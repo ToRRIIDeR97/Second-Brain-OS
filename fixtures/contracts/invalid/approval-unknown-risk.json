@@ -1,0 +1,15 @@
+{
+  "contract": "approval",
+  "version": 1,
+  "approval_id": "approval_01K4O",
+  "risk_class": "agent_can_decide",
+  "actor": "agent",
+  "workspace_id": "ws_01K4A",
+  "target": "notes/today.md",
+  "reversible": true,
+  "external_side_effect": false,
+  "destructive": false,
+  "participant_facing": false,
+  "decision": "pending",
+  "audit_event_id": "evt_01K4O"
+}

@@ -1,0 +1,5 @@
+name: viewer fixture
+items:
+  - 1
+  - 2
+enabled: true

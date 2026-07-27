@@ -1,0 +1,14 @@
+{
+  "contract": "event_envelope",
+  "version": 1,
+  "event_id": "evt_01K4E",
+  "event_type": "workspace.opened",
+  "timestamp": "2026-07-27T12:00:00Z",
+  "workspace_id": "ws_01K4A",
+  "correlation_id": "open_01K4E",
+  "actor": "user",
+  "payload_schema_version": 1,
+  "redaction_class": "internal",
+  "persist_to_audit": true,
+  "payload": { "kind": "project" }
+}

@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-brain-os.local/contracts/v1.json",
+  "title": "Second Brain OS contract definitions",
+  "description": "Version-one envelopes used by the CP02 examples. Runtime adapters may add fields only under the compatibility rules.",
+  "oneOf": [
+    { "$ref": "#/$defs/workspace_manifest" },
+    { "$ref": "#/$defs/project_card" },
+    { "$ref": "#/$defs/markdown_document" },
+    { "$ref": "#/$defs/ontology" },
+    { "$ref": "#/$defs/event_envelope" },
+    { "$ref": "#/$defs/ipc_result" },
+    { "$ref": "#/$defs/approval" },
+    { "$ref": "#/$defs/context_packet" }
+  ],
+  "$defs": {
+    "version": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "classification": { "enum": ["public", "internal", "sensitive", "restricted"] },
+    "workspace_manifest": {
+      "type": "object",
+      "required": ["contract", "version", "schema_version", "id", "name", "kind", "index", "agent", "terminal"],
+      "properties": {
+        "contract": { "const": "workspace_manifest" },
+        "version": { "$ref": "#/$defs/version" },
+        "schema_version": { "$ref": "#/$defs/version" },
+        "id": { "type": "string", "pattern": "^ws_[A-Za-z0-9_-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["brain", "project", "collection"] },
+        "project_id": { "type": "string", "pattern": "^project_[A-Za-z0-9_-]+$" },
+        "default_view": { "enum": ["knowledge", "files", "planner", "terminal", "settings"] },
+        "index": {
+          "type": "object",
+          "required": ["enabled", "respect_gitignore", "include", "exclude"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "respect_gitignore": { "type": "boolean" },
+            "include": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "exclude": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          },
+          "additionalProperties": true
+        },
+        "agent": {
+          "type": "object",
+          "required": ["default_profile", "auto_include_project_card", "default_context_budget", "readable_roots", "writable_roots"],
+          "properties": {
+            "default_profile": { "type": "string", "minLength": 1 },
+            "auto_include_project_card": { "type": "boolean" },
+            "default_context_budget": { "type": "integer", "minimum": 1 },
+            "readable_roots": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } },
+            "writable_roots": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } }
+          },
+          "additionalProperties": true
+        },
+        "terminal": {
+          "type": "object",
+          "required": ["default_shell", "max_tabs"],
+          "properties": {
+            "default_shell": { "type": "string", "minLength": 1 },
+            "max_tabs": { "type": "integer", "minimum": 1, "maximum": 64 }
+          },
+          "additionalProperties": true
+        },
+        "security": {
+          "type": "object",
+          "properties": {
+            "readable": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } },
+            "deny_read": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "writable": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } },
+            "deny_write": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "project_card": {
+      "type": "object",
+      "required": ["contract", "version", "front_matter", "body"],
+      "properties": {
+        "contract": { "const": "project_card" },
+        "version": { "$ref": "#/$defs/version" },
+        "front_matter": {
+          "type": "object",
+          "required": ["id", "type", "title", "status", "workspace_id", "workspace_path", "updated"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^project_[A-Za-z0-9_-]+$" },
+            "type": { "const": "project" },
+            "title": { "type": "string", "minLength": 1 },
+            "status": { "enum": ["active", "paused", "archived"] },
+            "workspace_id": { "type": "string", "pattern": "^ws_[A-Za-z0-9_-]+$" },
+            "workspace_path": { "type": "string", "minLength": 1 },
+            "updated": { "type": "string", "format": "date" },
+            "tags": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        },
+        "body": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "markdown_document": {
+      "type": "object",
+      "required": ["contract", "version", "extension_version", "content", "unknown_syntax"],
+      "properties": {
+        "contract": { "const": "markdown_document" },
+        "version": { "$ref": "#/$defs/version" },
+        "extension_version": { "$ref": "#/$defs/version" },
+        "content": { "type": "string" },
+        "unknown_syntax": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["raw", "start_line", "end_line"],
+            "properties": {
+              "raw": { "type": "string" },
+              "start_line": { "type": "integer", "minimum": 1 },
+              "end_line": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "ontology": {
+      "type": "object",
+      "required": ["contract", "version", "node_types", "edge_types", "authority_levels", "temporal_fields"],
+      "properties": {
+        "contract": { "const": "ontology" },
+        "version": { "$ref": "#/$defs/version" },
+        "node_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["Workspace", "Project", "Area", "Document", "Section", "Note", "Concept", "Task", "Decision", "Claim", "Question", "Person", "Organization", "Company", "Asset", "Source", "Citation", "CalendarEvent", "TaskList", "Calendar", "Milestone", "Artifact", "AgentSession", "TerminalSession", "GitCommit", "FileChange"] }
+        },
+        "edge_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["BELONGS_TO", "CONTAINS", "REFERENCES", "LINKS_TO", "RELATED_TO", "DEPENDS_ON", "BLOCKED_BY", "SUPPORTS", "CONTRADICTS", "SUPERSEDES", "ANSWERS", "IMPLEMENTS", "DERIVED_FROM", "CREATED_BY", "UPDATED_BY", "HAS_TASK", "HAS_DECISION", "HAS_EVENT", "SCHEDULED_BY", "HAS_ATTENDEE", "WORKSPACE_AT", "MENTIONS", "CITES", "DUPLICATE_OF", "PART_OF", "PRECEDES"] }
+        },
+        "authority_levels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["explicit_user", "explicit_file", "provider_authoritative", "agent_confirmed", "model_inferred", "heuristic_inferred"] } },
+        "temporal_fields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["valid_from", "valid_to", "observed_at", "supersedes_id", "deleted_at"] } }
+      },
+      "additionalProperties": true
+    },
+    "event_envelope": {
+      "type": "object",
+      "required": ["contract", "version", "event_id", "event_type", "timestamp", "correlation_id", "actor", "payload_schema_version", "redaction_class", "persist_to_audit", "payload"],
+      "properties": {
+        "contract": { "const": "event_envelope" },
+        "version": { "$ref": "#/$defs/version" },
+        "event_id": { "type": "string", "pattern": "^evt_[A-Za-z0-9_-]+$" },
+        "event_type": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "workspace_id": { "type": "string", "pattern": "^ws_[A-Za-z0-9_-]+$" },
+        "correlation_id": { "$ref": "#/$defs/id" },
+        "actor": { "enum": ["system", "user", "agent", "provider"] },
+        "payload_schema_version": { "$ref": "#/$defs/version" },
+        "redaction_class": { "$ref": "#/$defs/classification" },
+        "persist_to_audit": { "type": "boolean" },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "app_error": {
+      "type": "object",
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9_-]+)+$" },
+        "message": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "ipc_result": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["contract", "version", "ok", "correlation_id", "data"],
+          "not": { "required": ["error"] },
+          "properties": {
+            "contract": { "const": "ipc_result" },
+            "version": { "$ref": "#/$defs/version" },
+            "ok": { "const": true },
+            "correlation_id": { "$ref": "#/$defs/id" },
+            "data": {},
+            "job_id": { "type": "string", "pattern": "^job_[A-Za-z0-9_-]+$" }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": ["contract", "version", "ok", "correlation_id", "error"],
+          "not": { "required": ["data"] },
+          "properties": {
+            "contract": { "const": "ipc_result" },
+            "version": { "$ref": "#/$defs/version" },
+            "ok": { "const": false },
+            "correlation_id": { "$ref": "#/$defs/id" },
+            "error": { "$ref": "#/$defs/app_error" },
+            "job_id": { "type": "string", "pattern": "^job_[A-Za-z0-9_-]+$" }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "approval": {
+      "type": "object",
+      "required": ["contract", "version", "approval_id", "risk_class", "actor", "workspace_id", "target", "reversible", "external_side_effect", "destructive", "participant_facing", "decision", "audit_event_id"],
+      "properties": {
+        "contract": { "const": "approval" },
+        "version": { "$ref": "#/$defs/version" },
+        "approval_id": { "type": "string", "pattern": "^approval_[A-Za-z0-9_-]+$" },
+        "risk_class": { "enum": ["read", "local_reversible_write", "local_destructive", "external_private_write", "external_participant_write", "security_boundary_change"] },
+        "actor": { "enum": ["user", "agent", "provider", "system"] },
+        "workspace_id": { "type": "string", "pattern": "^ws_[A-Za-z0-9_-]+$" },
+        "target": { "type": "string", "minLength": 1 },
+        "reversible": { "type": "boolean" },
+        "external_side_effect": { "type": "boolean" },
+        "destructive": { "type": "boolean" },
+        "participant_facing": { "type": "boolean" },
+        "decision": { "enum": ["pending", "approved", "denied", "expired", "canceled"] },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "audit_event_id": { "type": "string", "pattern": "^evt_[A-Za-z0-9_-]+$" }
+      },
+      "additionalProperties": true
+    },
+    "context_packet": {
+      "type": "object",
+      "required": ["contract", "version", "packet_id", "workspace_id", "created_at", "objective", "instructions", "policy", "sources", "sections", "token_budget", "serialization"],
+      "properties": {
+        "contract": { "const": "context_packet" },
+        "version": { "$ref": "#/$defs/version" },
+        "packet_id": { "type": "string", "pattern": "^packet_[A-Za-z0-9_-]+$" },
+        "workspace_id": { "type": "string", "pattern": "^ws_[A-Za-z0-9_-]+$" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "objective": { "type": "string", "minLength": 1 },
+        "instructions": { "type": "array", "items": { "type": "string" } },
+        "policy": {
+          "type": "object",
+          "required": ["readable_roots", "writable_roots", "allow_processes", "mcp_tools", "html_mode"],
+          "properties": {
+            "readable_roots": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } },
+            "writable_roots": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } },
+            "allow_processes": { "type": "boolean" },
+            "mcp_tools": { "type": "array", "items": { "type": "string" } },
+            "html_mode": { "enum": ["disabled", "sanitized", "expert"] }
+          },
+          "additionalProperties": true
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "id", "classification", "content_hash"],
+            "properties": {
+              "kind": { "type": "string", "minLength": 1 },
+              "id": { "$ref": "#/$defs/id" },
+              "classification": { "$ref": "#/$defs/classification" },
+              "content_hash": { "type": "string", "minLength": 8 }
+            },
+            "additionalProperties": true
+          }
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "label", "content", "is_data"],
+            "properties": {
+              "kind": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "content": { "type": "string" },
+              "is_data": { "const": true }
+            },
+            "additionalProperties": true
+          }
+        },
+        "token_budget": { "type": "integer", "minimum": 1 },
+        "serialization": { "enum": ["canonical_json", "canonical_markdown"] }
+      },
+      "additionalProperties": true
+    }
+  }
+}

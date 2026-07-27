@@ -1,0 +1,7 @@
+{
+  "contract": "markdown_document",
+  "version": 1,
+  "extension_version": 1,
+  "content": ":::future\ntext\n:::",
+  "unknown_syntax": [{ "raw": ":::future\ntext\n:::", "start_line": 1 }]
+}

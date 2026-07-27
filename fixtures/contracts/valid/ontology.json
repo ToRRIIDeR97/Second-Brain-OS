@@ -1,0 +1,8 @@
+{
+  "contract": "ontology",
+  "version": 1,
+  "node_types": ["Workspace", "Project", "Document", "Note", "Task", "Decision", "Claim", "AgentSession", "FileChange"],
+  "edge_types": ["BELONGS_TO", "CONTAINS", "REFERENCES", "DEPENDS_ON", "SUPPORTS", "SUPERSEDES", "DERIVED_FROM", "MENTIONS", "PRECEDES"],
+  "authority_levels": ["explicit_user", "explicit_file", "provider_authoritative", "agent_confirmed", "model_inferred", "heuristic_inferred"],
+  "temporal_fields": ["valid_from", "valid_to", "observed_at", "supersedes_id", "deleted_at"]
+}

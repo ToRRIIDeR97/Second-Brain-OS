@@ -1,0 +1,23 @@
+{
+  "name": "second-brain-os",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": "22.22.3",
+    "pnpm": "11.9.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @second-brain-os/app dev",
+    "desktop:dev": "pnpm --filter @second-brain-os/app tauri dev",
+    "build": "pnpm --filter @second-brain-os/app build",
+    "desktop:build": "pnpm --filter @second-brain-os/app tauri build",
+    "format": "pnpm --filter @second-brain-os/app format && cargo fmt --all --check",
+    "format:write": "pnpm --filter @second-brain-os/app format:write && cargo fmt --all",
+    "lint": "pnpm --filter @second-brain-os/app lint && cargo clippy --workspace --all-targets -- -D warnings",
+    "test": "pnpm --filter @second-brain-os/app test && cargo test --workspace",
+    "check": "pnpm run format && pnpm run lint && pnpm run test && pnpm run build && cargo build --workspace",
+    "audit": "pnpm audit --audit-level high && cargo audit",
+    "licenses": "pnpm licenses list --prod && cargo deny check licenses"
+  }
+}

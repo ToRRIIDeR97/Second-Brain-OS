@@ -1,0 +1,13 @@
+{
+  "contract": "project_card",
+  "version": 1,
+  "front_matter": {
+    "id": "project_01K4B",
+    "type": "project",
+    "title": "Unbound project",
+    "status": "active",
+    "workspace_path": "~/Projects/unknown",
+    "updated": "2026-07-27"
+  },
+  "body": "This card has no workspace identity."
+}

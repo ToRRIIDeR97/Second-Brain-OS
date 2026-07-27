@@ -1,0 +1,15 @@
+{
+  "contract": "project_card",
+  "version": 1,
+  "front_matter": {
+    "id": "project_01K4B",
+    "type": "project",
+    "title": "Agent Operating System",
+    "status": "active",
+    "workspace_id": "ws_01K4A",
+    "workspace_path": "~/Projects/agent-operating-system",
+    "updated": "2026-07-27",
+    "tags": ["agents", "local-first"]
+  },
+  "body": "Architecture defined. Implementation not started."
+}

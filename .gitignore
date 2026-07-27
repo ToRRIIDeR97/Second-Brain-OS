@@ -1,0 +1,10 @@
+node_modules/
+.pnpm-store/
+dist/
+target/
+app/src-tauri/gen/
+.DS_Store
+*.log
+*.tsbuildinfo
+.idea/
+.vscode/

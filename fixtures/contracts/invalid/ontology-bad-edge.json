@@ -1,0 +1,8 @@
+{
+  "contract": "ontology",
+  "version": 1,
+  "node_types": ["Document"],
+  "edge_types": ["BELONGS_TO", "bad-edge"],
+  "authority_levels": ["explicit_file"],
+  "temporal_fields": ["observed_at"]
+}
