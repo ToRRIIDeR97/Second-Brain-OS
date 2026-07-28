@@ -5,6 +5,7 @@ pub mod db;
 pub mod errors;
 pub mod events;
 pub mod knowledge;
+pub mod mcp;
 pub mod planner;
 pub mod platform;
 pub mod terminal;

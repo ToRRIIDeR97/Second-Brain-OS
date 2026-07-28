@@ -22,6 +22,18 @@ pub const FOUNDATION_MIGRATION: Migration = Migration {
     sql: include_str!("../../migrations/0001_foundation.sql"),
 };
 
+pub const KNOWLEDGE_MIGRATION: Migration = Migration {
+    version: 13,
+    name: "knowledge",
+    sql: include_str!("../../migrations/0013_knowledge.sql"),
+};
+
+pub const CONTEXT_AGENTS_PLANNER_MIGRATION: Migration = Migration {
+    version: 30,
+    name: "context_agents_planner",
+    sql: include_str!("../../migrations/0030_context_agents_planner.sql"),
+};
+
 #[derive(Debug, Clone)]
 pub struct DatabaseHealth {
     pub path: PathBuf,
@@ -39,7 +51,14 @@ pub struct Database {
 
 impl Database {
     pub fn open(path: impl AsRef<Path>) -> AppResult<Self> {
-        Self::open_with_migrations(path, &[FOUNDATION_MIGRATION])
+        Self::open_with_migrations(
+            path,
+            &[
+                FOUNDATION_MIGRATION,
+                KNOWLEDGE_MIGRATION,
+                CONTEXT_AGENTS_PLANNER_MIGRATION,
+            ],
+        )
     }
 
     pub fn open_with_migrations(
@@ -259,11 +278,11 @@ mod tests {
         let health = first.health().expect("health");
         assert!(health.can_query);
         assert!(health.foreign_keys);
-        assert_eq!(health.schema_version, 1);
+        assert_eq!(health.schema_version, 30);
         drop(first);
 
         let reopened = Database::open(&path).expect("reopen");
-        assert_eq!(reopened.schema_version().expect("version"), 1);
+        assert_eq!(reopened.schema_version().expect("version"), 30);
     }
 
     #[test]
