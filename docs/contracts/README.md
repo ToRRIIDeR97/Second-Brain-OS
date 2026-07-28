@@ -25,4 +25,4 @@ types.
 | IPC result | Tauri command boundary | `version` |
 | Approval | `agents`/policy boundary | `version` |
 | Context packet | `knowledge`/context compiler | `version` |
-| MCP bridge | app gateway + thin sidecar | handshake `protocolVersion` |
+| MCP bridge | app gateway + thin sidecar | handshake `protocolVersion`; current contract [v2](mcp-v2.md) |

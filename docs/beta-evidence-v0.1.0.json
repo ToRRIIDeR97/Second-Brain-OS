@@ -1,0 +1,149 @@
+{
+  "version": "0.1.0",
+  "evaluatedAt": "2026-07-28",
+  "decision": "NO-GO",
+  "evidence": [
+    {
+      "id": "local_regression",
+      "status": "pass",
+      "summary": "Rust and frontend automated suites pass locally.",
+      "evidence": [
+        "cargo test --workspace --locked: 105 tests passed",
+        "app/node_modules/.bin/vitest run: 19 files, 51 tests passed"
+      ]
+    },
+    {
+      "id": "release_metadata",
+      "status": "pass",
+      "summary": "Source versions, MCP protocol, and configured icons agree.",
+      "evidence": ["node scripts/release-smoke.mjs"]
+    },
+    {
+      "id": "journey_note_graph",
+      "status": "missing",
+      "summary": "No complete macOS E2E recording from note creation through graph source reopen.",
+      "evidence": []
+    },
+    {
+      "id": "journey_note_codex",
+      "status": "missing",
+      "summary": "No live managed Codex approval, diff review, validation, and revert recording.",
+      "evidence": []
+    },
+    {
+      "id": "journey_terminal",
+      "status": "missing",
+      "summary": "No desktop E2E recording for folder terminal, inherited tab, visible agent, and line link.",
+      "evidence": []
+    },
+    {
+      "id": "journey_google_planner",
+      "status": "missing",
+      "summary": "No live Google OAuth/sync/write/conflict/audit journey evidence.",
+      "evidence": []
+    },
+    {
+      "id": "journey_recovery",
+      "status": "blocked",
+      "summary": "Backup and restore tests pass, but full database rebuild from canonical files was not demonstrated.",
+      "evidence": ["cargo test -p second-brain-os diagnostics::tests"]
+    },
+    {
+      "id": "macos_e2e",
+      "status": "missing",
+      "summary": "Current-host source build passed; installed beta journey smoke was not run.",
+      "evidence": ["tauri build --no-bundle only"]
+    },
+    {
+      "id": "windows_smoke",
+      "status": "missing",
+      "summary": "No Windows installer launch or workflow smoke evidence.",
+      "evidence": []
+    },
+    {
+      "id": "linux_smoke",
+      "status": "missing",
+      "summary": "No Linux installer launch or workflow smoke evidence.",
+      "evidence": []
+    },
+    {
+      "id": "security_clearance",
+      "status": "blocked",
+      "summary": "Focused regressions pass; dependency, viewer, terminal escape, and privileged-command reviews remain open.",
+      "evidence": ["docs/hardening-checkpoint-35.md"]
+    },
+    {
+      "id": "accessibility_screen_reader",
+      "status": "missing",
+      "summary": "Automated semantics pass, but no supported screen-reader session was run.",
+      "evidence": ["app/tests/hardening.test.tsx"]
+    },
+    {
+      "id": "performance_scale",
+      "status": "missing",
+      "summary": "Policy smoke budgets pass; required large-tree, million-chunk, terminal, planner, and memory fixtures were not run.",
+      "evidence": ["docs/hardening-checkpoint-35.md"]
+    },
+    {
+      "id": "migration_matrix",
+      "status": "missing",
+      "summary": "Current/newer/corrupt cases pass; every-supported-version and interrupted-upgrade matrix is absent.",
+      "evidence": ["docs/recovery.md"]
+    },
+    {
+      "id": "signed_installers",
+      "status": "missing",
+      "summary": "No signed/notarized macOS or signed Windows beta installer exists; no Linux installer was produced.",
+      "evidence": [".github/workflows/release.yml is explicitly unsigned"]
+    },
+    {
+      "id": "installer_checksums",
+      "status": "missing",
+      "summary": "Workflow plans SHA-256 manifests, but no installer artifacts or archived hashes were produced.",
+      "evidence": []
+    },
+    {
+      "id": "release_docs",
+      "status": "pass",
+      "summary": "Recovery, compatibility, privacy, install, upgrade, rollback, and troubleshooting guidance exists.",
+      "evidence": ["docs/recovery.md", "docs/release-operations.md"]
+    }
+  ],
+  "automaticNoGo": [
+    {
+      "id": "canonical_file_loss",
+      "status": "untested",
+      "evidence": "No complete recovery journey or installer upgrade test."
+    },
+    {
+      "id": "silent_overwrite",
+      "status": "not_observed",
+      "evidence": "Workspace mutation conflict/base-hash tests pass."
+    },
+    {
+      "id": "workspace_escape",
+      "status": "not_observed",
+      "evidence": "Path traversal, encoded escape, and symlink tests pass."
+    },
+    {
+      "id": "secret_leak",
+      "status": "not_observed",
+      "evidence": "Redaction and support-bundle leak regressions pass."
+    },
+    {
+      "id": "approval_bypass",
+      "status": "not_observed",
+      "evidence": "Scope, expiry, downgrade, destructive, and participant approval tests pass."
+    },
+    {
+      "id": "unrecoverable_migration",
+      "status": "untested",
+      "evidence": "Interrupted upgrade and every-supported-version matrix not run."
+    },
+    {
+      "id": "unconfirmed_participant_action",
+      "status": "not_observed",
+      "evidence": "Planner participant-facing approval regression passes."
+    }
+  ]
+}

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
 
-pub const MCP_PROTOCOL_VERSION: u32 = 1;
+pub const MCP_PROTOCOL_VERSION: u32 = 2;
 pub const MAX_CAPABILITY_LIFETIME_SECONDS: i64 = 3_600;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

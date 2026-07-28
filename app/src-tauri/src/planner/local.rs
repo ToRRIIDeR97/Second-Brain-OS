@@ -497,6 +497,20 @@ impl LocalPlanner {
         )
     }
 
+    pub fn mark_sync_status(
+        &mut self,
+        id: &str,
+        status: SyncStatus,
+    ) -> Result<PlannerItem, PlannerError> {
+        let item = self
+            .items
+            .get_mut(id)
+            .ok_or_else(|| PlannerError::MissingItem(id.to_owned()))?;
+        item.sync_status = status;
+        item.updated_at_epoch_seconds = self.now_epoch_seconds;
+        Ok(item.clone())
+    }
+
     /// Reconcile a Markdown task by its explicit `^task-id`.  A repeated ID
     /// updates the original local row instead of creating a duplicate.
     pub fn reconcile_explicit_task(

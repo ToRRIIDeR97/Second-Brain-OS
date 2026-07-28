@@ -2,6 +2,7 @@ pub mod agents;
 mod app;
 pub mod commands;
 pub mod db;
+pub mod diagnostics;
 pub mod errors;
 pub mod events;
 pub mod knowledge;

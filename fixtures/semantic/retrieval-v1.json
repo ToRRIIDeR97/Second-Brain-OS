@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "targetHybridRecallAtOne": 1.0,
+  "cases": [
+    {
+      "query": "vehicle storage",
+      "expectedId": "car",
+      "lexical": [
+        {
+          "candidateId": "bike",
+          "documentId": "bike",
+          "projectId": "transport",
+          "score": 700,
+          "reasons": ["search.text"]
+        },
+        {
+          "candidateId": "car",
+          "documentId": "car",
+          "projectId": "transport",
+          "score": 300,
+          "reasons": ["search.metadata"]
+        }
+      ],
+      "semantic": [
+        {
+          "candidateId": "car",
+          "documentId": "car",
+          "projectId": "transport",
+          "score": 1000
+        },
+        {
+          "candidateId": "bike",
+          "documentId": "bike",
+          "projectId": "transport",
+          "score": 0
+        }
+      ]
+    },
+    {
+      "query": "sqlite decision",
+      "expectedId": "sqlite",
+      "lexical": [
+        {
+          "candidateId": "sqlite",
+          "documentId": "sqlite",
+          "projectId": "architecture",
+          "score": 1000,
+          "reasons": ["search.exact"]
+        },
+        {
+          "candidateId": "postgres",
+          "documentId": "postgres",
+          "projectId": "architecture",
+          "score": 300,
+          "reasons": ["search.text"]
+        }
+      ],
+      "semantic": [
+        {
+          "candidateId": "sqlite",
+          "documentId": "sqlite",
+          "projectId": "architecture",
+          "score": 900
+        }
+      ]
+    }
+  ]
+}
