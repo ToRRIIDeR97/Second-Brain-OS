@@ -22,6 +22,26 @@ pub const FOUNDATION_MIGRATION: Migration = Migration {
     sql: include_str!("../../migrations/0001_foundation.sql"),
 };
 
+pub const KNOWLEDGE_MIGRATION: Migration = Migration {
+    version: 13,
+    name: "knowledge",
+    sql: include_str!("../../migrations/0013_knowledge.sql"),
+};
+
+pub const CONTEXT_AGENTS_PLANNER_MIGRATION: Migration = Migration {
+    version: 30,
+    name: "context_agents_planner",
+    sql: include_str!("../../migrations/0030_context_agents_planner.sql"),
+};
+
+pub const DERIVED_SEMANTIC_RELEASE_MIGRATION: Migration = Migration {
+    version: 37,
+    name: "derived_semantic_release",
+    sql: include_str!("../../migrations/0037_derived_semantic_release.sql"),
+};
+
+pub const MAX_SUPPORTED_SCHEMA_VERSION: u32 = DERIVED_SEMANTIC_RELEASE_MIGRATION.version;
+
 #[derive(Debug, Clone)]
 pub struct DatabaseHealth {
     pub path: PathBuf,
@@ -39,7 +59,15 @@ pub struct Database {
 
 impl Database {
     pub fn open(path: impl AsRef<Path>) -> AppResult<Self> {
-        Self::open_with_migrations(path, &[FOUNDATION_MIGRATION])
+        Self::open_with_migrations(
+            path,
+            &[
+                FOUNDATION_MIGRATION,
+                KNOWLEDGE_MIGRATION,
+                CONTEXT_AGENTS_PLANNER_MIGRATION,
+                DERIVED_SEMANTIC_RELEASE_MIGRATION,
+            ],
+        )
     }
 
     pub fn open_with_migrations(
@@ -56,6 +84,7 @@ impl Database {
             }
         }
         let mut connection = Connection::open(&path)?;
+        refuse_newer_schema(&connection)?;
         configure_connection(&mut connection)?;
         let database = Self {
             path,
@@ -234,6 +263,21 @@ fn configure_connection(connection: &mut Connection) -> AppResult<()> {
     Ok(())
 }
 
+fn refuse_newer_schema(connection: &Connection) -> AppResult<()> {
+    let version = connection.query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))?;
+    if version > MAX_SUPPORTED_SCHEMA_VERSION {
+        return Err(AppError::new(
+            "database.schema_newer",
+            "This database was created by a newer version of Second Brain OS.",
+        )
+        .with_details(serde_json::json!({
+            "found": version,
+            "supported": MAX_SUPPORTED_SCHEMA_VERSION,
+        })));
+    }
+    Ok(())
+}
+
 fn schema_version(connection: &Connection) -> Result<u32, rusqlite::Error> {
     connection.query_row(
         "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
@@ -259,11 +303,44 @@ mod tests {
         let health = first.health().expect("health");
         assert!(health.can_query);
         assert!(health.foreign_keys);
-        assert_eq!(health.schema_version, 1);
+        assert_eq!(health.schema_version, 37);
         drop(first);
 
         let reopened = Database::open(&path).expect("reopen");
-        assert_eq!(reopened.schema_version().expect("version"), 1);
+        assert_eq!(reopened.schema_version().expect("version"), 37);
+    }
+
+    #[test]
+    fn refuses_a_newer_schema_before_running_migrations() {
+        let root = tempdir().expect("tempdir");
+        let path = root.path().join("future.sqlite");
+        let connection = rusqlite::Connection::open(&path).expect("future database");
+        connection
+            .pragma_update(None, "user_version", 999)
+            .expect("future version");
+        drop(connection);
+
+        let error = match Database::open(&path) {
+            Ok(_) => panic!("newer schema must be refused"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code, "database.schema_newer");
+        let connection = rusqlite::Connection::open(&path).expect("reopen future database");
+        let version = connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .expect("version");
+        assert_eq!(version, 999);
+        let has_migration_table = connection
+            .query_row(
+                "SELECT EXISTS (
+                    SELECT 1 FROM sqlite_master
+                    WHERE type = 'table' AND name = 'schema_migrations'
+                )",
+                [],
+                |row| row.get::<_, bool>(0),
+            )
+            .expect("table check");
+        assert!(!has_migration_table);
     }
 
     #[test]

@@ -10,6 +10,11 @@ import {
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import StarterKit from "@tiptap/starter-kit";
+import {
+  directiveFallback,
+  type DirectiveAttribute,
+  type KnowledgeDirective,
+} from "./knowledge";
 
 export const UnderlineMark = Mark.create({
   name: "underline",
@@ -84,6 +89,58 @@ export const ProtectedSourceNode = Node.create({
   ],
 });
 
+export const DirectiveNode = Node.create({
+  name: "directive",
+  group: "block",
+  atom: true,
+  selectable: true,
+  isolating: true,
+  addAttributes: () => ({
+    name: { default: "" },
+    attributes: { default: "[]" },
+    body: { default: "" },
+    known: { default: false },
+    raw: { default: "" },
+  }),
+  parseHTML: () => [{ tag: "aside[data-markdown-directive]" }],
+  renderHTML: ({ node }) => {
+    const attrs = node.attrs as Record<string, unknown>;
+    let attributes: DirectiveAttribute[] = [];
+    try {
+      const parsed: unknown = JSON.parse(
+        typeof attrs.attributes === "string" ? attrs.attributes : "[]",
+      ) as unknown;
+      if (Array.isArray(parsed))
+        attributes = parsed.filter(
+          (attribute): attribute is DirectiveAttribute =>
+            typeof attribute === "object" &&
+            attribute !== null &&
+            typeof (attribute as DirectiveAttribute).name === "string" &&
+            typeof (attribute as DirectiveAttribute).value === "string",
+        );
+    } catch {
+      // The source view remains the escape hatch for malformed attributes.
+    }
+    const directive: KnowledgeDirective = {
+      name: typeof attrs.name === "string" ? attrs.name : "",
+      attributes,
+      body: typeof attrs.body === "string" ? attrs.body : "",
+      raw: typeof attrs.raw === "string" ? attrs.raw : "",
+      known: attrs.known === true,
+    };
+    const fallback = directiveFallback(directive);
+    return [
+      "aside",
+      {
+        "data-markdown-directive": directive.name,
+        "aria-label": fallback.label,
+      },
+      ["strong", {}, fallback.label],
+      ["p", {}, fallback.text],
+    ];
+  },
+});
+
 export const MarkdownExtensions = [
   StarterKit.configure({ link: false }),
   Link.configure({ openOnClick: false, autolink: false }),
@@ -97,5 +154,6 @@ export const MarkdownExtensions = [
   WikiLinkMark,
   InlineMathNode,
   MathBlockNode,
+  DirectiveNode,
   ProtectedSourceNode,
 ];

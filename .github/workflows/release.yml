@@ -1,0 +1,80 @@
+name: Unsigned release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        required: true
+        default: developer
+        type: choice
+        options: [developer, alpha, beta]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update &&
+          sudo apt-get install -y
+          libwebkit2gtk-4.1-dev
+          build-essential
+          libxdo-dev
+          libssl-dev
+          libayatana-appindicator3-dev
+          librsvg2-dev
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/release-smoke.mjs
+      - run: cargo test --workspace --locked
+      - run: cargo build -p agent-os-mcp --release --locked
+      - name: Write channel-specific Tauri override
+        shell: pwsh
+        run: |
+          $identifiers = @{
+            developer = "com.secondbrain.os.developer"
+            alpha = "com.secondbrain.os.alpha"
+            beta = "com.secondbrain.os.beta"
+          }
+          @{ identifier = $identifiers["${{ inputs.channel }}"] } |
+            ConvertTo-Json |
+            Set-Content release-channel.json
+      - run: pnpm --filter @second-brain-os/app tauri build --config ../release-channel.json
+      - name: Collect unsigned artifacts and checksums
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-artifacts | Out-Null
+          Copy-Item -Recurse target/release/bundle release-artifacts/bundle
+          Copy-Item target/release/agent-os-mcp* release-artifacts
+          Get-ChildItem release-artifacts -File -Recurse |
+            Sort-Object FullName |
+            ForEach-Object {
+              $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+              $relative = [IO.Path]::GetRelativePath((Resolve-Path release-artifacts), $_.FullName)
+              "$hash  $relative"
+            } | Set-Content release-artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-${{ inputs.channel }}-${{ runner.os }}
+          path: release-artifacts
+          if-no-files-found: error
+          retention-days: 14

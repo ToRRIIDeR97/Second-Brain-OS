@@ -5,6 +5,7 @@
 //! serializable boundary those adapters use.
 
 mod discovery;
+pub mod git;
 mod ignore_policy;
 mod manifest;
 pub mod mutations;

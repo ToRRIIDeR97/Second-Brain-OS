@@ -7,6 +7,13 @@
  * deterministic serializer for the supported subset.
  */
 
+import {
+  directiveEnd,
+  parseDirective,
+  serializeDirective,
+  type DirectiveAttribute,
+} from "./knowledge";
+
 export const MARKDOWN_CODEC_VERSION = 1 as const;
 
 export type LineEnding = "lf" | "crlf" | "mixed";
@@ -63,6 +70,7 @@ export interface MarkdownNode {
     | "hardBreak"
     | "footnote"
     | "mathBlock"
+    | "directive"
     | "protectedSource";
   attrs?: Record<string, string | number | boolean | null>;
   content?: Array<MarkdownNode | InlineNode>;
@@ -327,11 +335,38 @@ function parseBlocks(markdown: string): {
         ],
         raw: lines.slice(start, end).join("\n"),
       };
-    } else if (
-      /^:::[\w-]*/.test(first) ||
-      /^<\/?[a-z][^>]*>/i.test(first) ||
-      /^\s*~~~/.test(first)
-    ) {
+    } else if (/^:::[A-Za-z][\w-]*/.test(first)) {
+      const directiveEnding = directiveEnd(lines, index);
+      const rawDirective =
+        directiveEnding === undefined
+          ? undefined
+          : lines.slice(index, directiveEnding).join("\n");
+      const directive =
+        rawDirective === undefined ? undefined : parseDirective(rawDirective);
+      if (!directive || directiveEnding === undefined) {
+        kind = "protected";
+        end = index + 1;
+        while (end < lines.length && lines[end]?.trim() !== "") end += 1;
+        node = {
+          type: "protectedSource",
+          raw: lines.slice(start, end).join("\n"),
+        };
+      } else {
+        end = directiveEnding;
+        kind = directive.known ? "supported" : "protected";
+        node = directive.known
+          ? {
+              type: "directive",
+              attrs: {
+                name: directive.name,
+                attributes: JSON.stringify(directive.attributes),
+                body: directive.body,
+                known: true,
+              },
+            }
+          : { type: "protectedSource", raw: directive.raw };
+      }
+    } else if (/^<\/?[a-z][^>]*>/i.test(first) || /^\s*~~~/.test(first)) {
       kind = "protected";
       end = index + 1;
       while (end < lines.length && lines[end]?.trim() !== "") end += 1;
@@ -488,6 +523,30 @@ function nodeToMarkdown(node: MarkdownNode): string {
     )
     .join("");
   if (node.type === "protectedSource") return node.raw ?? "";
+  if (node.type === "directive") {
+    if (node.raw !== undefined) return node.raw;
+    let attributes: DirectiveAttribute[] = [];
+    try {
+      const parsed: unknown = JSON.parse(
+        String(node.attrs?.attributes ?? "[]"),
+      ) as unknown;
+      if (Array.isArray(parsed))
+        attributes = parsed.filter(
+          (attribute): attribute is DirectiveAttribute =>
+            typeof attribute === "object" &&
+            attribute !== null &&
+            typeof (attribute as DirectiveAttribute).name === "string" &&
+            typeof (attribute as DirectiveAttribute).value === "string",
+        );
+    } catch {
+      // Invalid editor attributes serialize without attributes instead of throwing.
+    }
+    return serializeDirective({
+      name: String(node.attrs?.name ?? "unknown"),
+      attributes,
+      body: String(node.attrs?.body ?? ""),
+    });
+  }
   if (node.type === "codeBlock") {
     if (node.raw !== undefined) return node.raw;
     const language =
@@ -680,6 +739,14 @@ export function editorDocumentToTiptap(
       return { type: "inlineMath", attrs: value.attrs };
     if (value.type === "protectedSource")
       return { type: "protectedSource", attrs: { raw: value.raw ?? "" } };
+    if (value.type === "directive")
+      return {
+        type: "directive",
+        attrs: {
+          ...(value.attrs ?? {}),
+          raw: value.raw ?? "",
+        },
+      };
     if (value.type === "tableCell" || value.type === "tableHeader") {
       return {
         type: value.type,
@@ -777,6 +844,28 @@ export function tiptapToMarkdown(
         raw:
           typeof candidate.attrs?.raw === "string" ? candidate.attrs.raw : "",
       };
+    if (
+      candidate.type === "directive" &&
+      typeof candidate.attrs?.name === "string"
+    )
+      return {
+        type: "directive",
+        attrs: {
+          name: candidate.attrs.name,
+          attributes:
+            typeof candidate.attrs.attributes === "string"
+              ? candidate.attrs.attributes
+              : "[]",
+          body:
+            typeof candidate.attrs.body === "string"
+              ? candidate.attrs.body
+              : "",
+          known: candidate.attrs.known === true,
+        },
+        ...(typeof candidate.attrs.raw === "string" && candidate.attrs.raw
+          ? { raw: candidate.attrs.raw }
+          : {}),
+      };
     const supported = new Set<MarkdownNode["type"]>([
       "paragraph",
       "heading",
@@ -795,6 +884,7 @@ export function tiptapToMarkdown(
       "hardBreak",
       "footnote",
       "mathBlock",
+      "directive",
     ]);
     if (
       !candidate.type ||

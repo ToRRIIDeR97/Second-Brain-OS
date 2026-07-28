@@ -1,5 +1,5 @@
 # Markdown fixtures
 
-The codec tests cover supported core syntax, mixed and invalid source, CRLF
-and Unicode, and unknown blocks. Later knowledge syntax checkpoints extend
-this fixture set without changing codec v1 serialization unexpectedly.
+The codec tests cover supported core syntax, knowledge directives and safe
+fallbacks, mixed and invalid source, CRLF and Unicode, and unknown blocks.
+Untouched fixtures remain byte-stable through codec v1.

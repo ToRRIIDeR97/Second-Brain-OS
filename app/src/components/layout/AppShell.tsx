@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { createDefaultCommands } from "../../app/commands";
+import {
+  AgentWorkspace,
+  type AgentWorkspaceState,
+} from "../../features/agents";
+import { LocalPlanner } from "../../features/planner";
+import { SourceControlWorkspace } from "../../features/source-control";
 import { ipcClient, type IpcClient, type CommandResult } from "../../lib/ipc";
 import {
   useShell,
@@ -114,6 +120,35 @@ function WorkspacePlaceholder({
       title={`${title} is ready for its feature pane`}
       description="This shell region is intentionally a placeholder for the next checkpoint."
     />
+  );
+}
+
+function WorkspaceSurface({
+  activity,
+  onOpenPalette,
+}: {
+  activity: Activity;
+  onOpenPalette: () => void;
+}) {
+  const [agents, setAgents] = useState<AgentWorkspaceState>({
+    workspaceId: "current",
+    sessions: [],
+    activeSessionId: null,
+  });
+  if (activity === "planner") return <LocalPlanner />;
+  if (activity === "agents")
+    return (
+      <AgentWorkspace
+        state={agents}
+        onChange={(state) => {
+          setAgents(state);
+        }}
+      />
+    );
+  if (activity === "source-control")
+    return <SourceControlWorkspace changes={[]} />;
+  return (
+    <WorkspacePlaceholder activity={activity} onOpenPalette={onOpenPalette} />
   );
 }
 
@@ -252,7 +287,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
                 }}
               />
               <main className="workspace" data-route={state.activity}>
-                <WorkspacePlaceholder
+                <WorkspaceSurface
                   activity={state.activity}
                   onOpenPalette={() => {
                     dispatch({ type: "palette/toggle", open: true });
