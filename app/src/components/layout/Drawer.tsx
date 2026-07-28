@@ -1,30 +1,35 @@
+import type { ReactNode } from "react";
 import type { Drawer as DrawerId } from "../../state/shell";
 
-const drawers: Array<[DrawerId, string]> = [
-  ["agents", "Agents"],
-  ["changes", "Changes"],
-  ["diagnostics", "Diagnostics"],
-  ["system", "System"],
-];
+const DRAWER_TABS = [["terminal", "Terminal"]] as const;
+
+export type DrawerTabId = (typeof DRAWER_TABS)[number][0];
+export type DrawerContent = Partial<Record<DrawerTabId, ReactNode>>;
+type DrawerSelection = DrawerId;
 
 export function Drawer({
-  active,
   onSelect,
+  content = {},
+  terminal,
 }: {
-  active: DrawerId;
-  onSelect: (drawer: DrawerId) => void;
+  active: DrawerSelection;
+  onSelect: (drawer: DrawerSelection) => void;
+  content?: DrawerContent;
+  terminal?: ReactNode;
 }) {
-  const activeLabel = drawers.find(([id]) => id === active)?.[1] ?? "System";
+  const activeContent =
+    terminal ?? content.terminal ?? "No terminal sessions are open.";
+
   return (
     <section className="drawer" aria-label="Bottom drawer">
       <div className="drawer-tabs" role="tablist" aria-label="Drawer views">
-        {drawers.map(([id, label]) => (
+        {DRAWER_TABS.map(([id, label]) => (
           <button
             type="button"
             role="tab"
-            aria-selected={id === active}
+            aria-selected="true"
             className="drawer-tab"
-            data-active={id === active ? "true" : undefined}
+            data-active="true"
             onClick={() => {
               onSelect(id);
             }}
@@ -34,12 +39,7 @@ export function Drawer({
           </button>
         ))}
       </div>
-      <div className="drawer-content">
-        <span className="status-dot" aria-hidden="true" />
-        {active === "diagnostics"
-          ? "No diagnostics in this window."
-          : `${activeLabel} is ready.`}
-      </div>
+      <div className="drawer-content">{activeContent}</div>
     </section>
   );
 }

@@ -16,17 +16,17 @@ test("renders the persistent application shell", () => {
   ).toBeInTheDocument();
 });
 
-test("routes activities and opens the command palette from the keyboard", () => {
+test("routes activities and opens knowledge search from the keyboard", () => {
   const mock = createMockIpc();
   render(<AppShell ipc={mock.client} />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Planner" }));
-  expect(screen.getByRole("main")).toHaveAttribute("data-route", "planner");
+  fireEvent.click(screen.getByRole("button", { name: "Graph" }));
+  expect(screen.getByRole("main")).toHaveAttribute("data-route", "graph");
   fireEvent.keyDown(window, { key: "k", ctrlKey: true });
   expect(
-    screen.getByRole("dialog", { name: "Command palette" }),
+    screen.getByRole("dialog", { name: "Search knowledge" }),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("textbox", { name: "Search commands" }),
+    screen.getByRole("searchbox", { name: "Search knowledge" }),
   ).toHaveFocus();
 });

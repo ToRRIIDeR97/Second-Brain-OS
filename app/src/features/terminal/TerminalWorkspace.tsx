@@ -1,273 +1,497 @@
-import { useState, type KeyboardEvent } from "react";
 import {
-  TERMINAL_PRESETS,
-  TERMINAL_TAB_LIMIT,
-  TERMINAL_VIEW_MODES,
-  type SelectedWorkspacePath,
-  type TerminalFileLink,
-  type TerminalOpenRequest,
-  type TerminalPreset,
-  type TerminalSession,
-  type TerminalWorkspaceState,
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
+import { Group, Panel, Separator } from "react-resizable-panels";
+import type {
+  IpcClient,
+  NativeTerminalPreset,
+  NativeTerminalSession,
+} from "../../lib/ipc";
+import { terminalReducer, type TerminalAction } from "./state";
+import type {
+  TerminalFileLink,
+  TerminalOpenRequest,
+  TerminalWorkspaceState,
 } from "./types";
-import {
-  parseTerminalFileLink,
-  resolveNewTerminalCwd,
-  terminalReducer,
-  type TerminalAction,
-} from "./state";
+import "@xterm/xterm/css/xterm.css";
 
-export type TerminalWorkspaceProps = {
+export type TerminalRequest = {
+  key: number;
+  workspaceId: string;
+  relativePath: string;
+  preset: NativeTerminalPreset;
+};
+
+function TerminalPane({
+  ipc,
+  session,
+  active,
+  initialOutput,
+  onOutput,
+}: {
+  ipc: IpcClient;
+  session: NativeTerminalSession;
+  active: boolean;
+  initialOutput: string;
+  onOutput: (sessionId: string, chunk: string) => void;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const activeRef = useRef(active);
+  const initialOutputRef = useRef(initialOutput);
+  activeRef.current = active;
+
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    let disposed = false;
+    let pollTimer = 0;
+    let resizeFrame = 0;
+    let lastColumns = 0;
+    let lastRows = 0;
+    let observer: ResizeObserver | undefined;
+    let disposeTerminal: (() => void) | undefined;
+
+    const connect = async () => {
+      const [{ Terminal }, { FitAddon }] = await Promise.all([
+        import("@xterm/xterm"),
+        import("@xterm/addon-fit"),
+      ]);
+      if (disposed) return;
+      const terminal = new Terminal({
+        cursorBlink: true,
+        cursorStyle: "bar",
+        fontFamily:
+          '"SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, monospace',
+        fontSize: 12,
+        lineHeight: 1.25,
+        scrollback: 5_000,
+        theme: {
+          background: "#0d1118",
+          foreground: "#dce3ef",
+          cursor: "#c3b1ff",
+          selectionBackground: "#534a78",
+          black: "#111722",
+          brightBlack: "#6f7888",
+          red: "#f28f9c",
+          green: "#7fd4aa",
+          yellow: "#e7c56d",
+          blue: "#8db4ef",
+          magenta: "#c3a7f5",
+          cyan: "#78cfdb",
+          white: "#dce3ef",
+        },
+      });
+      const fit = new FitAddon();
+      terminal.loadAddon(fit);
+      terminal.open(element);
+      if (initialOutputRef.current) terminal.write(initialOutputRef.current);
+
+      const fitAndResize = () => {
+        if (disposed || element.clientWidth < 20 || element.clientHeight < 20)
+          return;
+        fit.fit();
+        if (terminal.cols === lastColumns && terminal.rows === lastRows) return;
+        lastColumns = terminal.cols;
+        lastRows = terminal.rows;
+        void ipc.terminal.resize(
+          session.workspaceId,
+          session.id,
+          terminal.cols,
+          terminal.rows,
+        );
+      };
+      const scheduleFit = () => {
+        window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = window.requestAnimationFrame(fitAndResize);
+      };
+      if (typeof ResizeObserver !== "undefined") {
+        observer = new ResizeObserver(scheduleFit);
+        observer.observe(element);
+      }
+      resizeFrame = window.requestAnimationFrame(() => {
+        fitAndResize();
+        if (activeRef.current) terminal.focus();
+      });
+
+      const input = terminal.onData((data) => {
+        void ipc.terminal.write(session.workspaceId, session.id, data);
+      });
+      const poll = async () => {
+        const result = await ipc.terminal.read(session.workspaceId, session.id);
+        if (result.ok && result.data.content) {
+          terminal.write(result.data.content);
+          onOutput(session.id, result.data.content);
+        }
+      };
+      pollTimer = window.setInterval(() => void poll(), 80);
+      void poll();
+
+      disposeTerminal = () => {
+        input.dispose();
+        terminal.dispose();
+      };
+    };
+
+    void connect();
+    return () => {
+      disposed = true;
+      window.clearInterval(pollTimer);
+      window.cancelAnimationFrame(resizeFrame);
+      observer?.disconnect();
+      disposeTerminal?.();
+    };
+  }, [ipc, onOutput, session.id, session.workspaceId]);
+
+  return (
+    <div
+      ref={host}
+      className="terminal-emulator"
+      aria-label={`Terminal ${session.id}`}
+      onMouseDown={() => {
+        host.current
+          ?.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")
+          ?.focus();
+      }}
+    />
+  );
+}
+
+type NativeTerminalWorkspaceProps = {
+  ipc: IpcClient;
+  request?: TerminalRequest | undefined;
+};
+
+type ControlledTerminalWorkspaceProps = {
   state: TerminalWorkspaceState;
-  selectedPath?: SelectedWorkspacePath;
-  output?: Readonly<Record<string, string>>;
-  screenReaderMode?: boolean;
-  highContrast?: boolean;
   onChange: (state: TerminalWorkspaceState, action: TerminalAction) => void;
   onOpen: (request: TerminalOpenRequest) => void;
   onInput: (sessionId: string, input: string) => void;
   onOpenFile: (link: TerminalFileLink) => void;
-  onResize?: (sessionId: string, columns: number, rows: number) => void;
 };
 
-const statusLabels: Record<TerminalSession["status"], string> = {
-  running: "Running",
-  waiting: "Waiting",
-  exited: "Exited",
-  restored: "Restored · inactive",
-};
+export type TerminalWorkspaceProps =
+  | NativeTerminalWorkspaceProps
+  | ControlledTerminalWorkspaceProps;
 
-export function TerminalWorkspace({
+function ControlledTerminalTabs({
   state,
-  selectedPath,
-  output = {},
-  screenReaderMode = false,
-  highContrast = false,
   onChange,
-  onOpen,
-  onInput,
-  onOpenFile,
-}: TerminalWorkspaceProps) {
-  const [preset, setPreset] = useState<TerminalPreset>("shell");
-  const active = state.sessions.find(({ id }) => id === state.activeSessionId);
-  const dispatch = (action: TerminalAction) => {
+}: ControlledTerminalWorkspaceProps) {
+  const activate = (id: string) => {
+    const action: TerminalAction = { type: "session/activate", id };
     onChange(terminalReducer(state, action), action);
   };
-  const activateAt = (index: number) => {
-    const count = state.sessions.length;
-    const session = state.sessions[(index + count) % count];
-    if (session) dispatch({ type: "session/activate", id: session.id });
-  };
-  const onTabKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-    id: string,
-  ) => {
-    if (event.key === "ArrowRight") activateAt(index + 1);
-    else if (event.key === "ArrowLeft") activateAt(index - 1);
-    else if (event.key === "Home") activateAt(0);
-    else if (event.key === "End") activateAt(state.sessions.length - 1);
-    else if (event.key === "Delete") dispatch({ type: "session/close", id });
-    else return;
-    event.preventDefault();
-  };
-
   return (
-    <section
-      aria-label="Terminal workspace"
-      data-view-mode={state.viewMode}
-      data-high-contrast={highContrast || undefined}
-    >
-      <div role="toolbar" aria-label="Terminal controls">
-        <label>
-          Preset
-          <select
-            value={preset}
-            onChange={(event) => {
-              setPreset(event.target.value as TerminalPreset);
-            }}
-          >
-            {TERMINAL_PRESETS.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={state.sessions.length >= TERMINAL_TAB_LIMIT}
-          onClick={() => {
-            onOpen({
-              workspaceId: state.workspaceId,
-              preset,
-              cwd: resolveNewTerminalCwd(active, selectedPath),
-            });
-          }}
-        >
-          New terminal
-        </button>
-        <label>
-          View
-          <select
-            value={state.viewMode}
-            onChange={(event) => {
-              dispatch({
-                type: "view/set",
-                viewMode: event.target
-                  .value as TerminalWorkspaceState["viewMode"],
-              });
-            }}
-          >
-            {TERMINAL_VIEW_MODES.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-        <output aria-live="polite">
-          {state.sessions.length} of {TERMINAL_TAB_LIMIT} terminals
-        </output>
-      </div>
-
-      <div role="tablist" aria-label="Terminal sessions">
+    <section className="terminal-workspace" aria-label="Terminal workspace">
+      <div className="terminal-tabbar" role="tablist" aria-label="Terminals">
         {state.sessions.map((session, index) => (
-          <button
-            type="button"
-            role="tab"
-            id={`terminal-tab-${session.id}`}
-            aria-controls={`terminal-panel-${session.id}`}
-            aria-selected={session.id === state.activeSessionId}
-            tabIndex={session.id === state.activeSessionId ? 0 : -1}
+          <div
             key={session.id}
-            onClick={() => {
-              dispatch({ type: "session/activate", id: session.id });
-            }}
-            onKeyDown={(event) => {
-              onTabKeyDown(event, index, session.id);
-            }}
+            className="terminal-tab"
+            data-active={state.activeSessionId === session.id}
           >
-            {session.pinned ? "Pinned · " : ""}
-            {session.title}
-            {" · "}
-            {statusLabels[session.status]}
-            {" · CWD "}
-            {session.cwdReliability}
-            {session.agentLinked ? " · Agent linked" : ""}
-          </button>
-        ))}
-      </div>
-
-      {active ? (
-        <>
-          <div role="toolbar" aria-label="Active terminal tab">
-            <label>
-              Terminal title
-              <input
-                value={active.title}
-                onChange={(event) => {
-                  dispatch({
-                    type: "session/rename",
-                    id: active.id,
-                    title: event.target.value,
-                  });
-                }}
-              />
-            </label>
             <button
               type="button"
+              role="tab"
+              aria-selected={state.activeSessionId === session.id}
               onClick={() => {
-                dispatch({ type: "session/pin", id: active.id });
+                activate(session.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowRight" && event.key !== "ArrowLeft")
+                  return;
+                event.preventDefault();
+                const offset = event.key === "ArrowRight" ? 1 : -1;
+                const next =
+                  state.sessions[
+                    (index + offset + state.sessions.length) %
+                      state.sessions.length
+                  ];
+                if (next) activate(next.id);
               }}
             >
-              {active.pinned ? "Unpin" : "Pin"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                dispatch({ type: "session/close", id: active.id });
-              }}
-            >
-              Close
+              {session.title}
             </button>
           </div>
-          <TerminalPane
-            session={active}
-            output={output[active.id] ?? ""}
-            screenReaderMode={screenReaderMode}
-            onInput={onInput}
-            onOpenFile={onOpenFile}
-          />
-        </>
-      ) : (
-        <p>No terminal sessions are open.</p>
-      )}
+        ))}
+      </div>
     </section>
   );
 }
 
-function TerminalPane({
-  session,
-  output,
-  screenReaderMode,
-  onInput,
-  onOpenFile,
-}: {
-  session: TerminalSession;
-  output: string;
-  screenReaderMode: boolean;
-  onInput: TerminalWorkspaceProps["onInput"];
-  onOpenFile: TerminalWorkspaceProps["onOpenFile"];
-}) {
-  const [input, setInput] = useState("");
-  const link = parseTerminalFileLink(
-    session.workspaceId,
-    output.trim(),
-    session.cwd,
-    session.cwdReliability,
+function NativeTerminalWorkspace({
+  ipc,
+  request,
+}: NativeTerminalWorkspaceProps) {
+  const [sessions, setSessions] = useState<NativeTerminalSession[]>([]);
+  const [activeId, setActiveId] = useState<string>();
+  const [splitIds, setSplitIds] = useState<string[]>([]);
+  const [draggedId, setDraggedId] = useState<string>();
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState("");
+  const [outputHistory, setOutputHistory] = useState<Record<string, string>>(
+    {},
   );
+  const startedRequest = useRef<number | undefined>(undefined);
+
+  const rememberOutput = useCallback((sessionId: string, chunk: string) => {
+    setOutputHistory((current) => ({
+      ...current,
+      [sessionId]: ((current[sessionId] ?? "") + chunk).slice(-1_000_000),
+    }));
+  }, []);
+
+  const addSession = useCallback(
+    async (
+      workspaceId?: string,
+      relativePath?: string,
+      preset: NativeTerminalPreset = "zsh",
+    ) => {
+      let targetWorkspaceId = workspaceId;
+      if (!targetWorkspaceId) {
+        const result = await ipc.workspaces.list();
+        const workspace = result.ok
+          ? result.data.find((item) => item.canUseTerminal)
+          : undefined;
+        if (!workspace) {
+          setError(
+            result.ok
+              ? "Open a trusted workspace to start a terminal."
+              : result.error.message,
+          );
+          return;
+        }
+        targetWorkspaceId = workspace.id;
+      }
+      const result = await ipc.terminal.start(
+        targetWorkspaceId,
+        relativePath ?? "",
+        preset,
+      );
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      setError("");
+      setSessions((current) => [
+        ...current.filter(({ id }) => id !== result.data.id),
+        result.data,
+      ]);
+      setActiveId(result.data.id);
+    },
+    [ipc],
+  );
+
+  useEffect(() => {
+    if (request) {
+      if (startedRequest.current === request.key) return;
+      const timer = window.setTimeout(() => {
+        if (startedRequest.current === request.key) return;
+        startedRequest.current = request.key;
+        void addSession(
+          request.workspaceId,
+          request.relativePath,
+          request.preset,
+        );
+      });
+      return () => {
+        window.clearTimeout(timer);
+      };
+    }
+    if (startedRequest.current !== undefined) return;
+    const timer = window.setTimeout(() => {
+      if (startedRequest.current !== undefined) return;
+      startedRequest.current = 0;
+      void addSession();
+    });
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [addSession, request]);
+
+  const closeSession = useCallback(
+    (session: NativeTerminalSession) => {
+      void ipc.terminal.terminate(session.workspaceId, session.id, true);
+      setOutputHistory((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(([id]) => id !== session.id),
+        ),
+      );
+      setSessions((current) => {
+        const remaining = current.filter(({ id }) => id !== session.id);
+        setActiveId((selected) =>
+          selected === session.id ? remaining.at(-1)?.id : selected,
+        );
+        return remaining;
+      });
+      setSplitIds((current) => current.filter((id) => id !== session.id));
+    },
+    [ipc],
+  );
+
+  const splitWith = useCallback(
+    (id: string) => {
+      const anchor = activeId && activeId !== id ? activeId : sessions[0]?.id;
+      if (!anchor || anchor === id) return;
+      // ponytail: Two visible panes is an intentional product ceiling; tabs
+      // remain unbounded without multiplying concurrent terminal renderers.
+      setSplitIds([anchor, id]);
+      setActiveId(id);
+    },
+    [activeId, sessions],
+  );
+
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragOver(false);
+    if (draggedId) splitWith(draggedId);
+    setDraggedId(undefined);
+  };
+
+  const visibleIds =
+    splitIds.length === 2
+      ? splitIds
+      : activeId
+        ? [activeId]
+        : sessions[0]
+          ? [sessions[0].id]
+          : [];
+
   return (
-    <div
-      role="tabpanel"
-      id={`terminal-panel-${session.id}`}
-      aria-labelledby={`terminal-tab-${session.id}`}
-    >
-      <pre
-        aria-label="Terminal output"
-        aria-live={screenReaderMode ? "polite" : "off"}
-        tabIndex={0}
-      >
-        {output}
-      </pre>
-      {link ? (
+    <section className="terminal-workspace" aria-label="Terminal workspace">
+      <div className="terminal-tabbar" role="tablist" aria-label="Terminals">
+        {sessions.map((session, index) => (
+          <div
+            key={session.id}
+            className="terminal-tab"
+            data-active={visibleIds.includes(session.id)}
+            draggable
+            onDragStart={() => {
+              setDraggedId(session.id);
+            }}
+            onDragEnd={() => {
+              setDraggedId(undefined);
+              setDragOver(false);
+            }}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeId === session.id}
+              onClick={() => {
+                setActiveId(session.id);
+                setSplitIds([]);
+              }}
+            >
+              <span className="terminal-status-dot" />
+              Terminal {index + 1}
+            </button>
+            <button
+              type="button"
+              className="terminal-tab-close"
+              aria-label={`Close Terminal ${String(index + 1)}`}
+              onClick={() => {
+                closeSession(session);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ))}
         <button
           type="button"
+          className="terminal-add"
+          aria-label="New terminal"
+          title="New terminal"
           onClick={() => {
-            onOpenFile(link);
+            const active = sessions.find(({ id }) => id === activeId);
+            void addSession(
+              active?.workspaceId,
+              active?.cwd.relativePath,
+              "zsh",
+            );
           }}
         >
-          Open {link.candidates[0]} at line {link.line}
+          +
         </button>
-      ) : null}
-      <label>
-        Terminal input
-        <textarea
-          value={input}
-          disabled={
-            session.status === "exited" || session.status === "restored"
-          }
-          onChange={(event) => {
-            setInput(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.shiftKey) return;
-            event.preventDefault();
-            onInput(session.id, `${input}\n`);
-            setInput("");
-          }}
-        />
-      </label>
-    </div>
+        {sessions.length > 1 && activeId ? (
+          <button
+            type="button"
+            className="terminal-split"
+            title="Split with another terminal"
+            onClick={() => {
+              const other = sessions.find(({ id }) => id !== activeId);
+              if (other) splitWith(other.id);
+            }}
+          >
+            Split
+          </button>
+        ) : null}
+      </div>
+
+      <div
+        className="terminal-stage"
+        data-drag-over={dragOver}
+        onDragEnter={() => {
+          if (draggedId) setDragOver(true);
+        }}
+        onDragOver={(event) => {
+          if (draggedId) event.preventDefault();
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node))
+            setDragOver(false);
+        }}
+        onDrop={onDrop}
+      >
+        {visibleIds.length ? (
+          <Group orientation="horizontal" className="terminal-split-group">
+            {visibleIds.map((id, index) => {
+              const session = sessions.find((item) => item.id === id);
+              if (!session) return null;
+              return (
+                <Fragment key={id}>
+                  {index > 0 ? (
+                    <Separator
+                      className="terminal-split-handle"
+                      aria-label="Resize terminal split"
+                    />
+                  ) : null}
+                  <Panel minSize="20%">
+                    <TerminalPane
+                      ipc={ipc}
+                      session={session}
+                      active={activeId === id}
+                      initialOutput={outputHistory[id] ?? ""}
+                      onOutput={rememberOutput}
+                    />
+                  </Panel>
+                </Fragment>
+              );
+            })}
+          </Group>
+        ) : (
+          <div className="terminal-empty" role={error ? "alert" : "status"}>
+            {error || "Starting terminal…"}
+          </div>
+        )}
+        {dragOver ? (
+          <div className="terminal-drop-hint">Drop to split terminal</div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+export function TerminalWorkspace(props: TerminalWorkspaceProps) {
+  return "state" in props ? (
+    <ControlledTerminalTabs {...props} />
+  ) : (
+    <NativeTerminalWorkspace {...props} />
   );
 }

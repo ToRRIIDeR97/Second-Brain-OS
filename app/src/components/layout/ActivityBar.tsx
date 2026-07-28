@@ -1,4 +1,13 @@
-import { ACTIVITIES, type Activity } from "../../state/shell";
+import type { Activity } from "../../state/shell";
+
+const primaryActivities: Activity[] = [
+  "home",
+  "knowledge",
+  "files",
+  "graph",
+  "source-control",
+  "settings",
+];
 
 const labels: Record<Activity, string> = {
   home: "Home",
@@ -39,7 +48,7 @@ export function ActivityBar({
         SB
       </div>
       <div className="activity-list">
-        {ACTIVITIES.map((activity) => (
+        {primaryActivities.map((activity) => (
           <button
             type="button"
             key={activity}

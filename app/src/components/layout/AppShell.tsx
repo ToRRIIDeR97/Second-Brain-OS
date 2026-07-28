@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { createDefaultCommands } from "../../app/commands";
+import { WorkspaceSurface as IntegratedWorkspaceSurface } from "../../app/WorkspaceSurface";
+import { ipcClient, type CommandResult, type IpcClient } from "../../lib/ipc";
 import {
-  AgentWorkspace,
-  type AgentWorkspaceState,
-} from "../../features/agents";
-import { LocalPlanner } from "../../features/planner";
-import { SourceControlWorkspace } from "../../features/source-control";
-import { ipcClient, type IpcClient, type CommandResult } from "../../lib/ipc";
+  TerminalWorkspace,
+  type TerminalRequest,
+} from "../../features/terminal/TerminalWorkspace";
 import {
   useShell,
   ShellProvider,
@@ -15,11 +14,10 @@ import {
   type Drawer as DrawerId,
 } from "../../state/shell";
 import { CommandPalette } from "../common/CommandPalette";
-import { EmptyState } from "../common/EmptyState";
 import { ActivityBar } from "./ActivityBar";
 import { Drawer } from "./Drawer";
 import { Inspector } from "./Inspector";
-import { Navigator } from "./Navigator";
+import { Navigator, type NavigatorEntry } from "./Navigator";
 import { Tabs } from "./Tabs";
 
 const activityTitles: Record<Activity, string> = {
@@ -74,86 +72,11 @@ function IpcStatus({ ipc }: { ipc: IpcClient }) {
   );
 }
 
-function WorkspacePlaceholder({
-  activity,
-  onOpenPalette,
-}: {
-  activity: Activity;
-  onOpenPalette: () => void;
-}) {
-  const title = activityTitles[activity];
-  if (activity === "home") {
-    return (
-      <section className="home-surface" aria-labelledby="workspace-title">
-        <p className="eyebrow">Second Brain OS · Personal knowledge base</p>
-        <h1 id="workspace-title">A calm place to think.</h1>
-        <p className="workspace-lede">
-          Your local workspace is ready. Choose an activity to start exploring.
-        </p>
-        <div className="quick-actions">
-          <button
-            type="button"
-            className="quick-action"
-            onClick={onOpenPalette}
-          >
-            <span>⌘K</span>
-            <strong>Open command palette</strong>
-            <small>Find an action without leaving the keyboard.</small>
-          </button>
-          <button
-            type="button"
-            className="quick-action"
-            onClick={onOpenPalette}
-          >
-            <span>⌕</span>
-            <strong>Search your workspace</strong>
-            <small>
-              Search and retrieve notes when the index is connected.
-            </small>
-          </button>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <EmptyState
-      title={`${title} is ready for its feature pane`}
-      description="This shell region is intentionally a placeholder for the next checkpoint."
-    />
-  );
-}
-
-function WorkspaceSurface({
-  activity,
-  onOpenPalette,
-}: {
-  activity: Activity;
-  onOpenPalette: () => void;
-}) {
-  const [agents, setAgents] = useState<AgentWorkspaceState>({
-    workspaceId: "current",
-    sessions: [],
-    activeSessionId: null,
-  });
-  if (activity === "planner") return <LocalPlanner />;
-  if (activity === "agents")
-    return (
-      <AgentWorkspace
-        state={agents}
-        onChange={(state) => {
-          setAgents(state);
-        }}
-      />
-    );
-  if (activity === "source-control")
-    return <SourceControlWorkspace changes={[]} />;
-  return (
-    <WorkspacePlaceholder activity={activity} onOpenPalette={onOpenPalette} />
-  );
-}
-
 function ShellFrame({ ipc }: { ipc: IpcClient }) {
   const { state, dispatch } = useShell();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [terminalRequest, setTerminalRequest] = useState<TerminalRequest>();
+  const [collections, setCollections] = useState<NavigatorEntry[]>([]);
   const setActivity = useCallback(
     (activity: Activity) => {
       dispatch({ type: "activity/set", activity });
@@ -186,6 +109,10 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+      if (modifier && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
         dispatch({ type: "palette/toggle" });
       }
       if (modifier && event.key.toLowerCase() === "j") {
@@ -200,6 +127,43 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [dispatch, state.commandPaletteOpen]);
+
+  useEffect(() => {
+    const openTerminal = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          workspaceId: string;
+          relativePath?: string;
+          preset?: "shell" | "codex" | "claude";
+        }>
+      ).detail;
+      setTerminalRequest({
+        key: Date.now(),
+        workspaceId: detail.workspaceId,
+        relativePath: detail.relativePath ?? "",
+        preset: detail.preset === "shell" ? "zsh" : (detail.preset ?? "zsh"),
+      });
+      dispatch({ type: "drawer/toggle", drawer: "terminal" });
+    };
+    window.addEventListener("second-brain:open-terminal", openTerminal);
+    return () => {
+      window.removeEventListener("second-brain:open-terminal", openTerminal);
+    };
+  }, [dispatch]);
+
+  useEffect(() => {
+    const updateCollections = (event: Event) => {
+      setCollections(
+        (event as CustomEvent<NavigatorEntry[]>).detail.filter(
+          (entry) => entry.id && entry.label,
+        ),
+      );
+    };
+    window.addEventListener("second-brain:collections", updateCollections);
+    return () => {
+      window.removeEventListener("second-brain:collections", updateCollections);
+    };
+  }, []);
 
   return (
     <div className="app-shell">
@@ -226,7 +190,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
             type="button"
             className="search-trigger"
             onClick={() => {
-              dispatch({ type: "palette/toggle", open: true });
+              setSearchOpen(true);
             }}
           >
             <span>⌕</span> Search <kbd>⌘K</kbd>
@@ -260,73 +224,124 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
           </button>
         </div>
       </header>
-      <div className="shell-body">
-        <ActivityBar active={state.activity} onChange={setActivity} />
-        <Group orientation="horizontal" className="shell-panels">
-          <Panel
-            defaultSize={`${String(state.sidebarWidth)}%`}
-            minSize="12%"
-            maxSize="40%"
-            onResize={(size) => {
-              dispatch({ type: "sidebar/resize", width: size.asPercentage });
-            }}
-          >
-            <Navigator activity={state.activity} />
-          </Panel>
-          <Separator className="resize-handle" aria-label="Resize navigator" />
-          <Panel minSize={35}>
-            <div className="workspace-column">
-              <Tabs
-                tabs={state.tabs}
-                activeTabId={state.activeTabId}
-                onActivate={(id) => {
-                  dispatch({ type: "tab/activate", id });
-                }}
-                onClose={(id) => {
-                  dispatch({ type: "tab/close", id });
-                }}
-              />
-              <main className="workspace" data-route={state.activity}>
-                <WorkspaceSurface
-                  activity={state.activity}
-                  onOpenPalette={() => {
-                    dispatch({ type: "palette/toggle", open: true });
-                  }}
-                />
-              </main>
-            </div>
-          </Panel>
-          {state.inspectorOpen ? (
-            <>
-              <Separator
-                className="resize-handle"
-                aria-label="Resize inspector"
-              />
+      <Group orientation="vertical" className="shell-vertical">
+        <Panel minSize="30%">
+          <div className="shell-body">
+            <ActivityBar active={state.activity} onChange={setActivity} />
+            <Group orientation="horizontal" className="shell-panels">
               <Panel
-                defaultSize={`${String(state.inspectorWidth)}%`}
-                minSize="14%"
+                defaultSize={`${String(state.sidebarWidth)}%`}
+                minSize="12%"
                 maxSize="40%"
                 onResize={(size) => {
                   dispatch({
-                    type: "inspector/resize",
+                    type: "sidebar/resize",
                     width: size.asPercentage,
                   });
                 }}
               >
-                <Inspector activity={state.activity} />
+                <Navigator
+                  activity={state.activity}
+                  dailyNotes={[
+                    {
+                      id: "notes/today.md",
+                      label: "Today",
+                      secondary: new Date().toLocaleDateString(),
+                    },
+                  ]}
+                  collections={collections}
+                  onDailyNoteSelect={(note) => {
+                    window.dispatchEvent(
+                      new CustomEvent("second-brain:open-note", {
+                        detail: { relativePath: note.id },
+                      }),
+                    );
+                  }}
+                  onCollectionSelect={(collection) => {
+                    window.dispatchEvent(
+                      new CustomEvent("second-brain:select-workspace", {
+                        detail: { id: collection.id },
+                      }),
+                    );
+                  }}
+                />
               </Panel>
-            </>
-          ) : null}
-        </Group>
-      </div>
-      {state.drawerOpen ? (
-        <Drawer
-          active={state.drawer}
-          onSelect={(drawer: DrawerId) => {
-            dispatch({ type: "drawer/toggle", drawer });
-          }}
-        />
-      ) : null}
+              <Separator
+                className="resize-handle"
+                aria-label="Resize navigator"
+              />
+              <Panel minSize={35}>
+                <div className="workspace-column">
+                  <Tabs
+                    tabs={state.tabs}
+                    activeTabId={state.activeTabId}
+                    onActivate={(id) => {
+                      dispatch({ type: "tab/activate", id });
+                    }}
+                    onClose={(id) => {
+                      dispatch({ type: "tab/close", id });
+                    }}
+                  />
+                  <main className="workspace" data-route={state.activity}>
+                    <IntegratedWorkspaceSurface
+                      activity={state.activity}
+                      ipc={ipc}
+                      onOpenPalette={() => {
+                        dispatch({ type: "palette/toggle", open: true });
+                      }}
+                      searchOpen={searchOpen}
+                      onCloseSearch={() => {
+                        setSearchOpen(false);
+                      }}
+                      onNavigate={setActivity}
+                    />
+                  </main>
+                </div>
+              </Panel>
+              {state.inspectorOpen ? (
+                <>
+                  <Separator
+                    className="resize-handle"
+                    aria-label="Resize inspector"
+                  />
+                  <Panel
+                    defaultSize={`${String(state.inspectorWidth)}%`}
+                    minSize="14%"
+                    maxSize="40%"
+                    onResize={(size) => {
+                      dispatch({
+                        type: "inspector/resize",
+                        width: size.asPercentage,
+                      });
+                    }}
+                  >
+                    <Inspector activity={state.activity} />
+                  </Panel>
+                </>
+              ) : null}
+            </Group>
+          </div>
+        </Panel>
+        {state.drawerOpen ? (
+          <>
+            <Separator
+              className="drawer-resize-handle"
+              aria-label="Resize terminal drawer"
+            />
+            <Panel defaultSize="30%" minSize="14%" maxSize="70%">
+              <Drawer
+                active={state.drawer}
+                onSelect={(drawer: DrawerId) => {
+                  dispatch({ type: "drawer/toggle", drawer });
+                }}
+                terminal={
+                  <TerminalWorkspace ipc={ipc} request={terminalRequest} />
+                }
+              />
+            </Panel>
+          </>
+        ) : null}
+      </Group>
       <CommandPalette
         key={state.commandPaletteOpen ? "open" : "closed"}
         open={state.commandPaletteOpen}

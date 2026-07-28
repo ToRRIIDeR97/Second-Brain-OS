@@ -49,6 +49,7 @@ export type GraphCommand =
 export type GraphCommandContext = {
   node: GraphNode;
   source?: GraphSource;
+  provider?: "codex" | "claude";
 };
 
 export type GraphPosition = { x: number; y: number };

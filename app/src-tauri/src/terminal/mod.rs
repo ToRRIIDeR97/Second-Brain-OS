@@ -1,7 +1,7 @@
 //! Workspace-scoped terminal state and the platform PTY boundary.
 //!
-//! The platform adapter is deliberately not implemented here: checkpoint 18
-//! needs a real native PTY, not a `std::process` pipe pretending to be one.
+//! The native adapter lives in [`native`] and keeps PTY handles behind this
+//! workspace-scoped manager.
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 use crate::workspace::{
     EffectivePolicy, PathPolicy, PathPolicyError, WorkspacePath, WorkspaceRecord,
 };
+
+pub mod native;
+pub use native::{NativePtyAdapter, NativePtyEvent};
 
 pub const MAX_SESSIONS_PER_WORKSPACE: usize = 6;
 pub const DEFAULT_OUTPUT_CAPACITY: usize = 1024 * 1024;
@@ -158,12 +161,14 @@ pub enum TerminalStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CwdState {
     pub relative_path: String,
     pub reliable: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalSession {
     pub id: TerminalId,
     pub workspace_id: String,
@@ -599,6 +604,40 @@ impl<A: PtyAdapter> TerminalManager<A> {
         } else {
             Err(TerminalError::NotRunning)
         }
+    }
+}
+
+impl TerminalManager<NativePtyAdapter> {
+    pub fn poll_native_events(
+        &mut self,
+        limit: usize,
+    ) -> Vec<Result<TerminalEvent, TerminalError>> {
+        self.adapter
+            .drain_events(limit)
+            .into_iter()
+            .map(|event| {
+                let terminal_id = match &event {
+                    NativePtyEvent::Output { terminal_id, .. }
+                    | NativePtyEvent::Exited { terminal_id, .. } => terminal_id,
+                };
+                let workspace_id = self
+                    .sessions
+                    .get(terminal_id)
+                    .ok_or(TerminalError::NotFound)?
+                    .public
+                    .workspace_id
+                    .clone();
+                match event {
+                    NativePtyEvent::Output { terminal_id, bytes } => {
+                        self.push_output(&workspace_id, &terminal_id, &bytes)
+                    }
+                    NativePtyEvent::Exited {
+                        terminal_id,
+                        exit_code,
+                    } => self.mark_exited(&workspace_id, &terminal_id, exit_code),
+                }
+            })
+            .collect()
     }
 }
 
