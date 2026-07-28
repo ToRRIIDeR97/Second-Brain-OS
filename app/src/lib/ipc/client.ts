@@ -4,9 +4,18 @@ import type {
   FileReadResult,
   FileWriteRequest,
   FileWriteResult,
+  GitWorkspaceStatus,
   JobCancellation,
+  NativeTerminalOutput,
+  NativeTerminalPreset,
+  NativeTerminalSession,
   ShellLayout,
+  WorkspaceDirectoryPage,
+  WorkspaceGraphPage,
   WorkspacePath,
+  WorkspaceRegistration,
+  WorkspaceSearchResponse,
+  WorkspaceSummary,
 } from "./types";
 import { isCommandResult, protocolError } from "./types";
 
@@ -71,6 +80,84 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
     },
     jobs: {
       cancel: (jobId: string) => call<JobCancellation>("job_cancel", { jobId }),
+    },
+    workspaces: {
+      list: () => call<WorkspaceSummary[]>("workspace_list"),
+      register: (registration: WorkspaceRegistration) =>
+        call<WorkspaceSummary>("workspace_register", { registration }),
+      listDirectory: (path: WorkspacePath, cursor?: number, limit?: number) =>
+        call<WorkspaceDirectoryPage>("workspace_list_directory", {
+          path,
+          cursor,
+          limit,
+        }),
+    },
+    git: {
+      status: (workspaceId: string) =>
+        call<GitWorkspaceStatus>("git_status", { workspaceId }),
+      stage: (workspaceId: string, paths: string[]) =>
+        call<null>("git_stage", { workspaceId, paths }),
+      unstage: (workspaceId: string, paths: string[]) =>
+        call<null>("git_unstage", { workspaceId, paths }),
+      discard: (workspaceId: string, paths: string[], confirmed: boolean) =>
+        call<null>("git_discard", { workspaceId, paths, confirmed }),
+    },
+    knowledge: {
+      search: (workspaceId: string, query: string) =>
+        call<WorkspaceSearchResponse>("workspace_search", {
+          workspaceId,
+          query,
+        }),
+      graph: (workspaceId: string, relativePath = "", expandNodeId?: string) =>
+        call<WorkspaceGraphPage>("workspace_graph", {
+          workspaceId,
+          relativePath,
+          expandNodeId,
+        }),
+    },
+    terminal: {
+      start: (
+        workspaceId: string,
+        relativePath = "",
+        preset: NativeTerminalPreset = "zsh",
+      ) =>
+        call<NativeTerminalSession>("terminal_start", {
+          workspaceId,
+          relativePath,
+          preset,
+        }),
+      sessions: (workspaceId: string) =>
+        call<NativeTerminalSession[]>("terminal_sessions", { workspaceId }),
+      write: (workspaceId: string, terminalId: string, input: string) =>
+        call<null>("terminal_write", { workspaceId, terminalId, input }),
+      read: (workspaceId: string, terminalId: string, maxBytes = 65_536) =>
+        call<NativeTerminalOutput>("terminal_read", {
+          workspaceId,
+          terminalId,
+          maxBytes,
+        }),
+      resize: (
+        workspaceId: string,
+        terminalId: string,
+        columns: number,
+        rows: number,
+      ) =>
+        call<null>("terminal_resize", {
+          workspaceId,
+          terminalId,
+          columns,
+          rows,
+        }),
+      terminate: (
+        workspaceId: string,
+        terminalId: string,
+        confirmed: boolean,
+      ) =>
+        call<null>("terminal_terminate", {
+          workspaceId,
+          terminalId,
+          confirmed,
+        }),
     },
   };
 }

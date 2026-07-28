@@ -53,7 +53,7 @@ export function createDefaultCommands(actions: {
     id: "shell.command-palette",
     title: "Shell: Open Command Palette",
     category: "Shell",
-    shortcut: "⌘K / Ctrl K",
+    shortcut: "⌘⇧P / Ctrl Shift P",
     permission: "read",
     run: actions.openPalette,
   });
@@ -72,13 +72,7 @@ export function createDefaultCommands(actions: {
     permission: "read",
     run: actions.toggleDrawer,
   });
-  for (const activity of [
-    "search",
-    "planner",
-    "agents",
-    "terminal",
-    "settings",
-  ] as const) {
+  for (const activity of ["settings"] as const) {
     const label = `${activity.slice(0, 1).toUpperCase()}${activity.slice(1)}`;
     registry.register({
       id: `activity.${activity}`,

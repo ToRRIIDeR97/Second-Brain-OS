@@ -30,9 +30,15 @@ type FocusedGraphProps = {
   ) => void | Promise<void>;
 };
 
+type GraphContextMenu = {
+  node: GraphNode;
+  x: number;
+  y: number;
+};
+
 const panelStyle = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(240px, 32%)",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(230px, 27%)",
   minHeight: 0,
   height: "100%",
 } as const;
@@ -84,6 +90,7 @@ export function FocusedGraph({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [contextMenu, setContextMenu] = useState<GraphContextMenu>();
   const requestVersion = useRef(0);
   const layoutVersion = useRef(0);
 
@@ -96,6 +103,7 @@ export function FocusedGraph({
         ? current
         : next.nodes[0]?.id,
     );
+    setContextMenu(undefined);
   }, [hardCap, page]);
 
   useEffect(() => {
@@ -105,6 +113,7 @@ export function FocusedGraph({
       setPositions((current) =>
         layoutGraph(
           graph.nodes.map(({ id }) => id),
+          graph.edges,
           current,
         ),
       );
@@ -112,7 +121,23 @@ export function FocusedGraph({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [graph.nodes]);
+  }, [graph.edges, graph.nodes]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const dismiss = () => {
+      setContextMenu(undefined);
+    };
+    const dismissOnKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    window.addEventListener("click", dismiss);
+    window.addEventListener("keydown", dismissOnKeyDown);
+    return () => {
+      window.removeEventListener("click", dismiss);
+      window.removeEventListener("keydown", dismissOnKeyDown);
+    };
+  }, [contextMenu]);
 
   const nodesById = useMemo(
     () => new Map(graph.nodes.map((node) => [node.id, node])),
@@ -129,14 +154,7 @@ export function FocusedGraph({
         : [],
     [graph.edges, selected],
   );
-  const width = Math.max(
-    640,
-    ...[...positions.values()].map(({ x }) => x + 110),
-  );
-  const height = Math.max(
-    360,
-    ...[...positions.values()].map(({ y }) => y + 70),
-  );
+  const showLabels = graph.nodes.length <= 35;
 
   const addPage = useCallback(
     async (load: () => Promise<GraphPage>) => {
@@ -159,27 +177,34 @@ export function FocusedGraph({
     [hardCap],
   );
 
-  const selectAndExpand = useCallback(
+  const selectNode = useCallback((node: GraphNode) => {
+    setSelectedId(node.id);
+  }, []);
+
+  const expandNode = useCallback(
     (node: GraphNode) => {
-      setSelectedId(node.id);
-      if (onExpand && graph.nodes.length < hardCap) {
-        void addPage(() =>
-          onExpand(
-            node.id,
-            graph.nodes.map(({ id }) => id),
-          ),
-        );
-      }
+      if (!onExpand || graph.nodes.length >= hardCap) return;
+      void addPage(() =>
+        onExpand(
+          node.id,
+          graph.nodes.map(({ id }) => id),
+        ),
+      );
     },
     [addPage, graph.nodes, hardCap, onExpand],
   );
 
   const runCommand = useCallback(
-    (command: GraphCommand, node: GraphNode) => {
+    (
+      command: GraphCommand,
+      node: GraphNode,
+      provider?: GraphCommandContext["provider"],
+    ) => {
       if (!onCommand) return;
       const context: GraphCommandContext = {
         node,
         ...(node.source ? { source: node.source } : {}),
+        ...(provider ? { provider } : {}),
       };
       void onCommand(command, context);
     },
@@ -188,13 +213,37 @@ export function FocusedGraph({
 
   return (
     <section aria-label="Focused knowledge graph" style={panelStyle}>
-      <div style={{ minWidth: 0, overflow: "auto", position: "relative" }}>
+      <div
+        className="focused-graph-canvas"
+        style={{ minWidth: 0, overflow: "hidden", position: "relative" }}
+      >
         <svg
           role="img"
           aria-label={`Focused graph with ${String(graph.nodes.length)} nodes and ${String(graph.edges.length)} relationships`}
-          viewBox={`0 0 ${String(width)} ${String(height)}`}
-          style={{ display: "block", minWidth: 640, width: "100%" }}
+          viewBox="0 0 960 610"
+          preserveAspectRatio="xMidYMid meet"
+          style={{ display: "block", width: "100%", height: "100%" }}
         >
+          <defs>
+            <radialGradient id="graph-background">
+              <stop offset="0%" stopColor="#1b2230" />
+              <stop offset="100%" stopColor="#0d1118" />
+            </radialGradient>
+            <filter
+              id="node-glow"
+              x="-100%"
+              y="-100%"
+              width="300%"
+              height="300%"
+            >
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <rect width="960" height="610" fill="url(#graph-background)" />
           {graph.edges.map((edge) => {
             const source = positions.get(edge.sourceId);
             const target = positions.get(edge.targetId);
@@ -206,7 +255,9 @@ export function FocusedGraph({
                   y1={source.y}
                   x2={target.x}
                   y2={target.y}
-                  stroke="var(--text-faint)"
+                  stroke={isInferred(edge.authority) ? "#666078" : "#667184"}
+                  strokeWidth="0.8"
+                  opacity="0.48"
                   strokeDasharray={isInferred(edge.authority) ? "5 4" : "none"}
                 />
                 <title>{`${edge.type}, ${statusText(edge)}`}</title>
@@ -222,10 +273,11 @@ export function FocusedGraph({
                 role="button"
                 tabIndex={0}
                 aria-label={nodeLabel(node)}
+                aria-haspopup="menu"
                 aria-pressed={selectedNode}
-                transform={`translate(${String(position.x - 75)} ${String(position.y - 32)})`}
+                transform={`translate(${String(position.x)} ${String(position.y)})`}
                 onClick={(event) => {
-                  if (event.detail <= 1) selectAndExpand(node);
+                  if (event.detail <= 1) selectNode(node);
                 }}
                 onDoubleClick={() => {
                   if (node.source) runCommand("graph.open-source", node);
@@ -233,39 +285,59 @@ export function FocusedGraph({
                 onContextMenu={(event) => {
                   event.preventDefault();
                   setSelectedId(node.id);
+                  setContextMenu({
+                    node,
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
                   runCommand("graph.show-actions", node);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    selectAndExpand(node);
+                    selectNode(node);
                   }
                 }}
                 style={{ cursor: "pointer" }}
               >
-                <rect
-                  width="150"
-                  height="64"
-                  rx="8"
-                  fill={
-                    selectedNode ? "var(--surface-hover)" : "var(--surface)"
+                <circle
+                  r={
+                    selectedNode
+                      ? 15
+                      : node.type.toLowerCase().includes("folder")
+                        ? 11
+                        : 7
                   }
-                  stroke={node.stale ? "var(--danger)" : "var(--text-muted)"}
-                  strokeWidth={selectedNode ? 2 : 1}
-                  strokeDasharray={isInferred(node.authority) ? "6 4" : "none"}
+                  fill={
+                    selectedNode
+                      ? "#c3b1ff"
+                      : node.type.toLowerCase().includes("folder")
+                        ? "#e4cd68"
+                        : node.type.toLowerCase().includes("note")
+                          ? "#7f91ff"
+                          : "#aab3c2"
+                  }
+                  stroke={node.stale ? "var(--danger)" : "#e8ecf4"}
+                  strokeWidth={selectedNode ? 2.5 : 0.8}
+                  strokeDasharray={isInferred(node.authority) ? "3 2" : "none"}
+                  opacity={node.stale ? 0.72 : 0.96}
+                  filter={selectedNode ? "url(#node-glow)" : undefined}
                 />
-                <text x="10" y="20" fill="var(--text)" fontSize="12">
-                  {node.label.length > 20
-                    ? `${node.label.slice(0, 19)}…`
-                    : node.label}
-                </text>
-                <text x="10" y="39" fill="var(--text-muted)" fontSize="10">
-                  {node.type}
-                </text>
-                <text x="10" y="54" fill="var(--text-muted)" fontSize="9">
-                  {isInferred(node.authority) ? "INFERRED" : "AUTHORITATIVE"}
-                  {node.stale ? " · STALE" : ""}
-                </text>
+                {showLabels || selectedNode ? (
+                  <text
+                    x={selectedNode ? 20 : 14}
+                    y="4"
+                    fill={selectedNode ? "#f2edff" : "#c4cad5"}
+                    fontSize={selectedNode ? 12 : 10}
+                    paintOrder="stroke"
+                    stroke="#0d1118"
+                    strokeWidth="3"
+                  >
+                    {node.label.length > 28
+                      ? `${node.label.slice(0, 27)}…`
+                      : node.label}
+                  </text>
+                ) : null}
                 <title>{nodeLabel(node)}</title>
               </g>
             );
@@ -315,6 +387,48 @@ export function FocusedGraph({
             ) : null}
           </div>
         ) : null}
+        {contextMenu ? (
+          <div
+            role="menu"
+            aria-label={`Actions for ${contextMenu.node.label}`}
+            style={{
+              position: "fixed",
+              top: contextMenu.y,
+              left: contextMenu.x,
+              zIndex: 10,
+              display: "grid",
+              gap: 4,
+              minWidth: 160,
+              padding: 6,
+              border: "1px solid var(--line)",
+              borderRadius: 6,
+              background: "var(--surface-raised)",
+              boxShadow: "0 8px 20px rgba(0, 0, 0, 0.2)",
+            }}
+          >
+            {(
+              [
+                ["graph.open-terminal", "Open terminal", undefined],
+                ["graph.prepare-agent", "Prepare Codex", "codex"],
+                ["graph.prepare-agent", "Prepare Claude", "claude"],
+              ] as const
+            ).map(([command, label, provider], index) => (
+              <button
+                key={label}
+                type="button"
+                role="menuitem"
+                style={{ ...buttonStyle, textAlign: "left" }}
+                autoFocus={index === 0}
+                onClick={() => {
+                  setContextMenu(undefined);
+                  runCommand(command, contextMenu.node, provider);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <aside
@@ -349,6 +463,18 @@ export function FocusedGraph({
               aria-label="Selected node actions"
               style={{ display: "flex", flexWrap: "wrap", gap: 6 }}
             >
+              {onExpand ? (
+                <button
+                  type="button"
+                  style={buttonStyle}
+                  disabled={graph.nodes.length >= hardCap}
+                  onClick={() => {
+                    expandNode(selected);
+                  }}
+                >
+                  Expand
+                </button>
+              ) : null}
               {selected.source ? (
                 <button
                   type="button"
@@ -363,9 +489,7 @@ export function FocusedGraph({
               {(
                 [
                   ["graph.search-related", "Search related"],
-                  ["graph.open-terminal", "Open terminal"],
                   ["graph.add-to-context", "Add to context"],
-                  ["graph.prepare-agent", "Prepare agent"],
                 ] as const
               ).map(([command, label]) => (
                 <button

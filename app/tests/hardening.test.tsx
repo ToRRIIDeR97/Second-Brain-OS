@@ -21,14 +21,14 @@ describe("accessibility hardening", () => {
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     expect(
-      screen.getByRole("dialog", { name: "Command palette" }),
+      screen.getByRole("dialog", { name: "Search knowledge" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "Search commands" }),
+      screen.getByRole("searchbox", { name: "Search knowledge" }),
     ).toHaveFocus();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(
-      screen.queryByRole("dialog", { name: "Command palette" }),
+      screen.queryByRole("dialog", { name: "Search knowledge" }),
     ).not.toBeInTheDocument();
   });
 

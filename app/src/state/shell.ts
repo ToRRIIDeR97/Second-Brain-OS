@@ -24,10 +24,19 @@ export const ACTIVITIES = [
   "source-control",
   "settings",
 ] as const;
-export const DRAWERS = ["agents", "changes", "diagnostics", "system"] as const;
+export const DRAWERS = ["terminal"] as const;
 
 export type Activity = (typeof ACTIVITIES)[number];
 export type Drawer = (typeof DRAWERS)[number];
+
+const tabbedActivities = new Set<Activity>([
+  "home",
+  "knowledge",
+  "files",
+  "graph",
+  "source-control",
+  "settings",
+]);
 
 export type ShellTab = {
   id: string;
@@ -54,7 +63,7 @@ export const defaultShellState: ShellState = {
   inspectorWidth: 22,
   inspectorOpen: true,
   drawerOpen: false,
-  drawer: "diagnostics",
+  drawer: "terminal",
   tabs: [{ id: "welcome", title: "Welcome", activity: "home" }],
   activeTabId: "welcome",
   commandPaletteOpen: false,
@@ -163,7 +172,8 @@ function readStoredState(): ShellState {
           return (
             typeof candidate.id === "string" &&
             typeof candidate.title === "string" &&
-            isActivity(candidate.activity)
+            isActivity(candidate.activity) &&
+            tabbedActivities.has(candidate.activity)
           );
         })
       : [];
@@ -178,9 +188,10 @@ function readStoredState(): ShellState {
       ? (parsed.activeTabId ?? firstTab.id)
       : firstTab.id;
     return {
-      activity: isActivity(parsed.activity)
-        ? parsed.activity
-        : firstTab.activity,
+      activity:
+        isActivity(parsed.activity) && tabbedActivities.has(parsed.activity)
+          ? parsed.activity
+          : firstTab.activity,
       sidebarWidth:
         typeof parsed.sidebarWidth === "number" &&
         Number.isFinite(parsed.sidebarWidth)

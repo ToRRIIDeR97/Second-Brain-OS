@@ -95,6 +95,129 @@ export type FileWriteResult = {
   mergeNotice: boolean;
 };
 
+export type WorkspaceKind = "brain" | "project" | "collection";
+export type WorkspaceTrustLevel =
+  | "untrusted"
+  | "trusted_read_only"
+  | "trusted"
+  | "restricted";
+
+export type WorkspaceSummary = {
+  id: string;
+  name: string;
+  kind: WorkspaceKind;
+  trustLevel: WorkspaceTrustLevel;
+  canRead: boolean;
+  canWrite: boolean;
+  canUseTerminal: boolean;
+};
+
+export type WorkspaceRegistration = {
+  name: string;
+  rootPath: string;
+  kind: WorkspaceKind;
+  trustLevel: WorkspaceTrustLevel;
+};
+
+export type WorkspaceDirectoryEntry = {
+  name: string;
+  relativePath: string;
+  kind: "directory" | "file" | "symlink" | "other";
+  sizeBytes: number;
+  modifiedUnixSeconds?: number;
+  ignored: boolean;
+};
+
+export type WorkspaceDirectoryPage = {
+  entries: WorkspaceDirectoryEntry[];
+  nextCursor?: number;
+};
+
+export type GitWorkspaceChange = {
+  path: string;
+  status: string;
+  staged: boolean;
+};
+
+export type GitWorkspaceStatus = {
+  branch?: string;
+  changes: GitWorkspaceChange[];
+};
+
+export type WorkspaceSearchResult = {
+  id: string;
+  title: string;
+  path: string;
+  snippet: string;
+  authority: string;
+  indexState: "current" | "stale" | "failed";
+  reasonCodes: string[];
+};
+
+export type WorkspaceSearchResponse = {
+  results: WorkspaceSearchResult[];
+  structuredPlan: string;
+};
+
+export type WorkspaceGraphNode = {
+  id: string;
+  label: string;
+  type: string;
+  authority:
+    | "explicit_user"
+    | "explicit_file"
+    | "provider_authoritative"
+    | "agent_confirmed"
+    | "model_inferred"
+    | "heuristic_inferred";
+  confidence: number;
+  source: WorkspacePath;
+};
+
+export type WorkspaceGraphEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  type: string;
+  authority: WorkspaceGraphNode["authority"];
+  confidence: number;
+};
+
+export type WorkspaceGraphPage = {
+  nodes: WorkspaceGraphNode[];
+  edges: WorkspaceGraphEdge[];
+  truncated: boolean;
+};
+
+export type NativeTerminalPreset =
+  | "zsh"
+  | "bash"
+  | "fish"
+  | "power_shell"
+  | "codex"
+  | "claude";
+
+export type NativeTerminalSession = {
+  id: string;
+  workspaceId: string;
+  preset: NativeTerminalPreset;
+  status: "running" | "exited";
+  cwd: { relativePath: string; reliable: boolean };
+  size: { columns: number; rows: number };
+  exitCode: number | null;
+  protected: boolean;
+  busy: boolean;
+  childProcesses: number;
+  bufferedBytes: number;
+  droppedBytes: number;
+};
+
+export type NativeTerminalOutput = {
+  content: string;
+  remainingBytes: number;
+  droppedBytes: number;
+};
+
 export const IPC_ERROR_CODES = {
   malformedEnvelope: "IPC_MALFORMED_ENVELOPE",
   unavailable: "IPC_UNAVAILABLE",
