@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AppShell } from "../src/components/layout/AppShell";
 import { FocusedGraph } from "../src/features/graph";
@@ -6,7 +6,7 @@ import { LocalPlanner } from "../src/features/planner";
 import { createMockIpc } from "../src/lib/ipc";
 
 describe("accessibility hardening", () => {
-  it("gives shell controls names, landmarks, visible focus, and keyboard access", () => {
+  it("gives shell controls names, landmarks, visible focus, and keyboard access", async () => {
     render(<AppShell ipc={createMockIpc().client} />);
 
     expect(
@@ -15,17 +15,20 @@ describe("accessibility hardening", () => {
     expect(screen.getByRole("main")).toBeInTheDocument();
     for (const button of screen.getAllByRole("button")) {
       expect(button).toHaveAccessibleName();
+      if (button.matches(":disabled")) continue;
       button.focus();
       expect(button).toHaveFocus();
     }
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     expect(
-      screen.getByRole("dialog", { name: "Search knowledge" }),
+      await screen.findByRole("dialog", { name: "Search knowledge" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("searchbox", { name: "Search knowledge" }),
-    ).toHaveFocus();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("searchbox", { name: "Search knowledge" }),
+      ).toHaveFocus();
+    });
     fireEvent.keyDown(window, { key: "Escape" });
     expect(
       screen.queryByRole("dialog", { name: "Search knowledge" }),
@@ -35,6 +38,7 @@ describe("accessibility hardening", () => {
   it("keeps graph and planner workflows available without canvas or pointer input", () => {
     const { unmount } = render(
       <FocusedGraph
+        showInspector
         page={{
           nodes: [
             {
@@ -67,14 +71,19 @@ describe("accessibility hardening", () => {
       screen.getByRole("img", { name: /Focused graph with 2 nodes/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("complementary", {
+      screen.queryByRole("complementary", {
         name: "Graph inspector and relationship list",
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     const beta = screen.getByRole("button", { name: /^Beta, Note/ });
     beta.focus();
     fireEvent.keyDown(beta, { key: "Enter" });
     expect(beta).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("complementary", {
+        name: "Graph inspector and relationship list",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("list")).toBeInTheDocument();
     unmount();
 

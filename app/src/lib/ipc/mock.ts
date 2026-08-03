@@ -15,11 +15,35 @@ export function createMockIpc() {
     const handler = handlers.get(command);
     if (typeof handler === "function")
       return Promise.resolve((handler as () => T)());
+    const data =
+      command === "system_ping"
+        ? "pong"
+        : command === "workspace_list"
+          ? []
+          : command === "workspace_list_directory"
+            ? { entries: [] }
+            : command === "file_create_attachment"
+              ? {
+                  path: (args?.request as { path?: unknown } | undefined)?.path,
+                  mediaType: "image/png",
+                  sizeBytes: 0,
+                }
+              : command === "file_read_attachment"
+                ? { base64: "", mediaType: "image/png", sizeBytes: 0 }
+                : command === "git_status"
+                  ? { changes: [] }
+                  : command === "git_diff"
+                    ? {
+                        staged: Boolean(args?.staged),
+                        patch: "",
+                        truncated: false,
+                      }
+                    : (args?.layout ?? null);
     return Promise.resolve({
       contract: "ipc_result",
       version: 1,
       ok: true,
-      data: command === "system_ping" ? "pong" : (args?.layout ?? null),
+      data,
       correlationId: "mock-correlation",
     } as T);
   };

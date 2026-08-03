@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { markdownCodec, MARKDOWN_CODEC_VERSION } from "./codec";
+import {
+  editorDocumentToTiptap,
+  markdownCodec,
+  MARKDOWN_CODEC_VERSION,
+  tiptapToMarkdown,
+} from "./codec";
 
 describe("MarkdownCodec v1", () => {
   it("preserves untouched CRLF source and front matter", () => {
@@ -68,5 +73,52 @@ describe("MarkdownCodec v1", () => {
     const output = markdownCodec.serialize(edited, { preserveSource: false });
     expect(output).toContain("```ts\nnew\n```");
     expect(output).toContain("$$\nnew math\n$$");
+  });
+
+  it("keeps valid table widths through the rich projection", () => {
+    const source = [
+      "<!-- second-brain-table-widths: 180,240 -->",
+      "| Name | Value |",
+      "| --- | --- |",
+      "| one | two |",
+      "",
+    ].join("\n");
+    const original = markdownCodec.parse(source);
+    const table = original.nodes[0];
+    expect(table?.attrs?.columnWidths).toBe("180,240");
+    const rich = editorDocumentToTiptap(original) as {
+      content: Array<{
+        type: string;
+        content?: Array<{
+          content?: Array<{ attrs?: Record<string, unknown> }>;
+        }>;
+      }>;
+    };
+    expect(
+      rich.content[0]?.content?.[0]?.content?.[0]?.attrs?.colwidth,
+    ).toEqual([180]);
+    expect(tiptapToMarkdown(rich, original)).toContain(
+      "<!-- second-brain-table-widths: 180,240 -->",
+    );
+    expect(
+      markdownCodec.parse(tiptapToMarkdown(rich, original)).nodes[0]?.attrs,
+    ).toEqual({ columnWidths: "180,240" });
+  });
+
+  it("protects malformed width comments without breaking the table", () => {
+    const source = [
+      "<!-- second-brain-table-widths: nope,240 -->",
+      "| Name | Value |",
+      "| --- | --- |",
+      "| one | two |",
+    ].join("\n");
+    const document = markdownCodec.parse(source);
+    expect(document.nodes.map(({ type }) => type)).toEqual([
+      "protectedSource",
+      "table",
+    ]);
+    const edited = tiptapToMarkdown(editorDocumentToTiptap(document), document);
+    expect(edited).toContain("<!-- second-brain-table-widths: nope,240 -->");
+    expect(markdownCodec.validateRoundTrip(edited).stable).toBe(true);
   });
 });

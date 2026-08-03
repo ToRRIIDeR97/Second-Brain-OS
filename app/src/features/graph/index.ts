@@ -15,5 +15,6 @@ export type {
   GraphNode,
   GraphPage,
   GraphPosition,
+  GraphSelectionContext,
   GraphSource,
 } from "./types";

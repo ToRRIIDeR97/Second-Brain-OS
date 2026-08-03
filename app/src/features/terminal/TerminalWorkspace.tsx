@@ -164,6 +164,7 @@ function TerminalPane({
 type NativeTerminalWorkspaceProps = {
   ipc: IpcClient;
   request?: TerminalRequest | undefined;
+  onMinimize?: (() => void) | undefined;
 };
 
 type ControlledTerminalWorkspaceProps = {
@@ -172,6 +173,7 @@ type ControlledTerminalWorkspaceProps = {
   onOpen: (request: TerminalOpenRequest) => void;
   onInput: (sessionId: string, input: string) => void;
   onOpenFile: (link: TerminalFileLink) => void;
+  onMinimize?: (() => void) | undefined;
 };
 
 export type TerminalWorkspaceProps =
@@ -181,6 +183,7 @@ export type TerminalWorkspaceProps =
 function ControlledTerminalTabs({
   state,
   onChange,
+  onMinimize,
 }: ControlledTerminalWorkspaceProps) {
   const activate = (id: string) => {
     const action: TerminalAction = { type: "session/activate", id };
@@ -189,6 +192,9 @@ function ControlledTerminalTabs({
   return (
     <section className="terminal-workspace" aria-label="Terminal workspace">
       <div className="terminal-tabbar" role="tablist" aria-label="Terminals">
+        <div className="terminal-window-title" aria-hidden="true">
+          Terminal
+        </div>
         {state.sessions.map((session, index) => (
           <div
             key={session.id}
@@ -219,6 +225,17 @@ function ControlledTerminalTabs({
             </button>
           </div>
         ))}
+        {onMinimize ? (
+          <button
+            type="button"
+            className="terminal-minimize"
+            aria-label="Minimize terminal"
+            title="Minimize terminal"
+            onClick={onMinimize}
+          >
+            <span aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </section>
   );
@@ -227,6 +244,7 @@ function ControlledTerminalTabs({
 function NativeTerminalWorkspace({
   ipc,
   request,
+  onMinimize,
 }: NativeTerminalWorkspaceProps) {
   const [sessions, setSessions] = useState<NativeTerminalSession[]>([]);
   const [activeId, setActiveId] = useState<string>();
@@ -237,7 +255,21 @@ function NativeTerminalWorkspace({
   const [outputHistory, setOutputHistory] = useState<Record<string, string>>(
     {},
   );
+  const sessionsRef = useRef<NativeTerminalSession[]>([]);
   const startedRequest = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  useEffect(
+    () => () => {
+      for (const session of sessionsRef.current) {
+        void ipc.terminal.terminate(session.workspaceId, session.id, true);
+      }
+    },
+    [ipc],
+  );
 
   const rememberOutput = useCallback((sessionId: string, chunk: string) => {
     setOutputHistory((current) => ({
@@ -365,6 +397,9 @@ function NativeTerminalWorkspace({
   return (
     <section className="terminal-workspace" aria-label="Terminal workspace">
       <div className="terminal-tabbar" role="tablist" aria-label="Terminals">
+        <div className="terminal-window-title" aria-hidden="true">
+          Terminal
+        </div>
         {sessions.map((session, index) => (
           <div
             key={session.id}
@@ -430,6 +465,17 @@ function NativeTerminalWorkspace({
             }}
           >
             Split
+          </button>
+        ) : null}
+        {onMinimize ? (
+          <button
+            type="button"
+            className="terminal-minimize"
+            aria-label="Minimize terminal"
+            title="Minimize terminal"
+            onClick={onMinimize}
+          >
+            <span aria-hidden="true" />
           </button>
         ) : null}
       </div>

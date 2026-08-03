@@ -14,11 +14,28 @@ import type {
   GraphNode,
   GraphPage,
   GraphPosition,
+  GraphSelectionContext,
 } from "./types";
 
-type FocusedGraphProps = {
+export type FocusedGraphProps = {
   page: GraphPage;
   hardCap?: number;
+  /**
+   * When provided, the graph reads selection from its parent. Passing `null`
+   * explicitly clears a controlled selection; omitting the prop keeps the
+   * graph self-managed for small/embedded consumers.
+   */
+  selectedNodeId?: string | null;
+  /** Called with the selected node id whenever the user changes selection. */
+  onSelectionChange?: (nodeId: string | undefined) => void;
+  /**
+   * Receives the bounded graph context for the selected node. This is the
+   * bridge used by a global inspector and keeps relationship rendering out of
+   * the graph canvas.
+   */
+  onSelectionContextChange?: (
+    context: GraphSelectionContext | undefined,
+  ) => void;
   onExpand?: (nodeId: string, knownNodeIds: string[]) => Promise<GraphPage>;
   onLoadMore?: (
     continuationToken: string,
@@ -28,6 +45,13 @@ type FocusedGraphProps = {
     command: GraphCommand,
     context: GraphCommandContext,
   ) => void | Promise<void>;
+  /**
+   * Render the legacy relationship inspector inside the graph. It is opt-in so
+   * shell consumers can render the same context in the global inspector.
+   */
+  showInspector?: boolean;
+  /** Alias for consumers that prefer the feature's placement-oriented name. */
+  embeddedInspector?: boolean;
 };
 
 type GraphContextMenu = {
@@ -35,13 +59,6 @@ type GraphContextMenu = {
   x: number;
   y: number;
 };
-
-const panelStyle = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(230px, 27%)",
-  minHeight: 0,
-  height: "100%",
-} as const;
 
 const buttonStyle = {
   border: "1px solid var(--line)",
@@ -74,35 +91,67 @@ function relatedNode(
   );
 }
 
+const nodeColors = [
+  "#ef7f88",
+  "#e87baa",
+  "#4f91e8",
+  "#62b65a",
+  "#e1bd47",
+  "#72a6b9",
+  "#dc7557",
+  "#8ccf72",
+] as const;
+
+function graphHash(value: string): number {
+  let result = 2166136261;
+  for (const character of value) {
+    result ^= character.charCodeAt(0);
+    result = Math.imul(result, 16777619);
+  }
+  return result >>> 0;
+}
+
+function nodeColor(node: GraphNode): string {
+  if (node.type.toLowerCase().includes("folder")) return "#e7c54f";
+  return nodeColors[graphHash(node.type) % nodeColors.length] ?? "#79a7c0";
+}
+
 export function FocusedGraph({
   page,
   hardCap = DEFAULT_GRAPH_CAP,
+  selectedNodeId,
+  onSelectionChange,
+  onSelectionContextChange,
   onExpand,
   onLoadMore,
   onCommand,
+  showInspector: showInspectorProp,
+  embeddedInspector,
 }: FocusedGraphProps) {
   const [graph, setGraph] = useState(() => boundedGraph(page, hardCap));
-  const [selectedId, setSelectedId] = useState<string | undefined>(
-    graph.nodes[0]?.id,
-  );
+  const [internalSelectedId, setInternalSelectedId] = useState<string>();
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [positions, setPositions] = useState<Map<string, GraphPosition>>(
     () => new Map(),
   );
-  const [loading, setLoading] = useState(false);
+  const [loadingRequests, setLoadingRequests] = useState(0);
   const [error, setError] = useState<string>();
   const [contextMenu, setContextMenu] = useState<GraphContextMenu>();
-  const requestVersion = useRef(0);
+  const graphEpoch = useRef(0);
   const layoutVersion = useRef(0);
+  const loading = loadingRequests > 0;
+  const showInspector = showInspectorProp ?? embeddedInspector ?? false;
 
   useEffect(() => {
-    requestVersion.current += 1;
+    graphEpoch.current += 1;
     const next = boundedGraph(page, hardCap);
     setGraph(next);
-    setSelectedId((current) =>
+    setInternalSelectedId((current) =>
       current && next.nodes.some(({ id }) => id === current)
         ? current
-        : next.nodes[0]?.id,
+        : undefined,
     );
+    setExpandedIds(new Set());
     setContextMenu(undefined);
   }, [hardCap, page]);
 
@@ -143,7 +192,13 @@ export function FocusedGraph({
     () => new Map(graph.nodes.map((node) => [node.id, node])),
     [graph.nodes],
   );
-  const selected = selectedId ? nodesById.get(selectedId) : undefined;
+  const effectiveSelectedId =
+    selectedNodeId !== undefined
+      ? (selectedNodeId ?? undefined)
+      : internalSelectedId;
+  const selected = effectiveSelectedId
+    ? nodesById.get(effectiveSelectedId)
+    : undefined;
   const relationships = useMemo(
     () =>
       selected
@@ -154,44 +209,93 @@ export function FocusedGraph({
         : [],
     [graph.edges, selected],
   );
-  const showLabels = graph.nodes.length <= 35;
+  const selectionContext = useMemo<GraphSelectionContext | undefined>(() => {
+    if (!selected) return undefined;
+    const relatedNodes = relationships
+      .map((edge) => relatedNode(edge, selected.id, nodesById))
+      .filter((node): node is GraphNode => Boolean(node));
+    return {
+      node: selected,
+      relationships,
+      relatedNodes,
+      graph,
+    };
+  }, [graph, nodesById, relationships, selected]);
+
+  useEffect(() => {
+    onSelectionContextChange?.(selectionContext);
+  }, [onSelectionContextChange, selectionContext]);
+
+  const nodeDegrees = useMemo(() => {
+    const degrees = new Map<string, number>();
+    graph.nodes.forEach(({ id }) => degrees.set(id, 0));
+    graph.edges.forEach(({ sourceId, targetId }) => {
+      degrees.set(sourceId, (degrees.get(sourceId) ?? 0) + 1);
+      degrees.set(targetId, (degrees.get(targetId) ?? 0) + 1);
+    });
+    return degrees;
+  }, [graph.edges, graph.nodes]);
 
   const addPage = useCallback(
     async (load: () => Promise<GraphPage>) => {
-      const version = ++requestVersion.current;
-      setLoading(true);
+      const epoch = graphEpoch.current;
+      setLoadingRequests((current) => current + 1);
       setError(undefined);
       try {
         const incoming = await load();
-        if (version !== requestVersion.current) return;
+        if (epoch !== graphEpoch.current) return false;
         setGraph((current) => mergeGraphPages(current, incoming, hardCap));
+        return true;
       } catch (cause) {
-        if (version === requestVersion.current)
+        if (epoch === graphEpoch.current)
           setError(
             cause instanceof Error ? cause.message : "Graph request failed",
           );
+        return false;
       } finally {
-        if (version === requestVersion.current) setLoading(false);
+        setLoadingRequests((current) => Math.max(0, current - 1));
       }
     },
     [hardCap],
   );
 
-  const selectNode = useCallback((node: GraphNode) => {
-    setSelectedId(node.id);
-  }, []);
+  const selectNode = useCallback(
+    (node: GraphNode) => {
+      setInternalSelectedId(node.id);
+      onSelectionChange?.(node.id);
+    },
+    [onSelectionChange],
+  );
+
+  const clearSelection = useCallback(() => {
+    setInternalSelectedId(undefined);
+    onSelectionChange?.(undefined);
+  }, [onSelectionChange]);
 
   const expandNode = useCallback(
     (node: GraphNode) => {
-      if (!onExpand || graph.nodes.length >= hardCap) return;
+      if (
+        !onExpand ||
+        expandedIds.has(node.id) ||
+        graph.nodes.length >= hardCap
+      )
+        return;
+      setExpandedIds((current) => new Set(current).add(node.id));
       void addPage(() =>
         onExpand(
           node.id,
           graph.nodes.map(({ id }) => id),
         ),
-      );
+      ).then((succeeded) => {
+        if (succeeded) return;
+        setExpandedIds((current) => {
+          const next = new Set(current);
+          next.delete(node.id);
+          return next;
+        });
+      });
     },
-    [addPage, graph.nodes, hardCap, onExpand],
+    [addPage, expandedIds, graph.nodes, hardCap, onExpand],
   );
 
   const runCommand = useCallback(
@@ -212,23 +316,15 @@ export function FocusedGraph({
   );
 
   return (
-    <section aria-label="Focused knowledge graph" style={panelStyle}>
-      <div
-        className="focused-graph-canvas"
-        style={{ minWidth: 0, overflow: "hidden", position: "relative" }}
-      >
+    <section className="focused-graph" aria-label="Focused knowledge graph">
+      <div className="focused-graph-canvas">
         <svg
           role="img"
           aria-label={`Focused graph with ${String(graph.nodes.length)} nodes and ${String(graph.edges.length)} relationships`}
           viewBox="0 0 960 610"
           preserveAspectRatio="xMidYMid meet"
-          style={{ display: "block", width: "100%", height: "100%" }}
         >
           <defs>
-            <radialGradient id="graph-background">
-              <stop offset="0%" stopColor="#1b2230" />
-              <stop offset="100%" stopColor="#0d1118" />
-            </radialGradient>
             <filter
               id="node-glow"
               x="-100%"
@@ -243,7 +339,7 @@ export function FocusedGraph({
               </feMerge>
             </filter>
           </defs>
-          <rect width="960" height="610" fill="url(#graph-background)" />
+          <rect width="960" height="610" fill="#17191d" />
           {graph.edges.map((edge) => {
             const source = positions.get(edge.sourceId);
             const target = positions.get(edge.targetId);
@@ -255,9 +351,9 @@ export function FocusedGraph({
                   y1={source.y}
                   x2={target.x}
                   y2={target.y}
-                  stroke={isInferred(edge.authority) ? "#666078" : "#667184"}
-                  strokeWidth="0.8"
-                  opacity="0.48"
+                  stroke={isInferred(edge.authority) ? "#747079" : "#92979d"}
+                  strokeWidth="0.65"
+                  opacity="0.54"
                   strokeDasharray={isInferred(edge.authority) ? "5 4" : "none"}
                 />
                 <title>{`${edge.type}, ${statusText(edge)}`}</title>
@@ -266,7 +362,7 @@ export function FocusedGraph({
           })}
           {graph.nodes.map((node) => {
             const position = positions.get(node.id) ?? { x: 90, y: 70 };
-            const selectedNode = selectedId === node.id;
+            const selectedNode = effectiveSelectedId === node.id;
             return (
               <g
                 key={node.id}
@@ -275,16 +371,21 @@ export function FocusedGraph({
                 aria-label={nodeLabel(node)}
                 aria-haspopup="menu"
                 aria-pressed={selectedNode}
+                aria-expanded={onExpand ? expandedIds.has(node.id) : undefined}
                 transform={`translate(${String(position.x)} ${String(position.y)})`}
                 onClick={(event) => {
-                  if (event.detail <= 1) selectNode(node);
+                  if (event.detail <= 1) {
+                    selectNode(node);
+                  }
                 }}
                 onDoubleClick={() => {
-                  if (node.source) runCommand("graph.open-source", node);
+                  selectNode(node);
+                  if (onExpand) expandNode(node);
+                  else if (node.source) runCommand("graph.open-source", node);
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  setSelectedId(node.id);
+                  selectNode(node);
                   setContextMenu({
                     node,
                     x: event.clientX,
@@ -301,36 +402,34 @@ export function FocusedGraph({
                 style={{ cursor: "pointer" }}
               >
                 <circle
-                  r={
-                    selectedNode
-                      ? 15
-                      : node.type.toLowerCase().includes("folder")
-                        ? 11
-                        : 7
+                  r={Math.min(
+                    15,
+                    4 +
+                      Math.sqrt(nodeDegrees.get(node.id) ?? 0) * 1.7 +
+                      (node.type.toLowerCase().includes("folder") ? 2 : 0) +
+                      (selectedNode ? 2 : 0),
+                  )}
+                  fill={nodeColor(node)}
+                  stroke={
+                    node.stale
+                      ? "var(--danger)"
+                      : selectedNode
+                        ? "#f3f5f7"
+                        : "#24272c"
                   }
-                  fill={
-                    selectedNode
-                      ? "#c3b1ff"
-                      : node.type.toLowerCase().includes("folder")
-                        ? "#e4cd68"
-                        : node.type.toLowerCase().includes("note")
-                          ? "#7f91ff"
-                          : "#aab3c2"
-                  }
-                  stroke={node.stale ? "var(--danger)" : "#e8ecf4"}
-                  strokeWidth={selectedNode ? 2.5 : 0.8}
+                  strokeWidth={selectedNode ? 1.8 : 0.65}
                   strokeDasharray={isInferred(node.authority) ? "3 2" : "none"}
-                  opacity={node.stale ? 0.72 : 0.96}
+                  opacity={node.stale ? 0.72 : 0.98}
                   filter={selectedNode ? "url(#node-glow)" : undefined}
                 />
-                {showLabels || selectedNode ? (
+                {selectedNode ? (
                   <text
-                    x={selectedNode ? 20 : 14}
+                    x="18"
                     y="4"
-                    fill={selectedNode ? "#f2edff" : "#c4cad5"}
-                    fontSize={selectedNode ? 12 : 10}
+                    fill="#f1f2f4"
+                    fontSize="11"
                     paintOrder="stroke"
-                    stroke="#0d1118"
+                    stroke="#17191d"
                     strokeWidth="3"
                   >
                     {node.label.length > 28
@@ -431,16 +530,21 @@ export function FocusedGraph({
         ) : null}
       </div>
 
-      <aside
-        aria-label="Graph inspector and relationship list"
-        style={{
-          overflow: "auto",
-          padding: 16,
-          borderLeft: "1px solid var(--line)",
-          background: "var(--surface)",
-        }}
-      >
-        {selected ? (
+      {showInspector && selected ? (
+        <aside
+          className="focused-graph-inspector"
+          aria-label="Graph inspector and relationship list"
+        >
+          <button
+            type="button"
+            className="focused-graph-inspector-close"
+            aria-label="Close graph inspector"
+            onClick={() => {
+              clearSelection();
+            }}
+          >
+            ×
+          </button>
           <>
             <p style={{ margin: "0 0 4px", color: "var(--text-muted)" }}>
               {selected.type}
@@ -467,12 +571,15 @@ export function FocusedGraph({
                 <button
                   type="button"
                   style={buttonStyle}
-                  disabled={graph.nodes.length >= hardCap}
+                  disabled={
+                    expandedIds.has(selected.id) ||
+                    graph.nodes.length >= hardCap
+                  }
                   onClick={() => {
                     expandNode(selected);
                   }}
                 >
-                  Expand
+                  {expandedIds.has(selected.id) ? "Expanded" : "Expand"}
                 </button>
               ) : null}
               {selected.source ? (
@@ -520,7 +627,7 @@ export function FocusedGraph({
                           textAlign: "left",
                         }}
                         onClick={() => {
-                          setSelectedId(related.id);
+                          selectNode(related);
                         }}
                       >
                         <strong>{edge.type}</strong> → {related.label}
@@ -541,10 +648,8 @@ export function FocusedGraph({
               <p>No visible relationships.</p>
             )}
           </>
-        ) : (
-          <p>No node selected.</p>
-        )}
-      </aside>
+        </aside>
+      ) : null}
     </section>
   );
 }

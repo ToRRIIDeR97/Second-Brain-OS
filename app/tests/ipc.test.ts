@@ -13,6 +13,25 @@ test("validates typed command envelopes and records correlation IDs", async () =
   expect(mock.calls[0]?.command).toBe("system_ping");
 });
 
+test("git diff uses a workspace-scoped, typed read-only request", async () => {
+  const mock = createMockIpc();
+  const result = await mock.client.git.diff("workspace-1", true, [
+    "src/app.ts",
+  ]);
+  expect(result).toMatchObject({
+    ok: true,
+    data: { staged: true, patch: "", truncated: false },
+  });
+  expect(mock.calls[0]).toEqual({
+    command: "git_diff",
+    args: {
+      workspaceId: "workspace-1",
+      staged: true,
+      paths: ["src/app.ts"],
+    },
+  });
+});
+
 test("stream subscriptions return an unsubscribe function", async () => {
   const mock = createMockIpc();
   const seen: string[] = [];

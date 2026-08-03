@@ -27,13 +27,33 @@ export type CommandFailure = {
 
 export type CommandResult<T> = CommandSuccess<T> | CommandFailure;
 
+export type ThemeMode = "auto" | "light" | "dark";
+
+export type InspectorTab =
+  | "overview"
+  | "relationships"
+  | "source"
+  | "context"
+  | "history"
+  | "provider"
+  | "actions";
+
 export type ShellLayout = {
   version: number;
-  sidebarWidth: number;
+  navigatorWidth: number;
   inspectorWidth: number;
+  navigatorOpen: boolean;
   inspectorOpen: boolean;
   drawerOpen: boolean;
+  drawerHeight: number;
+  themeMode: ThemeMode;
+  inspectorTab: InspectorTab;
+  /** v1 compatibility: accepted when reading legacy shell state only. */
+  sidebarWidth?: number;
 };
+
+/** Canonical persisted shell payload after the v1 → v2 migration. */
+export type ShellLayoutV2 = Omit<ShellLayout, "version"> & { version: 2 };
 
 export type EventEnvelope<T> = {
   schemaVersion: number;
@@ -74,6 +94,29 @@ export type FileReadResult = {
   revisionId: string;
   encoding: "utf8" | "utf8Bom" | "unsupported";
   eol: "lf" | "crlf" | "mixed";
+  sizeBytes: number;
+};
+
+export type ImageMediaType =
+  | "image/png"
+  | "image/jpeg"
+  | "image/gif"
+  | "image/webp";
+
+export type FileAttachmentCreateRequest = {
+  path: WorkspacePath;
+  bytesBase64: string;
+};
+
+export type FileAttachmentCreateResult = {
+  path: WorkspacePath;
+  mediaType: ImageMediaType;
+  sizeBytes: number;
+};
+
+export type FileAttachmentReadResult = {
+  base64: string;
+  mediaType: ImageMediaType;
   sizeBytes: number;
 };
 
@@ -142,6 +185,12 @@ export type GitWorkspaceChange = {
 export type GitWorkspaceStatus = {
   branch?: string;
   changes: GitWorkspaceChange[];
+};
+
+export type GitWorkspaceDiff = {
+  staged: boolean;
+  patch: string;
+  truncated: boolean;
 };
 
 export type WorkspaceSearchResult = {

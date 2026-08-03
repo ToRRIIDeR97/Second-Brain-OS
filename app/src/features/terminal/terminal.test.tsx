@@ -93,6 +93,26 @@ describe("terminal workspace state", () => {
       { type: "session/activate", id: "two" },
     );
   });
+
+  it("places the window title beside session tabs and exposes minimize", () => {
+    const onMinimize = vi.fn();
+    render(
+      <TerminalWorkspace
+        state={state([session("one", { title: "Terminal 1" })])}
+        onChange={vi.fn()}
+        onOpen={vi.fn()}
+        onInput={vi.fn()}
+        onOpenFile={vi.fn()}
+        onMinimize={onMinimize}
+      />,
+    );
+
+    const tablist = screen.getByRole("tablist", { name: "Terminals" });
+    expect(tablist).toHaveTextContent("Terminal");
+    expect(screen.getByRole("tab", { name: "Terminal 1" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Minimize terminal" }));
+    expect(onMinimize).toHaveBeenCalledOnce();
+  });
 });
 
 describe("terminal file links", () => {
