@@ -6,6 +6,7 @@ import {
   type MouseEvent,
   type SyntheticEvent,
 } from "react";
+import { X } from "lucide-react";
 import type { SearchResponse, SearchResult } from "./SearchWorkspace";
 
 export type KnowledgeSearchModalProps = {
@@ -41,31 +42,56 @@ export function KnowledgeSearchModal({
   const titleId = useId();
   const inputId = useId();
   const resultsId = useId();
+  const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [query, setQuery] = useState(initialQuery);
+  const [submitted, setSubmitted] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   useEffect(() => {
     if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          "input, button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      previous?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open) return null;
 
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSubmitted(true);
+    setActiveIndex(response.results.length ? 0 : -1);
     onSearch(query);
   };
 
@@ -81,6 +107,7 @@ export function KnowledgeSearchModal({
       onClick={closeFromBackdrop}
     >
       <section
+        ref={panelRef}
         className="knowledge-search-modal"
         role="dialog"
         aria-modal="true"
@@ -97,7 +124,7 @@ export function KnowledgeSearchModal({
             aria-label="Close knowledge search"
             onClick={onClose}
           >
-            ×
+            <X size={16} aria-hidden="true" />
           </button>
         </header>
 
@@ -112,6 +139,14 @@ export function KnowledgeSearchModal({
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
+                setActiveIndex(-1);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" && response.results.length) {
+                  event.preventDefault();
+                  setActiveIndex(0);
+                  resultRefs.current[0]?.focus();
+                }
               }}
               placeholder="Search notes, decisions, and projects…"
               autoComplete="off"
@@ -131,11 +166,30 @@ export function KnowledgeSearchModal({
           aria-label="Knowledge search results"
         >
           {response.results.length ? (
-            response.results.map((result) => (
+            response.results.map((result, index) => (
               <li key={result.id}>
                 <button
+                  ref={(element) => {
+                    resultRefs.current[index] = element;
+                  }}
                   type="button"
                   className="knowledge-search-result"
+                  aria-current={activeIndex === index || undefined}
+                  onFocus={() => {
+                    setActiveIndex(index);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp")
+                      return;
+                    event.preventDefault();
+                    const next =
+                      event.key === "ArrowDown"
+                        ? (index + 1) % response.results.length
+                        : (index - 1 + response.results.length) %
+                          response.results.length;
+                    setActiveIndex(next);
+                    resultRefs.current[next]?.focus();
+                  }}
                   onClick={() => {
                     onOpen(result);
                   }}
@@ -155,7 +209,11 @@ export function KnowledgeSearchModal({
               </li>
             ))
           ) : (
-            <li className="knowledge-search-empty">No matching knowledge.</li>
+            <li className="knowledge-search-empty">
+              {submitted
+                ? "No matching knowledge. Try a broader phrase."
+                : "Search notes, decisions, projects, and indexed files."}
+            </li>
           )}
         </ol>
       </section>

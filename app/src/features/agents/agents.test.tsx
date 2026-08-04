@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AgentWorkspace } from "./AgentWorkspace";
 import { agentReducer, statusLabel } from "./model";
+import { unavailableAgentSessionSource } from "./source";
 import type { AgentSession, AgentWorkspaceState } from "./types";
 
 const session = (overrides: Partial<AgentSession> = {}): AgentSession => ({
@@ -80,5 +81,38 @@ describe("agent session model", () => {
 
   it("labels recoverable sessions honestly", () => {
     expect(statusLabel("recoverable")).toBe("Recoverable");
+  });
+
+  it("applies normalized events without treating provider text as a raw log", () => {
+    const initial = state([session({ state: "running" })]);
+    const next = agentReducer(initial, {
+      type: "session/event",
+      id: "agent-1",
+      event: {
+        id: "event-1",
+        sessionId: "agent-1",
+        occurredAt: "2026-08-02T10:00:00Z",
+        type: "lifecycle",
+        state: "waiting",
+        summary: "Waiting for approval",
+      },
+    });
+    expect(next.sessions[0]?.state).toBe("waiting");
+    expect(next.sessions[0]?.events).toHaveLength(1);
+  });
+
+  it("keeps the default runtime honest until an IPC source is connected", async () => {
+    expect(unavailableAgentSessionSource.availability.status).toBe(
+      "unavailable",
+    );
+    await expect(
+      unavailableAgentSessionSource.list("workspace-1"),
+    ).resolves.toEqual([]);
+    await expect(
+      unavailableAgentSessionSource.cancel("workspace-1", "agent-1"),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "agent.runtime_unavailable" },
+    });
   });
 });

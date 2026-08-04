@@ -7,6 +7,7 @@ import type {
   GraphCommandContext,
   GraphNode,
   GraphPage,
+  GraphSelectionContext,
 } from "./types";
 
 const node = (id: string, label = id): GraphNode => ({
@@ -54,26 +55,79 @@ describe("focused graph model", () => {
 });
 
 describe("FocusedGraph", () => {
-  it("selects nodes without expanding until the explicit action is used", async () => {
+  it("selects a node without expanding until an explicit action is used", async () => {
     const onExpand = vi
       .fn<(id: string, knownNodeIds: string[]) => Promise<GraphPage>>()
       .mockResolvedValue(page([node("expanded")]));
 
-    const { container } = render(
-      <FocusedGraph page={page([node("a"), node("b")])} onExpand={onExpand} />,
+    render(
+      <FocusedGraph
+        page={page([node("a"), node("b")])}
+        onExpand={onExpand}
+        showInspector
+      />,
     );
-    expect(container.querySelectorAll("svg circle")).toHaveLength(2);
+    expect(
+      screen.getByRole("img", {
+        name: "Focused graph with 2 nodes and 1 relationships",
+      }),
+    ).toBeInTheDocument();
     const firstNode = screen.getByRole("button", { name: /^a, Note/ });
     fireEvent.click(firstNode);
     expect(onExpand).not.toHaveBeenCalled();
     expect(firstNode).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("complementary", {
+        name: "Graph inspector and relationship list",
+      }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand" }));
     expect(onExpand).toHaveBeenCalledWith("a", ["a", "b"]);
+
     await screen.findByRole("button", { name: /^expanded, Note/ });
+    expect(screen.getByRole("button", { name: "Expanded" })).toBeDisabled();
   });
 
-  it("does not expand from keyboard selection and ignores an obsolete expansion", async () => {
+  it("toggles a folder's child branch from the folder node", async () => {
+    const folder = { ...node("folder", "Folder"), type: "folder" };
+    const child = node("child", "Child");
+    const onExpand = vi.fn().mockResolvedValue({
+      nodes: [child],
+      edges: [
+        {
+          id: "folder-child",
+          sourceId: folder.id,
+          targetId: child.id,
+          type: "contains",
+          authority: "explicit_file",
+        },
+      ],
+      truncated: false,
+    } satisfies GraphPage);
+
+    render(<FocusedGraph page={page([folder])} onExpand={onExpand} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Folder, folder/ }));
+    expect(onExpand).toHaveBeenCalledWith("folder", ["folder"]);
+    await screen.findByRole("button", { name: /^Child, Note/ });
+    expect(
+      screen.getByRole("button", { name: /^Folder, folder/ }),
+    ).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Folder, folder/ }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /^Child, Note/ }),
+      ).not.toBeInTheDocument();
+    });
+    expect(onExpand).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: /^Folder, folder/ }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("merges concurrent expansions", async () => {
     let resolveFirst: ((value: GraphPage) => void) | undefined;
     const onExpand = vi
       .fn<(id: string, knownNodeIds: string[]) => Promise<GraphPage>>()
@@ -86,25 +140,74 @@ describe("FocusedGraph", () => {
       .mockResolvedValueOnce(page([node("current", "Current result")]));
 
     render(
-      <FocusedGraph page={page([node("a"), node("b")])} onExpand={onExpand} />,
+      <FocusedGraph
+        page={page([node("a"), node("b")])}
+        onExpand={onExpand}
+        showInspector
+      />,
     );
     const firstNode = screen.getByRole("button", { name: /^a, Note/ });
-    fireEvent.keyDown(firstNode, { key: "Enter" });
-    expect(onExpand).not.toHaveBeenCalled();
+    fireEvent.click(firstNode);
     fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(onExpand).toHaveBeenCalledWith("a", ["a", "b"]);
     fireEvent.click(screen.getByRole("button", { name: /^b, Note/ }));
     fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    await waitFor(() => {
+      expect(onExpand).toHaveBeenCalledWith("b", ["a", "b"]);
+    });
     await screen.findByRole("button", { name: /^Current result, Note/ });
     resolveFirst?.(page([node("obsolete", "Obsolete result")]));
 
-    await waitFor(() => {
-      expect(
-        screen.queryByRole("button", { name: /^Obsolete result, Note/ }),
-      ).not.toBeInTheDocument();
-    });
+    await screen.findByRole("button", { name: /^Obsolete result, Note/ });
     expect(
       screen.getByRole("button", { name: /LINKS_TO → a/ }),
     ).toBeInTheDocument();
+  });
+
+  it("supports controlled selection and exposes graph context", async () => {
+    const onSelectionChange = vi.fn<(nodeId: string | undefined) => void>();
+    const onSelectionContextChange =
+      vi.fn<(context: GraphSelectionContext | undefined) => void>();
+    const view = render(
+      <FocusedGraph
+        page={page([node("a"), node("b")])}
+        selectedNodeId="b"
+        onSelectionChange={onSelectionChange}
+        onSelectionContextChange={onSelectionContextChange}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^b, Note/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^a, Note/ }));
+    expect(onSelectionChange).toHaveBeenCalledWith("a");
+    expect(screen.getByRole("button", { name: /^b, Note/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    view.rerender(
+      <FocusedGraph
+        page={page([node("a"), node("b")])}
+        selectedNodeId="a"
+        onSelectionChange={onSelectionChange}
+        onSelectionContextChange={onSelectionContextChange}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^a, Note/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+    await waitFor(() => {
+      const latestContext = onSelectionContextChange.mock.lastCall?.[0];
+      expect(latestContext?.node.id).toBe("a");
+      expect(latestContext?.relationships[0]?.type).toBe("LINKS_TO");
+      expect(latestContext?.relatedNodes[0]?.id).toBe("b");
+    });
   });
 
   it("keeps launch actions behind the node context menu", () => {

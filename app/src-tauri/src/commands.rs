@@ -9,9 +9,11 @@ use crate::terminal::{
 use crate::workspace::git::GitAdapter;
 use crate::workspace::mutations::{MutationActor, MutationService};
 use crate::workspace::{
-    ApplicationPolicy, FileKind, PathPolicy, RegisterWorkspace, TrustLevel, WorkspaceId,
-    WorkspaceKind, WorkspacePath, WorkspaceRegistry, evaluate_policy, list_directory, read_text,
+    ApplicationPolicy, FileKind, PathPolicy, ReadError, RegisterWorkspace, TrustLevel, WorkspaceId,
+    WorkspaceKind, WorkspacePath, WorkspaceRegistry, evaluate_policy, list_directory, open_file,
+    read_text,
 };
+use base64::Engine as _;
 use ignore::WalkBuilder;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,8 @@ const IPC_CONTRACT: &str = "ipc_result";
 const IPC_VERSION: u32 = 1;
 const SHELL_LAYOUT_KEY: &str = "shell.layout";
 const WORKSPACES_KEY: &str = "workspace.registry.v1";
+const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_BASE64_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4;
 
 /// Process-local application state. The domain registry deliberately stays
 /// independent of Tauri; this adapter is the only place that grants renderer
@@ -108,6 +112,29 @@ pub struct FileReadResult {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FileAttachmentCreateRequest {
+    pub path: RendererWorkspacePath,
+    pub bytes_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileAttachmentCreateResult {
+    pub path: RendererWorkspacePath,
+    pub media_type: &'static str,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileAttachmentReadResult {
+    pub base64: String,
+    pub media_type: &'static str,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileWriteRequest {
     pub path: RendererWorkspacePath,
     pub content: String,
@@ -133,6 +160,14 @@ pub struct FileWriteResult {
 pub struct GitWorkspaceStatus {
     pub branch: Option<String>,
     pub changes: Vec<GitWorkspaceChange>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorkspaceDiff {
+    pub staged: bool,
+    pub patch: String,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -232,11 +267,75 @@ pub struct CommandFailure {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellLayout {
+    /// Layout persistence schema. Version 1 payloads are accepted and
+    /// normalized to version 2 by `load_layout`/`shell_save_layout`.
+    #[serde(default = "default_shell_layout_version")]
     pub version: u32,
-    pub sidebar_width: u32,
+    /// The v1 field was named `sidebarWidth`; retain it as a serde alias so
+    /// existing installations can be migrated without dropping their width.
+    #[serde(alias = "sidebarWidth", default = "default_navigator_width")]
+    pub navigator_width: u32,
+    #[serde(default = "default_inspector_width")]
     pub inspector_width: u32,
+    #[serde(default = "default_navigator_open")]
+    pub navigator_open: bool,
+    #[serde(default = "default_inspector_open")]
     pub inspector_open: bool,
+    #[serde(default)]
     pub drawer_open: bool,
+    #[serde(default = "default_drawer_height")]
+    pub drawer_height: u32,
+    #[serde(default = "default_theme_mode")]
+    pub theme_mode: String,
+    #[serde(default = "default_inspector_tab")]
+    pub inspector_tab: String,
+}
+
+const SHELL_LAYOUT_VERSION: u32 = 2;
+
+fn default_shell_layout_version() -> u32 {
+    // Payloads that predate an explicit version are treated as v1 so they
+    // receive the same migration and safe defaults as existing v1 records.
+    1
+}
+
+fn default_navigator_width() -> u32 {
+    21
+}
+
+fn default_navigator_open() -> bool {
+    true
+}
+
+fn default_inspector_width() -> u32 {
+    22
+}
+
+fn default_inspector_open() -> bool {
+    true
+}
+
+fn default_drawer_height() -> u32 {
+    // The renderer persists panel dimensions as percentages (the same unit
+    // used by react-resizable-panels), so the default mirrors its 30% split.
+    30
+}
+
+fn default_theme_mode() -> String {
+    "light".to_owned()
+}
+
+fn default_inspector_tab() -> String {
+    "overview".to_owned()
+}
+
+impl ShellLayout {
+    fn migrated(mut self) -> Self {
+        if self.version < SHELL_LAYOUT_VERSION {
+            self.version = SHELL_LAYOUT_VERSION;
+        }
+        self
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -295,11 +394,13 @@ fn load_layout(database: &Database) -> AppResult<Option<ShellLayout>> {
                 .with_details(serde_json::Value::String(error.to_string()))
             })
         })
+        .map(|layout| layout.map(ShellLayout::migrated))
         .transpose()
 }
 
 fn save_layout(database: &Database, layout: &ShellLayout) -> AppResult<()> {
-    let value = serde_json::to_string(layout).map_err(|error| {
+    let layout = layout.clone().migrated();
+    let value = serde_json::to_string(&layout).map_err(|error| {
         AppError::new("settings.serialize", "The shell layout could not be saved.")
             .with_details(serde_json::Value::String(error.to_string()))
     })?;
@@ -407,6 +508,7 @@ pub fn shell_load_layout() -> CommandResult<Option<ShellLayout>> {
 
 #[tauri::command]
 pub fn shell_save_layout(layout: ShellLayout) -> CommandResult<ShellLayout> {
+    let layout = layout.migrated();
     let result = database().and_then(|database| {
         save_layout(&database, &layout)?;
         Ok(layout)
@@ -462,6 +564,359 @@ fn workspace_summary(record: &crate::workspace::WorkspaceRecord) -> WorkspaceSum
 
 fn app_error(code: &str, error: impl std::fmt::Display) -> AppError {
     AppError::new(code, error.to_string())
+}
+
+fn attachment_too_large() -> AppError {
+    AppError::new(
+        "file.attachment_too_large",
+        "The image exceeds the 10 MiB attachment limit.",
+    )
+}
+
+fn attachment_not_image() -> AppError {
+    AppError::new(
+        "file.attachment_not_image",
+        "The attachment is not a supported image.",
+    )
+}
+
+fn attachment_media_type(bytes: &[u8]) -> Option<&'static str> {
+    if is_png(bytes) {
+        Some("image/png")
+    } else if is_jpeg(bytes) {
+        Some("image/jpeg")
+    } else if is_gif(bytes) {
+        Some("image/gif")
+    } else if is_webp(bytes) {
+        Some("image/webp")
+    } else {
+        None
+    }
+}
+
+fn validate_attachment_bytes(bytes: &[u8]) -> AppResult<&'static str> {
+    if bytes.len() > MAX_ATTACHMENT_BYTES {
+        return Err(attachment_too_large());
+    }
+    attachment_media_type(bytes).ok_or_else(attachment_not_image)
+}
+
+fn decode_attachment(bytes_base64: &str) -> AppResult<Vec<u8>> {
+    if bytes_base64.len() > MAX_ATTACHMENT_BASE64_BYTES {
+        return Err(attachment_too_large());
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes_base64.as_bytes())
+        .map_err(|_| {
+            AppError::new(
+                "file.attachment_invalid_base64",
+                "The attachment data is not valid base64.",
+            )
+        })?;
+    validate_attachment_bytes(&bytes)?;
+    Ok(bytes)
+}
+
+fn is_png(bytes: &[u8]) -> bool {
+    const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    if bytes.len() < 33 || !bytes.starts_with(SIGNATURE) {
+        return false;
+    }
+    let mut offset = 8usize;
+    let mut first_chunk = true;
+    let mut saw_header = false;
+    while offset + 12 <= bytes.len() {
+        let length = u32::from_be_bytes([
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        ]) as usize;
+        let Some(end) = offset
+            .checked_add(12)
+            .and_then(|value| value.checked_add(length))
+        else {
+            return false;
+        };
+        if end > bytes.len() {
+            return false;
+        }
+        let kind = &bytes[offset + 4..offset + 8];
+        let data = &bytes[offset + 8..offset + 8 + length];
+        if first_chunk && (kind != b"IHDR" || length != 13) {
+            return false;
+        }
+        first_chunk = false;
+        if kind == b"IHDR" {
+            if length != 13 {
+                return false;
+            }
+            let width = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+            let height = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+            if width == 0 || height == 0 {
+                return false;
+            }
+            saw_header = true;
+        }
+        if kind == b"IEND" {
+            return length == 0 && saw_header && end == bytes.len();
+        }
+        offset = end;
+    }
+    false
+}
+
+fn is_jpeg(bytes: &[u8]) -> bool {
+    if bytes.len() < 4 || bytes[0..2] != [0xff, 0xd8] {
+        return false;
+    }
+    let mut offset = 2usize;
+    let mut saw_frame = false;
+    while offset < bytes.len() {
+        if bytes[offset] != 0xff {
+            return false;
+        }
+        while offset < bytes.len() && bytes[offset] == 0xff {
+            offset += 1;
+        }
+        if offset >= bytes.len() {
+            return false;
+        }
+        let marker = bytes[offset];
+        offset += 1;
+        if marker == 0xd9 {
+            return saw_frame && offset == bytes.len();
+        }
+        if marker == 0xd8 || marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            continue;
+        }
+        if offset + 2 > bytes.len() {
+            return false;
+        }
+        let segment_length = u16::from_be_bytes([bytes[offset], bytes[offset + 1]]) as usize;
+        if segment_length < 2 {
+            return false;
+        }
+        let Some(segment_end) = offset.checked_add(segment_length) else {
+            return false;
+        };
+        if segment_end > bytes.len() {
+            return false;
+        }
+        let segment = &bytes[offset + 2..segment_end];
+        if is_jpeg_frame_marker(marker) {
+            if segment.len() < 6 {
+                return false;
+            }
+            let height = u16::from_be_bytes([segment[1], segment[2]]);
+            let width = u16::from_be_bytes([segment[3], segment[4]]);
+            if width == 0 || height == 0 {
+                return false;
+            }
+            saw_frame = true;
+        }
+        offset = segment_end;
+        if marker == 0xda {
+            // After SOS, marker bytes are escaped as FF 00 or restart markers.
+            // Scan data ends at an unescaped EOI; no image payload is retained.
+            while offset + 1 < bytes.len() {
+                if bytes[offset] != 0xff {
+                    offset += 1;
+                    continue;
+                }
+                let next = bytes[offset + 1];
+                if next == 0x00 || (0xd0..=0xd7).contains(&next) {
+                    offset += 2;
+                } else if next == 0xff {
+                    offset += 1;
+                } else if next == 0xd9 {
+                    return saw_frame && offset + 2 == bytes.len();
+                } else {
+                    return false;
+                }
+            }
+            return false;
+        }
+    }
+    false
+}
+
+fn is_jpeg_frame_marker(marker: u8) -> bool {
+    matches!(
+        marker,
+        0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf
+    )
+}
+
+fn is_gif(bytes: &[u8]) -> bool {
+    if bytes.len() < 14 || !(bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
+        return false;
+    }
+    let width = u16::from_le_bytes([bytes[6], bytes[7]]);
+    let height = u16::from_le_bytes([bytes[8], bytes[9]]);
+    if width == 0 || height == 0 {
+        return false;
+    }
+    let mut offset = 13usize;
+    let packed = bytes[10];
+    if packed & 0x80 != 0 {
+        let entries = 1usize << ((packed & 0x07) + 1);
+        let Some(end) = offset.checked_add(entries * 3) else {
+            return false;
+        };
+        if end > bytes.len() {
+            return false;
+        }
+        offset = end;
+    }
+    let mut saw_image = false;
+    while offset < bytes.len() {
+        match bytes[offset] {
+            0x3b => return saw_image && offset + 1 == bytes.len(),
+            0x21 => {
+                if offset + 2 > bytes.len() {
+                    return false;
+                }
+                offset += 2;
+                if !skip_gif_sub_blocks(bytes, &mut offset) {
+                    return false;
+                }
+            }
+            0x2c => {
+                if offset + 10 > bytes.len() {
+                    return false;
+                }
+                let image_width = u16::from_le_bytes([bytes[offset + 5], bytes[offset + 6]]);
+                let image_height = u16::from_le_bytes([bytes[offset + 7], bytes[offset + 8]]);
+                if image_width == 0 || image_height == 0 {
+                    return false;
+                }
+                let image_packed = bytes[offset + 9];
+                offset += 10;
+                if image_packed & 0x80 != 0 {
+                    let entries = 1usize << ((image_packed & 0x07) + 1);
+                    let Some(end) = offset.checked_add(entries * 3) else {
+                        return false;
+                    };
+                    if end > bytes.len() {
+                        return false;
+                    }
+                    offset = end;
+                }
+                if offset >= bytes.len() {
+                    return false;
+                }
+                offset += 1; // LZW minimum code size.
+                if !skip_gif_sub_blocks(bytes, &mut offset) {
+                    return false;
+                }
+                saw_image = true;
+            }
+            _ => return false,
+        }
+    }
+    false
+}
+
+fn skip_gif_sub_blocks(bytes: &[u8], offset: &mut usize) -> bool {
+    loop {
+        if *offset >= bytes.len() {
+            return false;
+        }
+        let length = bytes[*offset] as usize;
+        *offset += 1;
+        if length == 0 {
+            return true;
+        }
+        let Some(end) = (*offset).checked_add(length) else {
+            return false;
+        };
+        if end > bytes.len() {
+            return false;
+        }
+        *offset = end;
+    }
+}
+
+fn is_webp(bytes: &[u8]) -> bool {
+    if bytes.len() < 20 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+        return false;
+    }
+    let declared_size = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+    let Some(container_end) = declared_size.checked_add(8) else {
+        return false;
+    };
+    if container_end != bytes.len() || container_end < 20 {
+        return false;
+    }
+    let mut offset = 12usize;
+    let mut saw_frame = false;
+    while offset < container_end {
+        if offset + 8 > container_end {
+            return false;
+        }
+        let kind = &bytes[offset..offset + 4];
+        let length = u32::from_le_bytes([
+            bytes[offset + 4],
+            bytes[offset + 5],
+            bytes[offset + 6],
+            bytes[offset + 7],
+        ]) as usize;
+        let Some(data_start) = offset.checked_add(8) else {
+            return false;
+        };
+        let Some(data_end) = data_start.checked_add(length) else {
+            return false;
+        };
+        let padded_end = data_end + (length & 1);
+        if padded_end > container_end {
+            return false;
+        }
+        let data = &bytes[data_start..data_end];
+        match kind {
+            b"VP8 " => {
+                if data.len() < 10
+                    || data[3..6] != [0x9d, 0x01, 0x2a]
+                    || u16::from_le_bytes([data[6], data[7]]) & 0x3fff == 0
+                    || u16::from_le_bytes([data[8], data[9]]) & 0x3fff == 0
+                {
+                    return false;
+                }
+                saw_frame = true;
+            }
+            b"VP8L" => {
+                if data.len() < 5 || data[0] != 0x2f {
+                    return false;
+                }
+                let width = 1 + (((data[1] as usize) | ((data[2] as usize & 0x3f) << 8)) & 0x3ff);
+                let height = 1
+                    + (((data[2] as usize >> 6)
+                        | ((data[3] as usize) << 2)
+                        | ((data[4] as usize & 0x0f) << 10))
+                        & 0x3ff);
+                if width == 0 || height == 0 {
+                    return false;
+                }
+                saw_frame = true;
+            }
+            b"VP8X" => {
+                if data.len() < 10 {
+                    return false;
+                }
+                let width =
+                    1 + (data[4] as usize | ((data[5] as usize) << 8) | ((data[6] as usize) << 16));
+                let height =
+                    1 + (data[7] as usize | ((data[8] as usize) << 8) | ((data[9] as usize) << 16));
+                if width == 0 || height == 0 {
+                    return false;
+                }
+                saw_frame = true;
+            }
+            _ => {}
+        }
+        offset = padded_end;
+    }
+    saw_frame && offset == container_end
 }
 
 fn registered_workspace(
@@ -603,6 +1058,138 @@ pub fn file_read_text(
     CommandResult::from_result(result, correlation_id())
 }
 
+fn attachment_create_error(error: crate::workspace::mutations::MutationError) -> AppError {
+    use crate::workspace::mutations::MutationError;
+
+    match error {
+        MutationError::AlreadyExists => AppError::new(
+            "file.attachment_exists",
+            "An attachment already exists at that path.",
+        ),
+        MutationError::WorkspaceMismatch
+        | MutationError::InvalidPath(_)
+        | MutationError::PathEscape => AppError::new(
+            "file.attachment_path_denied",
+            "The attachment path is not allowed in this workspace.",
+        ),
+        _ => AppError::new(
+            "file.attachment_create_failed",
+            "The image could not be saved.",
+        ),
+    }
+}
+
+fn attachment_read_error(error: ReadError) -> AppError {
+    match error {
+        ReadError::Path(error) => app_error("workspace.path_denied", error),
+        ReadError::NotFile => AppError::new(
+            "file.attachment_not_file",
+            "The attachment path is not a file.",
+        ),
+        ReadError::TooLarge { .. } => attachment_too_large(),
+        _ => AppError::new(
+            "file.attachment_read_failed",
+            "The image could not be read.",
+        ),
+    }
+}
+
+#[tauri::command]
+pub fn file_create_attachment(
+    request: FileAttachmentCreateRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<FileAttachmentCreateResult> {
+    let result = (|| {
+        let record = registered_workspace(&runtime, &request.path.workspace_id)?;
+        if !record.trust_level.capabilities().write {
+            return Err(AppError::new(
+                "workspace.write_denied",
+                "This workspace is read-only. Set it to Trusted before adding attachments.",
+            ));
+        }
+        let path = workspace_path(&request.path)?;
+        PathPolicy::default()
+            .validate_nearest_existing_parent(&record, &path)
+            .map_err(|error| app_error("workspace.path_denied", error))?;
+        let bytes = decode_attachment(&request.bytes_base64)?;
+        let media_type = attachment_media_type(&bytes).ok_or_else(attachment_not_image)?;
+        let root = record.root_path().ok_or_else(|| {
+            AppError::new(
+                "workspace.no_root",
+                "This workspace has no filesystem root.",
+            )
+        })?;
+        let service = MutationService::new(record.id.as_str(), root)
+            .map_err(|error| app_error("file.attachment_unavailable", error))?;
+        let mutation_path = crate::workspace::mutations::WorkspacePath::new(
+            request.path.workspace_id.clone(),
+            request.path.relative_path.clone(),
+        );
+        service
+            .create_attachment(
+                &mutation_path,
+                &bytes,
+                MutationActor::user("renderer"),
+                correlation_id(),
+            )
+            .map_err(attachment_create_error)?;
+        Ok(FileAttachmentCreateResult {
+            path: request.path,
+            media_type,
+            size_bytes: bytes.len() as u64,
+        })
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn file_read_attachment(
+    path: RendererWorkspacePath,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<FileAttachmentReadResult> {
+    let result = (|| {
+        let record = registered_workspace(&runtime, &path.workspace_id)?;
+        if !record.trust_level.capabilities().read {
+            return Err(AppError::new(
+                "workspace.read_denied",
+                "This workspace is not readable.",
+            ));
+        }
+        let path = workspace_path(&path)?;
+        let mut descriptor =
+            open_file(&PathPolicy::default(), &record, &path).map_err(attachment_read_error)?;
+        if descriptor.size_bytes > MAX_ATTACHMENT_BYTES as u64 {
+            return Err(attachment_too_large());
+        }
+        let expected_size =
+            usize::try_from(descriptor.size_bytes).map_err(|_| attachment_too_large())?;
+        let mut bytes = Vec::with_capacity(expected_size);
+        let mut offset = 0_u64;
+        while offset < descriptor.size_bytes {
+            let remaining = descriptor.size_bytes - offset;
+            let limit = remaining.min(64 * 1024) as usize;
+            let chunk = descriptor
+                .read_chunk(offset, limit)
+                .map_err(attachment_read_error)?;
+            if chunk.is_empty() {
+                return Err(AppError::new(
+                    "file.attachment_read_failed",
+                    "The image could not be read.",
+                ));
+            }
+            offset += chunk.len() as u64;
+            bytes.extend_from_slice(&chunk);
+        }
+        let media_type = validate_attachment_bytes(&bytes)?;
+        Ok(FileAttachmentReadResult {
+            base64: base64::engine::general_purpose::STANDARD.encode(bytes.as_slice()),
+            media_type,
+            size_bytes: bytes.len() as u64,
+        })
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
 #[tauri::command]
 pub fn file_write_text(
     request: FileWriteRequest,
@@ -685,6 +1272,45 @@ pub fn git_status(
                     staged: change.staged,
                 })
                 .collect(),
+        })
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+/// Return a read-only patch for validated paths in a registered workspace.
+///
+/// `GitAdapter::diff` performs the final relative-path validation and always
+/// places the path separator before renderer-provided paths. Workspace
+/// resolution happens first so an arbitrary filesystem root cannot be passed
+/// through this IPC seam.
+#[tauri::command]
+pub fn git_diff(
+    workspace_id: String,
+    staged: bool,
+    paths: Vec<String>,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<GitWorkspaceDiff> {
+    let result = (|| {
+        let record = registered_workspace(&runtime, &workspace_id)?;
+        if !record.trust_level.capabilities().read {
+            return Err(AppError::new(
+                "workspace.read_denied",
+                "This workspace is not readable.",
+            ));
+        }
+        let root = record.root_path().ok_or_else(|| {
+            AppError::new(
+                "workspace.no_root",
+                "This workspace has no filesystem root.",
+            )
+        })?;
+        let diff = GitAdapter::new(root)
+            .diff(staged, &paths)
+            .map_err(|error| app_error("git.diff_failed", error))?;
+        Ok(GitWorkspaceDiff {
+            staged: diff.staged,
+            patch: diff.patch,
+            truncated: diff.truncated,
         })
     })();
     CommandResult::from_result(result, correlation_id())
@@ -1047,7 +1673,28 @@ pub fn workspace_graph(
         let mut edges = Vec::new();
 
         if validated.canonical_path.is_dir() {
-            let page = list_directory(&validated, 0, 300, None)
+            let include_root = expand_node_id.is_none();
+            let parent_id = expand_node_id
+                .clone()
+                .unwrap_or_else(|| format!("fs:dir:{requested_path}"));
+            if include_root {
+                let label = requested_path
+                    .rsplit('/')
+                    .find(|part| !part.is_empty())
+                    .map_or_else(|| record.name.clone(), str::to_owned);
+                nodes.push(WorkspaceGraphNode {
+                    id: parent_id.clone(),
+                    label,
+                    node_type: "folder".to_owned(),
+                    authority: "explicit_file",
+                    confidence: 1.0,
+                    source: RendererWorkspacePath {
+                        workspace_id: record.id.as_str().to_owned(),
+                        relative_path: requested_path.clone(),
+                    },
+                });
+            }
+            let page = list_directory(&validated, 0, if include_root { 299 } else { 300 }, None)
                 .map_err(|error| app_error("workspace.directory_failed", error))?;
             for entry in page.entries {
                 let is_directory = entry.kind == FileKind::Directory;
@@ -1056,16 +1703,14 @@ pub fn workspace_graph(
                     if is_directory { "dir" } else { "file" },
                     entry.relative_path
                 );
-                if let Some(parent_id) = expand_node_id.as_ref() {
-                    edges.push(WorkspaceGraphEdge {
-                        id: format!("contains:{parent_id}:{id}"),
-                        source_id: parent_id.clone(),
-                        target_id: id.clone(),
-                        edge_type: "contains".to_owned(),
-                        authority: "explicit_file",
-                        confidence: 1.0,
-                    });
-                }
+                edges.push(WorkspaceGraphEdge {
+                    id: format!("contains:{parent_id}:{id}"),
+                    source_id: parent_id.clone(),
+                    target_id: id.clone(),
+                    edge_type: "contains".to_owned(),
+                    authority: "explicit_file",
+                    confidence: 1.0,
+                });
                 let node_type = if is_directory {
                     "folder"
                 } else if entry.relative_path.ends_with(".md")
@@ -1135,23 +1780,67 @@ pub fn workspace_graph(
 
 #[cfg(test)]
 mod tests {
-    use super::{ShellLayout, load_layout, save_layout, system_sample_error};
+    use base64::Engine as _;
+
+    use super::{
+        MAX_ATTACHMENT_BYTES, SHELL_LAYOUT_KEY, ShellLayout, attachment_media_type,
+        decode_attachment, load_layout, save_layout, system_sample_error, workspace_path,
+    };
     use crate::db::Database;
+    use rusqlite::params;
 
     #[test]
     fn shell_layout_round_trips_through_settings() {
         let database = Database::open(":memory:").expect("database");
         let layout = ShellLayout {
             version: 1,
-            sidebar_width: 24,
+            navigator_width: 24,
             inspector_width: 20,
+            navigator_open: true,
             inspector_open: true,
             drawer_open: false,
+            drawer_height: 320,
+            theme_mode: "dark".to_owned(),
+            inspector_tab: "context".to_owned(),
         };
         save_layout(&database, &layout).expect("save");
         let restored = load_layout(&database).expect("load").expect("layout");
-        assert_eq!(restored.sidebar_width, 24);
+        assert_eq!(restored.navigator_width, 24);
         assert!(restored.inspector_open);
+    }
+
+    #[test]
+    fn shell_layout_v1_payload_migrates_with_safe_v2_defaults() {
+        let database = Database::open(":memory:").expect("database");
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "INSERT INTO app_settings (key, value_json, schema_version, updated_at)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![
+                        SHELL_LAYOUT_KEY,
+                        r#"{
+                          "version": 1,
+                          "sidebarWidth": 26,
+                          "inspectorWidth": 18,
+                          "inspectorOpen": false,
+                          "drawerOpen": true
+                        }"#,
+                        1,
+                        "2026-08-02T00:00:00Z"
+                    ],
+                )?;
+                Ok(())
+            })
+            .expect("insert v1 layout");
+
+        let restored = load_layout(&database).expect("load").expect("layout");
+        assert_eq!(restored.version, 2);
+        assert_eq!(restored.navigator_width, 26);
+        assert!(restored.navigator_open);
+        assert_eq!(restored.drawer_height, 30);
+        assert_eq!(restored.theme_mode, "light");
+        assert_eq!(restored.inspector_tab, "overview");
     }
 
     #[test]
@@ -1161,5 +1850,57 @@ mod tests {
         assert_eq!(value["version"], 1);
         assert_eq!(value["ok"], false);
         assert_eq!(value["error"]["code"], "system.sample_error");
+    }
+
+    #[test]
+    fn attachment_magic_detection_requires_image_structure() {
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        png.extend_from_slice(&[0, 0, 0, 13]);
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&[0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+        png.extend_from_slice(&[0, 0, 0, 0]);
+        png.extend_from_slice(&[0, 0, 0, 0]);
+        png.extend_from_slice(b"IEND");
+        png.extend_from_slice(&[0, 0, 0, 0]);
+        let gif = [
+            b'G', b'I', b'F', b'8', b'9', b'a', 1, 0, 1, 0, 0x80, 0, 0, 0, 0, 0, 0xff, 0xff, 0xff,
+            0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 0x01, 0, 0x3b,
+        ];
+        let jpeg = [
+            0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0, 0xff, 0xda, 0, 2, 0xff,
+            0xd9,
+        ];
+        let webp = [
+            b'R', b'I', b'F', b'F', 18, 0, 0, 0, b'W', b'E', b'B', b'P', b'V', b'P', b'8', b'L', 5,
+            0, 0, 0, 0x2f, 1, 0, 0, 0, 0,
+        ];
+
+        assert_eq!(attachment_media_type(&png), Some("image/png"));
+        assert_eq!(attachment_media_type(&gif), Some("image/gif"));
+        assert_eq!(attachment_media_type(&jpeg), Some("image/jpeg"));
+        assert_eq!(attachment_media_type(&webp), Some("image/webp"));
+        assert_eq!(attachment_media_type(b"\x89PNG\r\n\x1a\n"), None);
+        assert_eq!(attachment_media_type(b"plain text"), None);
+    }
+
+    #[test]
+    fn attachment_decode_rejects_invalid_data_and_size() {
+        let invalid = base64::engine::general_purpose::STANDARD.encode(b"not an image");
+        let invalid_error = decode_attachment(&invalid).expect_err("not an image");
+        assert_eq!(invalid_error.code, "file.attachment_not_image");
+
+        let oversized = vec![0u8; MAX_ATTACHMENT_BYTES + 1];
+        let oversized_base64 = base64::engine::general_purpose::STANDARD.encode(oversized);
+        let oversized_error = decode_attachment(&oversized_base64).expect_err("oversized");
+        assert_eq!(oversized_error.code, "file.attachment_too_large");
+    }
+
+    #[test]
+    fn attachment_path_rejects_absolute_renderer_paths() {
+        let path = super::RendererWorkspacePath {
+            workspace_id: "workspace".into(),
+            relative_path: "/tmp/image.png".into(),
+        };
+        assert!(workspace_path(&path).is_err());
     }
 }

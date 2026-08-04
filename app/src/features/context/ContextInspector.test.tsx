@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ContextInspector } from "./ContextInspector";
-import type { ContextInspectorPacket } from "./types";
+import { contextUsagePercent, type ContextInspectorPacket } from "./types";
 
 const packet: ContextInspectorPacket = {
   packetId: "packet_test",
@@ -30,6 +30,12 @@ const packet: ContextInspectorPacket = {
 };
 
 describe("ContextInspector", () => {
+  it("calculates bounded token budget usage", () => {
+    expect(contextUsagePercent(400, 1200)).toBe(33);
+    expect(contextUsagePercent(1600, 1200)).toBe(100);
+    expect(contextUsagePercent(400, 0)).toBe(0);
+  });
+
   it("shows stale/excluded state and emits packet controls", () => {
     const onToggleItem = vi.fn();
     const onDepthChange = vi.fn();

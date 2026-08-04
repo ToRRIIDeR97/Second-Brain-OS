@@ -137,6 +137,78 @@ type BlockParse = {
   kind: SourceSegment["kind"];
 };
 
+/**
+ * Inert editor metadata: keep column widths in an HTML comment immediately
+ * before the pipe table they belong to.  Markdown renderers ignore this line.
+ */
+const TABLE_WIDTHS_COMMENT =
+  /^\s*<!--\s*second-brain-table-widths:\s*([\s\S]*?)\s*-->\s*$/;
+const TABLE_WIDTHS_ATTR = "columnWidths";
+
+function parseColumnWidths(
+  value: unknown,
+  expectedColumns?: number,
+): number[] | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) return undefined;
+  const parts = value.split(",").map((part) => part.trim());
+  if (parts.length === 0 || parts.some((part) => !/^\d+$/.test(part)))
+    return undefined;
+  const widths = parts.map((part) => Number(part));
+  if (
+    widths.some(
+      (width) =>
+        !Number.isFinite(width) || !Number.isInteger(width) || width <= 0,
+    )
+  )
+    return undefined;
+  if (expectedColumns !== undefined && widths.length !== expectedColumns)
+    return undefined;
+  return widths;
+}
+
+function parseTableWidthsComment(line: string): string | undefined {
+  return TABLE_WIDTHS_COMMENT.exec(line)?.[1];
+}
+
+function splitPipeRow(line: string): string[] | undefined {
+  if (!/^\s*\|/.test(line)) return undefined;
+  let value = line.trim().replace(/^\|/, "");
+  if (value.endsWith("|")) value = value.slice(0, -1);
+  const cells: string[] = [];
+  let cell = "";
+  let escaped = false;
+  for (const character of value) {
+    if (character === "|" && !escaped) {
+      cells.push(cell);
+      cell = "";
+      continue;
+    }
+    if (character === "\\" && !escaped) escaped = true;
+    else escaped = false;
+    cell += character;
+  }
+  cells.push(cell);
+  return cells.map((part) => part.trim().replace(/\\\|/g, "|"));
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = splitPipeRow(line);
+  return (
+    cells !== undefined &&
+    cells.length > 0 &&
+    cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
+  );
+}
+
+function tableColumnCount(node: MarkdownNode): number {
+  return Math.max(
+    0,
+    ...(node.content ?? []).map((row) =>
+      row.type === "tableRow" ? (row.content ?? []).length : 0,
+    ),
+  );
+}
+
 function detectLineEnding(markdown: string): LineEnding {
   const endings = [...markdown.matchAll(/\r\n|\r|\n/g)].map(
     ([ending]) => ending,
@@ -246,30 +318,53 @@ function parseInline(value: string): Array<InlineNode> {
   return nodes;
 }
 
-function parseTable(lines: string[]): MarkdownNode | undefined {
+function parseTable(
+  lines: string[],
+  encodedWidths?: unknown,
+): MarkdownNode | undefined {
   if (
     lines.length < 2 ||
-    !/^\s*\|/.test(lines[0] ?? "") ||
-    !/^\s*\|?\s*:?-{3,}/.test(lines[1] ?? "")
+    !splitPipeRow(lines[0] ?? "") ||
+    !isTableSeparator(lines[1] ?? "")
   )
     return undefined;
-  const rows = lines
+  const rows = [lines[0] ?? "", ...lines.slice(2)]
     .filter((line) => line.trim().length > 0)
-    .map((line) => {
-      const cells = line
-        .trim()
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|");
+    .map((line, rowIndex) => {
+      const cells = splitPipeRow(line) ?? [line.trim()];
       return {
         type: "tableRow" as const,
         content: cells.map((cell) => ({
-          type: "tableCell" as const,
-          content: parseInline(cell.trim()),
+          type:
+            rowIndex === 0 ? ("tableHeader" as const) : ("tableCell" as const),
+          content: parseInline(cell),
         })),
       };
     });
-  return { type: "table", content: rows };
+  const table: MarkdownNode = { type: "table", content: rows };
+  const widths = parseColumnWidths(encodedWidths, tableColumnCount(table));
+  if (widths) table.attrs = { [TABLE_WIDTHS_ATTR]: widths.join(",") };
+  return table;
+}
+
+function parsePipeTableAt(
+  lines: string[],
+  start: number,
+): { node: MarkdownNode; end: number } | undefined {
+  if (
+    !splitPipeRow(lines[start] ?? "") ||
+    !isTableSeparator(lines[start + 1] ?? "")
+  )
+    return undefined;
+  let end = start + 2;
+  while (
+    end < lines.length &&
+    (lines[end] ?? "").trim().length > 0 &&
+    splitPipeRow(lines[end] ?? "") !== undefined
+  )
+    end += 1;
+  const node = parseTable(lines.slice(start, end));
+  return node === undefined ? undefined : { node, end };
 }
 
 function parseBlocks(markdown: string): {
@@ -315,8 +410,38 @@ function parseBlocks(markdown: string): {
     let node: MarkdownNode;
     let kind: SourceSegment["kind"] = "supported";
 
+    const metadataWidths = parseTableWidthsComment(first);
+    const metadataTable =
+      metadataWidths === undefined
+        ? undefined
+        : parsePipeTableAt(lines, index + 1);
+    const plainTable =
+      metadataWidths === undefined ? parsePipeTableAt(lines, index) : undefined;
     const fence = /^(```+|~~~+)(.*)$/.exec(first);
-    if (fence) {
+    if (metadataWidths !== undefined) {
+      if (metadataTable === undefined) {
+        kind = "protected";
+        node = { type: "protectedSource", raw: first };
+      } else {
+        const widths = parseColumnWidths(
+          metadataWidths,
+          tableColumnCount(metadataTable.node),
+        );
+        if (widths === undefined) {
+          kind = "protected";
+          node = { type: "protectedSource", raw: first };
+        } else {
+          node = {
+            ...metadataTable.node,
+            attrs: { [TABLE_WIDTHS_ATTR]: widths.join(",") },
+          };
+          end = metadataTable.end;
+        }
+      }
+    } else if (plainTable !== undefined) {
+      node = plainTable.node;
+      end = plainTable.end;
+    } else if (fence) {
       const closing = lines
         .slice(index + 1)
         .findIndex((line) => line.startsWith(fence[1] ?? ""));
@@ -465,10 +590,7 @@ function parseBlocks(markdown: string): {
       )
         end += 1;
       const rawLines = lines.slice(start, end);
-      const table = parseTable(rawLines);
-      if (table) node = table;
-      else
-        node = { type: "paragraph", content: parseInline(rawLines.join("\n")) };
+      node = { type: "paragraph", content: parseInline(rawLines.join("\n")) };
     }
 
     const raw = lines.slice(start, end).join("\n");
@@ -510,6 +632,40 @@ function inlineToMarkdown(node: InlineNode): string {
       text = `[[${mark.attrs.target}${mark.attrs.heading ? `#${mark.attrs.heading}` : ""}]]`;
   }
   return text;
+}
+
+function tableWidthsFromNode(
+  node: MarkdownNode,
+  expectedColumns: number,
+): number[] | undefined {
+  const attrs = node.attrs ?? {};
+  const encoded =
+    attrs[TABLE_WIDTHS_ATTR] ??
+    attrs.tableWidths ??
+    attrs.widths ??
+    attrs.colwidth;
+  const widths = parseColumnWidths(encoded, expectedColumns);
+  if (widths) return widths;
+  const derived: number[] = [];
+  for (let column = 0; column < expectedColumns; column += 1) {
+    let value: number | undefined;
+    for (const row of node.content ?? []) {
+      if (row.type !== "tableRow") continue;
+      const cell = row.content?.[column];
+      if (!cell || (cell.type !== "tableCell" && cell.type !== "tableHeader"))
+        continue;
+      const cellWidth = parseColumnWidths(
+        cell.attrs?.colwidth ?? cell.attrs?.columnWidth,
+        1,
+      )?.[0];
+      if (cellWidth === undefined) continue;
+      if (value !== undefined && value !== cellWidth) return undefined;
+      value = cellWidth;
+    }
+    if (value === undefined) return undefined;
+    derived.push(value);
+  }
+  return derived.length === expectedColumns ? derived : undefined;
 }
 
 function nodeToMarkdown(node: MarkdownNode): string {
@@ -585,13 +741,28 @@ function nodeToMarkdown(node: MarkdownNode): string {
     return (node.content ?? [])
       .map((child) => nodeToMarkdown(child as MarkdownNode))
       .join("\n");
-  if (node.type === "table")
-    return (node.content ?? [])
-      .map(
-        (row) =>
-          `| ${(row as MarkdownNode).content?.map((cell) => nodeToMarkdown(cell as MarkdownNode)).join(" | ") ?? ""} |`,
-      )
-      .join("\n");
+  if (node.type === "table") {
+    const rows = (node.content ?? []).map((row) =>
+      ((row as MarkdownNode).content ?? []).map((cell) =>
+        nodeToMarkdown(cell as MarkdownNode)
+          .replace(/\|/g, "\\|")
+          .replace(/\n+/g, "<br>"),
+      ),
+    );
+    if (rows.length === 0) return "";
+    const width = Math.max(1, ...rows.map((row) => row.length));
+    const renderRow = (row: string[]) =>
+      `| ${Array.from({ length: width }, (_, index) => row[index] ?? "").join(" | ")} |`;
+    const table = [
+      renderRow(rows[0] ?? []),
+      renderRow(Array.from({ length: width }, () => "---")),
+      ...rows.slice(1).map(renderRow),
+    ].join("\n");
+    const widths = tableWidthsFromNode(node, width);
+    return widths
+      ? `<!-- second-brain-table-widths: ${widths.join(",")} -->\n${table}`
+      : table;
+  }
   if (
     node.type === "tableRow" ||
     node.type === "tableCell" ||
@@ -747,9 +918,49 @@ export function editorDocumentToTiptap(
           raw: value.raw ?? "",
         },
       };
+    if (value.type === "table") {
+      const columns = tableColumnCount(value);
+      const widths = tableWidthsFromNode(value, columns);
+      return {
+        type: "table",
+        ...(value.attrs && Object.keys(value.attrs).length > 0
+          ? { attrs: value.attrs }
+          : {}),
+        content: (value.content ?? []).map((row) => {
+          const convertedRow = node(row);
+          if (row.type !== "tableRow") return convertedRow;
+          return {
+            ...convertedRow,
+            content: (row.content ?? []).map((cell, column) => {
+              const convertedCell = node(cell);
+              if (
+                widths === undefined ||
+                (cell.type !== "tableCell" && cell.type !== "tableHeader") ||
+                widths[column] === undefined
+              )
+                return convertedCell;
+              return {
+                ...convertedCell,
+                attrs: {
+                  ...(convertedCell.attrs ?? {}),
+                  colwidth: [widths[column]],
+                },
+              };
+            }),
+          };
+        }),
+      };
+    }
     if (value.type === "tableCell" || value.type === "tableHeader") {
+      const cellAttrs: Record<string, unknown> = { ...(value.attrs ?? {}) };
+      if ("colwidth" in cellAttrs) {
+        const width = parseColumnWidths(cellAttrs.colwidth, 1);
+        if (width) cellAttrs.colwidth = width;
+        else delete cellAttrs.colwidth;
+      }
       return {
         type: value.type,
+        ...(Object.keys(cellAttrs).length > 0 ? { attrs: cellAttrs } : {}),
         content: [
           {
             type: "paragraph",
@@ -766,6 +977,61 @@ export function editorDocumentToTiptap(
     };
   };
   return { type: "doc", content: document.nodes.map(node) };
+}
+
+function parseTiptapColwidth(value: unknown): number | undefined {
+  if (!Array.isArray(value) || value.length !== 1) return undefined;
+  const width = (value as unknown[])[0];
+  return typeof width === "number" &&
+    Number.isFinite(width) &&
+    Number.isInteger(width) &&
+    width > 0
+    ? width
+    : undefined;
+}
+
+function tiptapTableWidths(
+  input: { content?: unknown[] },
+  columns: number,
+): number[] | undefined {
+  if (columns < 1) return undefined;
+  const widths: Array<number | undefined> = Array.from(
+    { length: columns },
+    () => undefined,
+  );
+  for (const rowInput of input.content ?? []) {
+    if (!rowInput || typeof rowInput !== "object") continue;
+    const row = rowInput as { type?: string; content?: unknown[] };
+    if (row.type !== "tableRow") continue;
+    let column = 0;
+    for (const cellInput of row.content ?? []) {
+      if (!cellInput || typeof cellInput !== "object") {
+        column += 1;
+        continue;
+      }
+      const cell = cellInput as {
+        type?: string;
+        attrs?: Record<string, unknown>;
+      };
+      if (cell.type !== "tableCell" && cell.type !== "tableHeader") {
+        column += 1;
+        continue;
+      }
+      if (column >= columns) return undefined;
+      const raw = cell.attrs?.colwidth;
+      if (raw !== undefined && raw !== null) {
+        const width = parseTiptapColwidth(raw);
+        if (width === undefined) return undefined;
+        if (widths[column] !== undefined && widths[column] !== width)
+          return undefined;
+        widths[column] = width;
+      }
+      column += 1;
+    }
+  }
+  return widths.every((width): width is number => width !== undefined)
+    ? widths
+    : undefined;
 }
 
 export function tiptapToMarkdown(
@@ -866,6 +1132,37 @@ export function tiptapToMarkdown(
           ? { raw: candidate.attrs.raw }
           : {}),
       };
+    if (candidate.type === "table") {
+      const content = (candidate.content ?? [])
+        .map(convert)
+        .filter(
+          (item): item is MarkdownNode | InlineNode => item !== undefined,
+        );
+      const columns = Math.max(
+        0,
+        ...content.map((row) =>
+          row.type === "tableRow" ? (row.content ?? []).length : 0,
+        ),
+      );
+      const attrs = Object.fromEntries(
+        Object.entries(candidate.attrs ?? {}).filter(
+          ([, attr]) =>
+            typeof attr === "string" ||
+            typeof attr === "number" ||
+            typeof attr === "boolean" ||
+            attr === null,
+        ),
+      ) as Record<string, string | number | boolean | null>;
+      const widths = tiptapTableWidths(candidate, columns);
+      const tableAttrs = widths
+        ? { ...attrs, [TABLE_WIDTHS_ATTR]: widths.join(",") }
+        : attrs;
+      return {
+        type: "table",
+        ...(Object.keys(tableAttrs).length > 0 ? { attrs: tableAttrs } : {}),
+        ...(content.length > 0 ? { content } : {}),
+      };
+    }
     const supported = new Set<MarkdownNode["type"]>([
       "paragraph",
       "heading",
@@ -900,6 +1197,11 @@ export function tiptapToMarkdown(
           attr === null,
       ),
     ) as Record<string, string | number | boolean | null>;
+    if (candidate.type === "tableCell" || candidate.type === "tableHeader") {
+      const width = parseTiptapColwidth(candidate.attrs?.colwidth);
+      if (width !== undefined) attrs.colwidth = String(width);
+      else delete attrs.colwidth;
+    }
     return {
       type: candidate.type as MarkdownNode["type"],
       ...(Object.keys(attrs).length > 0 ? { attrs } : {}),

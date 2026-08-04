@@ -1,5 +1,6 @@
 import { Mark, mergeAttributes, Node } from "@tiptap/react";
-import Image from "@tiptap/extension-image";
+import Image, { type ImageOptions } from "@tiptap/extension-image";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Link from "@tiptap/extension-link";
 import {
   Table,
@@ -10,11 +11,17 @@ import {
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import StarterKit from "@tiptap/starter-kit";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import "katex/dist/katex.min.css";
+import { createElement } from "react";
+import { common, createLowlight } from "lowlight";
 import {
   directiveFallback,
   type DirectiveAttribute,
   type KnowledgeDirective,
 } from "./knowledge";
+import { LocalImageNodeView, type LocalImageResolver } from "./ImageNodeView";
+import { MathNodeView } from "./MathNodeView";
 
 export const UnderlineMark = Mark.create({
   name: "underline",
@@ -42,7 +49,14 @@ export const InlineMathNode = Node.create({
   inline: true,
   atom: true,
   addAttributes: () => ({ value: { default: "" } }),
-  parseHTML: () => [{ tag: "span[data-inline-math]" }],
+  parseHTML: () => [
+    {
+      tag: "span[data-inline-math]",
+      getAttrs: (element) => ({
+        value: element.getAttribute("data-value") ?? "",
+      }),
+    },
+  ],
   renderHTML: ({ node }) => {
     const rawValue = (node.attrs as Record<string, unknown>).value;
     const value = typeof rawValue === "string" ? rawValue : "";
@@ -52,6 +66,7 @@ export const InlineMathNode = Node.create({
       `$${value}$`,
     ];
   },
+  addNodeView: () => ReactNodeViewRenderer(MathNodeView),
 });
 
 export const MathBlockNode = Node.create({
@@ -59,7 +74,14 @@ export const MathBlockNode = Node.create({
   group: "block",
   atom: true,
   addAttributes: () => ({ value: { default: "" } }),
-  parseHTML: () => [{ tag: "div[data-math-block]" }],
+  parseHTML: () => [
+    {
+      tag: "div[data-math-block]",
+      getAttrs: (element) => ({
+        value: element.getAttribute("data-value") ?? "",
+      }),
+    },
+  ],
   renderHTML: ({ node }) => {
     const rawValue = (node.attrs as Record<string, unknown>).value;
     const value = typeof rawValue === "string" ? rawValue : "";
@@ -69,6 +91,10 @@ export const MathBlockNode = Node.create({
       `$$\n${value}\n$$`,
     ];
   },
+  addNodeView: () =>
+    ReactNodeViewRenderer((props) =>
+      createElement(MathNodeView, { ...props, displayMode: true }),
+    ),
 });
 
 export const ProtectedSourceNode = Node.create({
@@ -141,19 +167,57 @@ export const DirectiveNode = Node.create({
   },
 });
 
-export const MarkdownExtensions = [
-  StarterKit.configure({ link: false }),
-  Link.configure({ openOnClick: false, autolink: false }),
-  Image.configure({ inline: true, allowBase64: false }),
-  Table.configure({ resizable: false }),
-  TableRow,
-  TableCell,
-  TableHeader,
-  TaskList,
-  TaskItem.configure({ nested: true }),
-  WikiLinkMark,
-  InlineMathNode,
-  MathBlockNode,
-  DirectiveNode,
-  ProtectedSourceNode,
-];
+const lowlight = createLowlight(common);
+
+export type MarkdownExtensionOptions = {
+  resolveLocalImage?: LocalImageResolver | undefined;
+};
+
+type ResolvedImageOptions = ImageOptions & MarkdownExtensionOptions;
+
+export function createMarkdownExtensions(
+  options: MarkdownExtensionOptions = {},
+) {
+  const image = Image.extend<ResolvedImageOptions>({
+    addOptions() {
+      return {
+        inline: false,
+        allowBase64: false,
+        HTMLAttributes: {},
+        resize: false,
+        ...this.parent?.(),
+        resolveLocalImage: options.resolveLocalImage,
+      };
+    },
+    addNodeView() {
+      if (!this.options.resolveLocalImage) return this.parent?.() ?? null;
+      const resolver = this.options.resolveLocalImage;
+      return ReactNodeViewRenderer((props) =>
+        createElement(LocalImageNodeView, {
+          ...props,
+          resolveLocalImage: resolver,
+        }),
+      );
+    },
+  }).configure({ inline: true, allowBase64: false });
+
+  return [
+    StarterKit.configure({ link: false, codeBlock: false }),
+    CodeBlockLowlight.configure({ lowlight }),
+    Link.configure({ openOnClick: false, autolink: false }),
+    image,
+    Table.configure({ resizable: true }),
+    TableRow,
+    TableCell,
+    TableHeader,
+    TaskList,
+    TaskItem.configure({ nested: true }),
+    WikiLinkMark,
+    InlineMathNode,
+    MathBlockNode,
+    DirectiveNode,
+    ProtectedSourceNode,
+  ];
+}
+
+export const MarkdownExtensions = createMarkdownExtensions();

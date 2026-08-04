@@ -2,6 +2,7 @@ use crate::commands;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(commands::AppRuntime::load())
         .invoke_handler(tauri::generate_handler![
             commands::system_ping,
@@ -13,8 +14,11 @@ pub fn run() {
             commands::workspace_list,
             commands::workspace_list_directory,
             commands::file_read_text,
+            commands::file_create_attachment,
+            commands::file_read_attachment,
             commands::file_write_text,
             commands::git_status,
+            commands::git_diff,
             commands::git_stage,
             commands::git_unstage,
             commands::git_discard,

@@ -6,4 +6,9 @@ export {
   statusLabel,
   type AgentAction,
 } from "./model";
+export {
+  createUnavailableAgentSessionSource,
+  defaultAgentSessionSource,
+  unavailableAgentSessionSource,
+} from "./source";
 export * from "./types";

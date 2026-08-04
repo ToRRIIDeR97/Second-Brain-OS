@@ -1,21 +1,35 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { AgentWorkspace, type AgentWorkspaceState } from "../features/agents";
-import { MarkdownEditor } from "../features/editor/markdown";
-import { SourceEditor, type EditorTabState } from "../features/editor/source";
 import {
-  FocusedGraph,
-  type GraphCommand,
-  type GraphCommandContext,
-  type GraphPage,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { CalendarPlus, Command, FilePlus2 } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { ConfirmDialog } from "../components/common/ModalDialog";
+import type { AgentWorkspaceState } from "../features/agents";
+import {
+  bytesToBase64,
+  createImageAttachmentPlacement,
+  imageDataUrl,
+  MAX_IMAGE_BYTES,
+  resolveImageAttachmentPath,
+} from "../features/editor/markdown/attachments";
+import { NewNoteDialog } from "../features/editor/markdown/NewNoteDialog";
+import type { EditorTabState } from "../features/editor/source";
+import type {
+  GraphCommand,
+  GraphCommandContext,
+  GraphPage,
+  GraphSelectionContext,
 } from "../features/graph";
-import { DerivedReviewQueue } from "../features/knowledge/derived/DerivedReviewQueue";
 import { KnowledgeSearchModal, type SearchResponse } from "../features/search";
-import {
-  SourceControlWorkspace,
-  type SourceControlChange,
-} from "../features/source-control";
+import type { SourceControlChange } from "../features/source-control";
 import type {
   CommandResult,
+  GitWorkspaceDiff,
   GitWorkspaceStatus,
   IpcClient,
   WorkspaceDirectoryEntry,
@@ -24,11 +38,38 @@ import type {
   WorkspaceTrustLevel,
 } from "../lib/ipc";
 import type { Activity } from "../state/shell";
+import { usePreferences } from "../state/preferences";
+import { useTheme } from "../state/theme";
+import { useWorkspace } from "../state/workspace";
+
+const AgentWorkspace = lazy(async () => ({
+  default: (await import("../features/agents")).AgentWorkspace,
+}));
+const MarkdownEditor = lazy(async () => ({
+  default: (await import("../features/editor/markdown")).MarkdownEditor,
+}));
+const SourceEditor = lazy(async () => ({
+  default: (await import("../features/editor/source")).SourceEditor,
+}));
+const FocusedGraph = lazy(async () => ({
+  default: (await import("../features/graph")).FocusedGraph,
+}));
+const SourceControlWorkspace = lazy(async () => ({
+  default: (await import("../features/source-control")).SourceControlWorkspace,
+}));
+const LocalPlanner = lazy(async () => ({
+  default: (await import("../features/planner")).LocalPlanner,
+}));
+const ReferenceCalendar = lazy(async () => ({
+  default: (await import("../features/planner/ReferenceCalendar"))
+    .ReferenceCalendar,
+}));
 
 type OpenDocument = {
   workspaceId: string;
   relativePath: string;
   content: string;
+  baseContent: string;
   baseHash: string;
   baseRevisionId: string;
   encoding: "utf8" | "utf8Bom" | "unsupported";
@@ -98,6 +139,31 @@ function EmptyWorkspace({
   const [rootPath, setRootPath] = useState("");
   const [name, setName] = useState("");
   const [trustLevel, setTrustLevel] = useState<WorkspaceTrustLevel>("trusted");
+  const [folderPickerBusy, setFolderPickerBusy] = useState(false);
+  const [folderPickerError, setFolderPickerError] = useState("");
+
+  const chooseFolder = async () => {
+    setFolderPickerBusy(true);
+    setFolderPickerError("");
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select workspace folder",
+      });
+      if (typeof selected !== "string" || !selected) return;
+      setRootPath(selected);
+      setName((current) => current.trim() || nameFromRoot(selected));
+    } catch (cause) {
+      setFolderPickerError(
+        cause instanceof Error
+          ? cause.message
+          : "The folder picker could not be opened.",
+      );
+    } finally {
+      setFolderPickerBusy(false);
+    }
+  };
 
   return (
     <section className="workspace-onboarding" aria-labelledby="workspace-title">
@@ -120,15 +186,26 @@ function EmptyWorkspace({
         }}
       >
         <label>
-          Folder path
-          <input
-            required
-            value={rootPath}
-            onChange={(event) => {
-              setRootPath(event.target.value);
-            }}
-            placeholder="/Users/you/Documents/My Brain"
-          />
+          Workspace folder
+          <button
+            className="button"
+            type="button"
+            onClick={() => void chooseFolder()}
+            disabled={busy || folderPickerBusy}
+          >
+            {folderPickerBusy
+              ? "Choosing folder…"
+              : rootPath
+                ? "Choose a different folder"
+                : "Choose folder…"}
+          </button>
+          <output
+            className="workspace-folder-selection"
+            aria-live="polite"
+            aria-label="Selected workspace folder"
+          >
+            {rootPath || "No folder selected yet."}
+          </output>
         </label>
         <label>
           Workspace name
@@ -156,11 +233,17 @@ function EmptyWorkspace({
             <option value="restricted">Restricted (read-only)</option>
           </select>
         </label>
-        <button className="button button-primary" type="submit" disabled={busy}>
+        <button
+          className="button button-primary"
+          type="submit"
+          disabled={busy || !rootPath}
+        >
           {busy ? "Opening…" : "Open workspace"}
         </button>
       </form>
-      {error ? <p role="alert">{error}</p> : null}
+      {error || folderPickerError ? (
+        <p role="alert">{error || folderPickerError}</p>
+      ) : null}
     </section>
   );
 }
@@ -289,12 +372,16 @@ function DocumentEditor({
   saving,
   onChange,
   onSave,
+  onImportImage,
+  resolveLocalImage,
 }: {
   document: OpenDocument;
   canWrite: boolean;
   saving: boolean;
   onChange: (content: string) => void;
   onSave: () => void;
+  onImportImage: (file: File, alt: string) => Promise<string | undefined>;
+  resolveLocalImage: (source: string) => Promise<string | undefined>;
 }) {
   const tab: EditorTabState = {
     resourceId: `${document.workspaceId}:${document.relativePath}`,
@@ -304,11 +391,11 @@ function DocumentEditor({
     language: fileLanguage(document.relativePath),
     encoding: document.encoding,
     eol: document.eol,
-    status: "clean",
+    status: document.content === document.baseContent ? "clean" : "dirty",
     content: document.content,
     baseHash: document.baseHash,
     baseRevisionId: document.baseRevisionId,
-    baseContent: document.content,
+    baseContent: document.baseContent,
     externalChange: "none",
     openRequest: 1,
   };
@@ -317,12 +404,23 @@ function DocumentEditor({
       className="document-editor"
       aria-label={`Editor for ${document.relativePath}`}
     >
-      <header>
-        <div>
-          <p className="eyebrow">
-            {canWrite ? "Editable" : "Read-only workspace"}
+      <header className="document-editor-header">
+        <div className="document-heading">
+          <nav className="document-breadcrumb" aria-label="Document path">
+            {document.relativePath.split("/").map((segment, index, path) => (
+              <span key={`${segment}-${String(index)}`}>
+                <strong>{segment}</strong>
+                {index < path.length - 1 ? <i aria-hidden="true">›</i> : null}
+              </span>
+            ))}
+          </nav>
+          <p className="document-save-state" role="status">
+            {!canWrite
+              ? "Read-only workspace"
+              : document.content === document.baseContent
+                ? "Saved"
+                : "Unsaved changes"}
           </p>
-          <h1>{document.relativePath}</h1>
         </div>
         <button
           className="button button-primary"
@@ -338,6 +436,8 @@ function DocumentEditor({
           value={document.content}
           readOnly={!canWrite}
           onChange={onChange}
+          onImportImage={onImportImage}
+          resolveLocalImage={resolveLocalImage}
         />
       ) : (
         <SourceEditor tab={tab} readOnly={!canWrite} onChange={onChange} />
@@ -353,6 +453,15 @@ export function WorkspaceSurface({
   searchOpen = false,
   onCloseSearch = () => undefined,
   onNavigate = () => undefined,
+  noteRequest,
+  fileRequest,
+  saveRequest,
+  onOpenTerminal = () => undefined,
+  onDocumentOpened = () => undefined,
+  onDocumentDirtyChange = () => undefined,
+  onDocumentSaved = () => undefined,
+  onGitDiffOpened = () => undefined,
+  onGraphSelectionContextChange = () => undefined,
 }: {
   activity: Activity;
   ipc: IpcClient;
@@ -360,15 +469,40 @@ export function WorkspaceSurface({
   searchOpen?: boolean;
   onCloseSearch?: () => void;
   onNavigate?: (activity: Activity) => void;
+  noteRequest?: { key: number; relativePath: string } | undefined;
+  fileRequest?: { key: number; relativePath: string } | undefined;
+  saveRequest?: { key: number; resourceId: string } | undefined;
+  onOpenTerminal?: (request: {
+    workspaceId: string;
+    relativePath: string;
+    preset: "shell" | "codex" | "claude";
+  }) => void;
+  onDocumentOpened?: (resource: {
+    workspaceId: string;
+    relativePath: string;
+    title: string;
+    activity: "knowledge" | "files";
+  }) => void;
+  onDocumentDirtyChange?: (resourceId: string, dirty: boolean) => void;
+  onDocumentSaved?: (resourceId: string) => void;
+  onGitDiffOpened?: (resource: {
+    workspaceId: string;
+    path: string;
+    title: string;
+  }) => void;
+  onGraphSelectionContextChange?: (
+    context: GraphSelectionContext | undefined,
+  ) => void;
 }) {
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
-  const [workspaceId, setWorkspaceId] = useState<string>();
   const [directory, setDirectory] = useState("");
   const [entries, setEntries] = useState<WorkspaceDirectoryEntry[]>([]);
   const [document, setDocument] = useState<OpenDocument>();
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [newNoteOpen, setNewNoteOpen] = useState(false);
+  const [pendingDiscard, setPendingDiscard] = useState<string>();
+  const [bridgeResult, setBridgeResult] =
+    useState<CommandResult<string> | null>(null);
   const [search, setSearch] = useState<SearchResponse>(emptySearch);
   const [graph, setGraph] = useState<GraphPage>({
     nodes: [],
@@ -376,69 +510,42 @@ export function WorkspaceSurface({
     truncated: false,
   });
   const [git, setGit] = useState<GitWorkspaceStatus>();
+  const [gitDiff, setGitDiff] = useState<{
+    path: string;
+    data: GitWorkspaceDiff;
+  }>();
   const [agents, setAgents] = useState<AgentWorkspaceState>({
     workspaceId: "",
     sessions: [],
     activeSessionId: null,
   });
-  const workspace = workspaces.find((item) => item.id === workspaceId);
-
-  const refreshWorkspaces = useCallback(async () => {
-    setLoading(true);
-    const result = await ipc.workspaces.list();
-    if (!isSuccess(result) || !Array.isArray(result.data)) {
-      setError(
-        errorMessage(result) || "The desktop workspace bridge is unavailable.",
-      );
-      setLoading(false);
-      return;
-    }
-    setWorkspaces(result.data);
-    setWorkspaceId((current) =>
-      result.data.some((item) => item.id === current)
-        ? current
-        : result.data[0]?.id,
-    );
-    setError("");
-    setLoading(false);
+  const {
+    workspaces,
+    activeWorkspace: workspace,
+    activeWorkspaceId,
+    loading,
+    error: workspaceError,
+    registerWorkspace,
+    refreshWorkspaces,
+  } = useWorkspace();
+  const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
+  const { editorAutosave, setEditorAutosave } = usePreferences();
+  const checkDesktopBridge = useCallback(async () => {
+    setBridgeResult(await ipc.system.ping());
   }, [ipc]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void refreshWorkspaces();
+      setDirectory("");
+      setDocument(undefined);
+      setEntries([]);
+      setError("");
+      setGitDiff(undefined);
     }, 0);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [refreshWorkspaces]);
-
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent("second-brain:collections", {
-        detail: workspaces
-          .filter(({ kind }) => kind === "collection")
-          .map(({ id, name }) => ({ id, label: name })),
-      }),
-    );
-  }, [workspaces]);
-
-  useEffect(() => {
-    const selectWorkspace = (event: Event) => {
-      const id = (event as CustomEvent<{ id?: string }>).detail.id;
-      if (!id || !workspaces.some((item) => item.id === id)) return;
-      setWorkspaceId(id);
-      setDirectory("");
-      setDocument(undefined);
-      onNavigate("knowledge");
-    };
-    window.addEventListener("second-brain:select-workspace", selectWorkspace);
-    return () => {
-      window.removeEventListener(
-        "second-brain:select-workspace",
-        selectWorkspace,
-      );
-    };
-  }, [onNavigate, workspaces]);
+  }, [activeWorkspaceId]);
 
   const refreshDirectory = useCallback(async () => {
     if (!workspace || workspace.kind === "collection") return;
@@ -466,26 +573,6 @@ export function WorkspaceSurface({
     };
   }, [refreshDirectory]);
 
-  const registerWorkspace = async (registration: {
-    name: string;
-    rootPath: string;
-    kind: WorkspaceKind;
-    trustLevel: WorkspaceTrustLevel;
-  }) => {
-    setLoading(true);
-    const result = await ipc.workspaces.register(registration);
-    if (!isSuccess(result)) {
-      setError(errorMessage(result));
-      setLoading(false);
-      return;
-    }
-    setWorkspaces((current) => [...current, result.data]);
-    setWorkspaceId(result.data.id);
-    setDirectory("");
-    setError("");
-    setLoading(false);
-  };
-
   const openDocument = useCallback(
     async (relativePath: string) => {
       if (!workspace) return;
@@ -501,27 +588,121 @@ export function WorkspaceSurface({
         workspaceId: workspace.id,
         relativePath,
         content: result.data.content,
+        baseContent: result.data.content,
         baseHash: result.data.contentHash,
         baseRevisionId: result.data.revisionId,
         encoding: result.data.encoding,
         eol: result.data.eol,
       });
+      onDocumentOpened({
+        workspaceId: workspace.id,
+        relativePath,
+        title: relativePath.split("/").at(-1) ?? relativePath,
+        activity: isMarkdown(relativePath) ? "knowledge" : "files",
+      });
       setError("");
     },
-    [ipc, workspace],
+    [ipc, onDocumentOpened, workspace],
   );
 
-  const saveDocument = async () => {
+  const importImage = useCallback(
+    async (file: File, _alt: string): Promise<string | undefined> => {
+      void _alt;
+      if (!workspace || !document || !workspace.canWrite) return undefined;
+      if (
+        !Number.isSafeInteger(file.size) ||
+        file.size <= 0 ||
+        file.size > MAX_IMAGE_BYTES
+      ) {
+        setError("Images must be between 1 byte and 10 MB.");
+        return undefined;
+      }
+      const placement = createImageAttachmentPlacement(
+        document.relativePath,
+        file.name,
+        file.type,
+      );
+      if (!placement) {
+        setError("Use a PNG, JPEG, GIF, or WebP image.");
+        return undefined;
+      }
+      let bytes: Uint8Array;
+      try {
+        bytes = new Uint8Array(await file.arrayBuffer());
+      } catch {
+        setError("The selected image could not be read.");
+        return undefined;
+      }
+      if (bytes.length <= 0 || bytes.length > MAX_IMAGE_BYTES) {
+        setError("The selected image is too large.");
+        return undefined;
+      }
+      let bytesBase64: string;
+      try {
+        bytesBase64 = bytesToBase64(bytes);
+      } catch {
+        setError("The selected image could not be encoded.");
+        return undefined;
+      }
+      const result = await ipc.files.createAttachment({
+        path: {
+          workspaceId: document.workspaceId,
+          relativePath: placement.workspaceRelativePath,
+        },
+        bytesBase64,
+      });
+      if (!isSuccess(result)) {
+        setError(errorMessage(result));
+        return undefined;
+      }
+      setError("");
+      return placement.markdownPath;
+    },
+    [document, ipc, workspace],
+  );
+
+  const resolveLocalImage = useCallback(
+    async (source: string): Promise<string | undefined> => {
+      if (!workspace || !document) return undefined;
+      const relativePath = resolveImageAttachmentPath(
+        document.relativePath,
+        source,
+      );
+      if (!relativePath) return undefined;
+      const result = await ipc.files.readAttachment({
+        workspaceId: document.workspaceId,
+        relativePath,
+      });
+      if (!isSuccess(result)) {
+        setError(errorMessage(result));
+        return undefined;
+      }
+      const dataUrl = imageDataUrl(
+        result.data.base64,
+        result.data.mediaType,
+        result.data.sizeBytes,
+      );
+      if (!dataUrl) {
+        setError("The workspace returned an invalid image attachment.");
+        return undefined;
+      }
+      return dataUrl;
+    },
+    [document, ipc, workspace],
+  );
+
+  const saveDocument = useCallback(async () => {
     if (!document || !workspace) return;
+    const submittedContent = document.content;
     setSaving(true);
     const result = await ipc.files.writeText({
       path: {
         workspaceId: document.workspaceId,
         relativePath: document.relativePath,
       },
-      content: document.content,
+      content: submittedContent,
       baseHash: document.baseHash,
-      baseContent: document.content,
+      baseContent: document.baseContent,
       actor: { actorType: "user", actorId: "desktop" },
       correlationId: `ui-${Date.now().toString(36)}`,
     });
@@ -534,13 +715,53 @@ export function WorkspaceSurface({
       current
         ? {
             ...current,
+            baseContent: submittedContent,
             baseHash: result.data.contentHash,
             baseRevisionId: result.data.revisionId,
           }
         : current,
     );
+    onDocumentDirtyChange(
+      `file:${document.workspaceId}:${document.relativePath}`,
+      false,
+    );
+    onDocumentSaved(`file:${document.workspaceId}:${document.relativePath}`);
     void refreshDirectory();
-  };
+  }, [
+    document,
+    ipc,
+    onDocumentDirtyChange,
+    onDocumentSaved,
+    refreshDirectory,
+    workspace,
+  ]);
+
+  useEffect(() => {
+    if (
+      !editorAutosave ||
+      !workspace?.canWrite ||
+      !document ||
+      saving ||
+      document.content === document.baseContent
+    )
+      return;
+    const timer = window.setTimeout(() => void saveDocument(), 1_000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [document, editorAutosave, saveDocument, saving, workspace?.canWrite]);
+
+  useEffect(() => {
+    if (!saveRequest || !document || saving) return;
+    const resourceId = `file:${document.workspaceId}:${document.relativePath}`;
+    if (saveRequest.resourceId !== resourceId) return;
+    const timer = window.setTimeout(() => {
+      void saveDocument();
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [document, saveDocument, saveRequest, saving]);
 
   const searchEntries = async (query: string) => {
     if (!workspace) return;
@@ -587,21 +808,28 @@ export function WorkspaceSurface({
   }, [createNote]);
 
   useEffect(() => {
-    const openNote = (event: Event) => {
-      const relativePath = (event as CustomEvent<{ relativePath?: string }>)
-        .detail.relativePath;
-      if (!relativePath) return;
-      if (relativePath === "notes/today.md") createDailyNote();
+    if (!noteRequest) return;
+    const timer = window.setTimeout(() => {
+      if (noteRequest.relativePath === "notes/today.md") createDailyNote();
       else {
-        void openDocument(relativePath);
+        void openDocument(noteRequest.relativePath);
         onNavigate("knowledge");
       }
-    };
-    window.addEventListener("second-brain:open-note", openNote);
+    }, 0);
     return () => {
-      window.removeEventListener("second-brain:open-note", openNote);
+      window.clearTimeout(timer);
     };
-  }, [createDailyNote, onNavigate, openDocument]);
+  }, [createDailyNote, noteRequest, onNavigate, openDocument]);
+
+  useEffect(() => {
+    if (!fileRequest) return;
+    const timer = window.setTimeout(() => {
+      void openDocument(fileRequest.relativePath);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [fileRequest, openDocument]);
 
   const refreshGit = useCallback(async () => {
     if (!workspace) return;
@@ -609,6 +837,40 @@ export function WorkspaceSurface({
     if (isSuccess(result)) setGit(result.data);
     else setError(errorMessage(result));
   }, [ipc, workspace]);
+
+  const mutateGit = useCallback(
+    async (operation: "stage" | "unstage" | "discard", path: string) => {
+      if (!workspace) return;
+      const result =
+        operation === "stage"
+          ? await ipc.git.stage(workspace.id, [path])
+          : operation === "unstage"
+            ? await ipc.git.unstage(workspace.id, [path])
+            : await ipc.git.discard(workspace.id, [path], true);
+      if (!isSuccess(result)) setError(errorMessage(result));
+      else void refreshGit();
+    },
+    [ipc, refreshGit, workspace],
+  );
+
+  const openGitDiff = useCallback(
+    async (path: string, staged: boolean) => {
+      if (!workspace) return;
+      const result = await ipc.git.diff(workspace.id, staged, [path]);
+      if (!isSuccess(result)) {
+        setError(errorMessage(result));
+        return;
+      }
+      setGitDiff({ path, data: result.data });
+      onGitDiffOpened({
+        workspaceId: workspace.id,
+        path,
+        title: `${path.split("/").at(-1) ?? path} · diff`,
+      });
+      setError("");
+    },
+    [ipc, onGitDiffOpened, workspace],
+  );
 
   useEffect(() => {
     if (activity !== "source-control") return;
@@ -662,24 +924,28 @@ export function WorkspaceSurface({
         context.node.type === "folder"
           ? context.source.relativePath
           : parentPath(context.source.relativePath);
-      window.dispatchEvent(
-        new CustomEvent("second-brain:open-terminal", {
-          detail: {
-            workspaceId: context.source.workspaceId,
-            relativePath,
-            preset:
-              command === "graph.open-terminal"
-                ? "shell"
-                : (context.provider ?? "codex"),
-          },
-        }),
-      );
+      onOpenTerminal({
+        workspaceId: context.source.workspaceId,
+        relativePath,
+        preset:
+          command === "graph.open-terminal"
+            ? "shell"
+            : (context.provider ?? "codex"),
+      });
     }
   };
 
   const surface = (content: ReactNode) => (
     <>
-      {content}
+      <Suspense
+        fallback={
+          <div className="surface-loading" role="status">
+            Loading workspace surface…
+          </div>
+        }
+      >
+        {content}
+      </Suspense>
       <KnowledgeSearchModal
         open={searchOpen}
         response={search}
@@ -689,6 +955,33 @@ export function WorkspaceSurface({
           onCloseSearch();
           void openDocument(result.path);
           onNavigate("knowledge");
+        }}
+      />
+      <NewNoteDialog
+        open={newNoteOpen}
+        onClose={() => {
+          setNewNoteOpen(false);
+        }}
+        onCreate={(relativePath, title) => {
+          void createNote(relativePath, title);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDiscard)}
+        title="Discard local changes?"
+        message={
+          pendingDiscard
+            ? `Changes to ${pendingDiscard} will be discarded. This action cannot be undone from Second Brain OS.`
+            : ""
+        }
+        confirmLabel="Discard changes"
+        dangerous
+        onClose={() => {
+          setPendingDiscard(undefined);
+        }}
+        onConfirm={() => {
+          if (pendingDiscard) void mutateGit("discard", pendingDiscard);
+          setPendingDiscard(undefined);
         }}
       />
     </>
@@ -703,7 +996,7 @@ export function WorkspaceSurface({
           void registerWorkspace(registration);
         }}
         busy={loading}
-        error={error}
+        error={workspaceError || error}
       />,
     );
 
@@ -729,11 +1022,20 @@ export function WorkspaceSurface({
         canWrite={workspace.canWrite}
         saving={saving}
         onChange={(content) => {
-          setDocument((current) => current && { ...current, content });
+          onDocumentDirtyChange(
+            `file:${document.workspaceId}:${document.relativePath}`,
+            content !== document.baseContent,
+          );
+          setDocument((current) => {
+            if (!current) return current;
+            return { ...current, content };
+          });
         }}
         onSave={() => {
           void saveDocument();
         }}
+        onImportImage={importImage}
+        resolveLocalImage={resolveLocalImage}
       />,
     );
 
@@ -756,25 +1058,12 @@ export function WorkspaceSurface({
             entry.kind === "directory"
               ? entry.relativePath
               : parentPath(entry.relativePath);
-          window.dispatchEvent(
-            new CustomEvent("second-brain:open-terminal", {
-              detail: {
-                workspaceId: workspace.id,
-                relativePath,
-                preset: action === "terminal" ? "shell" : action,
-              },
-            }),
-          );
+          onOpenTerminal({
+            workspaceId: workspace.id,
+            relativePath,
+            preset: action === "terminal" ? "shell" : action,
+          });
         }}
-      />,
-    );
-
-  if (activity === "graph")
-    return surface(
-      <FocusedGraph
-        page={graph}
-        onExpand={(nodeId) => expandGraphNode(nodeId)}
-        onCommand={handleGraphCommand}
       />,
     );
 
@@ -796,79 +1085,237 @@ export function WorkspaceSurface({
         staged: change.staged,
       }),
     );
-    const mutate = async (
-      operation: "stage" | "unstage" | "discard",
-      path: string,
-    ) => {
-      const result =
-        operation === "stage"
-          ? await ipc.git.stage(workspace.id, [path])
-          : operation === "unstage"
-            ? await ipc.git.unstage(workspace.id, [path])
-            : await ipc.git.discard(
-                workspace.id,
-                [path],
-                window.confirm(`Discard changes to ${path}?`),
-              );
-      if (!isSuccess(result)) setError(errorMessage(result));
-      else {
-        void refreshGit();
-      }
-    };
+    if (gitDiff)
+      return surface(
+        <section className="git-diff-view" aria-labelledby="git-diff-title">
+          <header className="git-diff-header">
+            <div>
+              <p className="eyebrow">
+                {gitDiff.data.staged ? "Staged diff" : "Working tree diff"}
+              </p>
+              <h1 id="git-diff-title">{gitDiff.path}</h1>
+            </div>
+            <button
+              type="button"
+              className="button button-small"
+              onClick={() => {
+                setGitDiff(undefined);
+              }}
+            >
+              Back to changes
+            </button>
+          </header>
+          {gitDiff.data.truncated ? (
+            <p role="status">This diff was truncated to a safe display size.</p>
+          ) : null}
+          <pre className="git-diff-patch" tabIndex={0}>
+            <code>{gitDiff.data.patch || "No textual changes."}</code>
+          </pre>
+        </section>,
+      );
     return surface(
       <SourceControlWorkspace
         {...(git?.branch === undefined ? {} : { branch: git.branch })}
         changes={changes}
         onStage={(path) => {
-          void mutate("stage", path);
+          void mutateGit("stage", path);
         }}
         onUnstage={(path) => {
-          void mutate("unstage", path);
+          void mutateGit("unstage", path);
         }}
         onDiscard={(path) => {
-          void mutate("discard", path);
+          setPendingDiscard(path);
+        }}
+        onOpenDiff={(path, staged) => {
+          void openGitDiff(path, staged);
         }}
       />,
     );
   }
 
-  if (activity === "settings")
+  if (activity === "planner")
     return surface(
-      <section className="workspace-settings" aria-labelledby="settings-title">
-        <p className="eyebrow">Workspace settings</p>
-        <h1 id="settings-title">{workspace.name}</h1>
-        <p>
-          Trust: {workspace.trustLevel.replaceAll("_", " ")} ·{" "}
-          {workspace.canWrite ? "editing enabled" : "read-only"}
-        </p>
-        <button
-          className="button"
-          type="button"
-          onClick={() => {
-            void refreshWorkspaces();
-          }}
-        >
-          Refresh workspaces
-        </button>
+      <section className="tasks-workspace" aria-labelledby="tasks-heading">
+        <header className="surface-toolbar">
+          <div>
+            <p className="eyebrow">Tasks</p>
+            <h1 id="tasks-heading">All Tasks</h1>
+          </div>
+          <span className="surface-status">Local planner</span>
+        </header>
+        <LocalPlanner />
       </section>,
     );
 
-  const today = new Date().toLocaleDateString("en-CA");
+  if (activity === "calendar") return surface(<ReferenceCalendar />);
+
+  if (activity === "settings")
+    return surface(
+      <section className="workspace-settings" aria-labelledby="settings-title">
+        <header className="settings-heading">
+          <div>
+            <p className="eyebrow">Settings</p>
+            <h1 id="settings-title">Workspace</h1>
+            <p>Configure how Second Brain OS works for this local workspace.</p>
+          </div>
+          <button
+            className="button button-small"
+            type="button"
+            onClick={() => void refreshWorkspaces()}
+          >
+            Refresh
+          </button>
+        </header>
+        <fieldset className="settings-group settings-profile">
+          <legend>Workspace Profile</legend>
+          <dl className="settings-rows">
+            <div>
+              <dt>Workspace name</dt>
+              <dd>{workspace.name}</dd>
+            </div>
+            <div>
+              <dt>Workspace type</dt>
+              <dd>{workspace.kind}</dd>
+            </div>
+            <div>
+              <dt>Data location</dt>
+              <dd>
+                <span className="settings-badge">● Local only</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Workspace ID</dt>
+              <dd>
+                <code>{workspace.id}</code>
+              </dd>
+            </div>
+          </dl>
+        </fieldset>
+        <fieldset className="settings-group">
+          <legend>Local-First Settings</legend>
+          <dl className="settings-rows">
+            <div>
+              <dt>Local-first mode</dt>
+              <dd>
+                Always prefer local data and offline operation{" "}
+                <span className="settings-switch" data-on="true" />
+              </dd>
+            </div>
+            <div>
+              <dt>Workspace trust</dt>
+              <dd>{workspace.trustLevel.replaceAll("_", " ")}</dd>
+            </div>
+            <div>
+              <dt>Editing</dt>
+              <dd>{workspace.canWrite ? "Enabled" : "Read-only"}</dd>
+            </div>
+            <div>
+              <dt>Native terminal</dt>
+              <dd>{workspace.canUseTerminal ? "Available" : "Unavailable"}</dd>
+            </div>
+          </dl>
+        </fieldset>
+        <fieldset className="settings-group">
+          <legend>Appearance</legend>
+          <p>
+            Choose how the workbench canvas and editor surfaces are rendered.
+          </p>
+          <div className="segmented-control" aria-label="Theme">
+            {(["light", "auto", "dark"] as const).map((mode) => (
+              <button
+                type="button"
+                key={mode}
+                className="button button-small"
+                aria-pressed={themeMode === mode}
+                onClick={() => {
+                  setThemeMode(mode);
+                }}
+              >
+                {mode.slice(0, 1).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="settings-group">
+          <legend>Editor</legend>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={editorAutosave}
+              onChange={(event) => {
+                setEditorAutosave(event.target.checked);
+              }}
+            />
+            <span>
+              <strong>Autosave after one second</strong>
+              <small>Off by default. Save failures remain visible.</small>
+            </span>
+          </label>
+        </fieldset>
+        <fieldset className="settings-group">
+          <legend>Debugging</legend>
+          <dl className="settings-rows">
+            <div>
+              <dt>Desktop bridge</dt>
+              <dd>
+                {bridgeResult
+                  ? bridgeResult.ok
+                    ? "Connected"
+                    : bridgeResult.error.message
+                  : "Not checked"}
+                <button
+                  type="button"
+                  className="button button-small"
+                  onClick={() => void checkDesktopBridge()}
+                >
+                  Check desktop bridge
+                </button>
+              </dd>
+            </div>
+            {bridgeResult ? (
+              <div>
+                <dt>Correlation ID</dt>
+                <dd>
+                  <code>{bridgeResult.correlationId}</code>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </fieldset>
+        <fieldset className="settings-group">
+          <legend>Sync & Collaboration</legend>
+          <dl className="settings-rows">
+            <div>
+              <dt>Cloud sync</dt>
+              <dd>Not configured</dd>
+            </div>
+            <div>
+              <dt>Shared links</dt>
+              <dd>Unavailable in this local build</dd>
+            </div>
+            <div>
+              <dt>Collaborative editing</dt>
+              <dd>Local-only</dd>
+            </div>
+          </dl>
+        </fieldset>
+      </section>,
+    );
+
   return surface(
     <section className="home-surface" aria-labelledby="home-title">
-      <p className="eyebrow">{workspace.name}</p>
-      <h1 id="home-title">Good to see you.</h1>
-      <p className="workspace-lede">
-        Capture what matters, see today at a glance, and follow the threads in
-        your knowledge graph.
-      </p>
+      <h1 id="home-title" className="visually-hidden">
+        Home
+      </h1>
       <div className="quick-actions">
         <button
           className="quick-action"
           type="button"
           onClick={createDailyNote}
         >
-          <span>＋</span>
+          <span>
+            <CalendarPlus size={16} strokeWidth={1.8} aria-hidden="true" />
+          </span>
           <strong>Today’s note</strong>
           <small>Open notes/today.md</small>
         </button>
@@ -876,54 +1323,31 @@ export function WorkspaceSurface({
           className="quick-action"
           type="button"
           onClick={() => {
-            const title = window.prompt("Note title")?.trim();
-            if (!title) return;
-            const slug = title
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-|-$/g, "");
-            void createNote(`notes/${slug || "untitled"}.md`, title);
+            setNewNoteOpen(true);
           }}
         >
-          <span>✦</span>
+          <span>
+            <FilePlus2 size={16} strokeWidth={1.8} aria-hidden="true" />
+          </span>
           <strong>New note</strong>
           <small>Create a Markdown node in notes.</small>
         </button>
         <button className="quick-action" type="button" onClick={onOpenPalette}>
-          <span>⌘⇧P</span>
+          <span>
+            <Command size={16} strokeWidth={1.8} aria-hidden="true" />
+          </span>
           <strong>Commands</strong>
           <small>Open the action palette.</small>
         </button>
       </div>
-      <div className="home-dashboard-grid">
-        <section className="home-card" aria-labelledby="calendar-title">
-          <p className="eyebrow">Calendar</p>
-          <h2 id="calendar-title">Today</h2>
-          <input type="date" defaultValue={today} aria-label="Calendar date" />
-          <p>Connect Google Calendar to show your schedule here.</p>
-        </section>
-        <section className="home-card" aria-labelledby="tasks-title">
-          <p className="eyebrow">Google Tasks</p>
-          <h2 id="tasks-title">Tasks</h2>
-          <p>Your Google task list will appear here after connection.</p>
-          <button className="button button-small" type="button" disabled>
-            Google connection required
-          </button>
-        </section>
-      </div>
-      <section className="home-graph" aria-labelledby="home-graph-title">
-        <header>
-          <p className="eyebrow">Knowledge graph</p>
-          <h2 id="home-graph-title">This folder</h2>
-        </header>
-        <FocusedGraph
-          page={graph}
-          onExpand={(nodeId) => expandGraphNode(nodeId)}
-          onCommand={handleGraphCommand}
-        />
-      </section>
+      <FocusedGraph
+        page={graph}
+        theme={resolvedTheme}
+        onExpand={(nodeId) => expandGraphNode(nodeId)}
+        onCommand={handleGraphCommand}
+        onSelectionContextChange={onGraphSelectionContextChange}
+      />
       {error ? <p role="alert">{error}</p> : null}
-      <DerivedReviewQueue artifacts={[]} />
     </section>,
   );
 }

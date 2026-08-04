@@ -56,6 +56,36 @@ describe("KnowledgeSearchModal", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
+  it("traps focus and restores the opener", () => {
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    opener.focus();
+    const { unmount } = render(
+      <KnowledgeSearchModal
+        open
+        response={{ results: [], structuredPlan: "" }}
+        onClose={vi.fn()}
+        onSearch={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
+    const close = screen.getByRole("button", {
+      name: "Close knowledge search",
+    });
+    const submit = screen.getByRole("button", { name: "Search" });
+
+    submit.focus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(close).toHaveFocus();
+    close.focus();
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(submit).toHaveFocus();
+
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
+
   it("does not render while closed", () => {
     render(
       <KnowledgeSearchModal

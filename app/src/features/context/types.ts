@@ -28,3 +28,16 @@ export type ContextInspectorPacket = {
   items: ContextInspectorItem[];
   exclusions: ContextInspectorExclusion[];
 };
+
+export type ContextSourceGroup = "required" | "optional";
+
+export function contextUsagePercent(
+  tokenCount: number,
+  tokenBudget: number,
+): number {
+  if (tokenBudget <= 0) return 0;
+  return Math.min(
+    100,
+    Math.round((Math.max(0, tokenCount) / tokenBudget) * 100),
+  );
+}

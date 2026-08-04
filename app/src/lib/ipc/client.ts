@@ -1,9 +1,13 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import type {
   CommandResult,
+  FileAttachmentCreateRequest,
+  FileAttachmentCreateResult,
+  FileAttachmentReadResult,
   FileReadResult,
   FileWriteRequest,
   FileWriteResult,
+  GitWorkspaceDiff,
   GitWorkspaceStatus,
   JobCancellation,
   NativeTerminalOutput,
@@ -75,6 +79,10 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
     files: {
       readText: (path: WorkspacePath) =>
         call<FileReadResult>("file_read_text", { path }),
+      createAttachment: (request: FileAttachmentCreateRequest) =>
+        call<FileAttachmentCreateResult>("file_create_attachment", { request }),
+      readAttachment: (path: WorkspacePath) =>
+        call<FileAttachmentReadResult>("file_read_attachment", { path }),
       writeText: (request: FileWriteRequest) =>
         call<FileWriteResult>("file_write_text", { request }),
     },
@@ -95,6 +103,12 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
     git: {
       status: (workspaceId: string) =>
         call<GitWorkspaceStatus>("git_status", { workspaceId }),
+      diff: (workspaceId: string, staged: boolean, relativePaths: string[]) =>
+        call<GitWorkspaceDiff>("git_diff", {
+          workspaceId,
+          staged,
+          paths: relativePaths,
+        }),
       stage: (workspaceId: string, paths: string[]) =>
         call<null>("git_stage", { workspaceId, paths }),
       unstage: (workspaceId: string, paths: string[]) =>

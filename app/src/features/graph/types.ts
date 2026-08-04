@@ -52,4 +52,19 @@ export type GraphCommandContext = {
   provider?: "codex" | "claude";
 };
 
+/**
+ * The graph state associated with the currently selected node.
+ *
+ * Keeping relationships in the selection payload means consumers such as the
+ * global inspector do not need to reach into the SVG to reconstruct the
+ * selected node's context. `graph` is the bounded, currently visible page and
+ * therefore remains safe to pass across the feature boundary.
+ */
+export type GraphSelectionContext = {
+  node: GraphNode;
+  relationships: GraphEdge[];
+  relatedNodes: GraphNode[];
+  graph: GraphPage;
+};
+
 export type GraphPosition = { x: number; y: number };
