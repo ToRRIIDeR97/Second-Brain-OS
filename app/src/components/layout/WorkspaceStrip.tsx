@@ -2,7 +2,6 @@ import {
   BriefcaseBusiness,
   FlaskConical,
   FolderKanban,
-  Network,
   PanelTop,
 } from "lucide-react";
 import type { Activity } from "../../state/shell";
@@ -33,12 +32,6 @@ export function WorkspaceStrip({
       label: "Projects",
       icon: FolderKanban,
       activity: "files" as const,
-    },
-    {
-      id: "graph",
-      label: "Knowledge Graph",
-      icon: Network,
-      activity: "graph" as const,
     },
   ];
 

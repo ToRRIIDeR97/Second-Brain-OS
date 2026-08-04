@@ -9,15 +9,15 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
-  CircleGauge,
   PanelLeft,
   PanelRight,
   Search,
   SquareTerminal,
 } from "lucide-react";
-import { Group, Panel, Separator } from "react-resizable-panels";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import { createDefaultCommands } from "../../app/commands";
-import { ipcClient, type CommandResult, type IpcClient } from "../../lib/ipc";
+import { ipcClient, type IpcClient } from "../../lib/ipc";
 import type { TerminalRequest } from "../../features/terminal/TerminalWorkspace";
 import type { GraphSelectionContext } from "../../features/graph";
 import {
@@ -31,7 +31,7 @@ import { ThemeProvider } from "../../state/theme";
 import { WorkspaceProvider } from "../../state/workspace";
 import { useWorkspace } from "../../state/workspace";
 import { CommandPalette } from "../common/CommandPalette";
-import { ModalDialog } from "../common/ModalDialog";
+import { ConfirmDialog, ModalDialog } from "../common/ModalDialog";
 import { ActivityBar } from "./ActivityBar";
 import { Tabs } from "./Tabs";
 import { UtilityDock, type UtilityDockTab } from "./UtilityDock";
@@ -42,7 +42,7 @@ const IntegratedWorkspaceSurface = lazy(async () => ({
 }));
 const activityTitles: Record<Activity, string> = {
   home: "Home",
-  knowledge: "Knowledge",
+  knowledge: "Files",
   files: "Files",
   graph: "Graph",
   search: "Search",
@@ -53,50 +53,6 @@ const activityTitles: Record<Activity, string> = {
   "source-control": "Source Control",
   settings: "Settings",
 };
-
-function IpcStatus({ ipc }: { ipc: IpcClient }) {
-  const [result, setResult] = useState<CommandResult<string> | null>(null);
-  const check = async () => {
-    setResult(await ipc.system.ping());
-  };
-  return (
-    <details className="system-health">
-      <summary aria-label="Open system health">
-        <CircleGauge size={15} strokeWidth={1.8} aria-hidden="true" />
-        <span>{result?.ok ? "Healthy" : result ? "Attention" : "Local"}</span>
-      </summary>
-      <div className="system-health-popover">
-        <p className="eyebrow">System health</p>
-        {result ? (
-          result.ok ? (
-            <p role="status" className="ipc-result ipc-success">
-              <span className="status-dot" /> Desktop bridge connected
-            </p>
-          ) : (
-            <p role="alert" className="ipc-result ipc-error">
-              {result.error.message}
-            </p>
-          )
-        ) : (
-          <p className="ipc-result ipc-idle">Local workspace is ready.</p>
-        )}
-        <button
-          type="button"
-          className="button button-small"
-          onClick={() => void check()}
-        >
-          Check desktop bridge
-        </button>
-        {result ? (
-          <details className="technical-details">
-            <summary>Technical details</summary>
-            <code>{result.correlationId}</code>
-          </details>
-        ) : null}
-      </div>
-    </details>
-  );
-}
 
 function ShellFrame({ ipc }: { ipc: IpcClient }) {
   const { state, dispatch } = useShell();
@@ -119,6 +75,8 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
   const [utilityOpen, setUtilityOpen] = useState(true);
   const [utilityTabs, setUtilityTabs] = useState<UtilityDockTab[]>([]);
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>();
+  const [terminalClosePending, setTerminalClosePending] = useState(false);
+  const utilityPanelRef = usePanelRef();
   const { activeWorkspace } = useWorkspace();
 
   useEffect(() => {
@@ -140,6 +98,21 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
     [dispatch],
   );
 
+  const openActivityTab = useCallback(
+    (activity: Activity) => {
+      setActivity(activity);
+      dispatch({
+        type: "tab/open",
+        tab: {
+          id: `activity:${activity}`,
+          title: activityTitles[activity],
+          activity,
+        },
+      });
+    },
+    [dispatch, setActivity],
+  );
+
   const openUtility = useCallback((tab: UtilityDockTab) => {
     setUtilityTabs((current) =>
       current.includes(tab) ? current : [...current, tab],
@@ -148,7 +121,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
     setUtilityOpen(true);
   }, []);
 
-  const closeUtilityTab = useCallback((tab: UtilityDockTab) => {
+  const removeUtilityTab = useCallback((tab: UtilityDockTab) => {
     if (tab === "terminal") setTerminalRequest(undefined);
     setUtilityTabs((current) => {
       const index = current.indexOf(tab);
@@ -162,6 +135,19 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
       return remaining;
     });
   }, []);
+
+  const closeUtilityTab = useCallback(
+    (tab: UtilityDockTab) => {
+      if (tab === "terminal") setTerminalClosePending(true);
+      else removeUtilityTab(tab);
+    },
+    [removeUtilityTab],
+  );
+
+  useEffect(() => {
+    if (utilityOpen) utilityPanelRef.current?.expand();
+    else utilityPanelRef.current?.collapse();
+  }, [utilityOpen, utilityPanelRef]);
 
   useEffect(() => {
     dispatch({
@@ -354,7 +340,21 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
 
   return (
     <div className="app-shell">
-      <header className="topbar" data-tauri-drag-region>
+      <header
+        className="topbar"
+        onMouseDown={(event) => {
+          if (
+            event.button !== 0 ||
+            (event.target as HTMLElement).closest(
+              "button, input, select, textarea, a",
+            )
+          )
+            return;
+          void getCurrentWindow()
+            .startDragging()
+            .catch(() => undefined);
+        }}
+      >
         <nav className="topbar-history" aria-label="Resource history">
           <button
             type="button"
@@ -379,7 +379,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
             <ArrowRight size={15} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </nav>
-        <div className="topbar-title" data-tauri-drag-region>
+        <div className="topbar-title">
           <span>Second Brain OS</span>
           <span aria-hidden="true">—</span>
           <strong>{activeWorkspace?.name ?? "Local workbench"}</strong>
@@ -396,7 +396,6 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
           <kbd>⌘K</kbd>
         </button>
         <div className="topbar-actions">
-          <IpcStatus ipc={ipc} />
           <button
             type="button"
             className="icon-button"
@@ -466,6 +465,9 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
                     setFileRequest({ key: Date.now(), relativePath });
                     setActivity("files");
                   }}
+                  onClose={() => {
+                    dispatch({ type: "navigator/toggle", open: false });
+                  }}
                 />
               </Panel>
               <Separator
@@ -474,7 +476,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
               />
             </>
           ) : null}
-          <Panel minSize={35}>
+          <Panel minSize="360px">
             <div className="workspace-column">
               {state.tabs.length ? (
                 <Tabs
@@ -492,6 +494,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
                     if (tab?.dirty) setPendingCloseTabId(id);
                     else dispatch({ type: "tab/close", id });
                   }}
+                  onAdd={openActivityTab}
                 />
               ) : null}
               <main className="workspace" data-route={state.activity}>
@@ -527,37 +530,42 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
               </main>
             </div>
           </Panel>
-          {utilityOpen ? (
-            <>
-              <Separator
-                className="resize-handle"
-                aria-label="Resize utility panel"
-              />
-              <Panel defaultSize="36%" minSize="26%" maxSize="58%">
-                <UtilityDock
-                  {...(utilityTab ? { activeTab: utilityTab } : {})}
-                  openTabs={utilityTabs}
-                  ipc={ipc}
-                  {...(terminalRequest ? { terminalRequest } : {})}
-                  onOpenTab={openUtility}
-                  onTabChange={setUtilityTab}
-                  onCloseTab={closeUtilityTab}
-                  onClose={() => {
-                    setUtilityOpen(false);
-                  }}
-                  onOpenDailyNote={() => {
-                    setNoteRequest({
-                      key: Date.now(),
-                      relativePath: "notes/today.md",
-                    });
-                  }}
-                  onOpenPath={(relativePath) => {
-                    setFileRequest({ key: Date.now(), relativePath });
-                  }}
-                />
-              </Panel>
-            </>
-          ) : null}
+          <Separator
+            className="resize-handle"
+            aria-label="Resize utility panel"
+            disabled={!utilityOpen}
+          />
+          <Panel
+            panelRef={utilityPanelRef}
+            defaultSize="360px"
+            minSize="320px"
+            maxSize="640px"
+            collapsible
+            collapsedSize={0}
+            groupResizeBehavior="preserve-pixel-size"
+          >
+            <UtilityDock
+              {...(utilityTab ? { activeTab: utilityTab } : {})}
+              openTabs={utilityTabs}
+              ipc={ipc}
+              {...(terminalRequest ? { terminalRequest } : {})}
+              onOpenTab={openUtility}
+              onTabChange={setUtilityTab}
+              onCloseTab={closeUtilityTab}
+              onClose={() => {
+                setUtilityOpen(false);
+              }}
+              onOpenDailyNote={() => {
+                setNoteRequest({
+                  key: Date.now(),
+                  relativePath: "notes/today.md",
+                });
+              }}
+              onOpenPath={(relativePath) => {
+                setFileRequest({ key: Date.now(), relativePath });
+              }}
+            />
+          </Panel>
         </Group>
       </div>
       <CommandPalette
@@ -571,6 +579,20 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
         }}
         onClose={() => {
           dispatch({ type: "palette/toggle", open: false });
+        }}
+      />
+      <ConfirmDialog
+        open={terminalClosePending}
+        title="Close terminal?"
+        message="Closing this terminal will terminate its running process and any work in it."
+        confirmLabel="Close terminal"
+        dangerous
+        onClose={() => {
+          setTerminalClosePending(false);
+        }}
+        onConfirm={() => {
+          removeUtilityTab("terminal");
+          setTerminalClosePending(false);
         }}
       />
       <ModalDialog

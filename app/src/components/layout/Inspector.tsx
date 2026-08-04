@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { X } from "lucide-react";
 import type { Activity } from "../../state/shell";
 
 export const INSPECTOR_TAB_IDS = [
@@ -169,7 +170,7 @@ export function Inspector({
               title="Close inspector"
               onClick={onClose}
             >
-              <span aria-hidden="true">×</span>
+              <X size={15} aria-hidden="true" />
             </button>
           ) : null}
         </div>

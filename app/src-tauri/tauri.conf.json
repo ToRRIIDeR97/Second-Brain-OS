@@ -15,8 +15,7 @@
         "title": "Second Brain OS",
         "width": 1280,
         "height": 800,
-        "maximized": true,
-        "minWidth": 800,
+        "minWidth": 900,
         "minHeight": 600
       }
     ],

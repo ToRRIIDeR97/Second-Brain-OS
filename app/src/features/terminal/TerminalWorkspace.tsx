@@ -7,6 +7,8 @@ import {
   type DragEvent,
 } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
+import { Plus, X } from "lucide-react";
+import { ConfirmDialog } from "../../components/common/ModalDialog";
 import type {
   IpcClient,
   NativeTerminalPreset,
@@ -51,6 +53,8 @@ function TerminalPane({
     let disposed = false;
     let pollTimer = 0;
     let resizeFrame = 0;
+    let resizeTimer = 0;
+    let panelDragging = false;
     let lastColumns = 0;
     let lastRows = 0;
     let observer: ResizeObserver | undefined;
@@ -107,8 +111,28 @@ function TerminalPane({
       };
       const scheduleFit = () => {
         window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = window.requestAnimationFrame(fitAndResize);
+        window.clearTimeout(resizeTimer);
+        resizeFrame = window.requestAnimationFrame(() => {
+          if (disposed || element.clientWidth < 20 || element.clientHeight < 20)
+            return;
+          fit.fit();
+          if (panelDragging) return;
+          resizeTimer = window.setTimeout(fitAndResize, 150);
+        });
       };
+      const stopPanelDrag = () => {
+        if (!panelDragging) return;
+        panelDragging = false;
+        scheduleFit();
+      };
+      const startPanelDrag = (event: PointerEvent) => {
+        panelDragging =
+          event.target instanceof Element &&
+          event.target.closest("[data-separator]") !== null;
+      };
+      window.addEventListener("pointerdown", startPanelDrag);
+      window.addEventListener("pointerup", stopPanelDrag);
+      window.addEventListener("pointercancel", stopPanelDrag);
       if (typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(scheduleFit);
         observer.observe(element);
@@ -132,6 +156,9 @@ function TerminalPane({
       void poll();
 
       disposeTerminal = () => {
+        window.removeEventListener("pointerdown", startPanelDrag);
+        window.removeEventListener("pointerup", stopPanelDrag);
+        window.removeEventListener("pointercancel", stopPanelDrag);
         input.dispose();
         terminal.dispose();
       };
@@ -142,6 +169,7 @@ function TerminalPane({
       disposed = true;
       window.clearInterval(pollTimer);
       window.cancelAnimationFrame(resizeFrame);
+      window.clearTimeout(resizeTimer);
       observer?.disconnect();
       disposeTerminal?.();
     };
@@ -165,6 +193,7 @@ type NativeTerminalWorkspaceProps = {
   ipc: IpcClient;
   request?: TerminalRequest | undefined;
   onMinimize?: (() => void) | undefined;
+  hidden?: boolean;
 };
 
 type ControlledTerminalWorkspaceProps = {
@@ -245,6 +274,7 @@ function NativeTerminalWorkspace({
   ipc,
   request,
   onMinimize,
+  hidden,
 }: NativeTerminalWorkspaceProps) {
   const [sessions, setSessions] = useState<NativeTerminalSession[]>([]);
   const [activeId, setActiveId] = useState<string>();
@@ -252,6 +282,7 @@ function NativeTerminalWorkspace({
   const [draggedId, setDraggedId] = useState<string>();
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState("");
+  const [pendingClose, setPendingClose] = useState<NativeTerminalSession>();
   const [outputHistory, setOutputHistory] = useState<Record<string, string>>(
     {},
   );
@@ -346,25 +377,21 @@ function NativeTerminalWorkspace({
     };
   }, [addSession, request]);
 
-  const closeSession = useCallback(
-    (session: NativeTerminalSession) => {
-      void ipc.terminal.terminate(session.workspaceId, session.id, true);
-      setOutputHistory((current) =>
-        Object.fromEntries(
-          Object.entries(current).filter(([id]) => id !== session.id),
-        ),
+  const removeSession = useCallback((session: NativeTerminalSession) => {
+    setOutputHistory((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([id]) => id !== session.id),
+      ),
+    );
+    setSessions((current) => {
+      const remaining = current.filter(({ id }) => id !== session.id);
+      setActiveId((selected) =>
+        selected === session.id ? remaining.at(-1)?.id : selected,
       );
-      setSessions((current) => {
-        const remaining = current.filter(({ id }) => id !== session.id);
-        setActiveId((selected) =>
-          selected === session.id ? remaining.at(-1)?.id : selected,
-        );
-        return remaining;
-      });
-      setSplitIds((current) => current.filter((id) => id !== session.id));
-    },
-    [ipc],
-  );
+      return remaining;
+    });
+    setSplitIds((current) => current.filter((id) => id !== session.id));
+  }, []);
 
   const splitWith = useCallback(
     (id: string) => {
@@ -395,7 +422,12 @@ function NativeTerminalWorkspace({
           : [];
 
   return (
-    <section className="terminal-workspace" aria-label="Terminal workspace">
+    <section
+      className="terminal-workspace"
+      aria-label="Terminal workspace"
+      hidden={hidden}
+      style={hidden ? { display: "none" } : undefined}
+    >
       <div className="terminal-tabbar" role="tablist" aria-label="Terminals">
         <div className="terminal-window-title" aria-hidden="true">
           Terminal
@@ -431,10 +463,10 @@ function NativeTerminalWorkspace({
               className="terminal-tab-close"
               aria-label={`Close Terminal ${String(index + 1)}`}
               onClick={() => {
-                closeSession(session);
+                setPendingClose(session);
               }}
             >
-              ×
+              <X size={14} aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -452,7 +484,7 @@ function NativeTerminalWorkspace({
             );
           }}
         >
-          +
+          <Plus size={16} aria-hidden="true" />
         </button>
         {sessions.length > 1 && activeId ? (
           <button
@@ -530,6 +562,26 @@ function NativeTerminalWorkspace({
           <div className="terminal-drop-hint">Drop to split terminal</div>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingClose)}
+        title="Close terminal?"
+        message="Closing this terminal will terminate its running process and any work in it."
+        confirmLabel="Close terminal"
+        dangerous
+        onClose={() => {
+          setPendingClose(undefined);
+        }}
+        onConfirm={() => {
+          if (!pendingClose) return;
+          void ipc.terminal
+            .terminate(pendingClose.workspaceId, pendingClose.id, true)
+            .then((result) => {
+              if (result.ok) removeSession(pendingClose);
+              else setError(result.error.message);
+              setPendingClose(undefined);
+            });
+        }}
+      />
     </section>
   );
 }

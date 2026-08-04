@@ -29,6 +29,16 @@ test("navigator opens data-backed notes and collections", () => {
   expect(screen.queryByText("Local workspace ready")).not.toBeInTheDocument();
 });
 
+test("navigator hides from its header control", () => {
+  const onClose = vi.fn();
+
+  render(<Navigator activity="home" onClose={onClose} />);
+
+  expect(screen.queryByText("Navigator")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Hide navigator" }));
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
 test("drawer renders terminal content without a duplicate header", () => {
   render(<Drawer terminal={<p>Shell output</p>} />);
 
@@ -47,8 +57,7 @@ test("activity rail keeps the primary order and moves focus with arrow keys", ()
   const buttons = within(rail).getAllByRole("button");
   expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
     "Home",
-    "Knowledge",
-    "Graph",
+    "Files",
     "Tasks",
     "Agents",
     "Settings",
@@ -60,7 +69,7 @@ test("activity rail keeps the primary order and moves focus with arrow keys", ()
 
   const homeButton = buttons[0];
   const knowledgeButton = buttons[1];
-  const agentsButton = buttons[4];
+  const agentsButton = buttons[3];
   if (!homeButton || !knowledgeButton || !agentsButton) {
     throw new Error("Activity rail did not render all expected buttons");
   }
@@ -103,6 +112,29 @@ test("resource tabs support roving keyboard focus and dirty close state", () => 
   expect(onActivate).toHaveBeenCalledWith("readme");
   fireEvent.click(screen.getByRole("button", { name: "Close README.md" }));
   expect(onClose).toHaveBeenCalledWith("readme");
+});
+
+test("tab add opens Home by default and offers activity tabs", () => {
+  const onAdd = vi.fn();
+
+  render(
+    <Tabs
+      tabs={[{ id: "home", title: "Home", activity: "home" }]}
+      activeTabId="home"
+      onActivate={vi.fn()}
+      onClose={vi.fn()}
+      onAdd={onAdd}
+    />,
+  );
+
+  const addButton = screen.getByRole("button", {
+    name: "Open a new resource",
+  });
+  fireEvent.click(addButton);
+  fireEvent.mouseEnter(addButton);
+  fireEvent.click(screen.getByRole("button", { name: "Files" }));
+  expect(onAdd).toHaveBeenNthCalledWith(1, "home");
+  expect(onAdd).toHaveBeenNthCalledWith(2, "knowledge");
 });
 
 test("inspector tabs render the selected resource contract", () => {

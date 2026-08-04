@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { PanelLeft } from "lucide-react";
 import type { Activity } from "../../state/shell";
 
 /** A workspace-scoped item rendered in the navigator. */
@@ -88,6 +89,7 @@ export type NavigatorProps = {
   onToggle?: (entry: NavigatorEntry, expanded: boolean) => void;
   onSectionToggle?: (section: NavigatorSection, expanded: boolean) => void;
   onActions?: () => void;
+  onClose?: () => void;
 };
 
 function entryKind(
@@ -112,6 +114,7 @@ export function Navigator({
   onToggle,
   onSectionToggle,
   onActions,
+  onClose,
 }: NavigatorProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -274,19 +277,33 @@ export function Navigator({
     <aside className="navigator" aria-label={`${title(activity)} navigator`}>
       <div className="region-heading">
         <div>
-          <p className="eyebrow">Navigator</p>
           <h2>{title(activity)}</h2>
         </div>
-        {onActions ? (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Navigator actions"
-            title="Navigator actions"
-            onClick={onActions}
-          >
-            <span aria-hidden="true">•••</span>
-          </button>
+        {onClose || onActions ? (
+          <div>
+            {onClose ? (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Hide navigator"
+                title="Hide navigator"
+                onClick={onClose}
+              >
+                <PanelLeft size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
+            ) : null}
+            {onActions ? (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Navigator actions"
+                title="Navigator actions"
+                onClick={onActions}
+              >
+                <span aria-hidden="true">•••</span>
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <div

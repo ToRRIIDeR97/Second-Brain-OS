@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
 import type {
   AppCommand,
   CommandContext,
@@ -15,7 +16,12 @@ type Props = {
 export function CommandPalette({ open, registry, context, onClose }: Props) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   const commands = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return registry
@@ -31,7 +37,35 @@ export function CommandPalette({ open, registry, context, onClose }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          "input, button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      previous?.focus();
+    };
   }, [open]);
 
   if (!open) return null;
@@ -44,6 +78,7 @@ export function CommandPalette({ open, registry, context, onClose }: Props) {
   return (
     <div className="palette-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={panelRef}
         className="command-palette"
         role="dialog"
         aria-modal="true"
@@ -62,7 +97,7 @@ export function CommandPalette({ open, registry, context, onClose }: Props) {
             aria-label="Close command palette"
             onClick={onClose}
           >
-            ×
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
         <input
@@ -74,7 +109,6 @@ export function CommandPalette({ open, registry, context, onClose }: Props) {
             setActiveIndex(0);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
             if (event.key === "ArrowDown") {
               event.preventDefault();
               setActiveIndex((index) =>

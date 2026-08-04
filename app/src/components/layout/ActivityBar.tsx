@@ -6,7 +6,6 @@ import type { Activity } from "../../state/shell";
 export const PRIMARY_ACTIVITIES = [
   "home",
   "knowledge",
-  "graph",
   "planner",
   "agents",
 ] as const satisfies readonly Activity[];
@@ -15,7 +14,7 @@ export type PrimaryActivity = (typeof PRIMARY_ACTIVITIES)[number];
 
 const labels: Record<Activity, string> = {
   home: "Home",
-  knowledge: "Knowledge",
+  knowledge: "Files",
   files: "Files",
   graph: "Graph",
   search: "Search",

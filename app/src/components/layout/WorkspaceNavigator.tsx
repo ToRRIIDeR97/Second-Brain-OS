@@ -27,11 +27,13 @@ export function WorkspaceNavigator({
   ipc,
   onOpenPath,
   onOpenDailyNote,
+  onClose,
 }: {
   activity: Activity;
   ipc: IpcClient;
   onOpenPath: (relativePath: string) => void;
   onOpenDailyNote: () => void;
+  onClose?: () => void;
 }) {
   const { activeWorkspace, workspaces, selectWorkspace } = useWorkspace();
   const [childrenByPath, setChildrenByPath] = useState<
@@ -110,13 +112,13 @@ export function WorkspaceNavigator({
   }, [activity, childrenByPath, expandedIds]);
 
   if (activity !== "knowledge" && activity !== "files") {
-    return <Navigator activity={activity} />;
+    return <Navigator activity={activity} {...(onClose ? { onClose } : {})} />;
   }
 
   const sections: NavigatorSection[] = [
     {
       id: "workspace",
-      label: activity === "knowledge" ? "Knowledge" : "Workspace",
+      label: activity === "knowledge" ? "Files" : "Workspace",
       entries: tree,
       badge: loadingPaths.includes("") ? "…" : tree.length,
     },
@@ -176,6 +178,7 @@ export function WorkspaceNavigator({
             void loadDirectory(entry.id);
         } else onOpenPath(entry.id);
       }}
+      {...(onClose ? { onClose } : {})}
     />
   );
 }

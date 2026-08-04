@@ -6,6 +6,7 @@ import {
   type MouseEvent,
   type SyntheticEvent,
 } from "react";
+import { X } from "lucide-react";
 import type { SearchResponse, SearchResult } from "./SearchWorkspace";
 
 export type KnowledgeSearchModalProps = {
@@ -41,7 +42,12 @@ export function KnowledgeSearchModal({
   const titleId = useId();
   const inputId = useId();
   const resultsId = useId();
+  const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [query, setQuery] = useState(initialQuery);
   const [submitted, setSubmitted] = useState(false);
@@ -49,21 +55,36 @@ export function KnowledgeSearchModal({
 
   useEffect(() => {
     if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          "input, button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      previous?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -86,6 +107,7 @@ export function KnowledgeSearchModal({
       onClick={closeFromBackdrop}
     >
       <section
+        ref={panelRef}
         className="knowledge-search-modal"
         role="dialog"
         aria-modal="true"
@@ -102,7 +124,7 @@ export function KnowledgeSearchModal({
             aria-label="Close knowledge search"
             onClick={onClose}
           >
-            ×
+            <X size={16} aria-hidden="true" />
           </button>
         </header>
 

@@ -1,13 +1,39 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { TerminalWorkspace } from "./TerminalWorkspace";
+import { createMockIpc } from "../../lib/ipc";
 import {
   parseTerminalFileLink,
   resolveNewTerminalCwd,
   terminalReducer,
 } from "./state";
 import type { TerminalSession, TerminalWorkspaceState } from "./types";
+
+vi.mock("@xterm/xterm", () => ({
+  Terminal: class {
+    cols = 80;
+    rows = 24;
+    loadAddon(addon: { terminal?: unknown }) {
+      addon.terminal = this;
+    }
+    open() {}
+    write() {}
+    focus() {}
+    dispose() {}
+    onData() {
+      return { dispose() {} };
+    }
+  },
+}));
+
+vi.mock("@xterm/addon-fit", () => ({
+  FitAddon: class {
+    terminal?: { cols: number };
+    fit() {
+      if (this.terminal) this.terminal.cols += 1;
+    }
+  },
+}));
 
 const session = (
   id: string,
@@ -32,7 +58,137 @@ const state = (sessions: TerminalSession[]): TerminalWorkspaceState => ({
   viewMode: "drawer",
 });
 
+const success = (data: unknown) => ({
+  contract: "ipc_result" as const,
+  version: 1 as const,
+  ok: true as const,
+  data,
+  correlationId: "terminal-test",
+});
+
+const nativeSession = {
+  id: "native-1",
+  workspaceId: "workspace-1",
+  preset: "zsh",
+  status: "running",
+  cwd: { relativePath: "", reliable: true },
+  size: { columns: 80, rows: 24 },
+  exitCode: null,
+  protected: false,
+  busy: false,
+  childProcesses: 0,
+  bufferedBytes: 0,
+  droppedBytes: 0,
+};
+
 describe("terminal workspace state", () => {
+  it("waits until a panel drag ends before resizing the PTY", async () => {
+    let notifyResize = () => {};
+    const originalObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = () => {
+          callback([], this);
+        };
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(400);
+    const height = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockReturnValue(300);
+    const mock = createMockIpc();
+    mock.setResponse("terminal_start", success(nativeSession));
+    mock.setResponse(
+      "terminal_read",
+      success({ content: "", remainingBytes: 0, droppedBytes: 0 }),
+    );
+
+    const view = render(
+      <TerminalWorkspace
+        ipc={mock.client}
+        request={{
+          key: 1,
+          workspaceId: "workspace-1",
+          relativePath: "",
+          preset: "zsh",
+        }}
+      />,
+    );
+    const resizeCount = () =>
+      mock.calls.filter(({ command }) => command === "terminal_resize").length;
+    await waitFor(() => {
+      expect(resizeCount()).toBe(1);
+    });
+
+    const separator = document.createElement("div");
+    separator.dataset.separator = "utility";
+    document.body.append(separator);
+    fireEvent.pointerDown(separator);
+    notifyResize();
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 200);
+    });
+    expect(resizeCount()).toBe(1);
+    window.dispatchEvent(new Event("pointerup"));
+    await waitFor(() => {
+      expect(resizeCount()).toBe(2);
+    });
+
+    separator.remove();
+    view.unmount();
+    width.mockRestore();
+    height.mockRestore();
+    globalThis.ResizeObserver = originalObserver;
+  });
+
+  it("confirms before terminating a native terminal", async () => {
+    const mock = createMockIpc();
+    mock.setResponse("terminal_start", success(nativeSession));
+    mock.setResponse(
+      "terminal_read",
+      success({ content: "", remainingBytes: 0, droppedBytes: 0 }),
+    );
+    mock.setResponse("terminal_terminate", success(null));
+    render(
+      <TerminalWorkspace
+        ipc={mock.client}
+        request={{
+          key: 2,
+          workspaceId: "workspace-1",
+          relativePath: "",
+          preset: "zsh",
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Close Terminal 1" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Close terminal?" }),
+    ).toBeInTheDocument();
+    expect(
+      mock.calls.filter(({ command }) => command === "terminal_terminate"),
+    ).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close terminal" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Close Terminal 1" }),
+      ).not.toBeInTheDocument();
+    });
+    const calls = mock.calls.filter(
+      ({ command }) => command === "terminal_terminate",
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.args).toMatchObject({ confirmed: true });
+  });
+
   it("enforces six sessions per workspace and preserves them across view modes", () => {
     const six = Array.from({ length: 6 }, (_, index) => session(String(index)));
     const unchanged = terminalReducer(state(six), {

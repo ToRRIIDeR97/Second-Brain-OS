@@ -1,5 +1,23 @@
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
-import type { ShellTab } from "../../state/shell";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  Bot,
+  CirclePlus,
+  Clock3,
+  FileText,
+  GitCompareArrows,
+  Network,
+  Plus,
+  SquareTerminal,
+  X,
+} from "lucide-react";
+import type { Activity, ShellTab } from "../../state/shell";
+
+const activityTabChoices: readonly { activity: Activity; label: string }[] = [
+  { activity: "home", label: "Home" },
+  { activity: "knowledge", label: "Files" },
+  { activity: "planner", label: "Tasks" },
+  { activity: "agents", label: "Agents" },
+];
 
 export type ResourceKind =
   | "activity"
@@ -36,70 +54,24 @@ const resourceLabels: Record<ResourceKind, string> = {
 };
 
 function ResourceIcon({ kind }: { kind: ResourceKind }) {
-  const common = {
-    className: "tab-icon",
-    viewBox: "0 0 24 24",
-    width: 15,
-    height: 15,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.7,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
+  const common = { size: 15, strokeWidth: 1.8, "aria-hidden": true } as const;
   switch (kind) {
     case "file":
     case "preview":
-      return (
-        <svg {...common}>
-          <path d="M6 3.8h8l4 4v12.4H6zM14 3.8v4h4M9 12h6M9 15.5h6" />
-        </svg>
-      );
+      return <FileText {...common} />;
     case "graph":
-      return (
-        <svg {...common}>
-          <circle cx="6" cy="6" r="2" />
-          <circle cx="18" cy="7" r="2" />
-          <circle cx="12" cy="18" r="2" />
-          <path d="m7.8 7 8.4-1m-9.4 1.7 3.9 8.4m5.8-6.2-3 6.1" />
-        </svg>
-      );
+      return <Network {...common} />;
     case "git-diff":
-      return (
-        <svg {...common}>
-          <path d="M7 4v16M17 4v16M4 7h6M14 17h6" />
-          <path d="m7 4-2 2 2 2M17 20l2-2-2-2" />
-        </svg>
-      );
+      return <GitCompareArrows {...common} />;
     case "agent-session":
-      return (
-        <svg {...common}>
-          <rect x="4" y="5" width="16" height="14" rx="3" />
-          <path d="M8 10h.01M16 10h.01M8 14h8M12 5V3" />
-        </svg>
-      );
+      return <Bot {...common} />;
     case "terminal":
-      return (
-        <svg {...common}>
-          <path d="m5 7 5 5-5 5M12.5 17H19" />
-        </svg>
-      );
+      return <SquareTerminal {...common} />;
     case "activity":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="8" />
-          <path d="M12 8v4l2.6 2" />
-        </svg>
-      );
+      return <Clock3 {...common} />;
     case "custom":
     default:
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="7.5" />
-          <path d="M12 8v8M8 12h8" />
-        </svg>
-      );
+      return <CirclePlus {...common} />;
   }
 }
 
@@ -126,7 +98,7 @@ export type TabsProps = {
   activeTabId: string;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
-  onAdd?: () => void;
+  onAdd?: (activity: Activity) => void;
   onMove?: (id: string, toIndex: number) => void;
 };
 
@@ -138,6 +110,7 @@ export function Tabs({
   onAdd,
 }: TabsProps) {
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const focusTab = (index: number) => {
     const tab = tabs[index];
     if (tab) tabRefs.current[tab.id]?.focus();
@@ -250,24 +223,56 @@ export function Tabs({
                   onClose(tab.id);
                 }}
               >
-                <span aria-hidden="true">×</span>
+                <X size={14} aria-hidden="true" />
               </button>
             ) : null}
           </div>
         );
       })}
-      <button
-        type="button"
-        className="tab-add"
-        aria-label="Open a new resource"
-        title={onAdd ? "Open a new resource" : "No resource action available"}
-        disabled={!onAdd}
-        onClick={() => {
-          onAdd?.();
+      <div
+        className="tab-add-group"
+        onMouseEnter={() => {
+          setAddMenuOpen(true);
+        }}
+        onMouseLeave={() => {
+          setAddMenuOpen(false);
+        }}
+        onFocusCapture={() => {
+          setAddMenuOpen(true);
+        }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setAddMenuOpen(false);
         }}
       >
-        <span aria-hidden="true">+</span>
-      </button>
+        <button
+          type="button"
+          className="tab-add"
+          aria-label="Open a new resource"
+          title={onAdd ? "Open Home tab" : "No resource action available"}
+          disabled={!onAdd}
+          onClick={() => {
+            onAdd?.("home");
+          }}
+        >
+          <Plus size={16} aria-hidden="true" />
+        </button>
+        {onAdd && addMenuOpen ? (
+          <div className="tab-add-menu" aria-label="Choose a tab to open">
+            {activityTabChoices.map(({ activity, label }) => (
+              <button
+                key={activity}
+                type="button"
+                onClick={() => {
+                  onAdd(activity);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

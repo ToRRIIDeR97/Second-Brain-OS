@@ -1829,12 +1829,55 @@ kbd {
   background: #17191d;
 }
 
-.focused-graph-canvas svg {
+.focused-graph-viewport,
+.focused-graph-viewport canvas {
   display: block;
   width: 100%;
   height: 100%;
   background: #17191d;
+}
+
+.focused-graph-viewport {
+  position: relative;
+}
+
+.focused-graph-viewport canvas {
   touch-action: none;
+}
+
+.focused-graph-controls {
+  position: absolute;
+  z-index: 2;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid rgba(151, 158, 168, 0.22);
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: rgba(27, 30, 35, 0.88);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+}
+
+.focused-graph-controls button {
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface-hover);
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.focused-graph-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .focused-graph-canvas > [role="status"],

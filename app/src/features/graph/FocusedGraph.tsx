@@ -3,22 +3,22 @@ import {
   authorityLabel,
   boundedGraph,
   DEFAULT_GRAPH_CAP,
-  isInferred,
-  layoutGraph,
   mergeGraphPages,
 } from "./model";
+import { GraphViewport3D } from "./GraphViewport3D";
 import type {
   GraphCommand,
   GraphCommandContext,
   GraphEdge,
   GraphNode,
   GraphPage,
-  GraphPosition,
   GraphSelectionContext,
 } from "./types";
 
 export type FocusedGraphProps = {
   page: GraphPage;
+  /** Resolved application theme used by the opaque WebGL canvas. */
+  theme?: "light" | "dark";
   hardCap?: number;
   /**
    * When provided, the graph reads selection from its parent. Passing `null`
@@ -60,6 +60,11 @@ type GraphContextMenu = {
   y: number;
 };
 
+type ExpandedBranch = {
+  nodeIds: string[];
+  edgeIds: string[];
+};
+
 const buttonStyle = {
   border: "1px solid var(--line)",
   borderRadius: 6,
@@ -73,14 +78,6 @@ function statusText(record: Pick<GraphNode, "authority" | "stale">): string {
   return `${authorityLabel(record.authority)}${record.stale ? ", stale" : ", current"}`;
 }
 
-function nodeLabel(node: GraphNode): string {
-  const confidence =
-    node.confidence === undefined
-      ? ""
-      : `, ${String(Math.round(node.confidence * 100))}% confidence`;
-  return `${node.label}, ${node.type}, ${statusText(node)}${confidence}`;
-}
-
 function relatedNode(
   edge: GraphEdge,
   selectedId: string,
@@ -91,33 +88,9 @@ function relatedNode(
   );
 }
 
-const nodeColors = [
-  "#ef7f88",
-  "#e87baa",
-  "#4f91e8",
-  "#62b65a",
-  "#e1bd47",
-  "#72a6b9",
-  "#dc7557",
-  "#8ccf72",
-] as const;
-
-function graphHash(value: string): number {
-  let result = 2166136261;
-  for (const character of value) {
-    result ^= character.charCodeAt(0);
-    result = Math.imul(result, 16777619);
-  }
-  return result >>> 0;
-}
-
-function nodeColor(node: GraphNode): string {
-  if (node.type.toLowerCase().includes("folder")) return "#e7c54f";
-  return nodeColors[graphHash(node.type) % nodeColors.length] ?? "#79a7c0";
-}
-
 export function FocusedGraph({
   page,
+  theme = "light",
   hardCap = DEFAULT_GRAPH_CAP,
   selectedNodeId,
   onSelectionChange,
@@ -131,14 +104,13 @@ export function FocusedGraph({
   const [graph, setGraph] = useState(() => boundedGraph(page, hardCap));
   const [internalSelectedId, setInternalSelectedId] = useState<string>();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
-  const [positions, setPositions] = useState<Map<string, GraphPosition>>(
-    () => new Map(),
-  );
+  const [expandedBranches, setExpandedBranches] = useState<
+    Map<string, ExpandedBranch>
+  >(() => new Map());
   const [loadingRequests, setLoadingRequests] = useState(0);
   const [error, setError] = useState<string>();
   const [contextMenu, setContextMenu] = useState<GraphContextMenu>();
   const graphEpoch = useRef(0);
-  const layoutVersion = useRef(0);
   const loading = loadingRequests > 0;
   const showInspector = showInspectorProp ?? embeddedInspector ?? false;
 
@@ -152,25 +124,9 @@ export function FocusedGraph({
         : undefined,
     );
     setExpandedIds(new Set());
+    setExpandedBranches(new Map());
     setContextMenu(undefined);
   }, [hardCap, page]);
-
-  useEffect(() => {
-    const version = ++layoutVersion.current;
-    const timer = window.setTimeout(() => {
-      if (version !== layoutVersion.current) return;
-      setPositions((current) =>
-        layoutGraph(
-          graph.nodes.map(({ id }) => id),
-          graph.edges,
-          current,
-        ),
-      );
-    });
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [graph.edges, graph.nodes]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -226,24 +182,18 @@ export function FocusedGraph({
     onSelectionContextChange?.(selectionContext);
   }, [onSelectionContextChange, selectionContext]);
 
-  const nodeDegrees = useMemo(() => {
-    const degrees = new Map<string, number>();
-    graph.nodes.forEach(({ id }) => degrees.set(id, 0));
-    graph.edges.forEach(({ sourceId, targetId }) => {
-      degrees.set(sourceId, (degrees.get(sourceId) ?? 0) + 1);
-      degrees.set(targetId, (degrees.get(targetId) ?? 0) + 1);
-    });
-    return degrees;
-  }, [graph.edges, graph.nodes]);
-
   const addPage = useCallback(
-    async (load: () => Promise<GraphPage>) => {
+    async (
+      load: () => Promise<GraphPage>,
+      onIncoming?: (incoming: GraphPage) => void,
+    ) => {
       const epoch = graphEpoch.current;
       setLoadingRequests((current) => current + 1);
       setError(undefined);
       try {
         const incoming = await load();
         if (epoch !== graphEpoch.current) return false;
+        onIncoming?.(incoming);
         setGraph((current) => mergeGraphPages(current, incoming, hardCap));
         return true;
       } catch (cause) {
@@ -257,6 +207,48 @@ export function FocusedGraph({
       }
     },
     [hardCap],
+  );
+
+  const collapseNode = useCallback(
+    (nodeId: string) => {
+      const branchIds = new Set<string>();
+      const nodeIds = new Set<string>();
+      const edgeIds = new Set<string>();
+      const pending = [nodeId];
+      while (pending.length) {
+        const parentId = pending.pop();
+        if (!parentId || branchIds.has(parentId)) continue;
+        branchIds.add(parentId);
+        const branch = expandedBranches.get(parentId);
+        if (!branch) continue;
+        branch.edgeIds.forEach((id) => edgeIds.add(id));
+        branch.nodeIds.forEach((id) => {
+          nodeIds.add(id);
+          if (expandedBranches.has(id)) pending.push(id);
+        });
+      }
+      setGraph((current) => ({
+        ...current,
+        nodes: current.nodes.filter(({ id }) => !nodeIds.has(id)),
+        edges: current.edges.filter(
+          ({ id, sourceId, targetId }) =>
+            !edgeIds.has(id) &&
+            !nodeIds.has(sourceId) &&
+            !nodeIds.has(targetId),
+        ),
+      }));
+      setExpandedBranches((current) => {
+        const next = new Map(current);
+        branchIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setExpandedIds((current) => {
+        const next = new Set(current);
+        branchIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    },
+    [expandedBranches],
   );
 
   const selectNode = useCallback(
@@ -274,29 +266,120 @@ export function FocusedGraph({
 
   const expandNode = useCallback(
     (node: GraphNode) => {
-      if (
-        !onExpand ||
-        expandedIds.has(node.id) ||
-        graph.nodes.length >= hardCap
-      )
+      if (!onExpand) return;
+      if (expandedBranches.has(node.id)) {
+        collapseNode(node.id);
         return;
+      }
+      if (expandedIds.has(node.id) || graph.nodes.length >= hardCap) return;
+      const knownNodeIds = new Set(graph.nodes.map(({ id }) => id));
+      const knownEdgeIds = new Set(graph.edges.map(({ id }) => id));
       setExpandedIds((current) => new Set(current).add(node.id));
-      void addPage(() =>
-        onExpand(
-          node.id,
-          graph.nodes.map(({ id }) => id),
-        ),
+      void addPage(
+        () =>
+          onExpand(
+            node.id,
+            graph.nodes.map(({ id }) => id),
+          ),
+        (incoming) => {
+          setExpandedBranches((current) => {
+            const next = new Map(current);
+            next.set(node.id, {
+              nodeIds: incoming.nodes
+                .map(({ id }) => id)
+                .filter((id) => !knownNodeIds.has(id)),
+              edgeIds: incoming.edges
+                .map(({ id }) => id)
+                .filter((id) => !knownEdgeIds.has(id)),
+            });
+            return next;
+          });
+        },
       ).then((succeeded) => {
-        if (succeeded) return;
-        setExpandedIds((current) => {
-          const next = new Set(current);
-          next.delete(node.id);
-          return next;
-        });
+        if (!succeeded) {
+          setExpandedIds((current) => {
+            const next = new Set(current);
+            next.delete(node.id);
+            return next;
+          });
+        }
       });
     },
-    [addPage, expandedIds, graph.nodes, hardCap, onExpand],
+    [
+      addPage,
+      collapseNode,
+      expandedBranches,
+      expandedIds,
+      graph.edges,
+      graph.nodes,
+      hardCap,
+      onExpand,
+    ],
   );
+
+  const expandAll = useCallback(async () => {
+    if (!onExpand || loading) return;
+    const epoch = graphEpoch.current;
+    const expanded = new Set(expandedIds);
+    const branches = new Map(expandedBranches);
+    let nextGraph = graph;
+    const pending = graph.nodes.filter(({ id }) => !expanded.has(id));
+    setLoadingRequests((current) => current + 1);
+    setError(undefined);
+    try {
+      while (pending.length && nextGraph.nodes.length < hardCap) {
+        const node = pending.shift();
+        if (!node || expanded.has(node.id)) continue;
+        expanded.add(node.id);
+        const knownNodeIds = new Set(nextGraph.nodes.map(({ id }) => id));
+        const knownEdgeIds = new Set(nextGraph.edges.map(({ id }) => id));
+        const incoming = await onExpand(node.id, [...knownNodeIds]);
+        if (epoch !== graphEpoch.current) return;
+        const addedNodes = incoming.nodes.filter(
+          ({ id }) => !knownNodeIds.has(id),
+        );
+        branches.set(node.id, {
+          nodeIds: addedNodes.map(({ id }) => id),
+          edgeIds: incoming.edges
+            .map(({ id }) => id)
+            .filter((id) => !knownEdgeIds.has(id)),
+        });
+        nextGraph = mergeGraphPages(nextGraph, incoming, hardCap);
+        pending.push(...addedNodes.filter(({ id }) => !expanded.has(id)));
+        setGraph(nextGraph);
+        setExpandedIds(new Set(expanded));
+        setExpandedBranches(new Map(branches));
+      }
+      if (epoch !== graphEpoch.current) return;
+      setGraph(nextGraph);
+      setExpandedIds(expanded);
+      setExpandedBranches(branches);
+    } catch (cause) {
+      if (epoch === graphEpoch.current)
+        setError(
+          cause instanceof Error ? cause.message : "Graph request failed",
+        );
+    } finally {
+      setLoadingRequests((current) => Math.max(0, current - 1));
+    }
+  }, [expandedBranches, expandedIds, graph, hardCap, loading, onExpand]);
+
+  const collapseAll = useCallback(() => {
+    graphEpoch.current += 1;
+    const initialGraph = boundedGraph(page, hardCap);
+    const targets = new Set(initialGraph.edges.map(({ targetId }) => targetId));
+    const roots = initialGraph.nodes.filter(({ id }) => !targets.has(id));
+    const rootNodes = roots.length ? roots : initialGraph.nodes.slice(0, 1);
+    const rootIds = new Set(rootNodes.map(({ id }) => id));
+    setGraph(initialGraph);
+    setExpandedIds(rootIds);
+    setExpandedBranches(new Map());
+    setInternalSelectedId((current) =>
+      current && rootIds.has(current) ? current : undefined,
+    );
+    if (effectiveSelectedId && !rootIds.has(effectiveSelectedId))
+      onSelectionChange?.(undefined);
+  }, [effectiveSelectedId, hardCap, onSelectionChange, page]);
 
   const runCommand = useCallback(
     (
@@ -318,130 +401,25 @@ export function FocusedGraph({
   return (
     <section className="focused-graph" aria-label="Focused knowledge graph">
       <div className="focused-graph-canvas">
-        <svg
-          role="img"
-          aria-label={`Focused graph with ${String(graph.nodes.length)} nodes and ${String(graph.edges.length)} relationships`}
-          viewBox="0 0 960 610"
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <defs>
-            <filter
-              id="node-glow"
-              x="-100%"
-              y="-100%"
-              width="300%"
-              height="300%"
-            >
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          <rect width="960" height="610" fill="#17191d" />
-          {graph.edges.map((edge) => {
-            const source = positions.get(edge.sourceId);
-            const target = positions.get(edge.targetId);
-            if (!source || !target) return null;
-            return (
-              <g key={edge.id}>
-                <line
-                  x1={source.x}
-                  y1={source.y}
-                  x2={target.x}
-                  y2={target.y}
-                  stroke={isInferred(edge.authority) ? "#747079" : "#92979d"}
-                  strokeWidth="0.65"
-                  opacity="0.54"
-                  strokeDasharray={isInferred(edge.authority) ? "5 4" : "none"}
-                />
-                <title>{`${edge.type}, ${statusText(edge)}`}</title>
-              </g>
-            );
-          })}
-          {graph.nodes.map((node) => {
-            const position = positions.get(node.id) ?? { x: 90, y: 70 };
-            const selectedNode = effectiveSelectedId === node.id;
-            return (
-              <g
-                key={node.id}
-                role="button"
-                tabIndex={0}
-                aria-label={nodeLabel(node)}
-                aria-haspopup="menu"
-                aria-pressed={selectedNode}
-                aria-expanded={onExpand ? expandedIds.has(node.id) : undefined}
-                transform={`translate(${String(position.x)} ${String(position.y)})`}
-                onClick={(event) => {
-                  if (event.detail <= 1) {
-                    selectNode(node);
-                  }
-                }}
-                onDoubleClick={() => {
-                  selectNode(node);
-                  if (onExpand) expandNode(node);
-                  else if (node.source) runCommand("graph.open-source", node);
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  selectNode(node);
-                  setContextMenu({
-                    node,
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
-                  runCommand("graph.show-actions", node);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    selectNode(node);
-                  }
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <circle
-                  r={Math.min(
-                    15,
-                    4 +
-                      Math.sqrt(nodeDegrees.get(node.id) ?? 0) * 1.7 +
-                      (node.type.toLowerCase().includes("folder") ? 2 : 0) +
-                      (selectedNode ? 2 : 0),
-                  )}
-                  fill={nodeColor(node)}
-                  stroke={
-                    node.stale
-                      ? "var(--danger)"
-                      : selectedNode
-                        ? "#f3f5f7"
-                        : "#24272c"
-                  }
-                  strokeWidth={selectedNode ? 1.8 : 0.65}
-                  strokeDasharray={isInferred(node.authority) ? "3 2" : "none"}
-                  opacity={node.stale ? 0.72 : 0.98}
-                  filter={selectedNode ? "url(#node-glow)" : undefined}
-                />
-                {selectedNode ? (
-                  <text
-                    x="18"
-                    y="4"
-                    fill="#f1f2f4"
-                    fontSize="11"
-                    paintOrder="stroke"
-                    stroke="#17191d"
-                    strokeWidth="3"
-                  >
-                    {node.label.length > 28
-                      ? `${node.label.slice(0, 27)}…`
-                      : node.label}
-                  </text>
-                ) : null}
-                <title>{nodeLabel(node)}</title>
-              </g>
-            );
-          })}
-        </svg>
+        <GraphViewport3D
+          graph={graph}
+          theme={theme}
+          expandedNodeIds={expandedIds}
+          selectedNodeId={effectiveSelectedId}
+          onSelect={selectNode}
+          onExpand={(node) => {
+            if (onExpand) expandNode(node);
+            else if (node.source) runCommand("graph.open-source", node);
+          }}
+          {...(onExpand ? { onExpandAll: () => void expandAll() } : {})}
+          onCollapseAll={collapseAll}
+          busy={loading}
+          onClearSelection={clearSelection}
+          onContextMenu={(node, x, y) => {
+            setContextMenu({ node, x, y });
+            runCommand("graph.show-actions", node);
+          }}
+        />
         {loading ? (
           <p role="status" style={{ margin: 12, color: "var(--text-muted)" }}>
             Loading graph…

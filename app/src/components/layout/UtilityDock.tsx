@@ -135,7 +135,7 @@ export function UtilityDock({
                     onCloseTab(id);
                   }}
                 >
-                  ×
+                  <X size={14} aria-hidden="true" />
                 </button>
               </div>
             );
@@ -280,9 +280,10 @@ export function UtilityDock({
             </>
           )
         ) : null}
-        {activeTab === "terminal" ? (
+        {openTabs.includes("terminal") ? (
           <TerminalWorkspace
             ipc={ipc}
+            hidden={activeTab !== "terminal"}
             {...(terminalRequest ? { request: terminalRequest } : {})}
           />
         ) : null}

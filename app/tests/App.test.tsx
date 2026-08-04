@@ -19,8 +19,8 @@ test("renders the persistent application shell", () => {
     screen.queryByRole("complementary", { name: "Inspector" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Check desktop bridge" }),
-  ).toBeInTheDocument();
+    screen.queryByRole("button", { name: "Check desktop bridge" }),
+  ).not.toBeInTheDocument();
 });
 
 test("opens the calendar and Google Tasks in the right utility panel", () => {
@@ -37,12 +37,14 @@ test("opens the calendar and Google Tasks in the right utility panel", () => {
   ).toBeInTheDocument();
 });
 
-test("routes activities and opens knowledge search from the keyboard", async () => {
+test("keeps the graph integrated into Home and opens knowledge search", async () => {
   const mock = createMockIpc();
   render(<AppShell ipc={mock.client} />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Graph" }));
-  expect(screen.getByRole("main")).toHaveAttribute("data-route", "graph");
+  expect(
+    screen.queryByRole("button", { name: "Graph" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("main")).toHaveAttribute("data-route", "home");
   fireEvent.keyDown(window, { key: "k", ctrlKey: true });
   expect(
     await screen.findByRole("dialog", { name: "Search knowledge" }),
@@ -52,19 +54,39 @@ test("routes activities and opens knowledge search from the keyboard", async () 
   ).toHaveFocus();
 });
 
-test("opens the terminal directly and returns to the launcher when its tab closes", async () => {
+test("confirms before closing the terminal utility", async () => {
   const mock = createMockIpc();
   render(<AppShell ipc={mock.client} />);
 
   fireEvent.click(
     screen.getByRole("button", { name: "Open terminal in utility panel" }),
   );
-  expect(
-    await screen.findByLabelText("Terminal workspace"),
-  ).toBeInTheDocument();
+  const terminal = await screen.findByLabelText("Terminal workspace");
   expect(screen.getByRole("tab", { name: "Terminal" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Close Terminal" }));
   expect(
-    screen.getByRole("heading", { name: "Open a utility" }),
+    screen.getByRole("dialog", { name: "Close terminal?" }),
   ).toBeInTheDocument();
+  expect(terminal).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("tab", { name: "Terminal" })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Close Terminal" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close terminal" }));
+  expect(screen.queryByLabelText("Terminal workspace")).not.toBeInTheDocument();
+});
+
+test("keeps an open terminal mounted when another utility tab is selected", async () => {
+  const mock = createMockIpc();
+  render(<AppShell ipc={mock.client} />);
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open terminal in utility panel" }),
+  );
+  const terminal = await screen.findByLabelText("Terminal workspace");
+  fireEvent.click(screen.getByLabelText("Add utility tab"));
+  fireEvent.click(screen.getByRole("button", { name: /Calendar/ }));
+
+  expect(terminal).toBeInTheDocument();
+  expect(terminal).toHaveAttribute("hidden");
 });

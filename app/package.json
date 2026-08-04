@@ -34,7 +34,9 @@
     "monaco-editor": "0.56.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-resizable-panels": "4.12.2"
+    "react-force-graph-3d": "1.29.1",
+    "react-resizable-panels": "4.12.2",
+    "three": "0.185.1"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
@@ -43,6 +45,7 @@
     "@testing-library/react": "16.3.2",
     "@types/react": "19.2.10",
     "@types/react-dom": "19.2.3",
+    "@types/three": "0.185.0",
     "@vitejs/plugin-react": "6.0.4",
     "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "7.0.1",

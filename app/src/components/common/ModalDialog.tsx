@@ -16,6 +16,10 @@ export function ModalDialog({
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -28,7 +32,7 @@ export function ModalDialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key === "Tab") {
@@ -54,7 +58,7 @@ export function ModalDialog({
       window.removeEventListener("keydown", onKeyDown);
       previous?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open) return null;
   return (

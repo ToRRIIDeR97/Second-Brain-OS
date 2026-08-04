@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Minimal renderer capability set; filesystem and shell access stay in typed commands.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:default"
+  ]
 }

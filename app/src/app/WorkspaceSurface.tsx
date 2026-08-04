@@ -54,10 +54,6 @@ const SourceEditor = lazy(async () => ({
 const FocusedGraph = lazy(async () => ({
   default: (await import("../features/graph")).FocusedGraph,
 }));
-const DerivedReviewQueue = lazy(async () => ({
-  default: (await import("../features/knowledge/derived/DerivedReviewQueue"))
-    .DerivedReviewQueue,
-}));
 const SourceControlWorkspace = lazy(async () => ({
   default: (await import("../features/source-control")).SourceControlWorkspace,
 }));
@@ -505,6 +501,8 @@ export function WorkspaceSurface({
   const [error, setError] = useState("");
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<string>();
+  const [bridgeResult, setBridgeResult] =
+    useState<CommandResult<string> | null>(null);
   const [search, setSearch] = useState<SearchResponse>(emptySearch);
   const [graph, setGraph] = useState<GraphPage>({
     nodes: [],
@@ -530,8 +528,11 @@ export function WorkspaceSurface({
     registerWorkspace,
     refreshWorkspaces,
   } = useWorkspace();
-  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const { editorAutosave, setEditorAutosave } = usePreferences();
+  const checkDesktopBridge = useCallback(async () => {
+    setBridgeResult(await ipc.system.ping());
+  }, [ipc]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1066,16 +1067,6 @@ export function WorkspaceSurface({
       />,
     );
 
-  if (activity === "graph")
-    return surface(
-      <FocusedGraph
-        page={graph}
-        onExpand={(nodeId) => expandGraphNode(nodeId)}
-        onCommand={handleGraphCommand}
-        onSelectionContextChange={onGraphSelectionContextChange}
-      />,
-    );
-
   if (activity === "agents")
     return surface(
       <AgentWorkspace
@@ -1262,6 +1253,36 @@ export function WorkspaceSurface({
           </label>
         </fieldset>
         <fieldset className="settings-group">
+          <legend>Debugging</legend>
+          <dl className="settings-rows">
+            <div>
+              <dt>Desktop bridge</dt>
+              <dd>
+                {bridgeResult
+                  ? bridgeResult.ok
+                    ? "Connected"
+                    : bridgeResult.error.message
+                  : "Not checked"}
+                <button
+                  type="button"
+                  className="button button-small"
+                  onClick={() => void checkDesktopBridge()}
+                >
+                  Check desktop bridge
+                </button>
+              </dd>
+            </div>
+            {bridgeResult ? (
+              <div>
+                <dt>Correlation ID</dt>
+                <dd>
+                  <code>{bridgeResult.correlationId}</code>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </fieldset>
+        <fieldset className="settings-group">
           <legend>Sync & Collaboration</legend>
           <dl className="settings-rows">
             <div>
@@ -1283,100 +1304,9 @@ export function WorkspaceSurface({
 
   return surface(
     <section className="home-surface" aria-labelledby="home-title">
-      <header className="home-heading">
-        <div>
-          <p className="eyebrow">Personal workspace</p>
-          <h1 id="home-title">Second Brain OS Home</h1>
-          <p className="workspace-lede">
-            Your local-first knowledge and project operating system.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="button button-small"
-          onClick={onOpenPalette}
-        >
-          Customize
-        </button>
-      </header>
-      <div className="home-dashboard-grid home-overview-grid">
-        <section className="home-card">
-          <div className="card-heading">
-            <h2>Workspace Overview</h2>
-            <span className="status-dot" />
-          </div>
-          <dl className="home-stat-list">
-            <div>
-              <dt>Visible items</dt>
-              <dd>{entries.length}</dd>
-            </div>
-            <div>
-              <dt>Graph nodes</dt>
-              <dd>{graph.nodes.length}</dd>
-            </div>
-            <div>
-              <dt>Git changes</dt>
-              <dd>{git?.changes.length ?? 0}</dd>
-            </div>
-            <div>
-              <dt>Agent sessions</dt>
-              <dd>{agents.sessions.length}</dd>
-            </div>
-          </dl>
-        </section>
-        <section className="home-card">
-          <div className="card-heading">
-            <h2>Recent Workspace Items</h2>
-            <button
-              type="button"
-              onClick={() => {
-                onNavigate("knowledge");
-              }}
-            >
-              View all
-            </button>
-          </div>
-          {entries.length ? (
-            <ul className="home-resource-list">
-              {entries.slice(0, 5).map((entry) => (
-                <li key={entry.relativePath}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (entry.kind === "file") {
-                        void openDocument(entry.relativePath);
-                      } else {
-                        onNavigate("files");
-                      }
-                    }}
-                  >
-                    <strong>{entry.name}</strong>
-                    <small>{entry.kind}</small>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="home-empty-copy">No visible items are loaded.</p>
-          )}
-        </section>
-        <section className="home-card">
-          <div className="card-heading">
-            <h2>Today’s Tasks</h2>
-            <button
-              type="button"
-              onClick={() => {
-                onNavigate("planner");
-              }}
-            >
-              Open Tasks
-            </button>
-          </div>
-          <p className="home-empty-copy">
-            Local tasks appear here after you add them in Tasks.
-          </p>
-        </section>
-      </div>
+      <h1 id="home-title" className="visually-hidden">
+        Home
+      </h1>
       <div className="quick-actions">
         <button
           className="quick-action"
@@ -1410,29 +1340,14 @@ export function WorkspaceSurface({
           <small>Open the action palette.</small>
         </button>
       </div>
-      <section className="home-graph" aria-labelledby="home-graph-title">
-        <header>
-          <div className="card-heading">
-            <h2 id="home-graph-title">Knowledge Graph Snapshot</h2>
-            <button
-              type="button"
-              onClick={() => {
-                onNavigate("graph");
-              }}
-            >
-              Open in Graph
-            </button>
-          </div>
-        </header>
-        <FocusedGraph
-          page={graph}
-          onExpand={(nodeId) => expandGraphNode(nodeId)}
-          onCommand={handleGraphCommand}
-          onSelectionContextChange={onGraphSelectionContextChange}
-        />
-      </section>
+      <FocusedGraph
+        page={graph}
+        theme={resolvedTheme}
+        onExpand={(nodeId) => expandGraphNode(nodeId)}
+        onCommand={handleGraphCommand}
+        onSelectionContextChange={onGraphSelectionContextChange}
+      />
       {error ? <p role="alert">{error}</p> : null}
-      <DerivedReviewQueue artifacts={[]} />
     </section>,
   );
 }
