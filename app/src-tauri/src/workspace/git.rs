@@ -12,8 +12,12 @@ use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
+
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_OUTPUT_LIMIT: usize = 8 * 1024 * 1024;
+/// Keep both sides of an editor diff bounded before they cross an IPC seam.
+const DEFAULT_DIFF_TEXT_LIMIT: usize = 1024 * 1024;
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +99,51 @@ pub struct GitDiff {
     pub staged: bool,
     pub patch: String,
     pub truncated: bool,
+}
+
+/// The source-control state represented by a single-file before/after view.
+///
+/// `Staged` and `Unstaged` describe the two normal Git comparisons.  The
+/// remaining variants make states that otherwise have no useful patch (new,
+/// deleted, and renamed files) explicit to renderer callers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GitDiffKind {
+    Staged,
+    Unstaged,
+    Untracked,
+    Deleted,
+    Renamed,
+}
+
+/// A text diff cannot safely be sent to a text editor when either side is
+/// binary or exceeds the bounded renderer budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GitDiffFallback {
+    Binary,
+    Oversized,
+}
+
+/// Bounded, renderer-ready contents for one workspace-relative Git path.
+///
+/// A missing side is represented as an empty string when the file is a normal
+/// add/delete.  `None` on either side means the caller should render the
+/// fallback instead of passing potentially unsafe content to a text editor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileDiff {
+    pub path: String,
+    pub old_path: Option<String>,
+    pub kind: GitDiffKind,
+    pub staged: bool,
+    pub original: Option<String>,
+    pub modified: Option<String>,
+    pub original_label: String,
+    pub modified_label: String,
+    pub fallback: Option<GitDiffFallback>,
+    pub binary: bool,
+    pub oversized: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -269,6 +318,171 @@ impl GitAdapter {
             truncated: false,
             patch: String::from_utf8_lossy(&output.stdout).into_owned(),
         })
+    }
+
+    /// Return bounded before/after text for one workspace-relative path.
+    ///
+    /// Staged comparisons are `HEAD → index`; unstaged comparisons are
+    /// `index → working tree`.  The path separator is kept before every
+    /// renderer-provided path and Git is always invoked directly, never by a
+    /// shell.  Missing sides are normal for adds/deletes; binary and oversized
+    /// sides return a typed fallback with no text content.
+    pub fn diff_file(&self, staged: bool, path: &str) -> Result<GitFileDiff, GitError> {
+        validate_path(path)?;
+        let cwd = self.repository_root()?;
+        let status = self.status()?;
+        let change = status
+            .changes
+            .iter()
+            .find(|change| change.path == path || change.old_path.as_deref() == Some(path));
+        let effective_path = change.map_or(path, |change| change.path.as_str());
+        let old_path = change.and_then(|change| change.old_path.clone());
+        if let Some(path) = old_path.as_deref() {
+            validate_path(path)?;
+        }
+
+        let is_untracked = change.is_some_and(|change| change.kind == ChangeKind::Untracked);
+        let is_renamed = change.is_some_and(|change| {
+            change.kind == ChangeKind::Renamed
+                || change.index_status == Some('R')
+                || change.worktree_status == Some('R')
+        });
+        let is_deleted = change.is_some_and(|change| {
+            change.kind == ChangeKind::Deleted
+                || change.index_status == Some('D')
+                || change.worktree_status == Some('D')
+        });
+
+        let original = if is_untracked {
+            Snapshot::Missing
+        } else if staged {
+            self.snapshot_from_tree(&cwd, "HEAD", old_path.as_deref().unwrap_or(effective_path))?
+        } else {
+            self.snapshot_from_index(&cwd, effective_path)?
+        };
+        let modified = if staged {
+            if is_untracked {
+                self.snapshot_from_worktree(&cwd, effective_path)?
+            } else {
+                self.snapshot_from_index(&cwd, effective_path)?
+            }
+        } else {
+            self.snapshot_from_worktree(&cwd, effective_path)?
+        };
+
+        let kind = if is_untracked {
+            GitDiffKind::Untracked
+        } else if is_renamed {
+            GitDiffKind::Renamed
+        } else if is_deleted {
+            GitDiffKind::Deleted
+        } else if staged {
+            GitDiffKind::Staged
+        } else {
+            GitDiffKind::Unstaged
+        };
+        let (original_label, modified_label) = diff_labels(kind, staged);
+        let (original, modified, fallback, binary, oversized) =
+            materialize_snapshots(original, modified);
+        Ok(GitFileDiff {
+            path: effective_path.to_owned(),
+            old_path,
+            kind,
+            staged,
+            original,
+            modified,
+            original_label: original_label.into(),
+            modified_label: modified_label.into(),
+            fallback,
+            binary,
+            oversized,
+        })
+    }
+
+    fn snapshot_from_tree(
+        &self,
+        cwd: &Path,
+        reference: &str,
+        path: &str,
+    ) -> Result<Snapshot, GitError> {
+        let pathspec = literal_pathspec(path);
+        let object = match self.run_at(
+            cwd,
+            [
+                "ls-tree",
+                "-z",
+                "--full-tree",
+                reference,
+                "--",
+                pathspec.as_str(),
+            ],
+        ) {
+            Ok(output) => parse_tree_object(&output.stdout),
+            Err(GitError::CommandFailed { .. }) => None,
+            Err(error) => return Err(error),
+        };
+        let Some(object) = object else {
+            return Ok(Snapshot::Missing);
+        };
+        self.snapshot_from_blob(cwd, &object)
+    }
+
+    fn snapshot_from_index(&self, cwd: &Path, path: &str) -> Result<Snapshot, GitError> {
+        let pathspec = literal_pathspec(path);
+        let output = match self.run_at(cwd, ["ls-files", "--stage", "-z", "--", pathspec.as_str()])
+        {
+            Ok(output) => output,
+            Err(GitError::CommandFailed { .. }) => return Ok(Snapshot::Missing),
+            Err(error) => return Err(error),
+        };
+        let Some(object) = parse_index_object(&output.stdout) else {
+            return Ok(Snapshot::Missing);
+        };
+        self.snapshot_from_blob(cwd, &object)
+    }
+
+    fn snapshot_from_blob(&self, cwd: &Path, object: &str) -> Result<Snapshot, GitError> {
+        let size_output = match self.run_at(cwd, ["cat-file", "-s", object]) {
+            Ok(output) => output,
+            Err(GitError::CommandFailed { .. }) => return Ok(Snapshot::Binary),
+            Err(error) => return Err(error),
+        };
+        let size = trim_text(&size_output.stdout)
+            .parse::<usize>()
+            .map_err(|_| GitError::Parse("invalid Git blob size".into()))?;
+        if size > DEFAULT_DIFF_TEXT_LIMIT {
+            return Ok(Snapshot::Oversized);
+        }
+        let output = match self.run_at(cwd, ["cat-file", "blob", object]) {
+            Ok(output) => output,
+            Err(GitError::OutputTooLarge { .. }) => return Ok(Snapshot::Oversized),
+            Err(GitError::CommandFailed { .. }) => return Ok(Snapshot::Binary),
+            Err(error) => return Err(error),
+        };
+        Ok(snapshot_from_bytes(output.stdout))
+    }
+
+    fn snapshot_from_worktree(&self, cwd: &Path, path: &str) -> Result<Snapshot, GitError> {
+        let root = canonical_or(cwd.to_path_buf());
+        let absolute = cwd.join(path);
+        let metadata = match std::fs::metadata(&absolute) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Snapshot::Missing),
+            Err(error) => return Err(GitError::Io(error.to_string())),
+        };
+        if !metadata.is_file() {
+            return Ok(Snapshot::Binary);
+        }
+        if metadata.len() > DEFAULT_DIFF_TEXT_LIMIT as u64 {
+            return Ok(Snapshot::Oversized);
+        }
+        let canonical =
+            std::fs::canonicalize(&absolute).map_err(|error| GitError::Io(error.to_string()))?;
+        if !canonical.starts_with(&root) {
+            return Err(GitError::InvalidPath(path.to_owned()));
+        }
+        let bytes = std::fs::read(&canonical).map_err(|error| GitError::Io(error.to_string()))?;
+        Ok(snapshot_from_bytes(bytes))
     }
 
     pub fn history(&self, path: Option<&str>, limit: usize) -> Result<Vec<GitCommit>, GitError> {
@@ -516,6 +730,107 @@ impl GitAdapter {
             })?;
         collect_child(&mut child, self.timeout, self.output_limit, command)
     }
+}
+
+#[derive(Debug)]
+enum Snapshot {
+    Missing,
+    Text(String),
+    Binary,
+    Oversized,
+}
+
+fn snapshot_from_bytes(bytes: Vec<u8>) -> Snapshot {
+    if bytes.contains(&0) {
+        return Snapshot::Binary;
+    }
+    match String::from_utf8(bytes) {
+        Ok(text) => Snapshot::Text(text),
+        Err(_) => Snapshot::Binary,
+    }
+}
+
+fn materialize_snapshots(
+    original: Snapshot,
+    modified: Snapshot,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<GitDiffFallback>,
+    bool,
+    bool,
+) {
+    let oversized =
+        matches!(original, Snapshot::Oversized) || matches!(modified, Snapshot::Oversized);
+    if oversized {
+        return (None, None, Some(GitDiffFallback::Oversized), false, true);
+    }
+    let binary = matches!(original, Snapshot::Binary) || matches!(modified, Snapshot::Binary);
+    if binary {
+        return (None, None, Some(GitDiffFallback::Binary), true, false);
+    }
+    let text = |snapshot: Snapshot| match snapshot {
+        Snapshot::Missing => String::new(),
+        Snapshot::Text(value) => value,
+        Snapshot::Binary | Snapshot::Oversized => unreachable!("fallback handled above"),
+    };
+    (
+        Some(text(original)),
+        Some(text(modified)),
+        None,
+        false,
+        false,
+    )
+}
+
+fn diff_labels(kind: GitDiffKind, staged: bool) -> (&'static str, &'static str) {
+    match kind {
+        GitDiffKind::Untracked => ("Empty", "Untracked"),
+        GitDiffKind::Deleted => {
+            if staged {
+                ("HEAD", "Deleted")
+            } else {
+                ("Index", "Deleted")
+            }
+        }
+        GitDiffKind::Renamed => {
+            if staged {
+                ("HEAD", "Index")
+            } else {
+                ("Index", "Working tree")
+            }
+        }
+        GitDiffKind::Staged => ("HEAD", "Index"),
+        GitDiffKind::Unstaged => ("Index", "Working tree"),
+    }
+}
+
+fn parse_tree_object(bytes: &[u8]) -> Option<String> {
+    let record = bytes
+        .split(|byte| *byte == 0)
+        .find(|record| !record.is_empty())?;
+    let tab = record.iter().position(|byte| *byte == b'\t')?;
+    let fields = record[..tab]
+        .split(|byte| *byte == b' ')
+        .collect::<Vec<_>>();
+    let object = fields.get(2)?;
+    let object = std::str::from_utf8(object).ok()?;
+    (object.len() == 40 && object.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then(|| object.to_owned())
+}
+
+fn parse_index_object(bytes: &[u8]) -> Option<String> {
+    let record = bytes
+        .split(|byte| *byte == 0)
+        .find(|record| !record.is_empty())?;
+    let tab = record.iter().position(|byte| *byte == b'\t')?;
+    let fields = record[..tab]
+        .split(|byte| *byte == b' ')
+        .collect::<Vec<_>>();
+    let object = fields.get(1)?;
+    let object = std::str::from_utf8(object).ok()?;
+    (object.len() == 40 && object.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then(|| object.to_owned())
 }
 
 #[derive(Debug)]
@@ -848,8 +1163,15 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
     Ok(())
 }
 
+fn literal_pathspec(path: &str) -> String {
+    format!(":(literal){path}")
+}
+
 fn validate_path(path: &str) -> Result<(), GitError> {
     if path.is_empty() || path.contains('\0') || Path::new(path).is_absolute() {
+        return Err(GitError::InvalidPath(path.to_owned()));
+    }
+    if path.split('/').any(|segment| segment == ".git") {
         return Err(GitError::InvalidPath(path.to_owned()));
     }
     if Path::new(path).components().any(|component| {
@@ -889,7 +1211,10 @@ fn canonical_or(path: PathBuf) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChangeKind, GitAdapter, GitError, RepositoryKind, parse_status_porcelain_v2};
+    use super::{
+        ChangeKind, GitAdapter, GitDiffFallback, GitDiffKind, GitError, RepositoryKind,
+        parse_status_porcelain_v2,
+    };
     use std::path::Path;
     use std::process::Command;
     use tempfile::tempdir;
@@ -1025,5 +1350,95 @@ mod tests {
         let info = GitAdapter::new(root.path()).detect().expect("detect");
         assert_eq!(info.kind, RepositoryKind::Nested);
         assert!(info.nested);
+    }
+
+    #[test]
+    fn single_file_diff_reads_staged_unstaged_and_untracked_text() {
+        if !git_available() {
+            return;
+        }
+        let root = tempdir().expect("tempdir");
+        run(root.path(), &["init", "-q"]);
+        std::fs::write(root.path().join("note.md"), "one\n").expect("file");
+        configured(root.path(), &["add", "--", "note.md"]);
+        configured(root.path(), &["commit", "-m", "initial"]);
+        std::fs::write(root.path().join("note.md"), "two\n").expect("edit");
+        let adapter = GitAdapter::new(root.path());
+        let unstaged = adapter.diff_file(false, "note.md").expect("unstaged");
+        assert_eq!(unstaged.kind, GitDiffKind::Unstaged);
+        assert_eq!(unstaged.original.as_deref(), Some("one\n"));
+        assert_eq!(unstaged.modified.as_deref(), Some("two\n"));
+        assert_eq!(unstaged.original_label, "Index");
+        assert_eq!(unstaged.modified_label, "Working tree");
+
+        adapter.stage(&["note.md".into()]).expect("stage");
+        let staged = adapter.diff_file(true, "note.md").expect("staged");
+        assert_eq!(staged.kind, GitDiffKind::Staged);
+        assert_eq!(staged.original.as_deref(), Some("one\n"));
+        assert_eq!(staged.modified.as_deref(), Some("two\n"));
+        assert_eq!(staged.original_label, "HEAD");
+        assert_eq!(staged.modified_label, "Index");
+
+        std::fs::write(root.path().join("new.md"), "new\n").expect("new file");
+        let untracked = adapter.diff_file(false, "new.md").expect("untracked");
+        assert_eq!(untracked.kind, GitDiffKind::Untracked);
+        assert_eq!(untracked.original.as_deref(), Some(""));
+        assert_eq!(untracked.modified.as_deref(), Some("new\n"));
+        assert_eq!(untracked.original_label, "Empty");
+        assert_eq!(untracked.modified_label, "Untracked");
+
+        let option_like = "-diff;$(touch should-not-exist).md";
+        std::fs::write(root.path().join(option_like), "safe\n").expect("option-like file");
+        let option_diff = adapter
+            .diff_file(false, option_like)
+            .expect("option-like diff");
+        assert_eq!(option_diff.modified.as_deref(), Some("safe\n"));
+        assert!(!root.path().join("should-not-exist").exists());
+        assert!(matches!(
+            adapter.diff_file(false, ".git/config"),
+            Err(GitError::InvalidPath(_))
+        ));
+    }
+
+    #[test]
+    fn single_file_diff_handles_deleted_renamed_binary_and_oversized_files() {
+        if !git_available() {
+            return;
+        }
+        let root = tempdir().expect("tempdir");
+        run(root.path(), &["init", "-q"]);
+        std::fs::write(root.path().join("old.md"), "before\n").expect("file");
+        std::fs::write(root.path().join("binary.dat"), [0, 1, 2]).expect("binary");
+        configured(root.path(), &["add", "--", "old.md", "binary.dat"]);
+        configured(root.path(), &["commit", "-m", "initial"]);
+        let adapter = GitAdapter::new(root.path());
+
+        std::fs::remove_file(root.path().join("old.md")).expect("delete");
+        let deleted = adapter.diff_file(false, "old.md").expect("deleted");
+        assert_eq!(deleted.kind, GitDiffKind::Deleted);
+        assert_eq!(deleted.original.as_deref(), Some("before\n"));
+        assert_eq!(deleted.modified.as_deref(), Some(""));
+
+        adapter.stage(&["old.md".into()]).expect("stage delete");
+        let staged_deleted = adapter.diff_file(true, "old.md").expect("staged delete");
+        assert_eq!(staged_deleted.kind, GitDiffKind::Deleted);
+        assert_eq!(staged_deleted.modified.as_deref(), Some(""));
+
+        run(root.path(), &["mv", "--", "binary.dat", "renamed.dat"]);
+        let renamed = adapter.diff_file(true, "renamed.dat").expect("renamed");
+        assert_eq!(renamed.kind, GitDiffKind::Renamed);
+        assert_eq!(renamed.old_path.as_deref(), Some("binary.dat"));
+        assert_eq!(renamed.fallback, Some(GitDiffFallback::Binary));
+        assert!(renamed.original.is_none());
+        assert!(renamed.modified.is_none());
+
+        std::fs::write(
+            root.path().join("large.txt"),
+            vec![b'x'; super::DEFAULT_DIFF_TEXT_LIMIT + 1],
+        )
+        .expect("large");
+        let large = adapter.diff_file(false, "large.txt").expect("large diff");
+        assert_eq!(large.fallback, Some(GitDiffFallback::Oversized));
+        assert!(large.oversized);
     }
 }

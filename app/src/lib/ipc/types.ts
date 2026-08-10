@@ -148,6 +148,7 @@ export type WorkspaceTrustLevel =
 export type WorkspaceSummary = {
   id: string;
   name: string;
+  rootPath?: string | null;
   kind: WorkspaceKind;
   trustLevel: WorkspaceTrustLevel;
   canRead: boolean;
@@ -191,6 +192,54 @@ export type GitWorkspaceDiff = {
   staged: boolean;
   patch: string;
   truncated: boolean;
+};
+
+export type GitFileDiff = {
+  path: string;
+  oldPath?: string;
+  kind: "staged" | "unstaged" | "untracked" | "deleted" | "renamed";
+  staged: boolean;
+  original?: string | null;
+  modified?: string | null;
+  originalLabel: string;
+  modifiedLabel: string;
+  fallback?: "binary" | "oversized" | null;
+  binary: boolean;
+  oversized: boolean;
+};
+
+export type ToolLanguage = "typescript" | "javascript" | "python" | "rust";
+
+export type LanguageToolStatus = {
+  id: string;
+  name: string;
+  available: boolean;
+  version?: string;
+};
+
+export type LanguageFormatResult = {
+  content: string;
+  tool: string;
+};
+
+export type LanguageDiagnostic = {
+  relativePath: string;
+  line: number;
+  column: number;
+  severity: "error" | "warning" | "info" | "hint";
+  message: string;
+  source: string;
+  code?: string;
+};
+
+export type LspServerKind = "type_script" | "python" | "ruff" | "rust";
+
+export type LspSessionSummary = {
+  id: string;
+  workspaceId: string;
+  server: LspServerKind;
+  rootUri: string;
+  status: "running" | "exited" | "stopped" | "failed";
 };
 
 export type WorkspaceSearchResult = {

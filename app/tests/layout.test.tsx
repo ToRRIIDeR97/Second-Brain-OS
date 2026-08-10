@@ -75,6 +75,8 @@ test("activity rail keeps the primary order and moves focus with arrow keys", ()
   }
   fireEvent.keyDown(homeButton, { key: "ArrowDown" });
   expect(knowledgeButton).toHaveFocus();
+  fireEvent.click(knowledgeButton);
+  expect(onChange).toHaveBeenCalledWith("files");
   fireEvent.click(agentsButton);
   expect(onChange).toHaveBeenCalledWith("agents");
 });

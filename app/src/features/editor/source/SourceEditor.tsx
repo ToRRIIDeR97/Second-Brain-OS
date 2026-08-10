@@ -1,6 +1,8 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
 
+import type { IpcClient } from "../../../lib/ipc";
+import { connectLsp } from "./lspClient";
 import type { EditorTabState, ViewState } from "./types";
 
 export type SourceEditorProps = {
@@ -11,6 +13,10 @@ export type SourceEditorProps = {
   onChange: (content: string) => void;
   onMount?: (editor: Parameters<OnMount>[0], monaco: Monaco) => void;
   onViewStateChange?: (viewState: ViewState) => void;
+  lsp?: {
+    ipc: IpcClient;
+    onStatus?: (status: "ready" | "missing") => void;
+  };
 };
 
 export function SourceEditor({
@@ -21,7 +27,20 @@ export function SourceEditor({
   onChange,
   onMount,
   onViewStateChange,
+  lsp,
 }: SourceEditorProps) {
+  const lspConnection =
+    useRef<Awaited<ReturnType<typeof connectLsp>>>(undefined);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      void lspConnection.current?.dispose();
+    };
+  }, [tab.modelUri]);
+
   const handleMount = useCallback<OnMount>(
     (editor, monaco) => {
       if (line !== undefined) {
@@ -39,9 +58,23 @@ export function SourceEditor({
           });
         }
       }
+      if (lsp) {
+        void connectLsp(monaco, lsp.ipc, tab.workspaceId, tab.language)
+          .then((connection) => {
+            if (!mounted.current) {
+              void connection?.dispose();
+              return;
+            }
+            lspConnection.current = connection;
+            if (connection) lsp.onStatus?.("ready");
+          })
+          .catch(() => {
+            lsp.onStatus?.("missing");
+          });
+      }
       onMount?.(editor, monaco);
     },
-    [column, line, onMount],
+    [column, line, lsp, onMount, tab.language, tab.workspaceId],
   );
 
   const handleChange = useCallback(

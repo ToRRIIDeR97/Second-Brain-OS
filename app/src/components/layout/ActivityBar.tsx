@@ -5,7 +5,7 @@ import type { Activity } from "../../state/shell";
 /** The activities that are always visible in the workbench rail. */
 export const PRIMARY_ACTIVITIES = [
   "home",
-  "knowledge",
+  "files",
   "planner",
   "agents",
 ] as const satisfies readonly Activity[];

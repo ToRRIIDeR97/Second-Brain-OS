@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CalendarDays,
+  CircleAlert,
   Files,
   GitCompareArrows,
   Plus,
@@ -10,23 +11,30 @@ import {
 import { ReferenceCalendar } from "../../features/planner/ReferenceCalendar";
 import { SourceControlWorkspace } from "../../features/source-control";
 import {
+  ProblemsPanel,
+  type SourceDiagnostic,
+} from "../../features/editor/source";
+import { GitDiffEditor } from "../../features/viewers";
+import {
   TerminalWorkspace,
   type TerminalRequest,
 } from "../../features/terminal/TerminalWorkspace";
-import type {
-  GitWorkspaceDiff,
-  GitWorkspaceStatus,
-  IpcClient,
-} from "../../lib/ipc";
+import type { GitFileDiff, GitWorkspaceStatus, IpcClient } from "../../lib/ipc";
 import { useWorkspace } from "../../state/workspace";
 import { WorkspaceNavigator } from "./WorkspaceNavigator";
 
-export type UtilityDockTab = "files" | "calendar" | "git" | "terminal";
+export type UtilityDockTab =
+  | "files"
+  | "calendar"
+  | "git"
+  | "problems"
+  | "terminal";
 
 const tabs = [
   { id: "files", label: "Files", icon: Files },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "git", label: "Git", icon: GitCompareArrows },
+  { id: "problems", label: "Problems", icon: CircleAlert },
   { id: "terminal", label: "Terminal", icon: SquareTerminal },
 ] as const;
 
@@ -41,6 +49,7 @@ export function UtilityDock({
   onClose,
   onOpenPath,
   onOpenDailyNote,
+  diagnostics = [],
 }: {
   activeTab?: UtilityDockTab;
   openTabs: readonly UtilityDockTab[];
@@ -50,12 +59,13 @@ export function UtilityDock({
   onTabChange: (tab: UtilityDockTab) => void;
   onCloseTab: (tab: UtilityDockTab) => void;
   onClose: () => void;
-  onOpenPath: (relativePath: string) => void;
+  onOpenPath: (relativePath: string, line?: number, column?: number) => void;
   onOpenDailyNote: () => void;
+  diagnostics?: readonly SourceDiagnostic[];
 }) {
   const { activeWorkspace } = useWorkspace();
   const [git, setGit] = useState<GitWorkspaceStatus>();
-  const [diff, setDiff] = useState<{ path: string; data: GitWorkspaceDiff }>();
+  const [diff, setDiff] = useState<{ path: string; data: GitFileDiff }>();
   const [gitError, setGitError] = useState("");
   const availableTabs = tabs.filter(({ id }) => !openTabs.includes(id));
 
@@ -95,7 +105,7 @@ export function UtilityDock({
 
   const openDiff = async (path: string, staged: boolean) => {
     if (!activeWorkspace) return;
-    const result = await ipc.git.diff(activeWorkspace.id, staged, [path]);
+    const result = await ipc.git.fileDiff(activeWorkspace.id, staged, path);
     if (result.ok) {
       setDiff({ path, data: result.data });
       setGitError("");
@@ -208,7 +218,9 @@ export function UtilityDock({
                           ? "Calendar and Google Tasks"
                           : id === "git"
                             ? "Changes and file diffs"
-                            : "Open a workspace shell"}
+                            : id === "problems"
+                              ? "Lint and analysis diagnostics"
+                              : "Open a workspace shell"}
                     </small>
                   </span>
                 </button>
@@ -248,9 +260,21 @@ export function UtilityDock({
                   Changes
                 </button>
               </header>
-              <pre className="git-diff-patch" tabIndex={0}>
-                <code>{diff.data.patch || "No textual changes."}</code>
-              </pre>
+              <GitDiffEditor
+                {...(diff.data.original === undefined
+                  ? {}
+                  : { original: diff.data.original })}
+                {...(diff.data.modified === undefined
+                  ? {}
+                  : { modified: diff.data.modified })}
+                originalLabel={diff.data.originalLabel}
+                modifiedLabel={diff.data.modifiedLabel}
+                {...(diff.data.fallback
+                  ? { fallback: diff.data.fallback }
+                  : {})}
+                binary={diff.data.binary}
+                oversized={diff.data.oversized}
+              />
             </section>
           ) : (
             <>
@@ -279,6 +303,14 @@ export function UtilityDock({
               />
             </>
           )
+        ) : null}
+        {activeTab === "problems" ? (
+          <ProblemsPanel
+            diagnostics={diagnostics}
+            onOpenLocation={(diagnostic) => {
+              onOpenPath(diagnostic.path, diagnostic.line, diagnostic.column);
+            }}
+          />
         ) : null}
         {openTabs.includes("terminal") ? (
           <TerminalWorkspace

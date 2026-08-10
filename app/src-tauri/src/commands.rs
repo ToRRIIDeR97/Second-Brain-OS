@@ -7,6 +7,10 @@ use crate::terminal::{
     NativePtyAdapter, PresetId, TerminalId, TerminalManager, TerminalSession, TerminalSize,
 };
 use crate::workspace::git::GitAdapter;
+use crate::workspace::language_tools::{
+    Diagnostic, FormatResult, LanguageToolService, ToolLanguage, ToolStatus,
+};
+use crate::workspace::lsp::{LspError, LspManager, LspServerKind, LspSessionId, LspSessionSummary};
 use crate::workspace::mutations::{MutationActor, MutationService};
 use crate::workspace::{
     ApplicationPolicy, FileKind, PathPolicy, ReadError, RegisterWorkspace, TrustLevel, WorkspaceId,
@@ -19,6 +23,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 use tauri::State;
 
 const IPC_CONTRACT: &str = "ipc_result";
@@ -34,6 +39,7 @@ const MAX_ATTACHMENT_BASE64_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4;
 pub struct AppRuntime {
     workspaces: Mutex<WorkspaceRegistry>,
     terminals: Mutex<TerminalManager<NativePtyAdapter>>,
+    lsp: Mutex<LspManager>,
 }
 
 impl AppRuntime {
@@ -43,6 +49,7 @@ impl AppRuntime {
         Self {
             workspaces: Mutex::new(workspaces),
             terminals: Mutex::new(TerminalManager::new(NativePtyAdapter::new())),
+            lsp: Mutex::new(LspManager::new()),
         }
     }
 }
@@ -67,6 +74,8 @@ pub struct WorkspaceRegistration {
 pub struct WorkspaceSummary {
     pub id: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_path: Option<String>,
     pub kind: WorkspaceKind,
     pub trust_level: TrustLevel,
     pub can_read: bool,
@@ -554,6 +563,7 @@ fn workspace_summary(record: &crate::workspace::WorkspaceRecord) -> WorkspaceSum
     WorkspaceSummary {
         id: record.id.as_str().to_owned(),
         name: record.name.clone(),
+        root_path: record.display_root.clone(),
         kind: record.kind,
         trust_level: record.trust_level,
         can_read: capabilities.read,
@@ -1313,6 +1323,178 @@ pub fn git_diff(
             truncated: diff.truncated,
         })
     })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn git_file_diff(
+    workspace_id: String,
+    staged: bool,
+    path: String,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<crate::workspace::git::GitFileDiff> {
+    let result = (|| {
+        let record = registered_workspace(&runtime, &workspace_id)?;
+        if !record.trust_level.capabilities().read {
+            return Err(AppError::new(
+                "workspace.read_denied",
+                "This workspace is not readable.",
+            ));
+        }
+        let root = record.root_path().ok_or_else(|| {
+            AppError::new(
+                "workspace.no_root",
+                "This workspace has no filesystem root.",
+            )
+        })?;
+        GitAdapter::new(root)
+            .diff_file(staged, &path)
+            .map_err(|error| app_error("git.diff_failed", error))
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+fn language_tool_service(
+    runtime: &AppRuntime,
+    workspace_id: &str,
+) -> AppResult<LanguageToolService> {
+    let record = registered_workspace(runtime, workspace_id)?;
+    if !record.trust_level.capabilities().terminal {
+        return Err(AppError::new(
+            "language_tools.trust_required",
+            "Language tools require a trusted workspace.",
+        ));
+    }
+    let root = record.root_path().ok_or_else(|| {
+        AppError::new(
+            "workspace.no_root",
+            "This workspace has no filesystem root.",
+        )
+    })?;
+    Ok(LanguageToolService::new(root))
+}
+
+#[tauri::command]
+pub fn language_tools_status(
+    workspace_id: String,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<Vec<ToolStatus>> {
+    let result = language_tool_service(&runtime, &workspace_id).and_then(|service| {
+        service
+            .statuses()
+            .map_err(|error| app_error("language_tools.status_failed", error))
+    });
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn language_format(
+    workspace_id: String,
+    relative_path: String,
+    language: ToolLanguage,
+    content: String,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<FormatResult> {
+    let result = language_tool_service(&runtime, &workspace_id).and_then(|service| {
+        service
+            .format(language, &relative_path, &content)
+            .map_err(|error| app_error("language_tools.format_failed", error))
+    });
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn language_analyze(
+    workspace_id: String,
+    language: Option<ToolLanguage>,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<Vec<Diagnostic>> {
+    let result = language_tool_service(&runtime, &workspace_id).and_then(|service| {
+        service
+            .analyze(language)
+            .map_err(|error| app_error("language_tools.analyze_failed", error))
+    });
+    CommandResult::from_result(result, correlation_id())
+}
+
+fn runtime_lsp(runtime: &AppRuntime) -> AppResult<MutexGuard<'_, LspManager>> {
+    runtime.lsp.lock().map_err(|_| {
+        AppError::new(
+            "lsp.runtime_unavailable",
+            "The language-server runtime is unavailable.",
+        )
+    })
+}
+
+#[tauri::command]
+pub fn lsp_start(
+    workspace_id: String,
+    server: LspServerKind,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<LspSessionSummary> {
+    let result = (|| {
+        let workspace = registered_workspace(&runtime, &workspace_id)?;
+        runtime_lsp(&runtime)?
+            .start(&workspace, server)
+            .map_err(|error| app_error("lsp.start_failed", error))
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn lsp_send(
+    workspace_id: String,
+    session_id: String,
+    message: serde_json::Value,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<()> {
+    let result = runtime_lsp(&runtime).and_then(|manager| {
+        manager
+            .send(
+                &WorkspaceId::from(workspace_id.as_str()),
+                &LspSessionId::from(session_id.as_str()),
+                &message,
+            )
+            .map_err(|error| app_error("lsp.send_failed", error))
+    });
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn lsp_receive(
+    workspace_id: String,
+    session_id: String,
+    timeout_ms: Option<u64>,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<Option<serde_json::Value>> {
+    let result = runtime_lsp(&runtime).and_then(|manager| {
+        match manager.receive(
+            &WorkspaceId::from(workspace_id.as_str()),
+            &LspSessionId::from(session_id.as_str()),
+            Duration::from_millis(timeout_ms.unwrap_or(100).min(250)),
+        ) {
+            Ok(message) => Ok(Some(message)),
+            Err(LspError::ReceiveTimeout) => Ok(None),
+            Err(error) => Err(app_error("lsp.receive_failed", error)),
+        }
+    });
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn lsp_stop(
+    workspace_id: String,
+    session_id: String,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<LspSessionSummary> {
+    let result = runtime_lsp(&runtime).and_then(|mut manager| {
+        manager
+            .stop(
+                &WorkspaceId::from(workspace_id.as_str()),
+                &LspSessionId::from(session_id.as_str()),
+            )
+            .map_err(|error| app_error("lsp.stop_failed", error))
+    });
     CommandResult::from_result(result, correlation_id())
 }
 

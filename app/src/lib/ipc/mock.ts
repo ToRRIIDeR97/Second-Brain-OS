@@ -38,7 +38,22 @@ export function createMockIpc() {
                         patch: "",
                         truncated: false,
                       }
-                    : (args?.layout ?? null);
+                    : command === "git_file_diff"
+                      ? {
+                          path: typeof args?.path === "string" ? args.path : "",
+                          kind: args?.staged === true ? "staged" : "unstaged",
+                          staged: Boolean(args?.staged),
+                          original: "",
+                          modified: "",
+                          originalLabel: "HEAD",
+                          modifiedLabel: "Working tree",
+                          binary: false,
+                          oversized: false,
+                        }
+                      : command === "language_tools_status" ||
+                          command === "language_analyze"
+                        ? []
+                        : (args?.layout ?? null);
     return Promise.resolve({
       contract: "ipc_result",
       version: 1,

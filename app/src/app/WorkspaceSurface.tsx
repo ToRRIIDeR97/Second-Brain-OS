@@ -5,6 +5,7 @@ import {
   useEffect,
   useState,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import { CalendarPlus, Command, FilePlus2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -18,7 +19,15 @@ import {
   resolveImageAttachmentPath,
 } from "../features/editor/markdown/attachments";
 import { NewNoteDialog } from "../features/editor/markdown/NewNoteDialog";
-import type { EditorTabState } from "../features/editor/source";
+import {
+  LanguageToolActions,
+  LanguageToolStatus,
+  languageForPath,
+  type LanguageToolStatusItem,
+  type SourceDiagnostic,
+  type EditorTabState,
+} from "../features/editor/source";
+import { GitDiffEditor } from "../features/viewers";
 import type {
   GraphCommand,
   GraphCommandContext,
@@ -29,13 +38,15 @@ import { KnowledgeSearchModal, type SearchResponse } from "../features/search";
 import type { SourceControlChange } from "../features/source-control";
 import type {
   CommandResult,
-  GitWorkspaceDiff,
+  GitFileDiff,
   GitWorkspaceStatus,
   IpcClient,
   WorkspaceDirectoryEntry,
   WorkspaceKind,
   WorkspaceSummary,
   WorkspaceTrustLevel,
+  ToolLanguage,
+  LanguageToolStatus as ToolStatus,
 } from "../lib/ipc";
 import type { Activity } from "../state/shell";
 import { usePreferences } from "../state/preferences";
@@ -77,6 +88,7 @@ type OpenDocument = {
 };
 
 const emptySearch: SearchResponse = { results: [], structuredPlan: "" };
+const noopDiagnostics = () => undefined;
 
 function nameFromRoot(path: string) {
   const trimmed = path.replace(/[\\/]+$/, "");
@@ -89,27 +101,40 @@ function parentPath(path: string) {
   return parts.join("/");
 }
 
-function fileLanguage(path: string) {
-  const extension = path.split(".").at(-1)?.toLowerCase();
-  const languages: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    rs: "rust",
-    json: "json",
-    yaml: "yaml",
-    yml: "yaml",
-    css: "css",
-    html: "html",
-    sh: "shell",
-    py: "python",
-  };
-  return languages[extension ?? ""] ?? "plaintext";
-}
-
 function isMarkdown(path: string) {
   return /\.(md|markdown|mdx)$/i.test(path);
+}
+
+function toolLanguageForPath(path: string): ToolLanguage | undefined {
+  const language = languageForPath(path);
+  return language === "typescript" ||
+    language === "javascript" ||
+    language === "python" ||
+    language === "rust"
+    ? language
+    : undefined;
+}
+
+function toolIds(language: ToolLanguage | undefined) {
+  if (language === "typescript" || language === "javascript")
+    return {
+      formatter: "prettier",
+      analyzer: "eslint",
+      server: "typescript-language-server",
+    };
+  if (language === "python")
+    return {
+      formatter: "ruff",
+      analyzer: "ruff",
+      server: "pyright-langserver",
+    };
+  if (language === "rust")
+    return {
+      formatter: "rustfmt",
+      analyzer: "cargo-clippy",
+      server: "rust-analyzer",
+    };
+  return {};
 }
 
 function isSuccess<T>(
@@ -374,6 +399,14 @@ function DocumentEditor({
   onSave,
   onImportImage,
   resolveLocalImage,
+  ipc,
+  toolStatuses,
+  formatting,
+  analyzing,
+  onFormat,
+  onAnalyze,
+  line,
+  column,
 }: {
   document: OpenDocument;
   canWrite: boolean;
@@ -382,13 +415,21 @@ function DocumentEditor({
   onSave: () => void;
   onImportImage: (file: File, alt: string) => Promise<string | undefined>;
   resolveLocalImage: (source: string) => Promise<string | undefined>;
+  ipc: IpcClient;
+  toolStatuses: readonly ToolStatus[];
+  formatting: boolean;
+  analyzing: boolean;
+  onFormat: () => void;
+  onAnalyze: () => void;
+  line?: number;
+  column?: number;
 }) {
   const tab: EditorTabState = {
     resourceId: `${document.workspaceId}:${document.relativePath}`,
     modelUri: `second-brain://${document.workspaceId}/${document.relativePath}`,
     workspaceId: document.workspaceId,
     relativePath: document.relativePath,
-    language: fileLanguage(document.relativePath),
+    language: languageForPath(document.relativePath),
     encoding: document.encoding,
     eol: document.eol,
     status: document.content === document.baseContent ? "clean" : "dirty",
@@ -399,6 +440,20 @@ function DocumentEditor({
     externalChange: "none",
     openRequest: 1,
   };
+  const ids = toolIds(toolLanguageForPath(document.relativePath));
+  const statuses: LanguageToolStatusItem[] = toolStatuses
+    .filter((status) =>
+      [ids.server, ids.formatter, ids.analyzer].includes(status.id),
+    )
+    .map((status) => ({
+      id: status.id,
+      name: status.name,
+      available: status.available,
+      ...(status.version ? { detail: status.version } : {}),
+    }));
+  const available = (id?: string) =>
+    id !== undefined &&
+    toolStatuses.some((item) => item.id === id && item.available);
   return (
     <section
       className="document-editor"
@@ -422,15 +477,30 @@ function DocumentEditor({
                 : "Unsaved changes"}
           </p>
         </div>
-        <button
-          className="button button-primary"
-          type="button"
-          disabled={!canWrite || saving}
-          onClick={onSave}
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
+        <div className="document-editor-actions">
+          {!isMarkdown(document.relativePath) ? (
+            <LanguageToolActions
+              onFormat={onFormat}
+              onAnalyze={onAnalyze}
+              formatting={formatting}
+              analyzing={analyzing}
+              canFormat={canWrite && available(ids.formatter)}
+              canAnalyze={available(ids.analyzer)}
+            />
+          ) : null}
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={!canWrite || saving}
+            onClick={onSave}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
       </header>
+      {!isMarkdown(document.relativePath) ? (
+        <LanguageToolStatus statuses={statuses} />
+      ) : null}
       {isMarkdown(document.relativePath) ? (
         <MarkdownEditor
           value={document.content}
@@ -440,7 +510,15 @@ function DocumentEditor({
           resolveLocalImage={resolveLocalImage}
         />
       ) : (
-        <SourceEditor tab={tab} readOnly={!canWrite} onChange={onChange} />
+        <SourceEditor
+          key={tab.modelUri}
+          tab={tab}
+          readOnly={!canWrite}
+          onChange={onChange}
+          lsp={{ ipc }}
+          {...(line === undefined ? {} : { line })}
+          {...(column === undefined ? {} : { column })}
+        />
       )}
     </section>
   );
@@ -462,6 +540,7 @@ export function WorkspaceSurface({
   onDocumentSaved = () => undefined,
   onGitDiffOpened = () => undefined,
   onGraphSelectionContextChange = () => undefined,
+  onDiagnosticsChange = noopDiagnostics,
 }: {
   activity: Activity;
   ipc: IpcClient;
@@ -470,7 +549,14 @@ export function WorkspaceSurface({
   onCloseSearch?: () => void;
   onNavigate?: (activity: Activity) => void;
   noteRequest?: { key: number; relativePath: string } | undefined;
-  fileRequest?: { key: number; relativePath: string } | undefined;
+  fileRequest?:
+    | {
+        key: number;
+        relativePath: string;
+        line?: number;
+        column?: number;
+      }
+    | undefined;
   saveRequest?: { key: number; resourceId: string } | undefined;
   onOpenTerminal?: (request: {
     workspaceId: string;
@@ -493,10 +579,11 @@ export function WorkspaceSurface({
   onGraphSelectionContextChange?: (
     context: GraphSelectionContext | undefined,
   ) => void;
+  onDiagnosticsChange?: (diagnostics: SourceDiagnostic[]) => void;
 }) {
   const [directory, setDirectory] = useState("");
   const [entries, setEntries] = useState<WorkspaceDirectoryEntry[]>([]);
-  const [document, setDocument] = useState<OpenDocument>();
+  const [documents, setDocuments] = useState<Record<string, OpenDocument>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [newNoteOpen, setNewNoteOpen] = useState(false);
@@ -512,7 +599,14 @@ export function WorkspaceSurface({
   const [git, setGit] = useState<GitWorkspaceStatus>();
   const [gitDiff, setGitDiff] = useState<{
     path: string;
-    data: GitWorkspaceDiff;
+    data: GitFileDiff;
+  }>();
+  const [toolStatuses, setToolStatuses] = useState<ToolStatus[]>([]);
+  const [formatting, setFormatting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [editorLocation, setEditorLocation] = useState<{
+    line: number;
+    column: number;
   }>();
   const [agents, setAgents] = useState<AgentWorkspaceState>({
     workspaceId: "",
@@ -528,8 +622,29 @@ export function WorkspaceSurface({
     registerWorkspace,
     refreshWorkspaces,
   } = useWorkspace();
+  const document = activeWorkspaceId ? documents[activeWorkspaceId] : undefined;
+  const setDocument = useCallback(
+    (next: SetStateAction<OpenDocument | undefined>) => {
+      if (!activeWorkspaceId) return;
+      setDocuments((current) => {
+        const value =
+          typeof next === "function" ? next(current[activeWorkspaceId]) : next;
+        if (!value) {
+          const updated: Record<string, OpenDocument> = {};
+          for (const [workspaceId, openDocument] of Object.entries(current)) {
+            if (workspaceId !== activeWorkspaceId)
+              updated[workspaceId] = openDocument;
+          }
+          return updated;
+        }
+        return { ...current, [activeWorkspaceId]: value };
+      });
+    },
+    [activeWorkspaceId],
+  );
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
-  const { editorAutosave, setEditorAutosave } = usePreferences();
+  const { editorAutosave, setEditorAutosave, formatOnSave, setFormatOnSave } =
+    usePreferences();
   const checkDesktopBridge = useCallback(async () => {
     setBridgeResult(await ipc.system.ping());
   }, [ipc]);
@@ -537,15 +652,29 @@ export function WorkspaceSurface({
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDirectory("");
-      setDocument(undefined);
       setEntries([]);
       setError("");
       setGitDiff(undefined);
+      setToolStatuses([]);
+      onDiagnosticsChange([]);
     }, 0);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, onDiagnosticsChange]);
+
+  useEffect(() => {
+    if (!workspace?.canUseTerminal) return;
+    let current = true;
+    void ipc.languageTools.status(workspace.id).then((result) => {
+      if (!current) return;
+      if (result.ok) setToolStatuses(result.data);
+      else setError(result.error.message);
+    });
+    return () => {
+      current = false;
+    };
+  }, [ipc, workspace?.canUseTerminal, workspace?.id]);
 
   const refreshDirectory = useCallback(async () => {
     if (!workspace || workspace.kind === "collection") return;
@@ -574,8 +703,19 @@ export function WorkspaceSurface({
   }, [refreshDirectory]);
 
   const openDocument = useCallback(
-    async (relativePath: string) => {
+    async (
+      relativePath: string,
+      location?: { line: number; column: number },
+    ) => {
       if (!workspace) return;
+      if (
+        document?.workspaceId === workspace.id &&
+        document.relativePath === relativePath &&
+        document.content !== document.baseContent
+      ) {
+        setEditorLocation(location);
+        return;
+      }
       const result = await ipc.files.readText({
         workspaceId: workspace.id,
         relativePath,
@@ -594,6 +734,7 @@ export function WorkspaceSurface({
         encoding: result.data.encoding,
         eol: result.data.eol,
       });
+      setEditorLocation(location);
       onDocumentOpened({
         workspaceId: workspace.id,
         relativePath,
@@ -602,7 +743,7 @@ export function WorkspaceSurface({
       });
       setError("");
     },
-    [ipc, onDocumentOpened, workspace],
+    [document, ipc, onDocumentOpened, setDocument, workspace],
   );
 
   const importImage = useCallback(
@@ -691,10 +832,75 @@ export function WorkspaceSurface({
     [document, ipc, workspace],
   );
 
+  const formatContent = useCallback(
+    async (content: string) => {
+      if (!document || !workspace) return undefined;
+      const language = toolLanguageForPath(document.relativePath);
+      if (!language) return content;
+      setFormatting(true);
+      const result = await ipc.languageTools.format(
+        workspace.id,
+        document.relativePath,
+        language,
+        content,
+      );
+      setFormatting(false);
+      if (!result.ok) {
+        setError(result.error.message);
+        return undefined;
+      }
+      setError("");
+      return result.data.content;
+    },
+    [document, ipc, workspace],
+  );
+
+  const formatDocument = useCallback(async () => {
+    if (!document) return;
+    const formatted = await formatContent(document.content);
+    if (formatted === undefined || formatted === document.content) return;
+    onDocumentDirtyChange(
+      `file:${document.workspaceId}:${document.relativePath}`,
+      formatted !== document.baseContent,
+    );
+    setDocument((current) =>
+      current ? { ...current, content: formatted } : current,
+    );
+  }, [document, formatContent, onDocumentDirtyChange, setDocument]);
+
+  const analyzeWorkspace = useCallback(async () => {
+    if (!document || !workspace) return;
+    const language = toolLanguageForPath(document.relativePath);
+    if (!language) return;
+    setAnalyzing(true);
+    const result = await ipc.languageTools.analyze(workspace.id, language);
+    setAnalyzing(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    onDiagnosticsChange(
+      result.data.map((diagnostic) => ({
+        path: diagnostic.relativePath,
+        line: diagnostic.line,
+        column: diagnostic.column,
+        severity: diagnostic.severity,
+        message: diagnostic.message,
+        source: diagnostic.source,
+        ...(diagnostic.code ? { code: diagnostic.code } : {}),
+      })),
+    );
+    setError("");
+  }, [document, ipc, onDiagnosticsChange, workspace]);
+
   const saveDocument = useCallback(async () => {
     if (!document || !workspace) return;
-    const submittedContent = document.content;
     setSaving(true);
+    let submittedContent = document.content;
+    if (formatOnSave && !isMarkdown(document.relativePath)) {
+      submittedContent =
+        (await formatContent(submittedContent)) ?? submittedContent;
+    }
     const result = await ipc.files.writeText({
       path: {
         workspaceId: document.workspaceId,
@@ -715,6 +921,7 @@ export function WorkspaceSurface({
       current
         ? {
             ...current,
+            content: submittedContent,
             baseContent: submittedContent,
             baseHash: result.data.contentHash,
             baseRevisionId: result.data.revisionId,
@@ -729,10 +936,13 @@ export function WorkspaceSurface({
     void refreshDirectory();
   }, [
     document,
+    formatContent,
+    formatOnSave,
     ipc,
     onDocumentDirtyChange,
     onDocumentSaved,
     refreshDirectory,
+    setDocument,
     workspace,
   ]);
 
@@ -824,7 +1034,12 @@ export function WorkspaceSurface({
   useEffect(() => {
     if (!fileRequest) return;
     const timer = window.setTimeout(() => {
-      void openDocument(fileRequest.relativePath);
+      void openDocument(
+        fileRequest.relativePath,
+        fileRequest.line === undefined
+          ? undefined
+          : { line: fileRequest.line, column: fileRequest.column ?? 1 },
+      );
     }, 0);
     return () => {
       window.clearTimeout(timer);
@@ -856,7 +1071,7 @@ export function WorkspaceSurface({
   const openGitDiff = useCallback(
     async (path: string, staged: boolean) => {
       if (!workspace) return;
-      const result = await ipc.git.diff(workspace.id, staged, [path]);
+      const result = await ipc.git.fileDiff(workspace.id, staged, path);
       if (!isSuccess(result)) {
         setError(errorMessage(result));
         return;
@@ -1036,6 +1251,19 @@ export function WorkspaceSurface({
         }}
         onImportImage={importImage}
         resolveLocalImage={resolveLocalImage}
+        ipc={ipc}
+        toolStatuses={toolStatuses}
+        formatting={formatting}
+        analyzing={analyzing}
+        onFormat={() => {
+          void formatDocument();
+        }}
+        onAnalyze={() => {
+          void analyzeWorkspace();
+        }}
+        {...(editorLocation?.line === undefined
+          ? {}
+          : { line: editorLocation.line, column: editorLocation.column })}
       />,
     );
 
@@ -1105,12 +1333,22 @@ export function WorkspaceSurface({
               Back to changes
             </button>
           </header>
-          {gitDiff.data.truncated ? (
-            <p role="status">This diff was truncated to a safe display size.</p>
-          ) : null}
-          <pre className="git-diff-patch" tabIndex={0}>
-            <code>{gitDiff.data.patch || "No textual changes."}</code>
-          </pre>
+          <GitDiffEditor
+            {...(gitDiff.data.original === undefined
+              ? {}
+              : { original: gitDiff.data.original })}
+            {...(gitDiff.data.modified === undefined
+              ? {}
+              : { modified: gitDiff.data.modified })}
+            originalLabel={gitDiff.data.originalLabel}
+            modifiedLabel={gitDiff.data.modifiedLabel}
+            language={languageForPath(gitDiff.path)}
+            {...(gitDiff.data.fallback
+              ? { fallback: gitDiff.data.fallback }
+              : {})}
+            binary={gitDiff.data.binary}
+            oversized={gitDiff.data.oversized}
+          />
         </section>,
       );
     return surface(
@@ -1249,6 +1487,19 @@ export function WorkspaceSurface({
             <span>
               <strong>Autosave after one second</strong>
               <small>Off by default. Save failures remain visible.</small>
+            </span>
+          </label>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={formatOnSave}
+              onChange={(event) => {
+                setFormatOnSave(event.target.checked);
+              }}
+            />
+            <span>
+              <strong>Format code on save</strong>
+              <small>Off by default. Uses the detected local formatter.</small>
             </span>
           </label>
         </fieldset>

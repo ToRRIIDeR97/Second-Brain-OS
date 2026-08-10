@@ -20,6 +20,7 @@ import { createDefaultCommands } from "../../app/commands";
 import { ipcClient, type IpcClient } from "../../lib/ipc";
 import type { TerminalRequest } from "../../features/terminal/TerminalWorkspace";
 import type { GraphSelectionContext } from "../../features/graph";
+import type { SourceDiagnostic } from "../../features/editor/source";
 import {
   useShell,
   ShellProvider,
@@ -36,6 +37,7 @@ import { ActivityBar } from "./ActivityBar";
 import { Tabs } from "./Tabs";
 import { UtilityDock, type UtilityDockTab } from "./UtilityDock";
 import { WorkspaceNavigator } from "./WorkspaceNavigator";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const IntegratedWorkspaceSurface = lazy(async () => ({
   default: (await import("../../app/WorkspaceSurface")).WorkspaceSurface,
@@ -65,6 +67,8 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
   const [fileRequest, setFileRequest] = useState<{
     key: number;
     relativePath: string;
+    line?: number;
+    column?: number;
   }>();
   const [saveRequest, setSaveRequest] = useState<{
     key: number;
@@ -76,6 +80,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
   const [utilityTabs, setUtilityTabs] = useState<UtilityDockTab[]>([]);
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>();
   const [terminalClosePending, setTerminalClosePending] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<SourceDiagnostic[]>([]);
   const utilityPanelRef = usePanelRef();
   const { activeWorkspace } = useWorkspace();
 
@@ -120,6 +125,14 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
     setUtilityTab(tab);
     setUtilityOpen(true);
   }, []);
+
+  const updateDiagnostics = useCallback(
+    (next: SourceDiagnostic[]) => {
+      setDiagnostics(next);
+      if (next.length) openUtility("problems");
+    },
+    [openUtility],
+  );
 
   const removeUtilityTab = useCallback((tab: UtilityDockTab) => {
     if (tab === "terminal") setTerminalRequest(undefined);
@@ -379,11 +392,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
             <ArrowRight size={15} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </nav>
-        <div className="topbar-title">
-          <span>Second Brain OS</span>
-          <span aria-hidden="true">—</span>
-          <strong>{activeWorkspace?.name ?? "Local workbench"}</strong>
-        </div>
+        <WorkspaceSwitcher />
         <button
           type="button"
           className="search-trigger"
@@ -525,6 +534,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
                     onDocumentSaved={finishPendingDocumentSave}
                     onGitDiffOpened={openGitDiffResource}
                     onGraphSelectionContextChange={updateGraphSelection}
+                    onDiagnosticsChange={updateDiagnostics}
                   />
                 </Suspense>
               </main>
@@ -548,6 +558,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
               {...(utilityTab ? { activeTab: utilityTab } : {})}
               openTabs={utilityTabs}
               ipc={ipc}
+              diagnostics={diagnostics}
               {...(terminalRequest ? { terminalRequest } : {})}
               onOpenTab={openUtility}
               onTabChange={setUtilityTab}
@@ -561,8 +572,13 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
                   relativePath: "notes/today.md",
                 });
               }}
-              onOpenPath={(relativePath) => {
-                setFileRequest({ key: Date.now(), relativePath });
+              onOpenPath={(relativePath, line, column) => {
+                setFileRequest({
+                  key: Date.now(),
+                  relativePath,
+                  ...(line === undefined ? {} : { line }),
+                  ...(column === undefined ? {} : { column }),
+                });
               }}
             />
           </Panel>
