@@ -7,6 +7,8 @@
 mod discovery;
 pub mod git;
 mod ignore_policy;
+pub mod language_tools;
+pub mod lsp;
 mod manifest;
 pub mod mutations;
 mod path_policy;

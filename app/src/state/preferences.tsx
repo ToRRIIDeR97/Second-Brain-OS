@@ -1,46 +1,59 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 type PreferencesContextValue = {
   editorAutosave: boolean;
   setEditorAutosave: (enabled: boolean) => void;
+  formatOnSave: boolean;
+  setFormatOnSave: (enabled: boolean) => void;
 };
 
 const storageKey = "second-brain-os.preferences.v1";
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 
-function storedAutosave() {
-  if (typeof window === "undefined") return false;
+type StoredPreferences = {
+  editorAutosave?: unknown;
+  formatOnSave?: unknown;
+};
+
+function storedPreferences(): StoredPreferences {
+  if (typeof window === "undefined") return {};
   try {
-    const value = JSON.parse(
+    return JSON.parse(
       window.localStorage.getItem(storageKey) ?? "{}",
-    ) as {
-      editorAutosave?: unknown;
-    };
-    return value.editorAutosave === true;
+    ) as StoredPreferences;
   } catch {
-    return false;
+    return {};
   }
 }
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
-  const [editorAutosave, setAutosaveState] = useState(storedAutosave);
-  const setEditorAutosave = (enabled: boolean) => {
-    setAutosaveState(enabled);
+  const stored = storedPreferences();
+  const [editorAutosave, setAutosaveState] = useState(
+    stored.editorAutosave === true,
+  );
+  const [formatOnSave, setFormatOnSaveState] = useState(
+    stored.formatOnSave === true,
+  );
+  const persist = (next: StoredPreferences) => {
     window.localStorage.setItem(
       storageKey,
-      JSON.stringify({ editorAutosave: enabled }),
+      JSON.stringify({ editorAutosave, formatOnSave, ...next }),
     );
   };
-  const value = useMemo(
-    () => ({ editorAutosave, setEditorAutosave }),
-    [editorAutosave],
-  );
+  const setEditorAutosave = (enabled: boolean) => {
+    setAutosaveState(enabled);
+    persist({ editorAutosave: enabled });
+  };
+  const setFormatOnSave = (enabled: boolean) => {
+    setFormatOnSaveState(enabled);
+    persist({ formatOnSave: enabled });
+  };
+  const value = {
+    editorAutosave,
+    setEditorAutosave,
+    formatOnSave,
+    setFormatOnSave,
+  };
   return (
     <PreferencesContext.Provider value={value}>
       {children}

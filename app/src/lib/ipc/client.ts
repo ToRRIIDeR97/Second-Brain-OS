@@ -8,8 +8,14 @@ import type {
   FileWriteRequest,
   FileWriteResult,
   GitWorkspaceDiff,
+  GitFileDiff,
   GitWorkspaceStatus,
   JobCancellation,
+  LanguageDiagnostic,
+  LanguageFormatResult,
+  LanguageToolStatus,
+  LspServerKind,
+  LspSessionSummary,
   NativeTerminalOutput,
   NativeTerminalPreset,
   NativeTerminalSession,
@@ -20,6 +26,7 @@ import type {
   WorkspaceRegistration,
   WorkspaceSearchResponse,
   WorkspaceSummary,
+  ToolLanguage,
 } from "./types";
 import { isCommandResult, protocolError } from "./types";
 
@@ -109,12 +116,49 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
           staged,
           paths: relativePaths,
         }),
+      fileDiff: (workspaceId: string, staged: boolean, path: string) =>
+        call<GitFileDiff>("git_file_diff", { workspaceId, staged, path }),
       stage: (workspaceId: string, paths: string[]) =>
         call<null>("git_stage", { workspaceId, paths }),
       unstage: (workspaceId: string, paths: string[]) =>
         call<null>("git_unstage", { workspaceId, paths }),
       discard: (workspaceId: string, paths: string[], confirmed: boolean) =>
         call<null>("git_discard", { workspaceId, paths, confirmed }),
+    },
+    languageTools: {
+      status: (workspaceId: string) =>
+        call<LanguageToolStatus[]>("language_tools_status", { workspaceId }),
+      format: (
+        workspaceId: string,
+        relativePath: string,
+        language: ToolLanguage,
+        content: string,
+      ) =>
+        call<LanguageFormatResult>("language_format", {
+          workspaceId,
+          relativePath,
+          language,
+          content,
+        }),
+      analyze: (workspaceId: string, language?: ToolLanguage) =>
+        call<LanguageDiagnostic[]>("language_analyze", {
+          workspaceId,
+          language,
+        }),
+    },
+    lsp: {
+      start: (workspaceId: string, server: LspServerKind) =>
+        call<LspSessionSummary>("lsp_start", { workspaceId, server }),
+      send: (workspaceId: string, sessionId: string, message: unknown) =>
+        call<null>("lsp_send", { workspaceId, sessionId, message }),
+      receive: (workspaceId: string, sessionId: string, timeoutMs = 100) =>
+        call<unknown>("lsp_receive", {
+          workspaceId,
+          sessionId,
+          timeoutMs,
+        }),
+      stop: (workspaceId: string, sessionId: string) =>
+        call<LspSessionSummary>("lsp_stop", { workspaceId, sessionId }),
     },
     knowledge: {
       search: (workspaceId: string, query: string) =>

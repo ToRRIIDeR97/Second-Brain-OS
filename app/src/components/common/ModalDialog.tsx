@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export function ModalDialog({
@@ -61,7 +62,7 @@ export function ModalDialog({
   }, [open]);
 
   if (!open) return null;
-  return (
+  return createPortal(
     <div
       className="modal-backdrop"
       role="presentation"
@@ -92,7 +93,8 @@ export function ModalDialog({
         </header>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

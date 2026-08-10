@@ -35,6 +35,28 @@ type WorkspaceContextValue = {
 };
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
+const activeWorkspaceStorageKey = "second-brain-os.active-workspace.v1";
+
+function readStoredWorkspaceId() {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const value = window.localStorage.getItem(activeWorkspaceStorageKey);
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function persistWorkspaceId(workspaceId: string | undefined) {
+  if (typeof window === "undefined") return;
+  try {
+    if (workspaceId)
+      window.localStorage.setItem(activeWorkspaceStorageKey, workspaceId);
+    else window.localStorage.removeItem(activeWorkspaceStorageKey);
+  } catch {
+    // Storage is a convenience; a private browsing context must not break the shell.
+  }
+}
 
 function resultError(result: { ok: boolean; error?: { message: string } }) {
   return result.ok
@@ -50,7 +72,9 @@ export function WorkspaceProvider({
   children: ReactNode;
 }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>();
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<
+    string | undefined
+  >(readStoredWorkspaceId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -66,7 +90,8 @@ export function WorkspaceProvider({
     setActiveWorkspaceId((current) =>
       current && result.data.some(({ id }) => id === current)
         ? current
-        : result.data[0]?.id,
+        : (result.data.find(({ kind }) => kind === "brain")?.id ??
+          result.data[0]?.id),
     );
     setError("");
     setLoading(false);
@@ -78,6 +103,10 @@ export function WorkspaceProvider({
       window.clearTimeout(timer);
     };
   }, [refreshWorkspaces]);
+
+  useEffect(() => {
+    persistWorkspaceId(activeWorkspaceId);
+  }, [activeWorkspaceId]);
 
   const registerWorkspace = useCallback(
     async (registration: WorkspaceRegistration) => {
