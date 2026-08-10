@@ -16,6 +16,7 @@ import {
   createImageAttachmentPlacement,
   imageDataUrl,
   MAX_IMAGE_BYTES,
+  normalizeImageFile,
   resolveImageAttachmentPath,
 } from "../features/editor/markdown/attachments";
 import { NewNoteDialog } from "../features/editor/markdown/NewNoteDialog";
@@ -758,18 +759,25 @@ export function WorkspaceSurface({
         setError("Images must be between 1 byte and 10 MB.");
         return undefined;
       }
+      let normalizedFile: File;
+      try {
+        normalizedFile = await normalizeImageFile(file);
+      } catch {
+        setError("The HEIC image could not be converted.");
+        return undefined;
+      }
       const placement = createImageAttachmentPlacement(
         document.relativePath,
-        file.name,
-        file.type,
+        normalizedFile.name,
+        normalizedFile.type,
       );
       if (!placement) {
-        setError("Use a PNG, JPEG, GIF, or WebP image.");
+        setError("Use a HEIC, PNG, JPEG, GIF, or WebP image.");
         return undefined;
       }
       let bytes: Uint8Array;
       try {
-        bytes = new Uint8Array(await file.arrayBuffer());
+        bytes = new Uint8Array(await normalizedFile.arrayBuffer());
       } catch {
         setError("The selected image could not be read.");
         return undefined;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Search } from "lucide-react";
 import type {
   AppCommand,
   CommandContext,
@@ -87,46 +87,40 @@ export function CommandPalette({ open, registry, context, onClose }: Props) {
           event.stopPropagation();
         }}
       >
-        <div className="palette-heading">
-          <p className="eyebrow" id="command-palette-title">
-            Command palette
-          </p>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Close command palette"
-            onClick={onClose}
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
+        <h2 className="visually-hidden" id="command-palette-title">
+          Command palette
+        </h2>
+        <div className="palette-search">
+          <Search size={18} aria-hidden="true" />
+          <input
+            ref={inputRef}
+            className="palette-input"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setActiveIndex((index) =>
+                  Math.min(index + 1, Math.max(0, commands.length - 1)),
+                );
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setActiveIndex((index) => Math.max(0, index - 1));
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                run(commands[activeIndex]);
+              }
+            }}
+            placeholder="Search commands…"
+            aria-label="Search commands"
+          />
         </div>
-        <input
-          ref={inputRef}
-          className="palette-input"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setActiveIndex(0);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setActiveIndex((index) =>
-                Math.min(index + 1, Math.max(0, commands.length - 1)),
-              );
-            }
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setActiveIndex((index) => Math.max(0, index - 1));
-            }
-            if (event.key === "Enter") {
-              event.preventDefault();
-              run(commands[activeIndex]);
-            }
-          }}
-          placeholder="Search commands…"
-          aria-label="Search commands"
-        />
+        <p className="command-list-label">Commands</p>
         <ul className="command-list" role="listbox" aria-label="Commands">
           {commands.length ? (
             commands.map((command, index) => (
@@ -159,6 +153,20 @@ export function CommandPalette({ open, registry, context, onClose }: Props) {
             <li className="command-empty">No matching commands.</li>
           )}
         </ul>
+        <footer
+          className="command-palette-footer"
+          aria-label="Keyboard shortcuts"
+        >
+          <span>
+            <kbd>↑↓</kbd> Navigate
+          </span>
+          <span>
+            <kbd>↵</kbd> Open
+          </span>
+          <span>
+            <kbd>Esc</kbd> Close
+          </span>
+        </footer>
       </section>
     </div>
   );
