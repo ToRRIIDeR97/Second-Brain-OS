@@ -4,6 +4,8 @@ import { validateAttachmentPath } from "./knowledge";
 /** Keep image reads/writes bounded before they cross the IPC boundary. */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+const HEIC_MEDIA_TYPES = new Set(["image/heic", "image/heif"]);
+
 const MEDIA_TYPE_EXTENSIONS: Record<ImageMediaType, string> = {
   "image/gif": "gif",
   "image/jpeg": "jpg",
@@ -26,6 +28,37 @@ export type ImageAttachmentPlacement = {
   markdownPath: string;
   mediaType: SupportedImageMediaType;
 };
+
+function fileExtension(fileName: string): string {
+  return (
+    fileName
+      .split(/[\\/.]/)
+      .at(-1)
+      ?.toLowerCase() ?? ""
+  );
+}
+
+export function isHeicImage(fileName: string, declaredType: string): boolean {
+  const mediaType = declaredType.trim().toLowerCase();
+  const extension = fileExtension(fileName);
+  return (
+    HEIC_MEDIA_TYPES.has(mediaType) ||
+    extension === "heic" ||
+    extension === "heif"
+  );
+}
+
+/** Convert HEIC locally because webviews cannot render it consistently. */
+export async function normalizeImageFile(file: File): Promise<File> {
+  if (!isHeicImage(file.name, file.type)) return file;
+  const { heicTo } = await import("heic-to/csp");
+  const jpeg = await heicTo({ blob: file, type: "image/jpeg", quality: 0.92 });
+  const stem = file.name.replace(/\.(?:heic|heif)$/i, "") || "image";
+  return new File([jpeg], `${stem}.jpg`, {
+    type: "image/jpeg",
+    lastModified: file.lastModified,
+  });
+}
 
 function safeRelativePath(path: string): string | undefined {
   for (const character of path) {
@@ -67,10 +100,7 @@ export function supportedImageMediaType(
   const type = declaredType.trim().toLowerCase();
   if (type in MEDIA_TYPE_EXTENSIONS) return type as SupportedImageMediaType;
   if (type) return undefined;
-  const extension = fileName
-    .split(/[\\/.]/)
-    .at(-1)
-    ?.toLowerCase();
+  const extension = fileExtension(fileName);
   return extension ? EXTENSION_MEDIA_TYPES[extension] : undefined;
 }
 

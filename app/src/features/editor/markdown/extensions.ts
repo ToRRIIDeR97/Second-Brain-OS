@@ -14,7 +14,8 @@ import StarterKit from "@tiptap/starter-kit";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import "katex/dist/katex.min.css";
 import { createElement } from "react";
-import { common, createLowlight } from "lowlight";
+import { all, createLowlight } from "lowlight";
+import { CodeBlockNodeView } from "./CodeBlockNodeView";
 import {
   directiveFallback,
   type DirectiveAttribute,
@@ -167,7 +168,7 @@ export const DirectiveNode = Node.create({
   },
 });
 
-const lowlight = createLowlight(common);
+const lowlight = createLowlight(all);
 
 export type MarkdownExtensionOptions = {
   resolveLocalImage?: LocalImageResolver | undefined;
@@ -178,6 +179,9 @@ type ResolvedImageOptions = ImageOptions & MarkdownExtensionOptions;
 export function createMarkdownExtensions(
   options: MarkdownExtensionOptions = {},
 ) {
+  const codeBlock = CodeBlockLowlight.extend({
+    addNodeView: () => ReactNodeViewRenderer(CodeBlockNodeView),
+  }).configure({ lowlight, defaultLanguage: "plain text" });
   const image = Image.extend<ResolvedImageOptions>({
     addOptions() {
       return {
@@ -203,7 +207,7 @@ export function createMarkdownExtensions(
 
   return [
     StarterKit.configure({ link: false, codeBlock: false }),
-    CodeBlockLowlight.configure({ lowlight }),
+    codeBlock,
     Link.configure({ openOnClick: false, autolink: false }),
     image,
     Table.configure({ resizable: true }),

@@ -113,15 +113,16 @@ test("changes the active code block language and emits a fenced Markdown block",
     />,
   );
 
-  const language = screen.getByRole("combobox", {
+  const language = await screen.findByRole("combobox", {
     name: "Code block language",
   });
-  expect(language).toHaveValue("");
-  fireEvent.change(language, { target: { value: "javascript" } });
+  expect(language).toHaveValue("plain text");
+  expect(screen.getByRole("option", { name: "C++" })).toHaveValue("c++");
+  fireEvent.change(language, { target: { value: "c++" } });
 
   await waitFor(() => {
     expect(onChange).toHaveBeenLastCalledWith(
-      expect.stringContaining("```javascript\nconst answer = 42;"),
+      expect.stringContaining("```c++\nconst answer = 42;"),
     );
   });
 });
@@ -134,8 +135,36 @@ test("inserts a plain-text code block by default", async () => {
 
   await waitFor(() => {
     expect(onChange).toHaveBeenLastCalledWith(
-      expect.stringContaining("```\ncode\n```"),
+      expect.stringContaining("```plain text\ncode\n```"),
     );
+  });
+});
+
+test("opens a searchable slash menu and inserts the selected block", async () => {
+  const onChange = vi.fn();
+  const { container } = render(
+    <MarkdownEditor value={""} onChange={onChange} />,
+  );
+  const richEditor = container.querySelector<HTMLElement>(".tiptap");
+  if (!richEditor) throw new Error("rich editor missing");
+  richEditor.innerHTML = "<p>/code</p>";
+  const text = richEditor.querySelector("p")?.firstChild;
+  if (!text) throw new Error("slash query missing");
+  const range = document.createRange();
+  range.setStart(text, text.textContent?.length ?? 0);
+  range.collapse(true);
+  document.getSelection()?.removeAllRanges();
+  document.getSelection()?.addRange(range);
+  fireEvent.input(richEditor, { inputType: "insertText", data: "e" });
+
+  expect(
+    await screen.findByRole("menu", { name: "Insert block" }),
+  ).toBeVisible();
+  expect(screen.getByRole("menuitem", { name: /Code/ })).toBeVisible();
+  fireEvent.keyDown(richEditor, { key: "Enter" });
+
+  await waitFor(() => {
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("```"));
   });
 });
 
@@ -177,20 +206,24 @@ test("inserts a display TeX equation", async () => {
   });
 });
 
-test("adds a row through the contextual table controls", async () => {
+test("chooses a table size and adjusts it through contextual controls", async () => {
   const onChange = vi.fn();
   render(<MarkdownEditor value={"Table\n"} onChange={onChange} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Insert table" }));
-  const addRow = screen.getByRole("button", { name: "Add row after" });
+  expect(
+    screen.getByRole("dialog", { name: "Choose table size" }),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Insert 5 × 4 table" }));
+  const addRow = await screen.findByRole("button", { name: "Add row after" });
   expect(addRow).toBeEnabled();
   fireEvent.click(addRow);
 
   await waitFor(() => {
     const latest = onChange.mock.lastCall?.[0] as string;
-    expect(
-      latest.split("\n").filter((line) => line.startsWith("|")),
-    ).toHaveLength(5);
+    const lines = latest.split("\n").filter((line) => line.startsWith("|"));
+    expect(lines).toHaveLength(6);
+    expect(lines[0]?.split("|").slice(1, -1)).toHaveLength(5);
   });
 });
 

@@ -1,11 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   bytesToBase64,
   createImageAttachmentPlacement,
   imageDataUrl,
+  isHeicImage,
+  normalizeImageFile,
   resolveImageAttachmentPath,
   supportedImageMediaType,
 } from "./attachments";
+
+vi.mock("heic-to/csp", () => ({
+  heicTo: vi.fn(() =>
+    Promise.resolve(new Blob(["jpeg"], { type: "image/jpeg" })),
+  ),
+}));
 
 describe("workspace image attachments", () => {
   it("places normalized images below the note and returns a note-relative path", () => {
@@ -62,5 +70,15 @@ describe("workspace image attachments", () => {
     );
     expect(imageDataUrl("aGVsbG8=", "text/html", 5)).toBeUndefined();
     expect(imageDataUrl("aGVsbG8=", "image/png", 4)).toBeUndefined();
+  });
+
+  it("converts HEIC images to a browser-safe JPEG before placement", async () => {
+    expect(isHeicImage("photo.HEIC", "")).toBe(true);
+    const original = new File(["heic"], "photo.HEIC", { type: "image/heic" });
+    const converted = await normalizeImageFile(original);
+
+    expect(converted.name).toBe("photo.jpg");
+    expect(converted.type).toBe("image/jpeg");
+    expect(await converted.text()).toBe("jpeg");
   });
 });
