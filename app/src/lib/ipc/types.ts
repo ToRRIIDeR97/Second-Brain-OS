@@ -27,6 +27,12 @@ export type CommandFailure = {
 
 export type CommandResult<T> = CommandSuccess<T> | CommandFailure;
 
+export type RendererDiagnostic = {
+  source: string;
+  message: string;
+  stack?: string;
+};
+
 export type ThemeMode = "auto" | "light" | "dark";
 
 export type InspectorTab =

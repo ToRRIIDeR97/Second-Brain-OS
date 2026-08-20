@@ -19,6 +19,7 @@ import type {
   NativeTerminalOutput,
   NativeTerminalPreset,
   NativeTerminalSession,
+  RendererDiagnostic,
   ShellLayout,
   WorkspaceDirectoryPage,
   WorkspaceGraphPage,
@@ -75,6 +76,8 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
 
   return {
     system: {
+      log: (diagnostic: RendererDiagnostic) =>
+        call<null>("system_log", { diagnostic }),
       ping: () => call<string>("system_ping"),
       sampleError: () => call<null>("system_sample_error"),
     },

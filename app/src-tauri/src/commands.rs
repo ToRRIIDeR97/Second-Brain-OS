@@ -1,5 +1,5 @@
 use crate::db::Database;
-use crate::errors::{AppError, AppResult};
+use crate::errors::{AppError, AppResult, redact_text};
 use crate::knowledge::parser::ParserRegistry;
 use crate::knowledge::search::parse_query;
 use crate::platform::{Clock, SystemClock, ensure_application_data_dir};
@@ -32,6 +32,8 @@ const SHELL_LAYOUT_KEY: &str = "shell.layout";
 const WORKSPACES_KEY: &str = "workspace.registry.v1";
 const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ATTACHMENT_BASE64_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4;
+const MAX_DIAGNOSTIC_SOURCE_CHARS: usize = 64;
+const MAX_DIAGNOSTIC_TEXT_CHARS: usize = 2_048;
 
 /// Process-local application state. The domain registry deliberately stays
 /// independent of Tauri; this adapter is the only place that grants renderer
@@ -491,6 +493,55 @@ fn persist_workspace_registry(registry: &WorkspaceRegistry) -> AppResult<()> {
         )?;
         Ok(())
     })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RendererDiagnostic {
+    pub source: String,
+    pub message: String,
+    pub stack: Option<String>,
+}
+
+fn sanitize_diagnostic(value: &str, max_chars: usize) -> String {
+    let bounded = value.chars().take(max_chars).collect::<String>();
+    redact_text(&bounded).chars().take(max_chars).collect()
+}
+
+fn non_empty_diagnostic(value: String, fallback: &str) -> String {
+    if value.is_empty() {
+        fallback.to_owned()
+    } else {
+        value
+    }
+}
+
+#[tauri::command]
+pub fn system_log(diagnostic: RendererDiagnostic) -> CommandResult<()> {
+    let correlation_id = correlation_id();
+    let source = non_empty_diagnostic(
+        sanitize_diagnostic(&diagnostic.source, MAX_DIAGNOSTIC_SOURCE_CHARS),
+        "unknown",
+    );
+    let message = non_empty_diagnostic(
+        sanitize_diagnostic(&diagnostic.message, MAX_DIAGNOSTIC_TEXT_CHARS),
+        "Unknown renderer error.",
+    );
+    let stack = diagnostic
+        .stack
+        .as_deref()
+        .map(|value| sanitize_diagnostic(value, MAX_DIAGNOSTIC_TEXT_CHARS));
+
+    tracing::error!(
+        target: "second_brain_os::renderer",
+        correlation_id = %correlation_id,
+        source = %source,
+        error_message = %message,
+        stack = ?stack,
+        "renderer diagnostic"
+    );
+
+    CommandResult::from_result(Ok(()), correlation_id)
 }
 
 #[tauri::command]
@@ -1966,7 +2017,8 @@ mod tests {
 
     use super::{
         MAX_ATTACHMENT_BYTES, SHELL_LAYOUT_KEY, ShellLayout, attachment_media_type,
-        decode_attachment, load_layout, save_layout, system_sample_error, workspace_path,
+        decode_attachment, load_layout, sanitize_diagnostic, save_layout, system_sample_error,
+        workspace_path,
     };
     use crate::db::Database;
     use rusqlite::params;
@@ -2032,6 +2084,15 @@ mod tests {
         assert_eq!(value["version"], 1);
         assert_eq!(value["ok"], false);
         assert_eq!(value["error"]["code"], "system.sample_error");
+    }
+
+    #[test]
+    fn diagnostic_text_is_redacted_and_bounded() {
+        assert_eq!(
+            sanitize_diagnostic("Bearer secret", 64),
+            "[REDACTED] [REDACTED]"
+        );
+        assert_eq!(sanitize_diagnostic("123456789", 4), "1234");
     }
 
     #[test]

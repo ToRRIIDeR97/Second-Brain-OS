@@ -1,10 +1,22 @@
 use crate::commands;
+use crate::platform::{application_data_dir, logging::init_logging};
 
 pub fn run() {
-    tauri::Builder::default()
+    let _logging = match application_data_dir().and_then(|path| init_logging(&path)) {
+        Ok(guard) => Some(guard),
+        Err(error) => {
+            eprintln!("Second Brain OS logging unavailable: {error}");
+            None
+        }
+    };
+
+    tracing::info!(lifecycle = "starting", "Second Brain OS starting");
+
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::AppRuntime::load())
         .invoke_handler(tauri::generate_handler![
+            commands::system_log,
             commands::system_ping,
             commands::system_sample_error,
             commands::shell_load_layout,
@@ -39,6 +51,13 @@ pub fn run() {
             commands::terminal_resize,
             commands::terminal_terminate
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Second Brain OS");
+        .run(tauri::generate_context!());
+
+    match result {
+        Ok(()) => tracing::info!(lifecycle = "stopped", "Second Brain OS stopped"),
+        Err(error) => {
+            tracing::error!(error = %error, lifecycle = "failed", "Second Brain OS failed");
+            panic!("failed to run Second Brain OS: {error}");
+        }
+    }
 }

@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportRendererDiagnostic } from "../../lib/diagnostics";
 
 type Props = { children: ReactNode; label?: string };
 type State = { error: Error | null; correlationId: string };
@@ -11,9 +12,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Keep diagnostics safe: names and stack traces stay in the local console,
-    // never in IPC or telemetry payloads.
-    console.error("Unhandled feature error", error, info.componentStack);
+    reportRendererDiagnostic(
+      "react.error_boundary",
+      error,
+      info.componentStack ?? undefined,
+    );
   }
 
   render() {
