@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { Check, ChevronDown, FolderPlus } from "lucide-react";
 import { ModalDialog } from "../common/ModalDialog";
 import type { WorkspaceTrustLevel } from "../../lib/ipc";
+import { pickWorkspaceFolder } from "../../lib/workspaceFolderPicker";
 import { useWorkspace } from "../../state/workspace";
 
 export type WorkspaceChangeGuard = (workspaceId?: string) => string | undefined;
@@ -105,12 +105,8 @@ export function WorkspaceSwitcher({
     setFolderPickerBusy(true);
     setFormError("");
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select workspace folder",
-      });
-      if (typeof selected !== "string" || !selected) return;
+      const selected = await pickWorkspaceFolder();
+      if (!selected) return;
       setRootPath(selected);
       setName((current) => current.trim() || nameFromRoot(selected));
     } catch (cause) {

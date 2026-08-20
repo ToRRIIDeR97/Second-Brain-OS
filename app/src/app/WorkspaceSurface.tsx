@@ -7,8 +7,16 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { CalendarPlus, Command, FilePlus2 } from "lucide-react";
-import { open } from "@tauri-apps/plugin-dialog";
+import {
+  ArrowRight,
+  CalendarPlus,
+  Command,
+  FilePlus2,
+  FolderOpen,
+  LockKeyhole,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { ConfirmDialog } from "../components/common/ModalDialog";
 import type { AgentWorkspaceState } from "../features/agents";
 import {
@@ -53,6 +61,7 @@ import type { Activity } from "../state/shell";
 import { usePreferences } from "../state/preferences";
 import { useTheme } from "../state/theme";
 import { useWorkspace } from "../state/workspace";
+import { pickWorkspaceFolder } from "../lib/workspaceFolderPicker";
 
 const AgentWorkspace = lazy(async () => ({
   default: (await import("../features/agents")).AgentWorkspace,
@@ -172,12 +181,8 @@ function EmptyWorkspace({
     setFolderPickerBusy(true);
     setFolderPickerError("");
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select workspace folder",
-      });
-      if (typeof selected !== "string" || !selected) return;
+      const selected = await pickWorkspaceFolder();
+      if (!selected) return;
       setRootPath(selected);
       setName((current) => current.trim() || nameFromRoot(selected));
     } catch (cause) {
@@ -193,83 +198,126 @@ function EmptyWorkspace({
 
   return (
     <section className="workspace-onboarding" aria-labelledby="workspace-title">
-      <p className="eyebrow">Get started</p>
-      <h1 id="workspace-title">Open a local workspace</h1>
-      <p>
-        Register a folder to browse, edit, search, inspect, and review its
-        contents. The app keeps all subsequent file operations scoped to this
-        workspace identity.
-      </p>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onRegister({
-            name: name.trim() || nameFromRoot(rootPath),
-            rootPath: rootPath.trim(),
-            kind: "brain",
-            trustLevel,
-          });
-        }}
-      >
-        <label>
-          Workspace folder
-          <button
-            className="button"
-            type="button"
-            onClick={() => void chooseFolder()}
-            disabled={busy || folderPickerBusy}
-          >
-            {folderPickerBusy
-              ? "Choosing folder…"
-              : rootPath
-                ? "Choose a different folder"
-                : "Choose folder…"}
-          </button>
-          <output
-            className="workspace-folder-selection"
-            aria-live="polite"
-            aria-label="Selected workspace folder"
-          >
-            {rootPath || "No folder selected yet."}
-          </output>
-        </label>
-        <label>
-          Workspace name
-          <input
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value);
-            }}
-            placeholder="My Brain"
-          />
-        </label>
-        <label>
-          Trust level
-          <select
-            value={trustLevel}
-            onChange={(event) => {
-              setTrustLevel(event.target.value as WorkspaceTrustLevel);
-            }}
-          >
-            <option value="untrusted">Untrusted (read-only)</option>
-            <option value="trusted_read_only">Trusted read-only</option>
-            <option value="trusted">
-              Trusted (editing and terminal enabled)
-            </option>
-            <option value="restricted">Restricted (read-only)</option>
-          </select>
-        </label>
-        <button
-          className="button button-primary"
-          type="submit"
-          disabled={busy || !rootPath}
+      <div className="workspace-onboarding-panel">
+        <div className="workspace-onboarding-intro">
+          <span className="workspace-onboarding-mark" aria-hidden="true">
+            <FolderOpen size={22} strokeWidth={1.8} />
+          </span>
+          <p className="eyebrow">Your local space</p>
+          <h1 id="workspace-title">Open a local workspace</h1>
+          <p className="workspace-onboarding-summary">
+            Choose a folder to keep notes, plans, and project files in one
+            place.
+          </p>
+          <ul className="workspace-onboarding-benefits">
+            <li>
+              <ShieldCheck size={16} strokeWidth={1.9} aria-hidden="true" />
+              <span>Your files stay on this device.</span>
+            </li>
+            <li>
+              <Search size={16} strokeWidth={1.9} aria-hidden="true" />
+              <span>Browse, edit, and search from one workspace.</span>
+            </li>
+            <li>
+              <LockKeyhole size={16} strokeWidth={1.9} aria-hidden="true" />
+              <span>Set the access level before you open it.</span>
+            </li>
+          </ul>
+        </div>
+        <form
+          className="workspace-onboarding-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onRegister({
+              name: name.trim() || nameFromRoot(rootPath),
+              rootPath: rootPath.trim(),
+              kind: "brain",
+              trustLevel,
+            });
+          }}
         >
-          {busy ? "Opening…" : "Open workspace"}
-        </button>
-      </form>
-      {error || folderPickerError ? (
-        <p role="alert">{error || folderPickerError}</p>
-      ) : null}
+          <header className="workspace-onboarding-form-heading">
+            <p className="eyebrow">Workspace details</p>
+            <h2>Start with a folder</h2>
+            <p>Pick the folder you want Second Brain OS to work in.</p>
+          </header>
+          <div className="workspace-folder-field">
+            <span className="workspace-field-label" id="workspace-folder-label">
+              Workspace folder
+            </span>
+            <button
+              className="button workspace-folder-picker"
+              type="button"
+              aria-labelledby="workspace-folder-label"
+              aria-describedby="workspace-folder-selection"
+              onClick={() => void chooseFolder()}
+              disabled={busy || folderPickerBusy}
+            >
+              <FolderOpen size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>
+                {folderPickerBusy
+                  ? "Choosing folder…"
+                  : rootPath
+                    ? "Choose a different folder"
+                    : "Choose folder…"}
+              </span>
+            </button>
+            <output
+              className="workspace-folder-selection"
+              id="workspace-folder-selection"
+              aria-live="polite"
+              aria-label="Selected workspace folder"
+            >
+              {rootPath || "No folder selected yet."}
+            </output>
+          </div>
+          <div className="workspace-onboarding-fields">
+            <label>
+              Workspace name
+              <input
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                }}
+                placeholder="My Brain"
+              />
+            </label>
+            <label>
+              Trust level
+              <select
+                value={trustLevel}
+                onChange={(event) => {
+                  setTrustLevel(event.target.value as WorkspaceTrustLevel);
+                }}
+              >
+                <option value="untrusted">Untrusted (read-only)</option>
+                <option value="trusted_read_only">Trusted read-only</option>
+                <option value="trusted">
+                  Trusted (editing and terminal enabled)
+                </option>
+                <option value="restricted">Restricted (read-only)</option>
+              </select>
+            </label>
+          </div>
+          <p className="workspace-trust-note">
+            <ShieldCheck size={15} strokeWidth={1.9} aria-hidden="true" />
+            Trusted workspaces can edit files and use the terminal.
+          </p>
+          <button
+            className="button button-primary workspace-open-button"
+            type="submit"
+            disabled={busy || !rootPath}
+          >
+            <span>{busy ? "Opening…" : "Open workspace"}</span>
+            <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
+          </button>
+          {error || folderPickerError ? (
+            <p className="workspace-onboarding-error" role="alert">
+              {error || folderPickerError}
+            </p>
+          ) : null}
+        </form>
+      </div>
     </section>
   );
 }
