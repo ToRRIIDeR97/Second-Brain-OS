@@ -9,6 +9,8 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
+
 function success<T>(data: T) {
   return {
     contract: "ipc_result" as const,

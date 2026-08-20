@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 import { WorkspaceSurface } from "./WorkspaceSurface";
 import { createMockIpc } from "../lib/ipc";
 import { PreferencesProvider } from "../state/preferences";
@@ -10,6 +10,14 @@ import { useWorkspace, WorkspaceProvider } from "../state/workspace";
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
 }));
+
+const { isTauri } = vi.hoisted(() => ({ isTauri: vi.fn() }));
+
+vi.mock("@tauri-apps/api/core", () => ({ isTauri }));
+
+beforeEach(() => {
+  isTauri.mockReturnValue(true);
+});
 
 vi.mock("../features/editor/source", async (importOriginal) => {
   const actual =
@@ -126,6 +134,31 @@ test("opens a native folder picker for workspace registration", async () => {
   expect(
     await screen.findByLabelText("Selected workspace folder"),
   ).toHaveTextContent("/Users/test/Second Brain");
+});
+
+test("explains that folder selection needs the desktop app in a browser", async () => {
+  const mock = createMockIpc();
+  isTauri.mockReturnValue(false);
+
+  render(
+    <ThemeProvider>
+      <PreferencesProvider>
+        <WorkspaceProvider ipc={mock.client}>
+          <WorkspaceSurface
+            activity="files"
+            ipc={mock.client}
+            onOpenPalette={() => undefined}
+          />
+        </WorkspaceProvider>
+      </PreferencesProvider>
+    </ThemeProvider>,
+  );
+
+  fireEvent.click(await screen.findByText("Choose folder…"));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "requires the desktop app",
+  );
 });
 
 test("keeps an unsaved editor buffer when switching workspaces", async () => {
