@@ -1,40 +1,51 @@
 # Second Brain OS
 
 A local-first desktop IDE for Markdown knowledge, project work, and inspectable
-agent workflows. Canonical content stays in ordinary workspace files.
+agent workflows. The product now forks OpenCode's desktop application so its
+agent, session, terminal, file, and project workflows remain the base product.
+Second Brain features are added inside that application.
 
 ## Prerequisites
 
-- Node.js 22.22.3
-- pnpm 11.9.0
-- Rust 1.88.0 with `rustfmt` and `clippy`
-- [Tauri 2 platform prerequisites](https://v2.tauri.app/start/prerequisites/)
+- Bun 1.3.14
+- The platform prerequisites required by Electron
 
 On macOS, install Xcode Command Line Tools with `xcode-select --install`.
 
 ## Setup
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run check
+cd opencode
+bun install --frozen-lockfile
+cd ..
+bun run dev
 ```
 
-Run the web frontend with `pnpm dev`, or the desktop app with
-`pnpm desktop:dev`.
+On Windows, native package installation can exceed the legacy 260-character
+limit when this repository lives under a long OneDrive path. Prefer a shorter
+checkout path. For this checkout, the verified fallback is:
+
+```powershell
+cd opencode
+bun install --ignore-scripts
+node packages/desktop/node_modules/electron/install.js
+cd ..
+bun run dev
+```
+
+The previous React/Tauri application remains in `app/` as donor code. It is not
+the default desktop host.
 
 ## Common commands
 
-| Command | Purpose |
-|---|---|
-| `pnpm dev` | Start the frontend |
-| `pnpm desktop:dev` | Start the Tauri desktop app |
-| `pnpm build` | Type-check and build the frontend |
-| `cargo build --workspace` | Build the backend and MCP sidecar |
-| `pnpm test` | Run frontend and Rust tests |
-| `pnpm lint` | Run TypeScript and Rust linters |
-| `pnpm format` | Check frontend and Rust formatting |
-| `pnpm audit` | Run dependency vulnerability checks |
-| `pnpm licenses` | Check dependency licenses |
+| Command                      | Purpose                                      |
+| ---------------------------- | -------------------------------------------- |
+| `bun run dev`                | Start the OpenCode Electron desktop app      |
+| `bun run build`              | Build the Electron renderer and main process |
+| `bun run typecheck`          | Type-check the desktop package               |
+| `bun run lint`               | Run OpenCode's linter                        |
+| `bun run test`               | Run desktop package tests                    |
+| `bun run legacy:desktop:dev` | Start the previous Tauri donor app           |
 
-See [docs/development/setup.md](docs/development/setup.md) for platform details.
-
+The fork is pinned and documented in
+[docs/opencode-upstream.md](docs/opencode-upstream.md).

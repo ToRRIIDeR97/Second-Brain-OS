@@ -9,3 +9,4 @@ app/src-tauri/gen/
 .idea/
 .vscode/
 /temp/
+/temp repos/
