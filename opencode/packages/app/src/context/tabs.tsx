@@ -12,6 +12,7 @@ import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
+import type { Harness } from "@opencode-ai/schema/harness"
 import { migrateTabs } from "./tab-migration"
 
 export type SessionTab = {
@@ -206,10 +207,17 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         if (!tab || tab.type !== "draft") throw new Error(`Draft not found: ${draftID}`)
         return tab
       },
-      async newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string, model?: PromptModel) {
+      async newDraft(
+        draft: Omit<DraftTab, "type" | "draftID">,
+        prompt?: string,
+        model?: PromptModel,
+        harnessInstanceID?: Harness.InstanceID,
+      ) {
         const draftID = uuid()
         const tab = { type: "draft" as const, draftID, ...draft }
-        memory.ensure(tabKey(tab), "prompt", () => createDraftPromptSession(draftID, { prompt, model }))
+        memory.ensure(tabKey(tab), "prompt", () =>
+          createDraftPromptSession(draftID, { prompt, model, harnessInstanceID }),
+        )
         await startTransition(() => {
           setStore(
             produce((tabs) => {

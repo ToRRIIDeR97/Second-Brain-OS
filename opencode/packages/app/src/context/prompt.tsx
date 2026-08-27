@@ -154,6 +154,15 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         current: withSuspense(() => session().model.current()),
         set: (model: PromptModel | undefined) => session().model.set(model),
       },
+      harness: {
+        current: withSuspense(() => session().harness.current()),
+        set: (instanceID: Parameters<PromptSession["harness"]["set"]>[0]) => session().harness.set(instanceID),
+        model: {
+          current: withSuspense(() => session().harness.model.current()),
+          set: (model: Parameters<PromptSession["harness"]["model"]["set"]>[0]) =>
+            session().harness.model.set(model),
+        },
+      },
       context: {
         items: withSuspense(() => session().context.items()),
         add: (item: ContextItem) => session().context.add(item),

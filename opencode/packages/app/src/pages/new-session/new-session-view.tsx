@@ -3,7 +3,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
-import { Show, createMemo, createSignal, type Accessor } from "solid-js"
+import { For, Show, createEffect, createMemo, createResource, createSignal, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
@@ -17,20 +17,80 @@ import {
 import { StatusPopoverV2 } from "@/components/status-popover"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { usePlatform } from "@/context/platform"
+import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
 import type { NewSessionDraftController } from "./new-session-draft-controller"
 import type { NewSessionWorkspaceController } from "./new-session-workspace-controller"
+import { Harness } from "@opencode-ai/schema/harness"
+import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
 export function NewSessionView(props: {
   input: NewSessionDraftController["input"]
+  harness: NewSessionDraftController["harness"]
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
 }) {
+  const language = useLanguage()
+  const sdk = useSDK()
+  const platform = usePlatform()
+  const serverSDK = useServerSDK()
+  const [instances] = createResource(
+    () => sdk().directory,
+    (directory) =>
+      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory).catch(
+        fallbackHarnesses,
+      ),
+  )
+  const selectedInstance = createMemo(() =>
+    instances()?.find((instance) => instance.id === props.harness.current()),
+  )
+  const selectedModel = createMemo(() => {
+    const instance = selectedInstance()
+    const selection = props.harness.model.current()
+    return instance?.models.find((model) => model.id === selection?.id)
+  })
+
+  createEffect(() => {
+    const available = instances()
+    if (!available) return
+    const current = available.find((instance) => instance.id === props.harness.current())
+    const instance = current?.status === "available" ? current : available.find((item) => item.status === "available")
+    if (!instance) return
+    if (instance.id !== props.harness.current()) props.harness.set(instance.id)
+    if (instance.driver === Harness.OpenCodeDriver) {
+      if (props.harness.model.current()) props.harness.model.set(undefined)
+      return
+    }
+    const selection = props.harness.model.current()
+    if (instance.models.some((model) => model.id === selection?.id)) return
+    const model = instance.models.find((item) => item.isDefault) ?? instance.models[0]
+    props.harness.model.set(
+      model
+        ? {
+            id: model.id,
+            reasoningEffort: model.defaultReasoningEffort,
+            serviceTier: model.defaultServiceTier,
+          }
+        : undefined,
+    )
+  })
+
+  const selectModel = (id: string) => {
+    const model = selectedInstance()?.models.find((item) => item.id === id)
+    if (!model) return
+    props.harness.model.set({
+      id: model.id,
+      reasoningEffort: model.defaultReasoningEffort,
+      serviceTier: model.defaultServiceTier,
+    })
+  }
+
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
@@ -42,6 +102,103 @@ export function NewSessionView(props: {
             <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />
+              <div class="mx-auto flex min-h-7 flex-wrap items-center justify-center gap-2 text-[12px] text-v2-text-text-faint">
+                <label class="flex items-center gap-2">
+                  <span>{language.t("harness.label")}</span>
+                  <select
+                    aria-label={language.t("harness.label")}
+                    class="h-7 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus disabled:cursor-wait disabled:opacity-60"
+                    value={props.harness.current()}
+                    disabled={instances.loading || !instances()}
+                    onChange={(event) => props.harness.set(Harness.InstanceID.make(event.currentTarget.value))}
+                  >
+                    <Show when={instances()} fallback={<option>{language.t("harness.checking")}</option>}>
+                      <For each={instances()}>
+                        {(instance) => (
+                          <option
+                            value={instance.id}
+                            disabled={instance.status === "unavailable"}
+                            title={instance.error}
+                          >
+                            {instance.name}
+                            {instance.status === "unavailable" ? ` — ${language.t("harness.unavailable")}` : ""}
+                          </option>
+                        )}
+                      </For>
+                    </Show>
+                  </select>
+                </label>
+                <Show when={selectedInstance()?.driver !== Harness.OpenCodeDriver && selectedInstance()} keyed>
+                  {(instance) => (
+                    <Show
+                      when={instance.models.length > 0}
+                      fallback={<span title={instance.error}>{language.t("harness.models.none")}</span>}
+                    >
+                      <label class="flex items-center gap-2">
+                        <span>{language.t("harness.model")}</span>
+                        <select
+                          aria-label={language.t("harness.model")}
+                          class="h-7 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
+                          value={props.harness.model.current()?.id}
+                          onChange={(event) => selectModel(event.currentTarget.value)}
+                        >
+                          <For each={instance.models}>{(model) => <option value={model.id}>{model.name}</option>}</For>
+                        </select>
+                      </label>
+                    </Show>
+                  )}
+                </Show>
+                <Show when={selectedModel()} keyed>
+                  {(model) => (
+                    <>
+                      <Show when={model.reasoningEfforts.length > 0}>
+                        <label class="flex items-center gap-2">
+                          <span>{language.t("harness.effort")}</span>
+                          <select
+                            aria-label={language.t("harness.effort")}
+                            class="h-7 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
+                            value={props.harness.model.current()?.reasoningEffort ?? ""}
+                            onChange={(event) => {
+                              const current = props.harness.model.current()
+                              if (!current) return
+                              props.harness.model.set({
+                                ...current,
+                                reasoningEffort: event.currentTarget.value || undefined,
+                              })
+                            }}
+                          >
+                            <option value="">{language.t("harness.default")}</option>
+                            <For each={model.reasoningEfforts}>{(effort) => <option value={effort}>{effort}</option>}</For>
+                          </select>
+                        </label>
+                      </Show>
+                      <Show when={model.serviceTiers.length > 0}>
+                        <label class="flex items-center gap-2">
+                          <span>{language.t("harness.serviceTier")}</span>
+                          <select
+                            aria-label={language.t("harness.serviceTier")}
+                            class="h-7 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
+                            value={props.harness.model.current()?.serviceTier ?? ""}
+                            onChange={(event) => {
+                              const current = props.harness.model.current()
+                              if (!current) return
+                              props.harness.model.set({ ...current, serviceTier: event.currentTarget.value || undefined })
+                            }}
+                          >
+                            <option value="">{language.t("harness.default")}</option>
+                            <For each={model.serviceTiers}>
+                              {(tier) => <option value={tier.id}>{tier.name}</option>}
+                            </For>
+                          </select>
+                        </label>
+                      </Show>
+                    </>
+                  )}
+                </Show>
+                <Show when={instances.error}>
+                  <span title={String(instances.error)}>{language.t("harness.probeFailed")}</span>
+                </Show>
+              </div>
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>

@@ -10,6 +10,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { Harness } from "@opencode-ai/core/harness"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { it } from "./lib/effect"
 
@@ -117,6 +118,7 @@ describe("SessionRunnerModel", () => {
       const session = SessionV2.Info.make({
         id: SessionV2.ID.make("ses_model_variant"),
         projectID: ProjectV2.ID.global,
+        harnessInstanceID: Harness.OpenCode,
         title: "test",
         model: {
           id: catalog.id,
@@ -157,6 +159,7 @@ describe("SessionRunnerModel", () => {
       const session = SessionV2.Info.make({
         id: SessionV2.ID.make("ses_compatible_variant"),
         projectID: ProjectV2.ID.global,
+        harnessInstanceID: Harness.OpenCode,
         title: "test",
         model: { id: catalog.id, providerID: catalog.providerID, variant: ModelV2.VariantID.make("high") },
         cost: 0,
@@ -181,6 +184,7 @@ describe("SessionRunnerModel", () => {
       const session = SessionV2.Info.make({
         id: SessionV2.ID.make("ses_model_variant_unavailable"),
         projectID: ProjectV2.ID.global,
+        harnessInstanceID: Harness.OpenCode,
         title: "test",
         model: {
           id: catalog.id,
@@ -217,6 +221,7 @@ describe("SessionRunnerModel", () => {
       const session = SessionV2.Info.make({
         id: SessionV2.ID.make("ses_anthropic_variant"),
         projectID: ProjectV2.ID.global,
+        harnessInstanceID: Harness.OpenCode,
         title: "test",
         model: { id: catalog.id, providerID: catalog.providerID, variant: ModelV2.VariantID.make("high") },
         cost: 0,

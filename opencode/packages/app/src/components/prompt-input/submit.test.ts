@@ -2,12 +2,15 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import type { Prompt, PromptStore } from "@/context/prompt"
 import type { ModelSelection } from "@/context/local"
+import { Harness } from "@opencode-ai/schema/harness"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
 const sessionCreateInputs: Array<{
+  harnessInstanceID?: Harness.InstanceID
+  harnessModel?: Harness.ModelSelection
   agent?: string
   model?: { id: string; providerID: string; variant?: string }
   location?: { directory: string }
@@ -56,6 +59,14 @@ const prompt = {
   model: {
     current: () => undefined,
     set: () => undefined,
+  },
+  harness: {
+    current: () => Harness.OpenCode,
+    set: () => undefined,
+    model: {
+      current: () => undefined,
+      set: () => undefined,
+    },
   },
   reset: () => undefined,
   set: () => undefined,
@@ -135,9 +146,11 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: {},
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
+    base64Decode: (value: string) => value,
     base64Encode: (value: string) => value,
   }))
 
@@ -322,6 +335,8 @@ describe("prompt submit worktree selection", () => {
       setMode: () => undefined,
       setPopover: () => undefined,
       newSessionWorktree: () => selected,
+      newSessionHarness: () => Harness.Codex,
+      newSessionHarnessModel: () => ({ id: "gpt-5.6", reasoningEffort: "high" }),
       onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
     })
@@ -337,11 +352,15 @@ describe("prompt submit worktree selection", () => {
     expect(sessionCreateInputs).toEqual([
       {
         agent: "agent",
+        harnessInstanceID: Harness.Codex,
+        harnessModel: { id: "gpt-5.6", reasoningEffort: "high" },
         model: { id: "model", providerID: "provider", variant: undefined },
         location: { directory: "/repo/worktree-a" },
       },
       {
         agent: "agent",
+        harnessInstanceID: Harness.Codex,
+        harnessModel: { id: "gpt-5.6", reasoningEffort: "high" },
         model: { id: "model", providerID: "provider", variant: undefined },
         location: { directory: "/repo/worktree-b" },
       },

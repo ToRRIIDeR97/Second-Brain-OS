@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -24,6 +24,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { Harness } from "@opencode-ai/schema/harness"
 import { testEffect } from "./lib/effect"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -56,6 +57,7 @@ describe("SessionV2.create", () => {
       const second = yield* session.create({ location })
 
       expect(second.id).not.toBe(first.id)
+      expect(first.harnessInstanceID).toBe(Harness.OpenCode)
       expect(yield* session.list()).toHaveLength(2)
     }),
   )
@@ -82,14 +84,49 @@ describe("SessionV2.create", () => {
         providerID: ProviderV2.ID.anthropic,
         variant: ModelV2.VariantID.make("fast"),
       })
+      const harnessModel = Harness.ModelSelection.make({ id: "gpt-5.6", reasoningEffort: "high" })
 
       expect(
         yield* session.create({
           location: Location.Ref.make({ directory: location.directory, workspaceID }),
+          harnessInstanceID: Harness.Codex,
+          harnessModel,
           agent: AgentV2.ID.make("build"),
           model,
         }),
-      ).toMatchObject({ location: { directory: location.directory, workspaceID }, agent: "build", model })
+      ).toMatchObject({
+        location: { directory: location.directory, workspaceID },
+        harnessInstanceID: Harness.Codex,
+        harnessModel,
+        agent: "build",
+        model,
+      })
+    }),
+  )
+
+  it.effect("stores the opaque harness continuation for process restarts", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const created = yield* session.create({ location, harnessInstanceID: Harness.Codex })
+
+      yield* events.publish(SessionEvent.HarnessContinuationSet, {
+        sessionID: created.id,
+        timestamp: yield* DateTime.now,
+        instanceID: Harness.Codex,
+        continuation: "thread_123",
+      })
+
+      const row = yield* db
+        .select({ metadata: SessionTable.metadata })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, created.id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(row?.metadata).toMatchObject({
+        harnessContinuation: { instanceID: Harness.Codex, value: "thread_123" },
+      })
     }),
   )
 

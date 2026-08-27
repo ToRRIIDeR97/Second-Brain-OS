@@ -35,6 +35,12 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
     get newSessionWorktree() {
       return workspace.worktree()
     },
+    get newSessionHarness() {
+      return prompt.harness.current()
+    },
+    get newSessionHarnessModel() {
+      return prompt.harness.model.current()
+    },
     onNewSessionWorktreeReset: workspace.resetWorktree,
     onSubmit: comments.clear,
   })
@@ -55,6 +61,7 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
       ready: prompt.ready,
       readyPromise: () => prompt.ready.promise,
     },
+    harness: prompt.harness,
     project: {
       controls: projectControls,
     },

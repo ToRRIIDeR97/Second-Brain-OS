@@ -345,6 +345,32 @@ const layer = Layer.effectDiscard(
         yield* run(db, event)
       }),
     )
+    yield* events.project(SessionEvent.HarnessContinuationSet, (event) =>
+      Effect.gen(function* () {
+        const row = yield* db
+          .select({ metadata: SessionTable.metadata })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* Effect.die(`Session not found while projecting continuation: ${event.data.sessionID}`)
+        yield* db
+          .update(SessionTable)
+          .set({
+            metadata: {
+              ...row.metadata,
+              harnessContinuation: {
+                instanceID: event.data.instanceID,
+                value: event.data.continuation,
+              },
+            },
+            time_updated: DateTime.toEpochMillis(event.data.timestamp),
+          })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }).pipe(Effect.orDie),
+    )
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")

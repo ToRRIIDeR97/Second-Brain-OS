@@ -37,6 +37,7 @@ import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
+import { Harness } from "@opencode-ai/schema/harness"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -78,6 +79,8 @@ export type ListInput = typeof ListInput.Type
 
 type CreateInput = {
   id?: SessionSchema.ID
+  harnessInstanceID?: Harness.InstanceID
+  harnessModel?: Harness.ModelSelection
   agent?: AgentV2.ID
   model?: ModelV2.Ref
   location: Location.Ref
@@ -226,6 +229,10 @@ const layer = Layer.effect(
           path: path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
           workspaceID: input.location.workspaceID ? WorkspaceV2.ID.make(input.location.workspaceID) : undefined,
           title: `New session - ${new Date(now).toISOString()}`,
+          metadata: {
+            harnessInstanceID: input.harnessInstanceID ?? Harness.OpenCode,
+            ...(input.harnessModel ? { harnessModel: input.harnessModel } : {}),
+          },
           agent: input.agent,
           model: input.model
             ? {

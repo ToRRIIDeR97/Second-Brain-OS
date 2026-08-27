@@ -15,7 +15,7 @@ export function SecondBrainSidebar() {
   const items = () => [
     {
       id: "overview",
-      icon: "grid-plus",
+      icon: "home",
       label: language.t("secondBrain.sidebar.overview"),
       active: location.pathname === "/brain",
       disabled: false,
@@ -66,21 +66,6 @@ export function SecondBrainSidebar() {
       }}
       aria-label={language.t("secondBrain.sidebar.title")}
     >
-      <div class="grid h-11 shrink-0 grid-cols-[32px_1fr] items-center px-2">
-        <div class="flex size-8 items-center justify-center text-v2-icon-icon-muted">
-          <Icon name="grid-plus" size="small" />
-        </div>
-        <span
-          classList={{
-            "min-w-0 truncate pl-1 text-[13px] text-v2-text-text-muted [font-weight:530] transition-[opacity,transform] motion-reduce:transition-none": true,
-            "translate-x-0 opacity-100 duration-180 ease-out": layout.sidebar.opened(),
-            "pointer-events-none -translate-x-1 opacity-0 duration-120 ease-in": !layout.sidebar.opened(),
-          }}
-        >
-          {language.t("secondBrain.sidebar.title")}
-        </span>
-      </div>
-
       <nav class="flex min-h-0 flex-1 flex-col gap-1 px-2 py-1">
         <For each={items()}>
           {(item) => (

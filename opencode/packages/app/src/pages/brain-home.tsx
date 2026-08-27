@@ -20,6 +20,8 @@ import {
 } from "@/features/second-brain/client"
 import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeSessionsController, type HomeSessionRecord } from "@/pages/home/home-sessions-controller"
+import { Harness } from "@opencode-ai/schema/harness"
+import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
 
 type TodayItem = { kind: "event"; value: CalendarEvent } | { kind: "task"; value: PlannerTask; overdue: boolean }
 
@@ -33,7 +35,12 @@ export default function BrainHomePage() {
   const tabs = useTabs()
   const openCodeHome = createHomeController()
   const openCodeSessions = createHomeSessionsController(openCodeHome)
-  const [state, setState] = createStore({ directory: "", prompt: "", starting: false })
+  const [state, setState] = createStore({
+    directory: "",
+    prompt: "",
+    harnessInstanceID: Harness.OpenCode,
+    starting: false,
+  })
   const locations = layout.projects.list
   const client = (directory: string) => ({
     server: serverSDK().server,
@@ -59,6 +66,21 @@ export default function BrainHomePage() {
     () => state.directory || undefined,
     (directory) => readCalendar(client(directory)),
   )
+  const [harnesses] = createResource(
+    () => state.directory || undefined,
+    (directory) =>
+      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory).catch(
+        fallbackHarnesses,
+      ),
+  )
+  createEffect(() => {
+    const available = harnesses()
+    if (!available) return
+    const current = available.find((instance) => instance.id === state.harnessInstanceID)
+    if (current?.status === "available") return
+    const fallback = available.find((instance) => instance.status === "available")
+    if (fallback) setState("harnessInstanceID", fallback.id)
+  })
   const today = localDateKey(new Date())
   const activeProjects = createMemo(() =>
     (projects() ?? [])
@@ -101,7 +123,12 @@ export default function BrainHomePage() {
     if (!prompt || !state.directory || state.starting) return
     setState("starting", true)
     try {
-      await tabs.newDraft({ server: server.key, directory: state.directory }, prompt)
+      await tabs.newDraft(
+        { server: server.key, directory: state.directory },
+        prompt,
+        undefined,
+        state.harnessInstanceID,
+      )
     } finally {
       setState("starting", false)
     }
@@ -172,9 +199,35 @@ export default function BrainHomePage() {
                 void startSession()
               }}
             >
-              <label class="mb-2 block text-[12px] text-v2-text-text-muted" for="brain-home-prompt">
-                {language.t("secondBrain.home.ask")}
-              </label>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <label class="block text-[12px] text-v2-text-text-muted" for="brain-home-prompt">
+                  {language.t("secondBrain.home.ask")}
+                </label>
+                <label class="flex items-center gap-2 text-[12px] text-v2-text-text-faint">
+                  <span>{language.t("harness.label")}</span>
+                  <select
+                    class="h-7 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-base px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus disabled:cursor-wait disabled:opacity-60"
+                    value={state.harnessInstanceID}
+                    disabled={harnesses.loading || !harnesses()}
+                    onChange={(event) => setState("harnessInstanceID", Harness.InstanceID.make(event.currentTarget.value))}
+                  >
+                    <Show when={harnesses()} fallback={<option>{language.t("harness.checking")}</option>}>
+                      <For each={harnesses()}>
+                        {(instance) => (
+                          <option
+                            value={instance.id}
+                            disabled={instance.status === "unavailable"}
+                            title={instance.error}
+                          >
+                            {instance.name}
+                            {instance.status === "unavailable" ? ` — ${language.t("harness.unavailable")}` : ""}
+                          </option>
+                        )}
+                      </For>
+                    </Show>
+                  </select>
+                </label>
+              </div>
               <div class="flex gap-2">
                 <TextInputV2
                   id="brain-home-prompt"

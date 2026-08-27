@@ -1,4 +1,4 @@
-import { DateTime } from "effect"
+import { DateTime, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { Location } from "../location"
 import { ModelV2 } from "../model"
@@ -10,11 +10,19 @@ import { SessionSchema } from "./schema"
 import { SessionTable } from "./sql"
 import { SessionMessage } from "./message"
 import { Snapshot } from "../snapshot"
+import { Harness } from "@opencode-ai/schema/harness"
+
+const isHarnessInstanceID = Schema.is(Harness.InstanceID)
+const isHarnessModel = Schema.is(Harness.ModelSelection)
 
 export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
   return SessionSchema.Info.make({
     id: SessionSchema.ID.make(row.id),
     projectID: ProjectV2.ID.make(row.project_id),
+    harnessInstanceID: isHarnessInstanceID(row.metadata?.harnessInstanceID)
+      ? row.metadata.harnessInstanceID
+      : Harness.OpenCode,
+    harnessModel: isHarnessModel(row.metadata?.harnessModel) ? row.metadata.harnessModel : undefined,
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
     agent: row.agent ? AgentV2.ID.make(row.agent) : undefined,

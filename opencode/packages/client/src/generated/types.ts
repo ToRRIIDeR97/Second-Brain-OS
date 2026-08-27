@@ -236,6 +236,8 @@ export type SessionsListOutput = {
     readonly id: string
     readonly parentID?: string
     readonly projectID: string
+    readonly harnessInstanceID: string
+    readonly harnessModel?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
     readonly agent?: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
@@ -269,24 +271,72 @@ export type SessionsListOutput = {
 export type SessionsCreateInput = {
   readonly id?: {
     readonly id?: string | null
+    readonly harnessInstanceID?: string | null
+    readonly harnessModel?: {
+      readonly id: string
+      readonly reasoningEffort?: string
+      readonly serviceTier?: string
+    } | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["id"]
+  readonly harnessInstanceID?: {
+    readonly id?: string | null
+    readonly harnessInstanceID?: string | null
+    readonly harnessModel?: {
+      readonly id: string
+      readonly reasoningEffort?: string
+      readonly serviceTier?: string
+    } | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+  }["harnessInstanceID"]
+  readonly harnessModel?: {
+    readonly id?: string | null
+    readonly harnessInstanceID?: string | null
+    readonly harnessModel?: {
+      readonly id: string
+      readonly reasoningEffort?: string
+      readonly serviceTier?: string
+    } | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+  }["harnessModel"]
   readonly agent?: {
     readonly id?: string | null
+    readonly harnessInstanceID?: string | null
+    readonly harnessModel?: {
+      readonly id: string
+      readonly reasoningEffort?: string
+      readonly serviceTier?: string
+    } | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["agent"]
   readonly model?: {
     readonly id?: string | null
+    readonly harnessInstanceID?: string | null
+    readonly harnessModel?: {
+      readonly id: string
+      readonly reasoningEffort?: string
+      readonly serviceTier?: string
+    } | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["model"]
   readonly location?: {
     readonly id?: string | null
+    readonly harnessInstanceID?: string | null
+    readonly harnessModel?: {
+      readonly id: string
+      readonly reasoningEffort?: string
+      readonly serviceTier?: string
+    } | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
@@ -298,6 +348,8 @@ export type SessionsCreateOutput = {
     readonly id: string
     readonly parentID?: string
     readonly projectID: string
+    readonly harnessInstanceID: string
+    readonly harnessModel?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
     readonly agent?: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
@@ -336,6 +388,8 @@ export type SessionsGetOutput = {
     readonly id: string
     readonly parentID?: string
     readonly projectID: string
+    readonly harnessInstanceID: string
+    readonly harnessModel?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
     readonly agent?: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
@@ -708,6 +762,19 @@ export type SessionsHistoryOutput = {
           readonly sessionID: string
           readonly messageID: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.harness.continuation.set"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: {
+          readonly timestamp: number
+          readonly sessionID: string
+          readonly instanceID: string
+          readonly continuation: string
         }
       }
     | {
@@ -1166,6 +1233,19 @@ export type SessionsEventsOutput =
         readonly sessionID: string
         readonly messageID: string
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.harness.continuation.set"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly instanceID: string
+        readonly continuation: string
       }
     }
   | {
@@ -2049,6 +2129,43 @@ export type ProvidersGetOutput = {
       readonly body: { readonly [x: string]: JsonValue }
     }
   }
+}
+
+export type HarnessesListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesListOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly driver: string
+    readonly name: string
+    readonly status: "available" | "unavailable"
+    readonly version?: string
+    readonly authenticated?: boolean
+    readonly error?: string
+    readonly models: ReadonlyArray<{
+      readonly id: string
+      readonly name: string
+      readonly description?: string
+      readonly reasoningEfforts: ReadonlyArray<string>
+      readonly serviceTiers: ReadonlyArray<{
+        readonly id: string
+        readonly name: string
+        readonly description?: string
+      }>
+      readonly defaultReasoningEffort?: string
+      readonly defaultServiceTier?: string
+      readonly isDefault: boolean
+    }>
+  }>
 }
 
 export type IntegrationsListInput = {

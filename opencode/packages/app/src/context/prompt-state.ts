@@ -7,6 +7,7 @@ import { Persist, persisted } from "@/utils/persist"
 import type { ServerScope } from "@/utils/server-scope"
 import type { BlobReference } from "@/utils/draft-store"
 import type { Platform } from "@/context/platform"
+import { Harness } from "@opencode-ai/schema/harness"
 
 interface PartBase {
   content: string
@@ -70,6 +71,8 @@ export type PromptStore = {
   prompt: Prompt
   cursor?: number
   model?: PromptModel
+  harnessInstanceID?: Harness.InstanceID
+  harnessModel?: Harness.ModelSelection
   context: {
     items: (ContextItem & { key: string })[]
   }
@@ -78,6 +81,8 @@ export type PromptStore = {
 type InitialPrompt = {
   prompt?: string
   model?: PromptModel
+  harnessInstanceID?: Harness.InstanceID
+  harnessModel?: Harness.ModelSelection
 }
 
 function isSelectionEqual(a?: FileSelection, b?: FileSelection) {
@@ -182,6 +187,8 @@ function promptStore(initial?: InitialPrompt): PromptStore {
       text === undefined ? clonePrompt(DEFAULT_PROMPT) : [{ type: "text", content: text, start: 0, end: text.length }],
     cursor: text === undefined ? undefined : text.length,
     model: initial?.model ? { ...initial.model } : undefined,
+    harnessInstanceID: initial?.harnessInstanceID,
+    harnessModel: initial?.harnessModel ? { ...initial.harnessModel } : undefined,
     context: {
       items: [],
     },
@@ -198,6 +205,14 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
     model: {
       current: () => store.model,
       set: (model: PromptModel | undefined) => setStore("model", model),
+    },
+    harness: {
+      current: () => store.harnessInstanceID ?? Harness.OpenCode,
+      set: (instanceID: Harness.InstanceID) => setStore("harnessInstanceID", instanceID),
+      model: {
+        current: () => store.harnessModel,
+        set: (model: Harness.ModelSelection | undefined) => setStore("harnessModel", model),
+      },
     },
     context: {
       items: createMemo(() => store.context.items),

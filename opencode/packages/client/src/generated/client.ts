@@ -45,6 +45,8 @@ import type {
   ProvidersListOutput,
   ProvidersGetInput,
   ProvidersGetOutput,
+  HarnessesListInput,
+  HarnessesListOutput,
   IntegrationsListInput,
   IntegrationsListOutput,
   IntegrationsGetInput,
@@ -311,6 +313,8 @@ export function make(options: ClientOptions) {
             path: `/api/session`,
             body: {
               id: input?.["id"],
+              harnessInstanceID: input?.["harnessInstanceID"],
+              harnessModel: input?.["harnessModel"],
               agent: input?.["agent"],
               model: input?.["model"],
               location: input?.["location"],
@@ -542,6 +546,20 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             successStatus: 200,
             declaredStatuses: [404, 503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    harnesses: {
+      list: (input?: HarnessesListInput, requestOptions?: RequestOptions) =>
+        request<HarnessesListOutput>(
+          {
+            method: "GET",
+            path: `/api/harness`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
             empty: false,
           },
           requestOptions,

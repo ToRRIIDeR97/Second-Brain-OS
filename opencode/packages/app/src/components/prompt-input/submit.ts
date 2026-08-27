@@ -23,6 +23,7 @@ import { createPromptSubmissionState } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
 import { blobDataUrl } from "@/utils/draft-store"
+import type { Harness } from "@opencode-ai/schema/harness"
 
 type PendingPrompt = {
   abort: AbortController
@@ -223,6 +224,8 @@ type PromptSubmitInput = {
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
   newSessionWorktree?: Accessor<string | undefined>
+  newSessionHarness?: Accessor<Harness.InstanceID | undefined>
+  newSessionHarnessModel?: Accessor<Harness.ModelSelection | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
   onQueue?: (draft: FollowupDraft) => void
@@ -247,12 +250,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk().scope, sessionID)
 
   const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "message" in err && typeof err.message === "string") return err.message
+    if (err && typeof err === "object" && "message" in err && typeof err.message === "string" && err.message)
+      return err.message
     if (err && typeof err === "object" && "data" in err) {
       const data = (err as { data?: { message?: string } }).data
       if (data?.message) return data.message
     }
-    if (err instanceof Error) return err.message
+    if (err instanceof Error && err.message) return err.message
     return language.t("common.requestFailed")
   }
 
@@ -402,6 +406,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (!session && isNewSession) {
       const created = await sdk()
         .api.session.create({
+          harnessInstanceID: input.newSessionHarness?.(),
+          harnessModel: input.newSessionHarnessModel?.(),
           agent: currentAgent.name,
           model: { id: currentModel.id, providerID: currentModel.provider.id, variant },
           location: { directory: sessionDirectory },

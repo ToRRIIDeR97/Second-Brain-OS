@@ -12,6 +12,7 @@ import { SessionID } from "./session-id"
 import { Location } from "./location"
 import { SessionMessage } from "./session-message"
 import { Revert } from "./revert"
+import { Harness } from "./harness"
 
 export { FileAttachment }
 
@@ -72,6 +73,17 @@ export const ModelSwitched = Event.define({
   },
 })
 export type ModelSwitched = typeof ModelSwitched.Type
+
+export const HarnessContinuationSet = Event.define({
+  type: "session.next.harness.continuation.set",
+  ...options,
+  schema: {
+    ...Base,
+    instanceID: Harness.InstanceID,
+    continuation: Schema.String,
+  },
+})
+export type HarnessContinuationSet = typeof HarnessContinuationSet.Type
 
 export const Moved = Event.define({
   type: "session.next.moved",
@@ -448,6 +460,7 @@ export namespace RevertEvent {
 export const DurableDefinitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
+  HarnessContinuationSet,
   Moved,
   Prompted,
   PromptAdmitted,
@@ -479,6 +492,7 @@ export const DurableDefinitions = Event.inventory(
 export const Definitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
+  HarnessContinuationSet,
   Moved,
   Prompted,
   PromptAdmitted,

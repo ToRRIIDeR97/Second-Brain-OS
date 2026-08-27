@@ -1,4 +1,5 @@
 export * as Config from "./config"
+export * as ConfigHarness from "./config/harness"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
@@ -16,6 +17,7 @@ import { ConfigCompaction } from "./config/compaction"
 import { ConfigCommand } from "./config/command"
 import { ConfigExperimental } from "./config/experimental"
 import { ConfigFormatter } from "./config/formatter"
+import { ConfigHarness } from "./config/harness"
 import { ConfigLSP } from "./config/lsp"
 import { ConfigMCP } from "./config/mcp"
 import { ConfigPlugin } from "./config/plugin"
@@ -104,6 +106,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
+  harnesses: Schema.Record(Schema.String, ConfigHarness.Instance).pipe(Schema.optional).annotate({
+    description: "Configured coding harness instances keyed by instance ID",
+  }),
 }) {}
 
 export class Document extends Schema.Class<Document>("Config.Document")({

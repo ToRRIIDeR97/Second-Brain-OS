@@ -10,6 +10,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
+import { Harness } from "@opencode-ai/core/harness"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -167,6 +168,7 @@ describe("LocationServiceMap", () => {
               SessionV2.Info.make({
                 id: SessionV2.ID.make("ses_unavailable_model"),
                 projectID: ProjectV2.ID.global,
+                harnessInstanceID: Harness.OpenCode,
                 title: "test",
                 model: {
                   id: ModelV2.ID.make("chat"),

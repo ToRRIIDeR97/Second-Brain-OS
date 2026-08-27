@@ -24,6 +24,7 @@ export const groupNames = {
   "server.message": "messages",
   "server.model": "models",
   "server.provider": "providers",
+  "server.harness": "harnesses",
   "server.integration": "integrations",
   "server.credential": "credentials",
   "server.permission": "permissions",

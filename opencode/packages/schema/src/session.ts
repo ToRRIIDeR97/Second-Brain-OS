@@ -6,6 +6,7 @@ import { Location } from "./location"
 import { Model } from "./model"
 import { Project } from "./project"
 import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema"
+import { Harness } from "./harness"
 import { SessionEvent } from "./session-event"
 import { SessionID } from "./session-id"
 import { Revert } from "./revert"
@@ -20,6 +21,8 @@ export const Info = Schema.Struct({
   id: ID,
   parentID: ID.pipe(optional),
   projectID: Project.ID,
+  harnessInstanceID: Harness.InstanceID,
+  harnessModel: Harness.ModelSelection.pipe(optional),
   agent: Agent.ID.pipe(optional),
   model: Model.Ref.pipe(optional),
   cost: Schema.Finite,

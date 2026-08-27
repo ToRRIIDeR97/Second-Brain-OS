@@ -2,6 +2,7 @@ import type { useLocal } from "@/context/local"
 import type { Prompt, usePrompt } from "@/context/prompt"
 import type { PromptInputHistory } from "./history-store"
 import type { FollowupDraft } from "./submit"
+import type { Harness } from "@opencode-ai/schema/harness"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -47,6 +48,8 @@ export interface PromptInputProps {
   controls: PromptInputControls
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
+  newSessionHarness?: Harness.InstanceID
+  newSessionHarnessModel?: Harness.ModelSelection
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
   onEditLoaded?: () => void

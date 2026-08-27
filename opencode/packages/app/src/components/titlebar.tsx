@@ -316,7 +316,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
-                title: language.t("home.title"),
+                title: language.t("home.sessions.search.sessions"),
                 category: language.t("command.category.view"),
                 keybind: "mod+b",
                 hidden: true,
@@ -376,7 +376,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   placement="bottom"
                   value={
                     <>
-                      {language.t("home.title")}
+                      {language.t("home.sessions.search.sessions")}
                       <KeybindV2 keys={command.keybindParts("home.toggle")} variant="neutral" />
                     </>
                   }
@@ -390,7 +390,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     icon={<IconV2 name="grid-plus" />}
                     state={layout.route().type === "home" ? "pressed" : undefined}
                     onClick={toggleHome}
-                    aria-label={language.t("home.title")}
+                    aria-label={language.t("home.sessions.search.sessions")}
                     aria-pressed={layout.route().type === "home"}
                   />
                 </TooltipV2>
