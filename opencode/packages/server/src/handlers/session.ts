@@ -139,6 +139,36 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.switchHarness",
+        Effect.fn(function* (ctx) {
+          yield* session
+            .switchHarness({
+              sessionID: ctx.params.sessionID,
+              instanceID: ctx.payload.instanceID,
+              model: ctx.payload.model,
+            })
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+                ),
+              ),
+              Effect.catchTag("Session.OperationUnavailableError", () =>
+                Effect.fail(
+                  new ServiceUnavailableError({
+                    message: "Wait for the current turn to finish before switching Harness.",
+                    service: "session.switchHarness",
+                  }),
+                ),
+              ),
+            )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
           return {

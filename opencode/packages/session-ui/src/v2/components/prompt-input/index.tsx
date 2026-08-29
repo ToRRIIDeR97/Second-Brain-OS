@@ -40,7 +40,10 @@ export type PromptInputV2Props = {
   readOnly?: boolean
   borderUnderlay?: boolean
   class?: string
+  runtimeControl?: JSX.Element
   modelControl?: JSX.Element
+  modelControlVisible?: boolean
+  agentControlVisible?: boolean
   variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
@@ -216,7 +219,8 @@ export function PromptInputV2(props: PromptInputV2Props) {
               onContext={props.controller.openContext}
               onShell={props.controller.openShell}
             />
-            <Show when={view.agent} keyed>
+            {props.runtimeControl}
+            <Show when={(props.agentControlVisible ?? true) && view.agent} keyed>
               {(control) => (
                 <PromptInputV2ConfiguredSelect
                   title={i18n.t("ui.promptInput.chooseAgent")}
@@ -225,22 +229,24 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 />
               )}
             </Show>
-            <Show
-              when={props.modelControl}
-              fallback={
-                <Show when={view.model} keyed>
-                  {(control) => (
-                    <PromptInputV2ConfiguredSelect
-                      title={i18n.t("ui.promptInput.chooseModel")}
-                      keybind={["Mod", "M"]}
-                      control={control}
-                      model
-                    />
-                  )}
-                </Show>
-              }
-            >
-              {props.modelControl}
+            <Show when={props.modelControlVisible ?? true}>
+              <Show
+                when={props.modelControl}
+                fallback={
+                  <Show when={view.model} keyed>
+                    {(control) => (
+                      <PromptInputV2ConfiguredSelect
+                        title={i18n.t("ui.promptInput.chooseModel")}
+                        keybind={["Mod", "M"]}
+                        control={control}
+                        model
+                      />
+                    )}
+                  </Show>
+                }
+              >
+                {props.modelControl}
+              </Show>
             </Show>
             <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
               {(control) => (

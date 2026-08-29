@@ -9,6 +9,7 @@ import { createPromptInputController, createPromptProjectControls } from "@/page
 import { createPromptModelSelection } from "@/pages/session/composer/prompt-model-selection"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
+import { createPromptHarnessController } from "@/components/prompt-input/harness-controller"
 
 export function createNewSessionDraftController(workspace: { worktree: () => string; resetWorktree: () => void }) {
   const prompt = usePrompt()
@@ -18,8 +19,16 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const model = createPromptModelSelection({ agent: () => local.agent.current() })
+  const harness = createPromptHarnessController({
+    current: prompt.harness.current,
+    set: (instanceID, harnessModel) => {
+      prompt.harness.set(instanceID)
+      prompt.harness.model.set(harnessModel)
+    },
+    model: prompt.harness.model,
+  })
 
-  useComposerCommands({ model })
+  useComposerCommands({ model, harness })
 
   const controls = createPromptInputController({
     sessionKey: route.sessionKey,
@@ -36,10 +45,13 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
       return workspace.worktree()
     },
     get newSessionHarness() {
-      return prompt.harness.current()
+      return harness.current()
     },
     get newSessionHarnessModel() {
-      return prompt.harness.model.current()
+      return harness.model.current()
+    },
+    get harnessDriver() {
+      return harness.driver()
     },
     onNewSessionWorktreeReset: workspace.resetWorktree,
     onSubmit: comments.clear,
@@ -61,7 +73,7 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
       ready: prompt.ready,
       readyPromise: () => prompt.ready.promise,
     },
-    harness: prompt.harness,
+    harness,
     project: {
       controls: projectControls,
     },

@@ -6,6 +6,7 @@ import {
   createSessionForServer,
   fallbackHarnesses,
   listHarnessesForServer,
+  switchHarnessForServer,
 } from "./server"
 
 describe("authFromToken", () => {
@@ -90,5 +91,32 @@ describe("listHarnessesForServer", () => {
     expect(harnesses[0]).toMatchObject({ id: Harness.Codex, authenticated: true })
     expect(new URL(request!.url).searchParams.get("location[directory]")).toBe("C:\\repo")
     expect(request!.headers.get("authorization")).toBe(`Basic ${btoa("kit:secret")}`)
+  })
+})
+
+describe("switchHarnessForServer", () => {
+  test("posts the selected harness and model to the session handoff endpoint", async () => {
+    let request: Request | undefined
+    const fetcher = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        request = new Request(input, init)
+        return new Response(null, { status: 204 })
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+
+    await switchHarnessForServer(
+      { server: { url: "http://localhost:4096", username: "kit", password: "secret" }, fetch: fetcher },
+      "session/1",
+      { instanceID: Harness.Codex, model: { id: "gpt-5.6", reasoningEffort: "high" } },
+    )
+
+    expect(request).toBeDefined()
+    expect(new URL(request!.url).pathname).toBe("/api/session/session%2F1/harness")
+    expect(request!.headers.get("authorization")).toBe(`Basic ${btoa("kit:secret")}`)
+    expect(await request!.json()).toEqual({
+      instanceID: Harness.Codex,
+      model: { id: "gpt-5.6", reasoningEffort: "high" },
+    })
   })
 })

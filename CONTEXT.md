@@ -39,8 +39,19 @@ _Avoid_: Meeting, appointment, time block as general terms
 
 **Run**:
 One managed execution of an agent with an objective, context, permissions,
-events, approvals, and a result.
+events, approvals, and a result. A Run uses one active Harness at a time and
+may switch Harnesses between turns.
 _Avoid_: Agent session, chat, job
+
+**Harness**:
+The agent runtime implementation that executes a Run, such as OpenCode or
+Codex.
+_Avoid_: Provider, model, agent
+
+**Harness instance**:
+A configured local installation and account for a Harness. Multiple instances
+of the same Harness may use different binaries, homes, or accounts.
+_Avoid_: Provider account, runtime as an interchangeable name
 
 **Activity**:
 The chronological record of meaningful user, agent, file, Git, planning, and

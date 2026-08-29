@@ -5,6 +5,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { useSessionLayout } from "./session-layout"
 import { createSessionOwnership } from "./session-ownership"
+import { Harness } from "@opencode-ai/schema/harness"
 
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
@@ -13,7 +14,9 @@ const withCategory = (category: string) => {
   })
 }
 
-export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
+export const useComposerCommands = (
+  input: { model?: ModelSelection; harness?: { driver: () => Harness.DriverKind | undefined } } = {},
+) => {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
@@ -23,8 +26,21 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const model = input.model ?? local.model
   const modelCommand = withCategory(language.t("command.category.model"))
   const agentCommand = withCategory(language.t("command.category.agent"))
+  const openCode = () => !input.harness || input.harness.driver() === Harness.OpenCodeDriver
 
   const chooseModel = async () => {
+    if (!openCode()) {
+      const control =
+        document.querySelector<HTMLSelectElement>('[data-control="harness-model"]') ??
+        document.querySelector<HTMLSelectElement>('[data-control="harness"]')
+      control?.focus()
+      try {
+        control?.showPicker()
+      } catch {
+        // Focus still makes the native picker keyboard-accessible on platforms without showPicker().
+      }
+      return
+    }
     const owner = sessionOwnership.capture()
     const editor = document.querySelector<HTMLElement>('[data-component="prompt-input"]')
     const selection = window.getSelection()
@@ -60,6 +76,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       title: language.t("command.model.variant.cycle"),
       description: language.t("command.model.variant.cycle.description"),
       keybind: "shift+mod+d",
+      disabled: !openCode(),
       onSelect: () => model.variant.cycle(),
     }),
     agentCommand({
@@ -68,7 +85,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
-      disabled: !local.agent.visible(),
+      disabled: !openCode() || !local.agent.visible(),
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
@@ -76,7 +93,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
-      disabled: !local.agent.visible(),
+      disabled: !openCode() || !local.agent.visible(),
       onSelect: () => local.agent.move(-1),
     }),
   ])

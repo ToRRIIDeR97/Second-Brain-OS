@@ -3,6 +3,7 @@ export * as SessionMessage from "./session-message"
 import { Schema } from "effect"
 import { optional } from "./schema"
 import { ProviderMetadata, ToolContent } from "./llm"
+import { Harness } from "./harness"
 import { Model } from "./model"
 import { FileAttachment, Prompt } from "./prompt"
 import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema"
@@ -167,6 +168,8 @@ export const Assistant = Schema.Struct({
   type: Schema.Literal("assistant"),
   agent: Schema.String,
   model: Model.Ref,
+  harnessInstanceID: Harness.InstanceID.pipe(optional),
+  harnessModel: Harness.ModelSelection.pipe(optional),
   content: AssistantContent.pipe(Schema.Array),
   snapshot: Schema.Struct({
     start: Schema.String.pipe(optional),

@@ -81,9 +81,21 @@ export const HarnessContinuationSet = Event.define({
     ...Base,
     instanceID: Harness.InstanceID,
     continuation: Schema.String,
+    revision: Schema.Finite.pipe(optional),
   },
 })
 export type HarnessContinuationSet = typeof HarnessContinuationSet.Type
+
+export const HarnessSwitched = Event.define({
+  type: "session.next.harness.switched",
+  ...options,
+  schema: {
+    ...Base,
+    instanceID: Harness.InstanceID,
+    model: Harness.ModelSelection.pipe(optional),
+  },
+})
+export type HarnessSwitched = typeof HarnessSwitched.Type
 
 export const Moved = Event.define({
   type: "session.next.moved",
@@ -166,6 +178,8 @@ export namespace Step {
       assistantMessageID: SessionMessage.ID,
       agent: Schema.String,
       model: Model.Ref,
+      harnessInstanceID: Harness.InstanceID.pipe(optional),
+      harnessModel: Harness.ModelSelection.pipe(optional),
       snapshot: Schema.String.pipe(optional),
     },
   })
@@ -461,6 +475,7 @@ export const DurableDefinitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
   HarnessContinuationSet,
+  HarnessSwitched,
   Moved,
   Prompted,
   PromptAdmitted,
@@ -493,6 +508,7 @@ export const Definitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
   HarnessContinuationSet,
+  HarnessSwitched,
   Moved,
   Prompted,
   PromptAdmitted,

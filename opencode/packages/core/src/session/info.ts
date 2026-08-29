@@ -23,6 +23,7 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       ? row.metadata.harnessInstanceID
       : Harness.OpenCode,
     harnessModel: isHarnessModel(row.metadata?.harnessModel) ? row.metadata.harnessModel : undefined,
+    harnessRevision: typeof row.metadata?.harnessRevision === "number" ? row.metadata.harnessRevision : 0,
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
     agent: row.agent ? AgentV2.ID.make(row.agent) : undefined,

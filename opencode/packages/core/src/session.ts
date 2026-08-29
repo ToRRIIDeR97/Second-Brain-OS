@@ -98,7 +98,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
-    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact", "wait"]),
+    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "switchHarness", "compact", "wait"]),
   },
 ) {}
 
@@ -147,6 +147,11 @@ export interface Interface {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
   }) => Effect.Effect<void, NotFoundError>
+  readonly switchHarness: (input: {
+    sessionID: SessionSchema.ID
+    instanceID: Harness.InstanceID
+    model?: Harness.ModelSelection
+  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -232,6 +237,7 @@ const layer = Layer.effect(
           metadata: {
             harnessInstanceID: input.harnessInstanceID ?? Harness.OpenCode,
             ...(input.harnessModel ? { harnessModel: input.harnessModel } : {}),
+            harnessRevision: 0,
           },
           agent: input.agent,
           model: input.model
@@ -418,6 +424,22 @@ const layer = Layer.effect(
           sessionID: input.sessionID,
           messageID: SessionMessage.ID.create(),
           timestamp: yield* DateTime.now,
+          model: input.model,
+        })
+      }),
+      switchHarness: Effect.fn("V2Session.switchHarness")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const sameModel =
+          session.harnessModel?.id === input.model?.id &&
+          session.harnessModel?.reasoningEffort === input.model?.reasoningEffort &&
+          session.harnessModel?.serviceTier === input.model?.serviceTier
+        if (session.harnessInstanceID === input.instanceID && sameModel) return
+        if ((yield* execution.active).has(input.sessionID))
+          return yield* new OperationUnavailableError({ operation: "switchHarness" })
+        yield* events.publish(SessionEvent.HarnessSwitched, {
+          sessionID: input.sessionID,
+          timestamp: yield* DateTime.now,
+          instanceID: input.instanceID,
           model: input.model,
         })
       }),

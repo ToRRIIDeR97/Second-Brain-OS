@@ -1223,6 +1223,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       newSessionWorktree: () => props.newSessionWorktree,
       newSessionHarness: () => props.newSessionHarness,
       newSessionHarnessModel: () => props.newSessionHarnessModel,
+      harnessDriver: () => props.harnessDriver,
+      harnessChanging: () => props.harnessChanging,
       onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
       shouldQueue: props.shouldQueue,
       onQueue: props.onQueue,

@@ -4,10 +4,12 @@ import {
   LLMError,
   LLMEvent,
   Message,
+  Model,
   SystemPart,
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
+import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Harness } from "@opencode-ai/schema/harness"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
@@ -41,6 +43,13 @@ import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 import { HarnessRuntime } from "../../harness"
+
+const harnessRequestModel = (session: SessionSchema.Info) =>
+  Model.make({
+    id: session.harnessModel?.id ?? session.harnessInstanceID,
+    provider: session.harnessInstanceID,
+    route: OpenAIChat.route,
+  })
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -199,7 +208,9 @@ const layer = Layer.effect(
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
-      const model = yield* models.resolve(session)
+      const driver = harnesses.driver(session.harnessInstanceID)
+      const usesHostModel = driver === Harness.OpenCodeDriver
+      const model = usesHostModel ? yield* models.resolve(session) : harnessRequestModel(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
@@ -222,20 +233,19 @@ const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      if (
-        session.harnessInstanceID === Harness.OpenCode &&
-        (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
-      )
+      if (usesHostModel && (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request })))
         return yield* Effect.die(continueAfterCompaction(currentStep))
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
         model: {
-          id: ModelV2.ID.make(model.id),
-          providerID: ProviderV2.ID.make(model.provider),
+          id: ModelV2.ID.make(usesHostModel ? model.id : (session.harnessModel?.id ?? model.id)),
+          providerID: ProviderV2.ID.make(usesHostModel ? model.provider : session.harnessInstanceID),
           ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
         },
+        harnessInstanceID: session.harnessInstanceID,
+        harnessModel: session.harnessModel,
         snapshot: startSnapshot,
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
@@ -249,6 +259,7 @@ const layer = Layer.effect(
           directory: session.location.directory,
           request,
           model: session.harnessModel,
+          revision: session.harnessRevision ?? 0,
         })
         .pipe(
           Stream.runForEach((event) =>
@@ -302,7 +313,7 @@ const layer = Layer.effect(
             stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
           if (
             recoverOverflow &&
-            session.harnessInstanceID === Harness.OpenCode &&
+            usesHostModel &&
             !publisher.hasAssistantStarted() &&
             isContextOverflowFailure(overflowFailure ?? failure) &&
             (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))

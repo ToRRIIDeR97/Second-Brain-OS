@@ -15,6 +15,8 @@ import type {
   SessionsSwitchAgentOutput,
   SessionsSwitchModelInput,
   SessionsSwitchModelOutput,
+  SessionsSwitchHarnessInput,
+  SessionsSwitchHarnessOutput,
   SessionsPromptInput,
   SessionsPromptOutput,
   SessionsCompactInput,
@@ -367,6 +369,18 @@ export function make(options: ClientOptions) {
             body: { model: input["model"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      switchHarness: (input: SessionsSwitchHarnessInput, requestOptions?: RequestOptions) =>
+        request<SessionsSwitchHarnessOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/harness`,
+            body: { instanceID: input["instanceID"], model: input["model"] },
+            successStatus: 204,
+            declaredStatuses: [404, 503, 400, 401],
             empty: true,
           },
           requestOptions,

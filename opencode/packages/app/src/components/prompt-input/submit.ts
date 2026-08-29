@@ -23,7 +23,7 @@ import { createPromptSubmissionState } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
 import { blobDataUrl } from "@/utils/draft-store"
-import type { Harness } from "@opencode-ai/schema/harness"
+import { Harness } from "@opencode-ai/schema/harness"
 
 type PendingPrompt = {
   abort: AbortController
@@ -226,6 +226,8 @@ type PromptSubmitInput = {
   newSessionWorktree?: Accessor<string | undefined>
   newSessionHarness?: Accessor<Harness.InstanceID | undefined>
   newSessionHarnessModel?: Accessor<Harness.ModelSelection | undefined>
+  harnessDriver?: Accessor<Harness.DriverKind | undefined>
+  harnessChanging?: Accessor<boolean | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
   onQueue?: (draft: FollowupDraft) => void
@@ -322,6 +324,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
 
+    if (input.harnessChanging?.()) {
+      showToast({
+        title: language.t("harness.label"),
+        description: language.t("harness.switching"),
+      })
+      return
+    }
+
     const target = prompt.capture()
     const submission = createPromptSubmissionState({
       target,
@@ -339,11 +349,19 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    const isNewSession = !params.id
+    const currentInfo = input.info() as
+      | { id: string; harnessInstanceID?: Harness.InstanceID; harnessModel?: Harness.ModelSelection }
+      | undefined
+    const harnessInstanceID = input.newSessionHarness?.() ?? currentInfo?.harnessInstanceID ?? Harness.OpenCode
+    const harnessModel = input.newSessionHarnessModel?.() ?? currentInfo?.harnessModel
+    const driver = input.harnessDriver?.()
+    const usesHostModel = driver ? driver === Harness.OpenCodeDriver : harnessInstanceID === Harness.OpenCode
     const modelSelection = input.model ?? local.model
     const currentModel = modelSelection.current()
     const currentAgent = local.agent.current()
-    const variant = modelSelection.variant.current()
-    if (!currentModel || !currentAgent) {
+    const variant = usesHostModel ? modelSelection.variant.current() : undefined
+    if (usesHostModel && (!currentModel || !currentAgent)) {
       showToast({
         title: language.t("prompt.toast.modelAgentRequired.title"),
         description: language.t("prompt.toast.modelAgentRequired.description"),
@@ -356,7 +374,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const projectDirectory = sdk().directory
     const permissionState = permission.currentServerState()
-    const isNewSession = !params.id
     const shouldAutoAccept = isNewSession && input.autoAccept()
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 
@@ -408,8 +425,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         .api.session.create({
           harnessInstanceID: input.newSessionHarness?.(),
           harnessModel: input.newSessionHarnessModel?.(),
-          agent: currentAgent.name,
-          model: { id: currentModel.id, providerID: currentModel.provider.id, variant },
+          agent: usesHostModel ? currentAgent?.name : undefined,
+          model:
+            usesHostModel && currentModel
+              ? { id: currentModel.id, providerID: currentModel.provider.id, variant }
+              : undefined,
           location: { directory: sessionDirectory },
         })
         .then(normalizeSessionInfo)
@@ -427,8 +447,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           if (!session) return
           if (shouldAutoAccept) permissionState.enableAutoAccept(session.id, sessionDirectory)
           local.session.promote(sessionDirectory, session.id, {
-            agent: currentAgent.name,
-            model: { providerID: currentModel.provider.id, modelID: currentModel.id },
+            agent: currentAgent?.name ?? "build",
+            model: usesHostModel
+              ? { providerID: currentModel!.provider.id, modelID: currentModel!.id }
+              : { providerID: harnessInstanceID, modelID: harnessModel?.id ?? harnessInstanceID },
             variant: variant ?? null,
           })
           layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
@@ -447,11 +469,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    const model = {
-      modelID: currentModel.id,
-      providerID: currentModel.provider.id,
-    }
-    const agent = currentAgent.name
+    const model = usesHostModel
+      ? { modelID: currentModel!.id, providerID: currentModel!.provider.id }
+      : { modelID: harnessModel?.id ?? harnessInstanceID, providerID: harnessInstanceID }
+    const agent = currentAgent?.name ?? "build"
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,

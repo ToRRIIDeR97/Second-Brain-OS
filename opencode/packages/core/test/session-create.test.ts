@@ -125,7 +125,35 @@ describe("SessionV2.create", () => {
         .get()
         .pipe(Effect.orDie)
       expect(row?.metadata).toMatchObject({
-        harnessContinuation: { instanceID: Harness.Codex, value: "thread_123" },
+        harnessContinuation: { instanceID: Harness.Codex, value: "thread_123", revision: 0 },
+      })
+    }),
+  )
+
+  it.effect("switches the active Harness between turns", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      const harnessModel = Harness.ModelSelection.make({ id: "gpt-5.6", reasoningEffort: "high" })
+
+      yield* session.switchHarness({ sessionID: created.id, instanceID: Harness.Codex, model: harnessModel })
+
+      expect(yield* session.get(created.id)).toMatchObject({
+        harnessInstanceID: Harness.Codex,
+        harnessModel,
+        harnessRevision: 1,
+      })
+
+      yield* session.switchHarness({
+        sessionID: created.id,
+        instanceID: Harness.Codex,
+        model: Harness.ModelSelection.make({ ...harnessModel, reasoningEffort: "xhigh" }),
+      })
+
+      expect(yield* session.get(created.id)).toMatchObject({
+        harnessInstanceID: Harness.Codex,
+        harnessModel: { id: "gpt-5.6", reasoningEffort: "xhigh" },
+        harnessRevision: 1,
       })
     }),
   )

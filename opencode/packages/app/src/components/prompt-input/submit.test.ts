@@ -318,6 +318,31 @@ beforeEach(() => {
 })
 
 describe("prompt submit worktree selection", () => {
+  test("waits for an in-flight Harness switch before submitting", async () => {
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      harnessChanging: () => true,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(createdSessions).toHaveLength(0)
+    expect(sentShell).toHaveLength(0)
+  })
+
   test("reads the latest worktree accessor value per submit", async () => {
     const submit = createPromptSubmit({
       prompt,
@@ -337,6 +362,7 @@ describe("prompt submit worktree selection", () => {
       newSessionWorktree: () => selected,
       newSessionHarness: () => Harness.Codex,
       newSessionHarnessModel: () => ({ id: "gpt-5.6", reasoningEffort: "high" }),
+      harnessDriver: () => Harness.CodexDriver,
       onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
     })
@@ -351,17 +377,17 @@ describe("prompt submit worktree selection", () => {
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sessionCreateInputs).toEqual([
       {
-        agent: "agent",
+        agent: undefined,
         harnessInstanceID: Harness.Codex,
         harnessModel: { id: "gpt-5.6", reasoningEffort: "high" },
-        model: { id: "model", providerID: "provider", variant: undefined },
+        model: undefined,
         location: { directory: "/repo/worktree-a" },
       },
       {
-        agent: "agent",
+        agent: undefined,
         harnessInstanceID: Harness.Codex,
         harnessModel: { id: "gpt-5.6", reasoningEffort: "high" },
-        model: { id: "model", providerID: "provider", variant: undefined },
+        model: undefined,
         location: { directory: "/repo/worktree-b" },
       },
     ])

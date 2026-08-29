@@ -2,6 +2,7 @@ import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue,
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
+import { Harness } from "@opencode-ai/schema/harness"
 import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
@@ -10,6 +11,8 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: string
   readonly model: ModelV2.Ref
+  readonly harnessInstanceID?: Harness.InstanceID
+  readonly harnessModel?: Harness.ModelSelection
   readonly snapshot?: string
 }
 

@@ -122,6 +122,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.harness.switched": () => Effect.void,
       "session.next.harness.continuation.set": () => Effect.void,
       "session.next.moved": () => Effect.void,
       "session.next.prompted": (event) => {
@@ -200,6 +201,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
               type: "assistant",
               agent: event.data.agent,
               model: event.data.model,
+              harnessInstanceID: event.data.harnessInstanceID,
+              harnessModel: event.data.harnessModel,
               time: { created: event.data.timestamp },
               content: [],
               snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,

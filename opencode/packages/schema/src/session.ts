@@ -23,6 +23,7 @@ export const Info = Schema.Struct({
   projectID: Project.ID,
   harnessInstanceID: Harness.InstanceID,
   harnessModel: Harness.ModelSelection.pipe(optional),
+  harnessRevision: Schema.Finite.pipe(optional),
   agent: Agent.ID.pipe(optional),
   model: Model.Ref.pipe(optional),
   cost: Schema.Finite,

@@ -1,8 +1,9 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { type Accessor, createMemo, For, Show, Suspense } from "solid-js"
+import { type Accessor, createMemo, createSignal, For, Show, Suspense } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
@@ -19,7 +20,6 @@ import {
   type OpenSessionOptions,
 } from "./home-sessions-controller"
 
-const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
 
@@ -72,6 +72,37 @@ export type HomeSessionsViewProps = {
 }
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
+  const [selected, setSelected] = createSignal<Set<string>>(new Set())
+  const [archiving, setArchiving] = createSignal(false)
+  const records = () => props.groups().flatMap((group) => group.sessions)
+  const selectedCount = () => records().filter((record) => selected().has(record.session.id)).length
+  const allSelected = () => records().length > 0 && selectedCount() === records().length
+
+  function setSelectedSession(sessionID: string, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(sessionID)
+      else next.delete(sessionID)
+      return next
+    })
+  }
+
+  function selectAll(checked: boolean) {
+    setSelected(checked ? new Set(records().map((record) => record.session.id)) : new Set<string>())
+  }
+
+  async function archiveSelected() {
+    const sessions = records().filter((record) => selected().has(record.session.id)).map((record) => record.session)
+    if (sessions.length === 0) return
+    setArchiving(true)
+    try {
+      await Promise.all(sessions.map(props.onArchiveSession))
+      setSelected(new Set<string>())
+    } finally {
+      setArchiving(false)
+    }
+  }
+
   return (
     <section
       ref={props.onSetHoverTarget}
@@ -80,6 +111,36 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
     >
       <div class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12" onWheel={props.onWheel}>
         <HomeSessionSearch {...props} />
+        <Show when={props.groups().length > 0}>
+          <div class="mt-3 flex h-7 items-center gap-1">
+            <CheckboxV2
+              label="Select all"
+              checked={allSelected()}
+              indeterminate={selectedCount() > 0 && !allSelected()}
+              disabled={archiving()}
+              onChange={selectAll}
+            />
+            <ButtonV2
+              variant="ghost-muted"
+              size="small"
+              disabled={selectedCount() === 0 || archiving()}
+              onClick={() => setSelected(new Set<string>())}
+            >
+              {props.language.t("common.clear")}
+            </ButtonV2>
+            <ButtonV2
+              data-action="home-session-archive-selected"
+              variant="ghost-muted"
+              size="small"
+              icon="archive"
+              disabled={selectedCount() === 0 || archiving()}
+              aria-label="Archive selected sessions"
+              onClick={() => void archiveSelected()}
+            >
+              {props.language.t("common.archive")} ({selectedCount()})
+            </ButtonV2>
+          </div>
+        </Show>
         <Suspense>
           <Show when={props.groups().length > 0 && props.canCreateSession()}>
             <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
@@ -134,7 +195,17 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                     <div
                       class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups().length - 1 ? "" : "mb-6"}`}
                     >
-                      <For each={group.sessions}>{(record) => <HomeSessionRow {...props} record={record} />}</For>
+                      <For each={group.sessions}>
+                        {(record) => (
+                          <HomeSessionRow
+                            {...props}
+                            record={record}
+                            selected={selected().has(record.session.id)}
+                            disabled={archiving()}
+                            onSelect={(checked) => setSelectedSession(record.session.id, checked)}
+                          />
+                        )}
+                      </For>
                     </div>
                   </>
                 )}
@@ -414,7 +485,14 @@ function HomeSessionGroupHeader(props: {
   )
 }
 
-function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
+function HomeSessionRow(
+  props: HomeSessionsViewProps & {
+    record: HomeSessionRecord
+    selected: boolean
+    disabled: boolean
+    onSelect: (checked: boolean) => void
+  },
+) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName() && props.record.projectName
 
@@ -423,12 +501,21 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
       class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
       classList={{ group: !!showProjectName() }}
     >
+      <div class="flex h-full shrink-0 items-center pl-3 pr-2">
+        <CheckboxV2
+          label={`Select ${title()}`}
+          hideLabel
+          checked={props.selected}
+          disabled={props.disabled}
+          onChange={props.onSelect}
+        />
+      </div>
       <button
         type="button"
         data-component="home-session-row"
         class={`
           flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
-          bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
+          bg-transparent py-3 pl-0 pr-2 text-left text-v2-text-text-muted [font-weight:530]
           transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
           hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
         `}
@@ -453,29 +540,21 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
           <HomeSessionProjectName name={props.record.projectName} />
         </Show>
       </button>
-      <Show when={SHOW_HOME_SESSION_ARCHIVE}>
-        <div
-          class={`
-            hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
-            group-hover/session:opacity-100 focus-within:opacity-100
-          `}
-        >
-          <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
-            <IconButtonV2
-              data-action="home-session-archive"
-              variant="ghost-muted"
-              size="large"
-              icon={<IconV2 name="archive" />}
-              aria-label={props.language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.onArchiveSession(props.record.session)
-              }}
-            />
-          </TooltipV2>
-        </div>
-      </Show>
+      <TooltipV2 class="mr-1.5 flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
+        <IconButtonV2
+          data-action="home-session-archive"
+          variant="ghost-muted"
+          size="large"
+          icon={<IconV2 name="archive" />}
+          aria-label={props.language.t("common.archive")}
+          disabled={props.disabled}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void props.onArchiveSession(props.record.session)
+          }}
+        />
+      </TooltipV2>
     </div>
   )
 }

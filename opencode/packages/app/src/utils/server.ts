@@ -156,6 +156,35 @@ export async function createSessionForServer(
   return payload.data as SessionInfo
 }
 
+export async function switchHarnessForServer(
+  input: {
+    server: ServerConnection.HttpBase
+    fetch?: typeof globalThis.fetch
+  },
+  sessionID: string,
+  value: { instanceID: Harness.InstanceID; model?: Harness.ModelSelection },
+) {
+  const response = await (input.fetch ?? globalThis.fetch)(
+    `${input.server.url.replace(/\/+$/, "")}/api/session/${encodeURIComponent(sessionID)}/harness`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(input.server.password
+          ? {
+              Authorization: `Basic ${authTokenFromCredentials({
+                username: input.server.username,
+                password: input.server.password,
+              })}`,
+            }
+          : {}),
+      },
+      body: JSON.stringify(value),
+    },
+  )
+  if (!response.ok) throw new Error(`Harness switch failed (${response.status}).`)
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }

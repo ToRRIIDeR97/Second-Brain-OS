@@ -904,6 +904,8 @@ export const dict = {
   "harness.effort": "Effort",
   "harness.serviceTier": "Service tier",
   "harness.default": "Default",
+  "harness.refreshModels": "Refresh Harness models",
+  "harness.switching": "Wait for the Harness switch to finish.",
   "secondBrain.home.empty.description": "Second Brain data stays with a local OpenCode workspace.",
   "secondBrain.home.kind.event": "Event",
   "secondBrain.home.kind.task": "Task",

@@ -50,6 +50,8 @@ export interface PromptInputProps {
   newSessionWorktree?: string
   newSessionHarness?: Harness.InstanceID
   newSessionHarnessModel?: Harness.ModelSelection
+  harnessDriver?: Harness.DriverKind
+  harnessChanging?: boolean
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
   onEditLoaded?: () => void

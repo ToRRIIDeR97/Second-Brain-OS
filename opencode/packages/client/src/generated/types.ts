@@ -33,14 +33,6 @@ export type SessionNotFoundError = {
 export const isSessionNotFoundError = (value: unknown): value is SessionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionNotFoundError"
 
-export type ConflictError = {
-  readonly _tag: "ConflictError"
-  readonly message: string
-  readonly resource?: string | undefined
-}
-export const isConflictError = (value: unknown): value is ConflictError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
-
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string
@@ -48,6 +40,14 @@ export type ServiceUnavailableError = {
 }
 export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
+export type ConflictError = {
+  readonly _tag: "ConflictError"
+  readonly message: string
+  readonly resource?: string | undefined
+}
+export const isConflictError = (value: unknown): value is ConflictError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
 
 export type MessageNotFoundError = {
   readonly _tag: "MessageNotFoundError"
@@ -238,6 +238,7 @@ export type SessionsListOutput = {
     readonly projectID: string
     readonly harnessInstanceID: string
     readonly harnessModel?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
+    readonly harnessRevision?: number
     readonly agent?: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
@@ -350,6 +351,7 @@ export type SessionsCreateOutput = {
     readonly projectID: string
     readonly harnessInstanceID: string
     readonly harnessModel?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
+    readonly harnessRevision?: number
     readonly agent?: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
@@ -390,6 +392,7 @@ export type SessionsGetOutput = {
     readonly projectID: string
     readonly harnessInstanceID: string
     readonly harnessModel?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
+    readonly harnessRevision?: number
     readonly agent?: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
@@ -434,6 +437,20 @@ export type SessionsSwitchModelInput = {
 }
 
 export type SessionsSwitchModelOutput = void
+
+export type SessionsSwitchHarnessInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly instanceID: {
+    readonly instanceID: string
+    readonly model?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string } | null
+  }["instanceID"]
+  readonly model?: {
+    readonly instanceID: string
+    readonly model?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string } | null
+  }["model"]
+}
+
+export type SessionsSwitchHarnessOutput = void
 
 export type SessionsPromptInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -641,6 +658,12 @@ export type SessionsContextOutput = {
         readonly type: "assistant"
         readonly agent: string
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        readonly harnessInstanceID?: string
+        readonly harnessModel?: {
+          readonly id: string
+          readonly reasoningEffort?: string
+          readonly serviceTier?: string
+        }
         readonly content: ReadonlyArray<
           | { readonly type: "text"; readonly id: string; readonly text: string }
           | {
@@ -775,6 +798,20 @@ export type SessionsHistoryOutput = {
           readonly sessionID: string
           readonly instanceID: string
           readonly continuation: string
+          readonly revision?: number
+        }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.harness.switched"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: {
+          readonly timestamp: number
+          readonly sessionID: string
+          readonly instanceID: string
+          readonly model?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
         }
       }
     | {
@@ -909,6 +946,12 @@ export type SessionsHistoryOutput = {
           readonly assistantMessageID: string
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          readonly harnessInstanceID?: string
+          readonly harnessModel?: {
+            readonly id: string
+            readonly reasoningEffort?: string
+            readonly serviceTier?: string
+          }
           readonly snapshot?: string
         }
       }
@@ -1246,6 +1289,20 @@ export type SessionsEventsOutput =
         readonly sessionID: string
         readonly instanceID: string
         readonly continuation: string
+        readonly revision?: number
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.harness.switched"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly instanceID: string
+        readonly model?: { readonly id: string; readonly reasoningEffort?: string; readonly serviceTier?: string }
       }
     }
   | {
@@ -1380,6 +1437,12 @@ export type SessionsEventsOutput =
         readonly assistantMessageID: string
         readonly agent: string
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        readonly harnessInstanceID?: string
+        readonly harnessModel?: {
+          readonly id: string
+          readonly reasoningEffort?: string
+          readonly serviceTier?: string
+        }
         readonly snapshot?: string
       }
     }
@@ -1745,6 +1808,12 @@ export type SessionsMessageOutput = {
         readonly type: "assistant"
         readonly agent: string
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        readonly harnessInstanceID?: string
+        readonly harnessModel?: {
+          readonly id: string
+          readonly reasoningEffort?: string
+          readonly serviceTier?: string
+        }
         readonly content: ReadonlyArray<
           | { readonly type: "text"; readonly id: string; readonly text: string }
           | {
@@ -1917,6 +1986,12 @@ export type MessagesListOutput = {
         readonly type: "assistant"
         readonly agent: string
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        readonly harnessInstanceID?: string
+        readonly harnessModel?: {
+          readonly id: string
+          readonly reasoningEffort?: string
+          readonly serviceTier?: string
+        }
         readonly content: ReadonlyArray<
           | { readonly type: "text"; readonly id: string; readonly text: string }
           | {

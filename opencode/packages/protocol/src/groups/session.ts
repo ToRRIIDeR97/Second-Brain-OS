@@ -205,6 +205,25 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.switchHarness", "/api/session/:sessionID/harness", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          instanceID: Harness.InstanceID,
+          model: Harness.ModelSelection.pipe(Schema.optional),
+        }),
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, ServiceUnavailableError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.switchHarness",
+            summary: "Switch session harness",
+            description: "Switch the Harness used by subsequent turns in an idle session.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({

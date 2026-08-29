@@ -60,6 +60,7 @@ import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
 import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
+import { createPromptHarnessController } from "@/components/prompt-input/harness-controller"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
@@ -100,7 +101,10 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import type { HarnessSession } from "@/utils/session"
+import { switchHarnessForServer } from "@/utils/server"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
+import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 
@@ -531,7 +535,51 @@ export default function Page() {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const info = createMemo(() => (params.id ? (sync().session.get(params.id) as HarnessSession | undefined) : undefined))
+  const [switchingHarness, setSwitchingHarness] = createSignal(false)
+  const switchHarness = (instanceID: Harness.InstanceID, harnessModel?: Harness.ModelSelection) => {
+    const sessionID = params.id
+    const current = info()
+    if (!sessionID || !current || switchingHarness()) return
+    const sameModel =
+      current.harnessModel?.id === harnessModel?.id &&
+      current.harnessModel?.reasoningEffort === harnessModel?.reasoningEffort &&
+      current.harnessModel?.serviceTier === harnessModel?.serviceTier
+    const currentInstanceID = current.harnessInstanceID ?? Harness.OpenCode
+    if (currentInstanceID === instanceID && sameModel) return
+    setSwitchingHarness(true)
+    void switchHarnessForServer({ server: serverSDK().server.http, fetch: platform.fetch }, sessionID, {
+      instanceID,
+      model: harnessModel,
+    })
+      .then(() => {
+        const next: HarnessSession = {
+          ...current,
+          harnessInstanceID: instanceID,
+          harnessModel,
+          harnessRevision: (current.harnessRevision ?? 0) + (currentInstanceID === instanceID ? 0 : 1),
+        }
+        sync().session.remember(next)
+      })
+      .catch((error: unknown) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: formatServerError(error, language.t),
+        }),
+      )
+      .finally(() => setSwitchingHarness(false))
+  }
+  const sessionHarness = createPromptHarnessController({
+    current: () => info()?.harnessInstanceID ?? Harness.OpenCode,
+    set: switchHarness,
+    model: {
+      current: () => info()?.harnessModel,
+      set: (model) => switchHarness(info()?.harnessInstanceID ?? Harness.OpenCode, model),
+    },
+    disabled: () => switchingHarness() || (params.id ? sync().data.session_working(params.id) : false),
+    fallbackUnavailable: false,
+  })
   const isChildSession = createMemo(() => !!info()?.parentID)
   const canReview = createMemo(() => !!sync().project)
   const reviewTab = createMemo(() => isDesktop())
@@ -1136,7 +1184,7 @@ export default function Page() {
     inputRef?.focus()
   }
 
-  useComposerCommands()
+  useComposerCommands({ harness: sessionHarness })
   useSessionCommands({
     navigateMessageByOffset,
     setActiveMessage,
@@ -2233,8 +2281,14 @@ export default function Page() {
                         if (!id) return
                         setFollowup("paused", id, true)
                       },
+                      get harnessDriver() {
+                        return sessionHarness.driver()
+                      },
+                      get harnessChanging() {
+                        return switchingHarness()
+                      },
                     })
-                    return <PromptInputV2Composer controller={controller} borderUnderlay />
+                    return <PromptInputV2Composer controller={controller} harness={sessionHarness} borderUnderlay />
                   }}
                 </Show>
               }

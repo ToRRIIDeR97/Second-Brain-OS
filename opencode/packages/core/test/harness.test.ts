@@ -58,7 +58,8 @@ describe("Codex harness", () => {
         messages: [
           LLM.request({ model: Model.make({ id: "gpt-test", provider: "test", route }), prompt: "Old" }).messages[0]!,
           { role: "assistant", content: [{ type: "text", text: "Earlier answer" }] },
-          LLM.request({ model: Model.make({ id: "gpt-test", provider: "test", route }), prompt: "Latest" }).messages[0]!,
+          LLM.request({ model: Model.make({ id: "gpt-test", provider: "test", route }), prompt: "Latest" })
+            .messages[0]!,
         ],
       }),
     )
@@ -66,5 +67,24 @@ describe("Codex harness", () => {
     expect(prompt).toContain("Latest")
     expect(prompt).not.toContain("Old")
     expect(prompt).not.toContain("Earlier answer")
+  })
+
+  test("renders canonical history when handing a Run to a fresh Codex thread", () => {
+    const prompt = renderCodexPrompt(
+      LLM.request({
+        model: Model.make({ id: "gpt-test", provider: "test", route }),
+        messages: [
+          LLM.request({ model: Model.make({ id: "gpt-test", provider: "test", route }), prompt: "Old" }).messages[0]!,
+          { role: "assistant", content: [{ type: "text", text: "Earlier answer" }] },
+          LLM.request({ model: Model.make({ id: "gpt-test", provider: "test", route }), prompt: "Latest" })
+            .messages[0]!,
+        ],
+      }),
+      true,
+    )
+
+    expect(prompt).toContain("USER:\nOld")
+    expect(prompt).toContain("ASSISTANT:\nEarlier answer")
+    expect(prompt).toContain("USER:\nLatest")
   })
 })

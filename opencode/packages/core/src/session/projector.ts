@@ -14,6 +14,7 @@ import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
+import { Harness } from "@opencode-ai/schema/harness"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -345,6 +346,37 @@ const layer = Layer.effectDiscard(
         yield* run(db, event)
       }),
     )
+    yield* events.project(SessionEvent.HarnessSwitched, (event) =>
+      Effect.gen(function* () {
+        const row = yield* db
+          .select({ metadata: SessionTable.metadata })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* Effect.die(`Session not found while switching harness: ${event.data.sessionID}`)
+        const { harnessModel: _model, ...metadata } = row.metadata ?? {}
+        const currentRevision = typeof metadata.harnessRevision === "number" ? metadata.harnessRevision : 0
+        const revision =
+          (metadata.harnessInstanceID ?? Harness.OpenCode) === event.data.instanceID
+            ? currentRevision
+            : currentRevision + 1
+        yield* db
+          .update(SessionTable)
+          .set({
+            metadata: {
+              ...metadata,
+              harnessInstanceID: event.data.instanceID,
+              ...(event.data.model ? { harnessModel: event.data.model } : {}),
+              harnessRevision: revision,
+            },
+            time_updated: DateTime.toEpochMillis(event.data.timestamp),
+          })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }).pipe(Effect.orDie),
+    )
     yield* events.project(SessionEvent.HarnessContinuationSet, (event) =>
       Effect.gen(function* () {
         const row = yield* db
@@ -362,6 +394,7 @@ const layer = Layer.effectDiscard(
               harnessContinuation: {
                 instanceID: event.data.instanceID,
                 value: event.data.continuation,
+                revision: event.data.revision ?? 0,
               },
             },
             time_updated: DateTime.toEpochMillis(event.data.timestamp),
