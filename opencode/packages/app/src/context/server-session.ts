@@ -110,9 +110,11 @@ function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
   const part = new Map(page.part.map((item) => [item.id, item.part]))
   const observed: { messageID: string; parts: Part[] }[] = []
   for (const item of items) {
-    const result = Binary.search(session, messageKey(item.message), messageKey)
-    const found = result.found
-    if (!found) session.splice(result.index, 0, item.message)
+    const found = session.some((message) => message.id === item.message.id)
+    if (!found) {
+      const result = Binary.search(session, messageKey(item.message), messageKey)
+      session.splice(result.index, 0, item.message)
+    }
     const current = part.get(item.message.id)
     const confirmed = found ? item.parts.filter((part) => current?.some((value) => value.id === part.id)) : []
     if (found) observed.push({ messageID: item.message.id, parts: confirmed })
@@ -936,10 +938,18 @@ export function createServerSession(
   const applyV2 = (event: OpenCodeEvent) => {
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
+    const eventType = event.type as string
+    const eventData = event.data as typeof event.data & { assistantMessageID?: string; finish?: string }
     const reduction = v2.reduce(data.session_message[sessionID] ?? [], event)
     if (reduction) {
       projectV2(reduction)
       if (reduction.missing) hydrateV2Message(sessionID, reduction.missing)
+    }
+
+    if (eventType === "session.next.step.ended" || eventType === "session.next.step.failed") {
+      if (eventData.assistantMessageID) hydrateV2Message(sessionID, eventData.assistantMessageID)
+      if (eventType === "session.next.step.failed" || eventData.finish !== "tool-calls")
+        setData("session_status", sessionID, { type: "idle" })
     }
 
     const info = data.info[sessionID]
@@ -1050,14 +1060,19 @@ export function createServerSession(
           setData("message", info.sessionID, [info])
           return
         }
+        const existing = messages.findIndex((message) => message.id === info.id)
+        if (existing !== -1) {
+          const next = messages.slice()
+          next[existing] = info
+          setData("message", info.sessionID, reconcile(next.sort(compareMessages), { key: "id" }))
+          return
+        }
         const result = Binary.search(messages, messageKey(info), messageKey)
-        if (result.found) setData("message", info.sessionID, result.index, reconcile(info))
-        if (!result.found)
-          setData("message", info.sessionID, (value = []) => {
-            const next = value.slice()
-            next.splice(result.index, 0, info)
-            return next
-          })
+        setData("message", info.sessionID, (value = []) => {
+          const next = value.slice()
+          next.splice(result.index, 0, info)
+          return next
+        })
         return
       }
       case "message.removed": {

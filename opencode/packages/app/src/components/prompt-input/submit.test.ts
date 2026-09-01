@@ -318,6 +318,41 @@ beforeEach(() => {
 })
 
 describe("prompt submit worktree selection", () => {
+  test("creates only one session for concurrent submits", async () => {
+    let release!: () => void
+    createSessionGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    const first = submit.handleSubmit(event)
+    await Promise.resolve()
+    const second = submit.handleSubmit(event)
+    release()
+    await Promise.all([first, second])
+    await Bun.sleep(0)
+
+    expect(createdSessions).toHaveLength(1)
+    expect(sentPrompts).toHaveLength(1)
+  })
+
   test("waits for an in-flight Harness switch before submitting", async () => {
     const submit = createPromptSubmit({
       prompt,

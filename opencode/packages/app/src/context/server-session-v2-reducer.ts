@@ -3,6 +3,17 @@ import type { OpenCodeEvent, SessionMessageInfo, SessionPendingMessage } from "@
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 type Compaction = Extract<SessionMessageInfo, { type: "compaction" }>
 type Shell = Extract<SessionMessageInfo, { type: "shell" }>
+type User = Extract<SessionMessageInfo, { type: "user" }>
+
+type NextPromptEvent = {
+  type: "session.next.prompt.admitted" | "session.next.prompted"
+  data: {
+    timestamp: number | string
+    sessionID: string
+    messageID: string
+    prompt: Pick<User, "text" | "files" | "agents">
+  }
+}
 
 export type V2SessionReduction = {
   sessionID: string
@@ -24,6 +35,21 @@ export function createV2SessionReducer() {
     })
     const append = (message: SessionMessageInfo) =>
       result(source.some((item) => item.id === message.id) ? [...source] : [...source, message], [message.id])
+
+    const eventType = event.type as string
+    if (eventType === "session.next.prompt.admitted" || eventType === "session.next.prompted") {
+      const current = event as unknown as NextPromptEvent
+      const created =
+        typeof current.data.timestamp === "number" ? current.data.timestamp : Date.parse(current.data.timestamp)
+      return append({
+        id: current.data.messageID,
+        type: "user",
+        text: current.data.prompt.text,
+        files: current.data.prompt.files,
+        agents: current.data.prompt.agents,
+        time: { created },
+      })
+    }
 
     switch (event.type) {
       case "session.input.admitted":

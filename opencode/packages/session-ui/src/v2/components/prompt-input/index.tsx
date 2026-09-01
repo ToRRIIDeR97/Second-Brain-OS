@@ -557,10 +557,13 @@ function PromptInputV2ConfiguredSelect(props: {
 export function PromptInputV2Select(props: {
   title: string
   keybind?: string[]
-  options: PromptInputV2Option[]
+  options: Array<PromptInputV2Option & { disabled?: boolean; title?: string }>
   current: string
   currentIcon?: JSX.Element
   class?: string
+  control?: string
+  disabled?: boolean
+  capitalize?: boolean
   onOpenChange?: (open: boolean) => void
   onSelect: (id: string) => void
 }) {
@@ -580,10 +583,12 @@ export function PromptInputV2Select(props: {
           variant="ghost-muted"
           size="normal"
           class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          data-control={props.control}
+          disabled={props.disabled}
           aria-label={props.title}
         >
           {props.currentIcon}
-          <span class="truncate capitalize leading-5">
+          <span class="truncate leading-5" classList={{ capitalize: props.capitalize ?? true }}>
             {props.options.find((option) => option.id === props.current)?.label ?? props.current}
           </span>
           <span class="-ms-0.5 -me-1 flex shrink-0">
@@ -595,7 +600,13 @@ export function PromptInputV2Select(props: {
             <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
               <For each={props.options}>
                 {(option) => (
-                  <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                  <MenuV2.RadioItem
+                    value={option.id}
+                    classList={{ capitalize: props.capitalize ?? true }}
+                    disabled={option.disabled}
+                    title={option.title}
+                    closeOnSelect
+                  >
                     {option.label}
                   </MenuV2.RadioItem>
                 )}

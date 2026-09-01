@@ -15,6 +15,7 @@ import type {
   SessionShellInput,
   SessionShellOutput,
 } from "@opencode-ai/client/promise"
+import { Harness } from "@opencode-ai/schema/harness"
 
 type LegacyClient = OpencodeClient
 type LegacyFor = (directory?: string) => LegacyClient
@@ -45,12 +46,14 @@ type LegacyPrompt = {
   model?: { providerID: string; modelID: string }
   variant?: string
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
+  harness?: boolean
 }
 type LegacyLocation = { directory?: string }
 type CompatibleInput = {
   protocol: Promise<ServerProtocol>
   current: ServerApi
   createSession?: (input?: HarnessSessionCreateInput) => Promise<SessionInfo>
+  promptSession?: (input: SessionPromptInput) => Promise<void>
   legacy: LegacyFor
   directory?: string
 }
@@ -58,6 +61,18 @@ type CompatibleInput = {
 function mime(uri: string) {
   const match = /^data:([^;,]+)/.exec(uri)
   return match?.[1] ?? "application/octet-stream"
+}
+
+function pendingUser(value: SessionPromptInput) {
+  return {
+    admittedSeq: 0,
+    id: value.id ?? "",
+    sessionID: value.sessionID,
+    timeCreated: Date.now(),
+    type: "user" as const,
+    data: { text: value.text },
+    delivery: value.delivery ?? ("steer" as const),
+  }
 }
 
 function sessionInfo(session: Session): SessionInfo {
@@ -92,6 +107,12 @@ export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
     session: {
       ...input.current.session,
       create: input.createSession ?? ((value) => input.current.session.create(value)),
+      prompt: input.promptSession
+        ? async (value) => {
+            await input.promptSession!(value)
+            return pendingUser(value)
+          }
+        : input.current.session.prompt,
     },
   }
   return lazyApi(
@@ -170,6 +191,8 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         return { data: (result.data ?? []).map(sessionInfo), cursor: {} }
       },
       async create(value?: HarnessSessionCreateInput) {
+        if (value?.harnessInstanceID && value.harnessInstanceID !== Harness.OpenCode && input.createSession)
+          return input.createSession(value)
         const result = await legacy(value?.location ?? undefined).session.create({
           directory: directory(value?.location ?? undefined),
         })
@@ -207,6 +230,10 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         await legacy().session.abort(value)
       },
       async prompt(value: SessionPromptInput & LegacyPrompt) {
+        if (value.harness && input.promptSession) {
+          await input.promptSession(value)
+          return pendingUser(value)
+        }
         await legacy().session.promptAsync({
           sessionID: value.sessionID,
           messageID: value.id ?? undefined,
@@ -237,15 +264,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
             })),
           ],
         })
-        return {
-          admittedSeq: 0,
-          id: value.id ?? "",
-          sessionID: value.sessionID,
-          timeCreated: Date.now(),
-          type: "user",
-          data: { text: value.text },
-          delivery: value.delivery ?? "steer",
-        }
+        return pendingUser(value)
       },
       async command(value: SessionCommandInput) {
         await legacy().session.command({

@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { adaptServerEvent, coalesceServerEvents, enqueueServerEvent, resumeStreamAfterPageShow } from "./server-sdk"
+import {
+  adaptLegacyServerEvent,
+  adaptServerEvent,
+  coalesceServerEvents,
+  enqueueServerEvent,
+  resumeStreamAfterPageShow,
+} from "./server-sdk"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { Event } from "@opencode-ai/sdk/v2/client"
 
@@ -28,6 +34,23 @@ describe("adaptServerEvent", () => {
       type: "permission.asked",
       properties: { id: "perm_1", sessionID: "ses_1", permission: "read", patterns: ["src/**"] },
       current,
+    })
+  })
+})
+
+describe("adaptLegacyServerEvent", () => {
+  test("preserves current session events carried by the legacy global stream", () => {
+    const event = {
+      id: "evt_1",
+      type: "session.text.delta",
+      properties: { sessionID: "ses_1", assistantMessageID: "msg_1", ordinal: 0, delta: "hello" },
+    }
+
+    expect(adaptLegacyServerEvent(event, "/repo").current).toMatchObject({
+      id: "evt_1",
+      type: "session.text.delta",
+      data: event.properties,
+      location: { directory: "/repo" },
     })
   })
 })
@@ -61,6 +84,29 @@ describe("coalesceServerEvents", () => {
         location: { directory: "/repo" },
         data: { sessionID: "ses", assistantMessageID: "msg", ordinal: 0, delta: value },
       } as OpenCodeEvent)
+    const result = coalesceServerEvents([
+      { directory: "/repo", payload: current("evt_1", "hello ") },
+      { directory: "/repo", payload: current("evt_2", "world") },
+    ])
+
+    expect(result).toHaveLength(1)
+    expect(result[0]?.payload.current).toMatchObject({ id: "evt_2", data: { delta: "hello world" } })
+  })
+
+  test("merges adjacent next-generation text deltas", () => {
+    const current = (id: string, value: string) =>
+      adaptServerEvent({
+        id,
+        type: "session.next.text.delta",
+        location: { directory: "/repo" },
+        data: {
+          timestamp: 1,
+          sessionID: "ses",
+          assistantMessageID: "msg_1",
+          textID: "text_1",
+          delta: value,
+        },
+      } as unknown as OpenCodeEvent)
     const result = coalesceServerEvents([
       { directory: "/repo", payload: current("evt_1", "hello ") },
       { directory: "/repo", payload: current("evt_2", "world") },

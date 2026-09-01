@@ -59,6 +59,7 @@ type Deps = {
 export function registerIpcHandlers(deps: Deps) {
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
+  const updaterSenders = new WeakSet<Electron.WebContents>()
   app.once("will-quit", updaterSubscriptions.clear)
   app.on("before-quit", () => drafts.flush())
   app.once("will-quit", () => drafts.close())
@@ -91,7 +92,10 @@ export function registerIpcHandlers(deps: Deps) {
         event.sender.send("updater-state", state)
       }),
     )
-    event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
+    if (!updaterSenders.has(event.sender)) {
+      updaterSenders.add(event.sender)
+      event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
+    }
   })
   ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
   ipcMain.handle("updater-check", () => deps.updater.check())

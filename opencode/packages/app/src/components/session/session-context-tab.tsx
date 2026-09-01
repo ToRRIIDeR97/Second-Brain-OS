@@ -65,7 +65,7 @@ function RawMessage(props: {
   message: Message
   getParts: (id: string) => Part[]
   onRendered: () => void
-  time: (value: number | undefined) => string
+  time: (value: number | string | undefined) => string
 }) {
   return (
     <Accordion.Item value={props.message.id}>

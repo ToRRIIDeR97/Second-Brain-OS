@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { createApiForServer, createSdkForServer } from "./server"
+import { Harness } from "@opencode-ai/schema/harness"
+import { createApiForServer, createSdkForServer, createSessionForServer, promptSessionForServer } from "./server"
 import { createCompatibleApi } from "./server-compat"
 
 function setup(
@@ -11,6 +12,8 @@ function setup(
     async (input: string | URL | Request, init?: RequestInit) => {
       const request = new Request(input, init)
       requests.push(request)
+      if (request.method === "POST" && new URL(request.url).pathname === "/api/session")
+        return Response.json({ data: { id: "ses_1" } })
       if (request.method === "PATCH") {
         return Response.json({
           id: "ses_1",
@@ -46,6 +49,8 @@ function setup(
   const api = createCompatibleApi({
     protocol: typeof protocol === "string" ? Promise.resolve(protocol) : protocol,
     current: createApiForServer({ server, fetch: fetcher }),
+    createSession: (input) => createSessionForServer({ server, fetch: fetcher }, input),
+    promptSession: (input) => promptSessionForServer({ server, fetch: fetcher }, input),
     legacy: (directory) => createSdkForServer({ server, fetch: fetcher, directory, throwOnError: true }),
     directory: "/repo",
   })
@@ -53,6 +58,41 @@ function setup(
 }
 
 describe("createCompatibleApi", () => {
+  test("keeps harness sessions on the current API when the server also exposes V1", async () => {
+    const { api, requests } = setup("v1")
+    await api.session.create({
+      harnessInstanceID: Harness.Codex,
+      harnessModel: { id: "gpt-5.6-sol", reasoningEffort: "low" },
+      location: { directory: "/repo" },
+    })
+    await api.session.prompt({
+      sessionID: "ses_1",
+      id: "msg_1",
+      text: "hello",
+      model: { providerID: Harness.Codex, modelID: "gpt-5.6-sol" },
+      harness: true,
+    })
+
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/api/session",
+      "/api/session/ses_1/prompt",
+    ])
+    expect(await requests[0]!.json()).toMatchObject({
+      harnessInstanceID: Harness.Codex,
+      harnessModel: { id: "gpt-5.6-sol", reasoningEffort: "low" },
+      location: { directory: "/repo" },
+    })
+    expect(await requests[1]!.json()).toEqual({ id: "msg_1", prompt: { text: "hello" } })
+  })
+
+  test("uses the current prompt contract on V2 servers", async () => {
+    const { api, requests } = setup("v2")
+    await api.session.prompt({ sessionID: "ses_1", id: "msg_1", text: "hello" })
+
+    expect(new URL(requests[0]!.url).pathname).toBe("/api/session/ses_1/prompt")
+    expect(await requests[0]!.json()).toEqual({ id: "msg_1", prompt: { text: "hello" } })
+  })
+
   /*
   test("routes V1 archive through the legacy session update", async () => {
     const { api, requests } = setup("v1")

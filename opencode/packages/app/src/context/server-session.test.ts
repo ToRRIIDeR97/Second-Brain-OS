@@ -213,6 +213,82 @@ describe("server session", () => {
     expect(ctx.store.data.part.msg_2_assistant).toMatchObject([{ type: "text", text: "world" }])
   })
 
+  test("hydrates completed messages from current session events", async () => {
+    const requests: unknown[] = []
+    const assistant = {
+      id: "msg_2_assistant",
+      type: "assistant" as const,
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ id: "text_1", type: "text" as const, text: "done" }],
+      finish: "stop" as const,
+      time: { created: 2, completed: 3 },
+    }
+    const sessionApi = {
+      message: async (input: unknown) => {
+        requests.push(input)
+        return assistant
+      },
+    } as unknown as SessionApi
+    const store = createServerSession({} as OpencodeClient, sessionApi, {} as MessageApi)
+    store.remember(session("child"))
+    store.set("session_message", "child", [{ id: "msg_1_user", type: "user", text: "hello", time: { created: 1 } }])
+    store.set("session_status", "child", { type: "busy" })
+
+    store.applyV2({
+      id: "evt_step_end",
+      type: "session.next.step.ended",
+      data: {
+        sessionID: "child",
+        assistantMessageID: assistant.id,
+        finish: "stop",
+      },
+    } as unknown as OpenCodeEvent)
+    await Promise.resolve()
+
+    expect(requests).toEqual([{ sessionID: "child", messageID: assistant.id }])
+    expect(store.data.session_message.child.at(-1)).toEqual(assistant)
+    expect(store.data.part[assistant.id]).toMatchObject([{ type: "text", text: "done" }])
+    expect(store.data.session_status.child).toEqual({ type: "idle" })
+  })
+
+  test("keeps an ISO-timestamped current prompt before its hydrated assistant", async () => {
+    const created = Date.parse("2026-09-01T00:43:00.000Z")
+    const assistant = {
+      id: "msg_assistant",
+      type: "assistant" as const,
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ id: "text", type: "text" as const, text: "done" }],
+      finish: "stop" as const,
+      time: { created: created + 1, completed: created + 2 },
+    }
+    const sessionApi = { message: async () => assistant } as unknown as SessionApi
+    const store = createServerSession({} as OpencodeClient, sessionApi, {} as MessageApi)
+    store.remember(session("child"))
+
+    store.applyV2({
+      id: "evt_prompt",
+      type: "session.next.prompted",
+      data: {
+        timestamp: "2026-09-01T00:43:00.000Z",
+        sessionID: "child",
+        messageID: "msg_user",
+        prompt: { text: "test" },
+        delivery: "steer",
+      },
+    } as unknown as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_step_end",
+      type: "session.next.step.ended",
+      data: { sessionID: "child", assistantMessageID: assistant.id, finish: "stop" },
+    } as unknown as OpenCodeEvent)
+    await Promise.resolve()
+
+    expect(store.data.session_message.child.map((message) => message.id)).toEqual(["msg_user", "msg_assistant"])
+    expect(store.data.message.child.map((message) => message.id)).toEqual(["msg_user", "msg_assistant"])
+  })
+
   test("resolves lineage by session ID without directory", async () => {
     const ctx = setup({ child: session("child", "root"), root: session("root") })
 
@@ -926,6 +1002,17 @@ describe("server session", () => {
 
     expect(store.data.message.child).toEqual([message])
     expect(store.data.part[message.id]).toBeUndefined()
+  })
+
+  test("reconciles an optimistic message when the server changes its timestamp", () => {
+    const optimistic = userMessage("message", { time: { created: 1 } })
+    const confirmed = userMessage("message", { time: { created: 2 } })
+    const store = setup({ child: session("child") }).store
+    store.optimistic.add({ sessionID: "child", message: optimistic, parts: [] })
+
+    store.apply({ type: "message.updated", properties: { sessionID: "child", info: confirmed } })
+
+    expect(store.data.message.child).toEqual([confirmed])
   })
 
   test("does not remove parts confirmed by part events", () => {

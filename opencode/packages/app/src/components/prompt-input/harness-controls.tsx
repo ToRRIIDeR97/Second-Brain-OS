@@ -1,5 +1,6 @@
-import { For, Show, createMemo } from "solid-js"
+import { Show, createMemo } from "solid-js"
 import { Harness } from "@opencode-ai/schema/harness"
+import { PromptInputV2Select } from "@opencode-ai/session-ui/v2/prompt-input"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
@@ -17,9 +18,6 @@ export type PromptInputHarnessController = {
     set: (model: Harness.ModelSelection | undefined) => void
   }
 }
-
-const SELECT_CLASS =
-  "h-7 min-w-0 max-w-[220px] cursor-pointer rounded-[6px] border-0 bg-transparent px-2 text-[12px] text-v2-text-text-muted outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover disabled:cursor-wait disabled:opacity-60"
 
 export function PromptInputHarnessControls(props: { controller: PromptInputHarnessController }) {
   const language = useLanguage()
@@ -42,46 +40,36 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
 
   return (
     <>
-      <select
-        data-control="harness"
-        aria-label={language.t("harness.label")}
-        class={SELECT_CLASS}
-        value={props.controller.current()}
+      <PromptInputV2Select
+        title={language.t("harness.label")}
+        options={
+          props.controller.instances()?.map((item) => ({
+            id: item.id,
+            label: item.name + (item.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""),
+            disabled: item.status === "unavailable",
+            title: item.error,
+          })) ?? [{ id: props.controller.current(), label: language.t("harness.checking") }]
+        }
+        current={props.controller.current()}
+        control="harness"
         disabled={props.controller.loading() || props.controller.disabled?.() || !props.controller.instances()}
-        onChange={(event) => props.controller.select(Harness.InstanceID.make(event.currentTarget.value))}
-      >
-        <Show when={props.controller.instances()} fallback={<option>{language.t("harness.checking")}</option>}>
-          <For each={props.controller.instances()}>
-            {(item) => (
-              <option
-                value={item.id}
-                selected={item.id === props.controller.current()}
-                disabled={item.status === "unavailable"}
-                title={item.error}
-              >
-                {item.name}
-                {item.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}
-              </option>
-            )}
-          </For>
-        </Show>
-      </select>
+        onSelect={(id) => props.controller.select(Harness.InstanceID.make(id))}
+      />
       <Show when={instance()?.driver !== Harness.OpenCodeDriver && instance()} keyed>
         {(item) => (
           <Show
             when={item.models.length > 0}
             fallback={<span class="px-2 text-[12px] text-v2-text-text-faint">{language.t("harness.models.none")}</span>}
           >
-            <select
-              data-control="harness-model"
-              aria-label={language.t("harness.model")}
-              class={SELECT_CLASS}
-              value={props.controller.model.current()?.id}
+            <PromptInputV2Select
+              title={language.t("harness.model")}
+              options={item.models.map((option) => ({ id: option.id, label: option.name }))}
+              current={props.controller.model.current()?.id ?? item.models[0]?.id ?? ""}
+              control="harness-model"
+              capitalize={false}
               disabled={props.controller.disabled?.()}
-              onChange={(event) => selectModel(event.currentTarget.value)}
-            >
-              <For each={item.models}>{(option) => <option value={option.id}>{option.name}</option>}</For>
-            </select>
+              onSelect={selectModel}
+            />
           </Show>
         )}
       </Show>
@@ -89,42 +77,40 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
         {(selected) => (
           <>
             <Show when={selected.reasoningEfforts.length > 0}>
-              <select
-                data-control="harness-effort"
-                aria-label={language.t("harness.effort")}
-                class={SELECT_CLASS}
-                value={props.controller.model.current()?.reasoningEffort ?? ""}
+              <PromptInputV2Select
+                title={language.t("harness.effort")}
+                options={[
+                  { id: "", label: language.t("harness.default") },
+                  ...selected.reasoningEfforts.map((effort) => ({ id: effort, label: effort })),
+                ]}
+                current={props.controller.model.current()?.reasoningEffort ?? ""}
+                control="harness-effort"
+                capitalize={false}
                 disabled={props.controller.disabled?.()}
-                onChange={(event) => {
+                onSelect={(reasoningEffort) => {
                   const current = props.controller.model.current()
                   if (!current) return
-                  props.controller.model.set({ ...current, reasoningEffort: event.currentTarget.value || undefined })
+                  props.controller.model.set({ ...current, reasoningEffort: reasoningEffort || undefined })
                 }}
-              >
-                <option value="">{`${language.t("harness.effort")}: ${language.t("harness.default")}`}</option>
-                <For each={selected.reasoningEfforts}>
-                  {(effort) => <option value={effort}>{`${language.t("harness.effort")}: ${effort}`}</option>}
-                </For>
-              </select>
+              />
             </Show>
             <Show when={selected.serviceTiers.length > 0}>
-              <select
-                data-control="harness-service-tier"
-                aria-label={language.t("harness.serviceTier")}
-                class={SELECT_CLASS}
-                value={props.controller.model.current()?.serviceTier ?? ""}
+              <PromptInputV2Select
+                title={language.t("harness.serviceTier")}
+                options={[
+                  { id: "", label: language.t("harness.default") },
+                  ...selected.serviceTiers.map((tier) => ({ id: tier.id, label: tier.name })),
+                ]}
+                current={props.controller.model.current()?.serviceTier ?? ""}
+                control="harness-service-tier"
+                capitalize={false}
                 disabled={props.controller.disabled?.()}
-                onChange={(event) => {
+                onSelect={(serviceTier) => {
                   const current = props.controller.model.current()
                   if (!current) return
-                  props.controller.model.set({ ...current, serviceTier: event.currentTarget.value || undefined })
+                  props.controller.model.set({ ...current, serviceTier: serviceTier || undefined })
                 }}
-              >
-                <option value="">{`${language.t("harness.serviceTier")}: ${language.t("harness.default")}`}</option>
-                <For each={selected.serviceTiers}>
-                  {(tier) => <option value={tier.id}>{`${language.t("harness.serviceTier")}: ${tier.name}`}</option>}
-                </For>
-              </select>
+              />
             </Show>
           </>
         )}

@@ -153,4 +153,37 @@ describe("v2 session reducer", () => {
 
     expect(result).toMatchObject({ sessionID: "ses_1", missing: "msg_user", touched: [] })
   })
+
+  test("projects current prompt events once before the assistant response", () => {
+    const reducer = createV2SessionReducer()
+    let messages: SessionMessageInfo[] = []
+    const apply = (type: "session.next.prompt.admitted" | "session.next.prompted") => {
+      const result = reducer.reduce(
+        messages,
+        event({
+          id: `evt_${type}`,
+          type,
+          data: {
+            timestamp: "2026-09-01T00:43:00.000Z",
+            sessionID: "ses_1",
+            messageID: "msg_user",
+            prompt: { text: "hello", files: [], agents: [] },
+            delivery: "steer",
+          },
+        }),
+      )
+      if (result) messages = result.messages
+    }
+
+    apply("session.next.prompt.admitted")
+    apply("session.next.prompted")
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      id: "msg_user",
+      type: "user",
+      text: "hello",
+      time: { created: Date.parse("2026-09-01T00:43:00.000Z") },
+    })
+  })
 })
