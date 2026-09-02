@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message } from "@opencode-ai/sdk/v2/client"
-import { getSessionContext } from "./session-context-metrics"
+import { getSessionContext, getSessionHarnesses } from "./session-context-metrics"
 
 const assistant = (
   id: string,
@@ -8,12 +8,14 @@ const assistant = (
   cost: number,
   providerID = "openai",
   modelID = "gpt-4.1",
+  harnessInstanceID?: string,
 ) => {
   return {
     id,
     role: "assistant",
     providerID,
     modelID,
+    harnessInstanceID,
     cost,
     tokens: {
       input: tokens.input,
@@ -95,5 +97,17 @@ describe("getSessionContext", () => {
     const ctx = getSessionContext(undefined, undefined)
 
     expect(ctx).toBeUndefined()
+  })
+
+  test("selects the latest token snapshot for each harness", () => {
+    const messages = [
+      assistant("a1", { input: 10, output: 1, reasoning: 0, read: 0, write: 0 }, 0, "openai", "gpt", "opencode"),
+      assistant("a2", { input: 20, output: 2, reasoning: 0, read: 0, write: 0 }, 0, "codex", "gpt", "codex"),
+      assistant("a3", { input: 30, output: 3, reasoning: 0, read: 0, write: 0 }, 0, "openai", "gpt", "opencode"),
+    ]
+
+    expect(getSessionHarnesses(messages)).toEqual(["opencode", "codex"])
+    expect(getSessionContext(messages, [], "opencode")?.message.id).toBe("a3")
+    expect(getSessionContext(messages, [], "codex")?.message.id).toBe("a2")
   })
 })

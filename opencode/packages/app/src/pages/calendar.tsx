@@ -1,6 +1,7 @@
 import { useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { createEffect, createMemo, createResource, For, Show } from "solid-js"
@@ -692,19 +693,18 @@ export default function CalendarPage() {
         <Show when={projects().length > 0}>
           <label class="flex items-center gap-2 text-[12px] text-v2-text-text-muted">
             <span>{language.t("secondBrain.workspace")}</span>
-            <select
-              class="h-8 max-w-56 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-              value={state.directory}
-              onChange={(event) =>
-                setState({ directory: event.currentTarget.value, editing: false, draft: emptyDraft() })
+            <SelectV2
+              aria-label={language.t("secondBrain.workspace")}
+              appearance="large"
+              class="!w-56 max-w-full"
+              options={projects()}
+              current={projects().find((project) => project.worktree === state.directory)}
+              value={(project) => project.worktree}
+              label={(project) => project.name ?? project.worktree.split(/[\\/]/).pop() ?? project.worktree}
+              onSelect={(project) =>
+                project && setState({ directory: project.worktree, editing: false, draft: emptyDraft() })
               }
-            >
-              <For each={projects()}>
-                {(project) => (
-                  <option value={project.worktree}>{project.name ?? project.worktree.split(/[\\/]/).pop()}</option>
-                )}
-              </For>
-            </select>
+            />
           </label>
           <Show when={state.googleError}>
             <span role="alert" class="max-w-48 truncate text-[11px] text-v2-text-text-critical">
@@ -791,15 +791,19 @@ export default function CalendarPage() {
                 <h2 class="min-w-0 flex-1 truncate px-1 text-[14px] text-v2-text-text-base [font-weight:530]">
                   {viewTitle()}
                 </h2>
-                <select
+                <SelectV2
                   aria-label={language.t("secondBrain.calendar.filterProject")}
-                  class="h-8 max-w-44 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-                  value={state.projectFilter}
-                  onChange={(event) => setState("projectFilter", event.currentTarget.value)}
-                >
-                  <option value="">{language.t("secondBrain.calendar.allProjects")}</option>
-                  <For each={brainProjects()}>{(project) => <option value={project.id}>{project.name}</option>}</For>
-                </select>
+                  appearance="large"
+                  class="!w-44"
+                  options={["", ...(brainProjects() ?? []).map((project) => project.id)]}
+                  current={state.projectFilter}
+                  label={(id) =>
+                    id
+                      ? (brainProjects()?.find((project) => project.id === id)?.name ?? id)
+                      : language.t("secondBrain.calendar.allProjects")
+                  }
+                  onSelect={(id) => id !== null && setState("projectFilter", id)}
+                />
                 <ButtonV2
                   size="small"
                   variant="ghost"
@@ -993,17 +997,18 @@ export default function CalendarPage() {
                               for="google-access"
                             >
                               {language.t("secondBrain.calendar.google.access")}
-                              <select
+                              <SelectV2
                                 id="google-access"
-                                class="h-8 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-                                value={state.googleAccess}
-                                onChange={(event) =>
-                                  setState("googleAccess", event.currentTarget.value === "write" ? "write" : "read")
+                                aria-label={language.t("secondBrain.calendar.google.access")}
+                                appearance="large"
+                                class="!w-full"
+                                options={["read", "write"]}
+                                current={state.googleAccess}
+                                label={(access) => language.t(`secondBrain.calendar.google.access.${access}`)}
+                                onSelect={(access) =>
+                                  access && setState("googleAccess", access === "write" ? "write" : "read")
                                 }
-                              >
-                                <option value="read">{language.t("secondBrain.calendar.google.access.read")}</option>
-                                <option value="write">{language.t("secondBrain.calendar.google.access.write")}</option>
-                              </select>
+                              />
                             </label>
                             <p class="text-[11px] leading-4 text-v2-text-text-faint">
                               {language.t("secondBrain.calendar.google.credentialNote")}
@@ -1137,21 +1142,29 @@ export default function CalendarPage() {
                         for="calendar-event-source"
                       >
                         {language.t("secondBrain.calendar.google.destination")}
-                        <select
+                        <SelectV2
                           id="calendar-event-source"
-                          class="h-8 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-                          value={state.draft.source}
-                          onChange={(event) =>
+                          aria-label={language.t("secondBrain.calendar.google.destination")}
+                          appearance="large"
+                          class="!w-full"
+                          options={["local", "google"]}
+                          current={state.draft.source}
+                          label={(source) =>
+                            language.t(
+                              source === "google"
+                                ? "secondBrain.calendar.google.title"
+                                : "secondBrain.calendar.sync.local",
+                            )
+                          }
+                          onSelect={(source) =>
+                            source &&
                             setState("draft", {
                               ...state.draft,
-                              source: event.currentTarget.value === "google" ? "google" : "local",
-                              syncState: event.currentTarget.value === "google" ? "pending" : "local",
+                              source: source === "google" ? "google" : "local",
+                              syncState: source === "google" ? "pending" : "local",
                             })
                           }
-                        >
-                          <option value="local">{language.t("secondBrain.calendar.sync.local")}</option>
-                          <option value="google">{language.t("secondBrain.calendar.google.title")}</option>
-                        </select>
+                        />
                       </label>
                     </Show>
                     <label
@@ -1159,17 +1172,20 @@ export default function CalendarPage() {
                       for="calendar-event-project"
                     >
                       {language.t("secondBrain.calendar.project")}
-                      <select
+                      <SelectV2
                         id="calendar-event-project"
-                        class="h-8 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-                        value={state.draft.projectId}
-                        onChange={(event) => setState("draft", "projectId", event.currentTarget.value)}
-                      >
-                        <option value="">{language.t("secondBrain.calendar.noProject")}</option>
-                        <For each={brainProjects()}>
-                          {(project) => <option value={project.id}>{project.name}</option>}
-                        </For>
-                      </select>
+                        aria-label={language.t("secondBrain.calendar.project")}
+                        appearance="large"
+                        class="!w-full"
+                        options={["", ...(brainProjects() ?? []).map((project) => project.id)]}
+                        current={state.draft.projectId}
+                        label={(id) =>
+                          id
+                            ? (brainProjects()?.find((project) => project.id === id)?.name ?? id)
+                            : language.t("secondBrain.calendar.noProject")
+                        }
+                        onSelect={(id) => id !== null && setState("draft", "projectId", id)}
+                      />
                     </label>
                     <div class="grid grid-cols-2 gap-3">
                       <label
