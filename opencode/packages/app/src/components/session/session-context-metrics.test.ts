@@ -106,7 +106,7 @@ describe("getSessionContext", () => {
       assistant("a3", { input: 30, output: 3, reasoning: 0, read: 0, write: 0 }, 0, "openai", "gpt", "opencode"),
     ]
 
-    expect(getSessionHarnesses(messages)).toEqual(["opencode", "codex"])
+    expect(getSessionHarnesses(messages)).toEqual(["codex", "opencode"])
     expect(getSessionContext(messages, [], "opencode")?.message.id).toBe("a3")
     expect(getSessionContext(messages, [], "codex")?.message.id).toBe("a2")
   })

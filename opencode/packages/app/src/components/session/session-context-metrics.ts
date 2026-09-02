@@ -34,9 +34,10 @@ const tokenTotal = (msg: AssistantMessage) => {
 
 const harnessID = (message: AssistantMessage) => (message as HarnessAssistant).harnessInstanceID ?? Harness.OpenCode
 
-export const getSessionHarnesses = (messages: Message[] = []) => [
-  ...new Set(messages.flatMap((message) => (message.role === "assistant" ? [harnessID(message)] : []))),
-]
+export const getSessionHarnesses = (messages: Message[] = []) =>
+  [
+    ...new Set(messages.flatMap((message) => (message.role === "assistant" ? [harnessID(message)] : [])).reverse()),
+  ].reverse()
 
 const lastAssistantWithTokens = (messages: Message[], selectedHarness?: string) => {
   for (let i = messages.length - 1; i >= 0; i--) {
