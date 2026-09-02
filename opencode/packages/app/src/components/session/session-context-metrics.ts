@@ -1,4 +1,7 @@
 import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
+import { Harness } from "@opencode-ai/schema/harness"
+
+type HarnessAssistant = AssistantMessage & { harnessInstanceID?: string }
 
 type Provider = {
   id: string
@@ -29,17 +32,25 @@ const tokenTotal = (msg: AssistantMessage) => {
   return msg.tokens.input + msg.tokens.output + msg.tokens.reasoning + msg.tokens.cache.read + msg.tokens.cache.write
 }
 
-const lastAssistantWithTokens = (messages: Message[]) => {
+const harnessID = (message: AssistantMessage) => (message as HarnessAssistant).harnessInstanceID ?? Harness.OpenCode
+
+export const getSessionHarnesses = (messages: Message[] = []) =>
+  [
+    ...new Set(messages.flatMap((message) => (message.role === "assistant" ? [harnessID(message)] : [])).reverse()),
+  ].reverse()
+
+const lastAssistantWithTokens = (messages: Message[], selectedHarness?: string) => {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
     if (msg.role !== "assistant") continue
+    if (selectedHarness && harnessID(msg) !== selectedHarness) continue
     if (tokenTotal(msg) <= 0) continue
     return msg
   }
 }
 
-const build = (messages: Message[] = [], providers: Provider[] = []): Context | undefined => {
-  const message = lastAssistantWithTokens(messages)
+const build = (messages: Message[] = [], providers: Provider[] = [], selectedHarness?: string): Context | undefined => {
+  const message = lastAssistantWithTokens(messages, selectedHarness)
   if (!message) return undefined
 
   const provider = providers.find((item) => item.id === message.providerID)
@@ -60,6 +71,6 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
   }
 }
 
-export function getSessionContext(messages: Message[] = [], providers: Provider[] = []) {
-  return build(messages, providers)
+export function getSessionContext(messages: Message[] = [], providers: Provider[] = [], selectedHarness?: string) {
+  return build(messages, providers, selectedHarness)
 }
