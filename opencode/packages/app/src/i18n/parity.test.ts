@@ -65,9 +65,9 @@ const appLocales = [
   "uz",
 ] as const
 const desktopLocales = appLocales
-// New Second Brain surfaces intentionally use the English base dictionary until translations are commissioned.
+// New Second Brain surfaces, including harness controls, use the English base until translations are commissioned.
 // The runtime merges that base into every locale before localized values, so these keys never render raw IDs.
-const englishFallbackPrefixes = ["secondBrain."]
+const englishFallbackPrefixes = ["secondBrain.", "harness."]
 const pluralCategories = new Map(
   appLocales.map(
     (locale) =>
@@ -100,7 +100,7 @@ const domains = [
 ] as const
 
 describe("i18n parity", () => {
-  test("non-English locales have every English key and required plural variants", async () => {
+  test("non-English locales have every required key and plural variant outside the English fallback domains", async () => {
     for (const domain of domains) {
       const source = await dictionary(domain.source)
       for (const locale of domain.locales) {

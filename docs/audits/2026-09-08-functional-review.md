@@ -14,22 +14,30 @@ The regression script now asserts corrected behavior. It loads the full desktop 
 
 Validation from the implementation run:
 
-| Check                                             | Result                                                                                                       |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Core harness, protocol, and configuration tests   | 58 passed                                                                                                    |
-| Second Brain app domain tests                     | 13 passed                                                                                                    |
-| App browser-condition tests (Happy DOM)           | 42 passed                                                                                                    |
-| Desktop Google domain and security boundary tests | 7 passed                                                                                                     |
-| Functional regression script                      | Passed                                                                                                       |
-| Previous security regression script               | Passed                                                                                                       |
-| Core, app, and desktop `bun typecheck`            | Passed                                                                                                       |
-| App production build                              | Passed; existing chunk-size warning                                                                          |
-| Desktop build, including Node server and renderer | Passed using the repository models fixture, a local review version, and no Sentry upload                     |
-| Full app unit suite                               | 751 passed; 3 existing failures, also reproduced from HEAD in an isolated copy (749 passed; same 3 failures) |
+| Check                                             | Result                                                                                   |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Core harness, protocol, and configuration tests   | 58 passed                                                                                |
+| Second Brain app domain tests                     | 13 passed                                                                                |
+| App browser-condition tests (Happy DOM)           | 42 passed                                                                                |
+| Desktop Google domain and security boundary tests | 7 passed                                                                                 |
+| Functional regression script                      | Passed                                                                                   |
+| Previous security regression script               | Passed                                                                                   |
+| Core, app, and desktop `bun typecheck`            | Passed                                                                                   |
+| App production build                              | Passed; existing chunk-size warning                                                      |
+| Desktop build, including Node server and renderer | Passed using the repository models fixture, a local review version, and no Sentry upload |
+| Full app unit suite                               | 756 passed after the test-failure follow-up below                                        |
 
 Prettier and `git diff --check` passed. Targeted oxlint completed with zero errors and 42 warnings across 23 files. Seventeen unrelated pre-existing file diffs were preserved byte-for-byte; the three overlapping files were reviewed against the saved starting patch.
 
-The remaining full-suite failures are the session normalization expectation missing harness fields, Punjabi locale detection for `pa-PK`, and untranslated harness keys in the locale parity check. They were not introduced by these fixes. Router test substitutes were updated to include the newly used leave hook; the actual hook is tested separately with the router.
+The initial implementation run had three existing failures (751 passed); an isolated copy of the base commit reproduced all three (749 passed). The test-failure follow-up resolves them:
+
+- Session normalization expectations now include the default harness fields. A regression test checks that the selected harness, model settings, and revision survive both current and legacy normalization.
+- Desktop locale detection treats the Nastaliq script tag `Aran` as Arabic `Arab` when selecting a translation bundle. This restores `pa-PK` detection with newer locale data while retaining rejection of different writing systems. [Unicode documents Nastaliq as a style of Arabic script](https://www.unicode.org/faq/arabic.html).
+- The translation parity check includes `harness.*` in the existing Second Brain English fallback policy. Harness controls remain in English until translations are commissioned; all other translation-key requirements remain enforced.
+
+The follow-up passed all 756 app unit tests and 42 browser-condition tests, app and desktop typechecks, and both builds. The 19 tests in the three affected test files also passed independently. Formatting and diff checks passed; targeted lint on the four changed app files reported zero errors and five existing warnings. Only session tests changed in this follow-up; session runtime and timeline code were untouched.
+
+Router test substitutes were updated during the original implementation to include the newly used leave hook; the actual hook is tested separately with the router.
 
 The prompt-rendering microbenchmark used 2,001 messages and seven samples: the median incremental prompt cost changed from 0.000064 ms to 0.000199 ms; full-history rendering changed from 0.625 ms to 0.598 ms. These are local function timings, not an end-to-end UI performance claim. Session/timeline files were unchanged. Installer behavior, real OAuth, and live provider exchanges remain untested.
 

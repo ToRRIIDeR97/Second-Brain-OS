@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
+import { Harness } from "@opencode-ai/schema/harness"
 import { listAllSessions, normalizeSessionInfo } from "./session"
 
 describe("normalizeSessionInfo", () => {
@@ -32,9 +33,23 @@ describe("normalizeSessionInfo", () => {
       agent: "build",
       model: { id: "gpt-5", providerID: "openai", variant: "high" },
       version: "",
+      harnessInstanceID: Harness.OpenCode,
+      harnessModel: undefined,
+      harnessRevision: undefined,
       time: { created: 1, updated: 1 },
       revert: { messageID: "message-1", partID: "part-1", snapshot: "snapshot" },
     })
+  })
+
+  test("preserves the selected harness when adapting current and legacy sessions", () => {
+    const selection = {
+      harnessInstanceID: Harness.Codex,
+      harnessModel: { id: "gpt-test", reasoningEffort: "high", serviceTier: "fast" },
+      harnessRevision: 2,
+    }
+    const current = normalizeSessionInfo({ ...currentSession("session-1"), ...selection })
+    expect(current).toMatchObject(selection)
+    expect(normalizeSessionInfo(current)).toMatchObject(selection)
   })
 
   test("supplies timestamped titles for untitled current sessions", () => {

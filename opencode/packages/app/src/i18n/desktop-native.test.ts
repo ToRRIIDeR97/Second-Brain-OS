@@ -133,6 +133,15 @@ describe("desktop native locale detection", () => {
     expect(detectDesktopNativeLocale(["nb-NO"])).toBe("no")
     expect(detectDesktopNativeLocale(["nn-NO"])).toBe("no")
   })
+
+  test("matches Nastaliq and Arabic bundles without accepting a different writing system", () => {
+    for (const script of ["Aran", "Arab"]) {
+      expect(detectDesktopNativeLocale([`pa-${script}-PK`])).toBe("pa")
+      expect(detectDesktopNativeLocale([`ur-${script}-PK`])).toBe("ur")
+    }
+    expect(detectDesktopNativeLocale(["pa-Guru-PK", "fr"])).toBe("fr")
+    expect(detectDesktopNativeLocale(["ur-Latn-PK", "de"])).toBe("de")
+  })
 })
 
 describe("desktop native ICU data", () => {

@@ -215,7 +215,10 @@ export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
 
 function locale(value: string) {
   try {
-    return new Intl.Locale(value).maximize()
+    const resolved = new Intl.Locale(value).maximize()
+    // Nastaliq is a style of Arabic; both script tags use the same translations.
+    // https://www.unicode.org/faq/arabic.html
+    return { language: resolved.language, script: resolved.script === "Aran" ? "Arab" : resolved.script }
   } catch {
     return undefined
   }
