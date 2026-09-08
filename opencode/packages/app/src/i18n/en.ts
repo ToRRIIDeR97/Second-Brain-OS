@@ -1114,6 +1114,10 @@ export const dict = {
   "secondBrain.calendar.google.error.conflict": "Google changed this event. Sync before trying again.",
   "secondBrain.calendar.google.error.denied": "Google sign-in was canceled or denied.",
   "secondBrain.calendar.google.error.request": "Google Calendar or Tasks could not complete the request.",
+  "secondBrain.calendar.google.error.outboxFull":
+    "The Google queue is full. Sync or resolve pending changes before adding more.",
+  "secondBrain.tasks.google.error.uncertain":
+    "Google may have created this task, but the response was lost. Check Google Tasks before creating it again.",
   "secondBrain.calendar.google.error.exactTime": "Google events need both a start and an end time, or neither.",
   "secondBrain.calendar.google.error.restricted":
     "Participant and recurring-series changes must be made in Google Calendar.",

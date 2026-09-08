@@ -8,14 +8,10 @@ import { createEffect, createMemo, createResource, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import {
-  usePlatform,
-  type GoogleCalendarConnection,
-  type GoogleCalendarProviderEvent,
-  type GoogleTaskProviderTask,
-} from "@/context/platform"
+import { usePlatform, type GoogleCalendarConnection, type GoogleCalendarProviderEvent } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { localDateKey, monthGrid, shiftDate, shiftMonth, weekRange } from "@/features/second-brain/calendar-domain"
+import { mergeGoogleTasks, providerTask } from "@/features/second-brain/google-sync"
 import { CalendarTasks, type CalendarTaskFilter } from "@/features/second-brain/calendar-tasks"
 import {
   listProjects,
@@ -124,31 +120,12 @@ const providerEvent = (event: GoogleCalendarProviderEvent, projectId?: string): 
   syncState: "synced",
 })
 
-const providerTask = (task: GoogleTaskProviderTask, local?: PlannerTask): PlannerTask => ({
-  id: `google-task:${task.taskListId}:${task.providerId}`,
-  title: task.title,
-  ...(task.notes ? { notes: task.notes } : {}),
-  ...(local?.projectId ? { projectId: local.projectId } : {}),
-  ...(task.dueDate ? { dueDate: task.dueDate } : {}),
-  ...(local?.scheduledDate ? { scheduledDate: local.scheduledDate } : {}),
-  ...(local?.start ? { start: local.start, end: local.end } : {}),
-  ...(task.completedAt ? { completedAt: task.completedAt } : {}),
-  providerId: task.providerId,
-  taskListId: task.taskListId,
-  taskListTitle: task.taskListTitle,
-  ...(task.etag ? { etag: task.etag } : {}),
-  createdAt: local?.createdAt ?? task.updatedAt,
-  updatedAt: task.updatedAt,
-  source: "google",
-  syncState: "synced",
-})
-
 export default function CalendarPage() {
   const language = useLanguage()
   const layout = useLayout()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
-  const [search] = useSearchParams<{ view?: string; project?: string; google?: string }>()
+  const [search] = useSearchParams<{ view?: string; project?: string; google?: string; directory?: string }>()
   const [state, setState] = createStore<CalendarState>({
     directory: "",
     cursor: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 12),
@@ -177,7 +154,8 @@ export default function CalendarPage() {
   createEffect(() => {
     const available = projects()
     if (available.some((project) => project.worktree === state.directory)) return
-    const preferred = layout.home.selection().directory
+    const preferred =
+      available.find((project) => project.worktree === search.directory)?.worktree ?? layout.home.selection().directory
     setState(
       "directory",
       available.find((project) => project.worktree === preferred)?.worktree ?? available[0]?.worktree ?? "",
@@ -347,6 +325,8 @@ export default function CalendarPage() {
 
   const googleMessage = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
+    if (message.includes("task_create_uncertain")) return language.t("secondBrain.tasks.google.error.uncertain")
+    if (message.includes("outbox_full")) return language.t("secondBrain.calendar.google.error.outboxFull")
     if (message.includes("secure_storage")) return language.t("secondBrain.calendar.google.error.secureStorage")
     if (message.includes("write_consent")) return language.t("secondBrain.calendar.google.error.writeConsent")
     if (message.includes("conflict")) return language.t("secondBrain.calendar.google.error.conflict")
@@ -378,7 +358,7 @@ export default function CalendarPage() {
 
   const syncGoogle = async () => {
     const google = platform.googleCalendar
-    if (!google || !state.directory) return
+    if (!google || !state.directory || state.googleBusy || state.saving) return
     setState({ googleBusy: true, googleError: "" })
     try {
       const result = await google.sync()
@@ -392,26 +372,11 @@ export default function CalendarPage() {
         ...current.filter((event) => event.source === "local"),
         ...result.events.map((event) => providerEvent(event, projectByProvider.get(event.providerId))),
       ]
-      const currentTasks = events()?.tasks ?? []
-      const localByProvider = new Map(
-        currentTasks
-          .filter((task) => task.source === "google" && task.providerId && task.taskListId)
-          .map((task) => [`${task.taskListId}:${task.providerId}`, task] as const),
-      )
-      const remoteKeys = new Set(result.tasks.map((task) => `${task.taskListId}:${task.providerId}`))
-      const mergedTasks = [
-        ...currentTasks.filter((task) => task.source === "local"),
-        ...currentTasks.filter(
-          (task) =>
-            task.source === "google" &&
-            Boolean(task.outboxKey) &&
-            !remoteKeys.has(`${task.taskListId}:${task.providerId}`),
-        ),
-        ...result.tasks.map((task) => providerTask(task, localByProvider.get(`${task.taskListId}:${task.providerId}`))),
-      ]
+      const mergedTasks = mergeGoogleTasks(events()?.tasks ?? [], result.tasks, result.taskWrites)
       const saved = await writeCalendar(client(state.directory), merged, events()?.revision, mergedTasks)
       eventActions.mutate(saved)
       googleActions.mutate(result.connection)
+      if (result.connection.errorCode) setState("googleError", googleMessage(result.connection.errorCode))
     } catch (error) {
       setState("googleError", googleMessage(error))
     } finally {
@@ -421,7 +386,7 @@ export default function CalendarPage() {
 
   const disconnectGoogle = async () => {
     const google = platform.googleCalendar
-    if (!google || !state.directory) return
+    if (!google || !state.directory || state.googleBusy || state.saving) return
     setState({ googleBusy: true, googleError: "" })
     try {
       const connection = await google.disconnect()
@@ -459,56 +424,66 @@ export default function CalendarPage() {
 
   const persistTasks = async (tasks: ReadonlyArray<PlannerTask>) => {
     if (!state.directory) return
-    const current = events()?.tasks ?? []
-    const removed = current.find((task) => task.source === "google" && !tasks.some((next) => next.id === task.id))
-    const changed = tasks.find((task) => {
-      if (task.source !== "google") return false
-      const previous = current.find((item) => item.id === task.id)
-      return !previous || googleTaskFields(previous) !== googleTaskFields(task)
-    })
-    if (removed && changed) throw new Error("google_multiple_task_writes")
-
-    let next = [...tasks]
-    const target = removed ?? changed
-    if (target) {
-      const google = platform.googleCalendar
-      if (!google || !googleConnection()?.connected || googleConnection()?.access !== "write") {
-        throw new Error("google_write_consent_required")
-      }
-      const kind = removed ? "delete" : target.providerId?.startsWith("pending:") ? "create" : "update"
-      const idempotencyKey = target.outboxKey || crypto.randomUUID()
-      const result = await google.writeTask({
-        kind,
-        idempotencyKey,
-        task: {
-          providerId: target.providerId ?? `pending:${target.id}`,
-          taskListId: target.taskListId ?? "@default",
-          taskListTitle: target.taskListTitle ?? language.t("secondBrain.tasks.google.defaultList"),
-          title: target.title,
-          ...(target.notes ? { notes: target.notes } : {}),
-          ...(target.dueDate ? { dueDate: target.dueDate } : {}),
-          ...(target.completedAt ? { completedAt: target.completedAt } : {}),
-          updatedAt: target.updatedAt,
-          ...(target.etag ? { etag: target.etag } : {}),
-        },
+    if (state.saving || state.googleBusy) throw new Error("google_operation_busy")
+    setState({ saving: true, googleError: "" })
+    try {
+      const current = events()?.tasks ?? []
+      const removed = current.find((task) => task.source === "google" && !tasks.some((next) => next.id === task.id))
+      const changed = tasks.find((task) => {
+        if (task.source !== "google") return false
+        const previous = current.find((item) => item.id === task.id)
+        return !previous || googleTaskFields(previous) !== googleTaskFields(task)
       })
-      if (kind === "delete") {
-        if (result.state !== "synced") {
-          next.push({ ...target, syncState: result.state, outboxKind: kind, outboxKey: idempotencyKey })
+      if (removed && changed) throw new Error("google_multiple_task_writes")
+
+      let next = [...tasks]
+      const target = removed ?? changed
+      if (target) {
+        const google = platform.googleCalendar
+        if (!google || !googleConnection()?.connected || googleConnection()?.access !== "write") {
+          throw new Error("google_write_consent_required")
         }
-      } else {
-        if (!result.task) throw new Error("google_task_write_failed")
-        const savedTask: PlannerTask = {
-          ...providerTask(result.task, target),
-          syncState: result.state === "synced" ? ("synced" as const) : result.state,
-          ...(result.state === "synced" ? {} : { outboxKind: kind, outboxKey: idempotencyKey }),
+        const kind = removed ? "delete" : target.providerId?.startsWith("pending:") ? "create" : "update"
+        const idempotencyKey = target.outboxKey || crypto.randomUUID()
+        const result = await google.writeTask({
+          kind,
+          idempotencyKey,
+          task: {
+            providerId: target.providerId ?? `pending:${target.id}`,
+            taskListId: target.taskListId ?? "@default",
+            taskListTitle: target.taskListTitle ?? language.t("secondBrain.tasks.google.defaultList"),
+            title: target.title,
+            ...(target.notes ? { notes: target.notes } : {}),
+            ...(target.dueDate ? { dueDate: target.dueDate } : {}),
+            ...(target.completedAt ? { completedAt: target.completedAt } : {}),
+            updatedAt: target.updatedAt,
+            ...(target.etag ? { etag: target.etag } : {}),
+          },
+        })
+        if (kind === "delete") {
+          if (result.state !== "synced") {
+            next.push({ ...target, syncState: result.state, outboxKind: kind, outboxKey: idempotencyKey })
+          }
+        } else {
+          if (!result.task) throw new Error("google_task_write_failed")
+          const savedTask: PlannerTask = {
+            ...providerTask(result.task, target),
+            syncState: result.state === "synced" ? ("synced" as const) : result.state,
+            ...(result.state === "synced" ? {} : { outboxKind: kind, outboxKey: idempotencyKey }),
+          }
+          next = next.map((task) => (task.id === target.id ? savedTask : task))
         }
-        next = next.map((task) => (task.id === target.id ? savedTask : task))
+        if (result.errorCode) setState("googleError", googleMessage(result.errorCode))
+        await googleActions.refetch()
       }
-      await googleActions.refetch()
+      const saved = await writeCalendar(client(state.directory), events()?.events ?? [], events()?.revision, next)
+      eventActions.mutate(saved)
+    } catch (error) {
+      setState("googleError", googleMessage(error))
+      throw error
+    } finally {
+      setState("saving", false)
     }
-    const saved = await writeCalendar(client(state.directory), events()?.events ?? [], events()?.revision, next)
-    eventActions.mutate(saved)
   }
 
   const save = async () => {
@@ -695,6 +670,7 @@ export default function CalendarPage() {
             <span>{language.t("secondBrain.workspace")}</span>
             <SelectV2
               aria-label={language.t("secondBrain.workspace")}
+              disabled={state.saving || state.googleBusy}
               appearance="large"
               class="!w-56 max-w-full"
               options={projects()}
@@ -1013,9 +989,9 @@ export default function CalendarPage() {
                             <p class="text-[11px] leading-4 text-v2-text-text-faint">
                               {language.t("secondBrain.calendar.google.credentialNote")}
                             </p>
-                            <Show when={state.googleError}>
+                            <Show when={state.googleError || googleConnection()?.errorCode}>
                               <p role="alert" class="text-[12px] text-v2-text-text-critical">
-                                {state.googleError}
+                                {state.googleError || googleMessage(googleConnection()?.errorCode)}
                               </p>
                             </Show>
                             <ButtonV2 type="submit" variant="contrast" disabled={state.googleBusy}>
@@ -1071,9 +1047,9 @@ export default function CalendarPage() {
                               })}
                             </p>
                           </Show>
-                          <Show when={state.googleError}>
+                          <Show when={state.googleError || googleConnection()?.errorCode}>
                             <p role="alert" class="text-[12px] text-v2-text-text-critical">
-                              {state.googleError}
+                              {state.googleError || googleMessage(googleConnection()?.errorCode)}
                             </p>
                           </Show>
                           <ButtonV2 variant="contrast" disabled={state.googleBusy} onClick={() => void syncGoogle()}>

@@ -7,6 +7,7 @@ import {
   normalizeGoogleEvent,
   normalizeGoogleTask,
   pkceChallenge,
+  requireWritableGoogleEvent,
 } from "./google-calendar-domain"
 
 describe("Google Calendar domain", () => {
@@ -76,5 +77,16 @@ describe("Google Calendar domain", () => {
 
     expect(event.endDate).toBe("2026-08-26")
     expect(googleEventPayload(event)).toMatchObject({ end: { dateTime: "2026-08-26T01:00:00" } })
+  })
+
+  test("requires authoritative provider metadata before participant-facing writes", () => {
+    expect(() =>
+      requireWritableGoogleEvent({
+        id: "provider-4",
+        attendees: [{ email: "guest@example.com" }],
+        start: { date: "2026-09-07" },
+        end: { date: "2026-09-08" },
+      }),
+    ).toThrow("google_write_requires_approval")
   })
 })

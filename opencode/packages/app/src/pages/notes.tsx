@@ -3,7 +3,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { createEffect, createMemo, createResource, For, on, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -19,6 +19,7 @@ import {
   type NoteSummary,
 } from "@/features/second-brain/client"
 import { NoteEditor } from "@/features/second-brain/note-editor"
+import { useDraftGuard } from "@/features/second-brain/draft-guard"
 
 const slugify = (value: string) =>
   value
@@ -52,7 +53,7 @@ export default function NotesPage() {
   const layout = useLayout()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
-  const [search] = useSearchParams<{ project?: string }>()
+  const [search] = useSearchParams<{ project?: string; directory?: string }>()
   const [state, setState] = createStore<State>({
     directory: "",
     path: "",
@@ -90,7 +91,8 @@ export default function NotesPage() {
   createEffect(() => {
     const available = workspaces()
     if (available.some((project) => project.worktree === state.directory)) return
-    const preferred = layout.home.selection().directory
+    const preferred =
+      available.find((project) => project.worktree === search.directory)?.worktree ?? layout.home.selection().directory
     setState(
       "directory",
       available.find((project) => project.worktree === preferred)?.worktree ?? available[0]?.worktree ?? "",
@@ -139,22 +141,32 @@ export default function NotesPage() {
     ...new Map([...outgoing(), ...backlinks()].map((note) => [note.path, note] as const)).values(),
   ])
 
-  const applyDocument = (document: NoteDocument) => {
+  const applyDocument = (document: NoteDocument, submitted?: Pick<State, "body" | "title" | "projectIds" | "tags">) => {
     const projectIds = [...document.info.projectIds]
     const tags = document.info.tags.join(", ")
     setState({
-      body: document.body,
+      body: submitted && state.body !== submitted.body ? state.body : document.body,
       baseBody: document.body,
-      title: document.info.title,
+      title: submitted && state.title !== submitted.title ? state.title : document.info.title,
       baseTitle: document.info.title,
-      projectIds,
+      projectIds:
+        submitted && state.projectIds.join("\0") !== submitted.projectIds.join("\0")
+          ? [...state.projectIds]
+          : projectIds,
       baseProjectIds: projectIds,
-      tags,
+      tags: submitted && state.tags !== submitted.tags ? state.tags : tags,
       baseTags: tags,
       revision: document.revision,
       error: "",
     })
   }
+
+  const updateSummary = (document: NoteDocument) =>
+    noteActions.mutate(
+      [...(notes() ?? []).filter((note) => note.path !== document.info.path), document.info].sort(
+        (left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.title.localeCompare(right.title),
+      ),
+    )
 
   createEffect(
     on(loadedNote, (document) => {
@@ -163,13 +175,10 @@ export default function NotesPage() {
     }),
   )
 
-  const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (!dirty()) return
-    event.preventDefault()
-    event.returnValue = ""
-  }
-  window.addEventListener("beforeunload", beforeUnload)
-  onCleanup(() => window.removeEventListener("beforeunload", beforeUnload))
+  useDraftGuard(
+    () => dirty() || state.saving,
+    () => setState("error", language.t("secondBrain.notes.error.unsaved")),
+  )
 
   const report = (error: unknown) => {
     setState(
@@ -181,7 +190,7 @@ export default function NotesPage() {
   }
 
   const chooseNote = (note: NoteSummary) => {
-    if (dirty()) {
+    if (dirty() || state.saving) {
       setState("error", language.t("secondBrain.notes.error.unsaved"))
       return
     }
@@ -201,6 +210,7 @@ export default function NotesPage() {
   }
 
   const createNote = async () => {
+    if (state.saving || dirty()) return
     const title = state.newTitle.trim()
     const slug = slugify(title)
     if (!title || !slug || !state.directory) {
@@ -218,7 +228,7 @@ export default function NotesPage() {
         tags: [],
         create: true,
       })
-      await noteActions.refetch()
+      updateSummary(document)
       setState({ path, newTitle: "", creating: false })
       applyDocument(document)
     } catch (error) {
@@ -229,7 +239,8 @@ export default function NotesPage() {
   }
 
   const save = async () => {
-    if (!state.directory || !state.path || !dirty()) return
+    if (!state.directory || !state.path || !dirty() || state.saving || loadedNote.loading) return
+    const submitted = { body: state.body, title: state.title, projectIds: [...state.projectIds], tags: state.tags }
     const title = state.title.trim()
     if (!title) {
       setState("error", language.t("secondBrain.notes.error.title"))
@@ -248,8 +259,8 @@ export default function NotesPage() {
           .filter(Boolean),
         expectedRevision: state.revision,
       })
-      applyDocument(document)
-      await noteActions.refetch()
+      applyDocument(document, submitted)
+      updateSummary(document)
     } catch (error) {
       report(error)
     } finally {
@@ -341,6 +352,7 @@ export default function NotesPage() {
                   appearance="large"
                   autofocus
                   value={state.newTitle}
+                  disabled={state.saving}
                   onInput={(event) => setState("newTitle", event.currentTarget.value)}
                 />
                 <div class="flex justify-end gap-2">
@@ -398,7 +410,7 @@ export default function NotesPage() {
                   current={workspaces().find((project) => project.worktree === state.directory)}
                   value={(project) => project.worktree}
                   label={(project) => project.name ?? project.worktree.split(/[\\/]/).pop() ?? project.worktree}
-                  disabled={dirty()}
+                  disabled={dirty() || state.saving}
                   onSelect={(project) =>
                     project && setState({ directory: project.worktree, path: "", body: "", baseBody: "" })
                   }
@@ -457,6 +469,7 @@ export default function NotesPage() {
                     class="w-full border-0 bg-transparent p-0 text-[34px] leading-[1.18] text-v2-text-text-strong outline-none placeholder:text-v2-text-text-faint sm:text-[38px] [font-weight:660]"
                     aria-label={language.t("secondBrain.notes.name")}
                     value={state.title}
+                    disabled={loadedNote.loading}
                     onInput={(event) => setState("title", event.currentTarget.value)}
                   />
 
@@ -485,6 +498,7 @@ export default function NotesPage() {
                                     type="checkbox"
                                     class="size-3 accent-v2-icon-icon-accent"
                                     checked={state.projectIds.includes(project.id)}
+                                    disabled={loadedNote.loading}
                                     onChange={(event) =>
                                       setState(
                                         "projectIds",
@@ -510,6 +524,7 @@ export default function NotesPage() {
                         <input
                           class="h-7 min-w-0 rounded-[5px] border border-transparent bg-transparent px-2 text-[12px] text-v2-text-text-muted outline-none placeholder:text-v2-text-text-faint hover:bg-v2-background-bg-layer-01 focus:border-v2-border-border-focus sm:mt-1 sm:w-full"
                           value={state.tags}
+                          disabled={loadedNote.loading}
                           placeholder={language.t("secondBrain.notes.tagsPlaceholder")}
                           onInput={(event) => setState("tags", event.currentTarget.value)}
                         />

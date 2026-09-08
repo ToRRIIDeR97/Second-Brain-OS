@@ -23,6 +23,8 @@ describe("external URLs", () => {
   test("resolves only local file URLs", () => {
     const path = resolve("example.html")
     expect(resolveLocalFilePath(pathToFileURL(path).href)).toBe(path)
+    expect(resolveLocalFilePath(pathToFileURL(resolve("install.command")).href)).toBeUndefined()
+    expect(resolveLocalFilePath(pathToFileURL(resolve("INSTALL.EXE")).href)).toBeUndefined()
     expect(resolveLocalFilePath("file://example.com/share/index.html")).toBeUndefined()
     expect(resolveLocalFilePath("https://example.com/index.html")).toBeUndefined()
   })

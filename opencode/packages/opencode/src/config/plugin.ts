@@ -15,6 +15,10 @@ export type Origin = {
   scope: Scope
 }
 
+export function allowsCode(scope: Scope, client: string) {
+  return client !== "desktop" || scope !== "local"
+}
+
 export async function load(dir: string) {
   const plugins: ConfigPluginV1.Spec[] = []
 

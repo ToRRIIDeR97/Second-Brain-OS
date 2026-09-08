@@ -13,6 +13,7 @@ import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useTabs } from "@/context/tabs"
+import { useDraftGuard } from "@/features/second-brain/draft-guard"
 import {
   createProject,
   listNotes,
@@ -126,6 +127,11 @@ export default function ProjectsPage() {
       state.tags !== project.tags.join(", ")
     )
   })
+  const draftDirty = createMemo(() => overviewDirty() || (state.creating && Object.values(state.draft).some(Boolean)))
+  useDraftGuard(
+    () => draftDirty() || state.saving,
+    () => setState("error", language.t("secondBrain.projects.error.unsaved")),
+  )
 
   createEffect(() => {
     const project = selected()
@@ -187,7 +193,7 @@ export default function ProjectsPage() {
 
   const saveOverview = async () => {
     const project = selected()
-    if (!project || !overviewDirty()) return
+    if (!project || !overviewDirty() || state.saving) return
     if (!state.outcome.trim()) {
       setState("error", language.t("secondBrain.projects.error.required"))
       return
@@ -235,7 +241,7 @@ export default function ProjectsPage() {
   }
 
   const choose = (project: ProjectRecord) => {
-    if (overviewDirty()) {
+    if (draftDirty() || state.saving) {
       setState("error", language.t("secondBrain.projects.error.unsaved"))
       return
     }
@@ -261,17 +267,15 @@ export default function ProjectsPage() {
               current={locations().find((location) => location.worktree === state.brainDirectory)}
               value={(location) => location.worktree}
               label={(location) => location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree}
-              disabled={overviewDirty() || state.saving}
-              onSelect={(location) =>
-                location && setState({ brainDirectory: location.worktree, selectedId: "" })
-              }
+              disabled={draftDirty() || state.saving}
+              onSelect={(location) => location && setState({ brainDirectory: location.worktree, selectedId: "" })}
             />
           </label>
           <ButtonV2
             variant="contrast"
             size="small"
             icon="plus"
-            disabled={overviewDirty()}
+            disabled={draftDirty()}
             onClick={() => setState({ creating: true, selectedId: "", error: "" })}
           >
             {language.t("secondBrain.projects.new")}
@@ -319,8 +323,10 @@ export default function ProjectsPage() {
                 if (!location) return
                 void tabs.newDraft({ server: server.key, directory: location.worktree }, projectWorkPrompt(project))
               }
-              const openNotes = () => navigate(`/notes?project=${encodeURIComponent(project.id)}`)
-              const openCalendar = () => navigate(`/calendar?project=${encodeURIComponent(project.id)}`)
+              const openNotes = () =>
+                navigate(`/notes?${new URLSearchParams({ project: project.id, directory: state.brainDirectory })}`)
+              const openCalendar = () =>
+                navigate(`/calendar?${new URLSearchParams({ project: project.id, directory: state.brainDirectory })}`)
               const openActivity = () => {
                 const location = selectedLocation()
                 if (location) layout.home.setSelection({ server: server.key, directory: location.worktree })
@@ -337,14 +343,14 @@ export default function ProjectsPage() {
                     project={project}
                     view={state.view}
                     setView={(view) => {
-                      if (overviewDirty()) {
+                      if (draftDirty() || state.saving) {
                         setState("error", language.t("secondBrain.projects.error.unsaved"))
                         return
                       }
                       setState({ view, error: "" })
                     }}
                     back={() => {
-                      if (overviewDirty()) {
+                      if (draftDirty() || state.saving) {
                         setState("error", language.t("secondBrain.projects.error.unsaved"))
                         return
                       }
@@ -526,6 +532,7 @@ function CreateProjectForm(props: {
             appearance="large"
             autofocus
             value={props.state.draft.name}
+            disabled={props.state.saving}
             onInput={(event) => props.setState("draft", "name", event.currentTarget.value)}
           />
         </label>
@@ -535,6 +542,7 @@ function CreateProjectForm(props: {
             id="project-outcome"
             rows={4}
             value={props.state.draft.outcome}
+            disabled={props.state.saving}
             onInput={(event) => props.setState("draft", "outcome", event.currentTarget.value)}
           />
         </label>
@@ -568,6 +576,7 @@ function CreateProjectForm(props: {
                 id="project-instructions"
                 rows={5}
                 value={props.state.draft.instructions}
+                disabled={props.state.saving}
                 onInput={(event) => props.setState("draft", "instructions", event.currentTarget.value)}
               />
             </label>
@@ -577,6 +586,7 @@ function CreateProjectForm(props: {
                 id="project-tags"
                 appearance="large"
                 value={props.state.draft.tags}
+                disabled={props.state.saving}
                 onInput={(event) => props.setState("draft", "tags", event.currentTarget.value)}
               />
             </label>
@@ -1040,6 +1050,7 @@ function ProjectOverview(props: {
             min="0"
             max="100"
             value={props.state.progress}
+            disabled={props.state.saving}
             class="h-6 w-full cursor-pointer accent-v2-icon-icon-accent"
             onInput={(event) => props.setState("progress", Number(event.currentTarget.value))}
           />
@@ -1051,6 +1062,7 @@ function ProjectOverview(props: {
               id="project-next-milestone"
               rows={4}
               value={props.state.nextMilestone}
+              disabled={props.state.saving}
               onInput={(event) => props.setState("nextMilestone", event.currentTarget.value)}
             />
           </label>
@@ -1060,6 +1072,7 @@ function ProjectOverview(props: {
               id="project-blocker"
               rows={4}
               value={props.state.blocker}
+              disabled={props.state.saving}
               onInput={(event) => props.setState("blocker", event.currentTarget.value)}
             />
           </label>
@@ -1075,6 +1088,7 @@ function ProjectOverview(props: {
                 id="project-settings-outcome"
                 rows={4}
                 value={props.state.outcome}
+                disabled={props.state.saving}
                 onInput={(event) => props.setState("outcome", event.currentTarget.value)}
               />
             </label>
@@ -1087,6 +1101,7 @@ function ProjectOverview(props: {
                 id="project-settings-instructions"
                 rows={5}
                 value={props.state.instructions}
+                disabled={props.state.saving}
                 onInput={(event) => props.setState("instructions", event.currentTarget.value)}
               />
             </label>
@@ -1096,6 +1111,7 @@ function ProjectOverview(props: {
                 id="project-settings-tags"
                 appearance="large"
                 value={props.state.tags}
+                disabled={props.state.saving}
                 onInput={(event) => props.setState("tags", event.currentTarget.value)}
               />
             </label>

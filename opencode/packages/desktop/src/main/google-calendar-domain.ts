@@ -42,6 +42,14 @@ export function googleEventId(idempotencyKey: string) {
   return createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 32)
 }
 
+export function retainGoogleOutbox<T extends { state: string }>(entries: T[]) {
+  const unfinished = entries.filter((entry) => entry.state !== "succeeded").length
+  if (unfinished > 100) throw new Error("google_outbox_full")
+  const completed = entries.filter((entry) => entry.state === "succeeded")
+  const retained = new Set(completed.slice(Math.max(0, completed.length - (100 - unfinished))))
+  return entries.filter((entry) => entry.state !== "succeeded" || retained.has(entry))
+}
+
 export function normalizeGoogleEvent(input: GoogleEventResponse): GoogleCalendarProviderEvent | undefined {
   if (!input.id || input.status === "cancelled" || !input.start || !input.end) return
   const allDay = typeof input.start.date === "string"
@@ -84,6 +92,13 @@ export function googleEventPayload(event: GoogleCalendarProviderEvent) {
     start: { dateTime: `${event.date}T${event.start}:00`, timeZone: event.timezone },
     end: { dateTime: `${event.endDate ?? event.date}T${event.end}:00`, timeZone: event.timezone },
   }
+}
+
+export function requireWritableGoogleEvent(input: GoogleEventResponse) {
+  const event = normalizeGoogleEvent(input)
+  if (!event) throw new Error("google_event_invalid_response")
+  googleEventPayload(event)
+  return event
 }
 
 export function normalizeGoogleTask(

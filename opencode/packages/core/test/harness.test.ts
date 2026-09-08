@@ -1,9 +1,45 @@
 import { describe, expect, test } from "bun:test"
 import { LLM, Model } from "@opencode-ai/llm"
 import { route } from "@opencode-ai/llm/protocols/openai-chat"
-import { codexState, parseCodexNotification, renderCodexPrompt } from "@opencode-ai/core/harness"
+import { codexState, parseCodexNotification, renderCodexInput, renderCodexPrompt } from "@opencode-ai/core/harness"
+import { Effect } from "effect"
 
 describe("Codex harness", () => {
+  test("forwards the whole steering batch and sends image bytes only for new messages", async () => {
+    const image = {
+      type: "media" as const,
+      mediaType: "image/png",
+      data: "data:image/png;base64,dGVzdA==",
+      filename: "diagram.png",
+    }
+    const request = LLM.request({
+      model: Model.make({ id: "test", provider: "test", route }),
+      messages: [
+        { role: "user", content: [{ type: "text", text: "Old" }, image] },
+        { role: "assistant", content: [{ type: "text", text: "Earlier reply" }] },
+        { role: "user", content: [{ type: "text", text: "First steer" }, image] },
+        { role: "user", content: [{ type: "text", text: "Second steer" }] },
+      ],
+    })
+    const input = await Effect.runPromise(renderCodexInput(request))
+    expect(input[0]).toMatchObject({ type: "text", text: "First steer\n[Attached diagram.png]\n\nSecond steer" })
+    expect(input.slice(1)).toEqual([{ type: "image", url: image.data }])
+    expect(
+      (await Effect.runPromise(renderCodexInput(request, true))).filter((part) => part.type === "image"),
+    ).toHaveLength(2)
+    const unsupported = LLM.request({
+      model: request.model,
+      messages: [{ role: "user", content: [{ ...image, mediaType: "application/pdf" }] }],
+    })
+    expect((await Effect.runPromise(renderCodexInput(unsupported).pipe(Effect.flip))).message).toContain(
+      "does not support media type",
+    )
+    const malformed = LLM.request({
+      model: request.model,
+      messages: [{ role: "user", content: [{ ...image, data: "file:///private/image.png" }] }],
+    })
+    expect((await Effect.runPromise(renderCodexInput(malformed).pipe(Effect.flip))).message).toContain("valid base64")
+  })
   test("maps assistant and provider-executed tool items", () => {
     const state = codexState()
     const command = parseCodexNotification(

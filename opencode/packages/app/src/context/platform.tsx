@@ -80,6 +80,7 @@ export type GoogleTaskWrite = {
 export type GoogleTaskWriteResult = {
   state: "synced" | "offline" | "failed" | "conflict"
   task: GoogleTaskProviderTask | null
+  errorCode?: string
 }
 
 export type GoogleCalendarPlatform = {
@@ -94,6 +95,7 @@ export type GoogleCalendarPlatform = {
   sync(): Promise<{
     events: GoogleCalendarProviderEvent[]
     tasks: GoogleTaskProviderTask[]
+    taskWrites?: Array<GoogleTaskWriteResult & Pick<GoogleTaskWrite, "idempotencyKey" | "kind">>
     connection: GoogleCalendarConnection
   }>
   write(input: GoogleCalendarWrite): Promise<GoogleCalendarWriteResult>

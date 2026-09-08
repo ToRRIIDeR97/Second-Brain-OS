@@ -12,15 +12,18 @@ import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
+import { assertRendererStoreName } from "./store-name"
 import {
   getPinchZoomEnabled,
   getWindowID,
+  isTrustedRendererUrl,
   openExternalURL,
   openLocalFileURL,
   setPinchZoomEnabled,
   setTitlebar,
   updateTitlebar,
 } from "./windows"
+import { assertAllowedApp } from "./apps"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
@@ -82,7 +85,6 @@ export function registerIpcHandlers(deps: Deps) {
     deps.setDisplayBackend(backend),
   )
   ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
-  ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
   ipcMain.handle("updater-subscribe", (event) => {
     const id = event.sender.id
     updaterSubscriptions.set(
@@ -100,14 +102,30 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
   ipcMain.handle("updater-check", () => deps.updater.check())
   ipcMain.handle("updater-install", () => deps.updater.install())
-  ipcMain.handle("google-calendar-status", () => deps.googleCalendar.status())
-  ipcMain.handle("google-calendar-connect", (event, input) =>
-    deps.googleCalendar.connect({ ...input, windowId: event.sender.id }),
-  )
-  ipcMain.handle("google-calendar-sync", () => deps.googleCalendar.sync())
-  ipcMain.handle("google-calendar-write", (_event, input) => deps.googleCalendar.write(input))
-  ipcMain.handle("google-task-write", (_event, input) => deps.googleCalendar.writeTask(input))
-  ipcMain.handle("google-calendar-disconnect", () => deps.googleCalendar.disconnect())
+  ipcMain.handle("google-calendar-status", (event) => {
+    assertTrustedSender(event)
+    return deps.googleCalendar.status()
+  })
+  ipcMain.handle("google-calendar-connect", (event, input) => {
+    assertTrustedSender(event)
+    return deps.googleCalendar.connect({ ...input, windowId: event.sender.id })
+  })
+  ipcMain.handle("google-calendar-sync", (event) => {
+    assertTrustedSender(event)
+    return deps.googleCalendar.sync()
+  })
+  ipcMain.handle("google-calendar-write", (event, input) => {
+    assertTrustedSender(event)
+    return deps.googleCalendar.write(input)
+  })
+  ipcMain.handle("google-task-write", (event, input) => {
+    assertTrustedSender(event)
+    return deps.googleCalendar.writeTask(input)
+  })
+  ipcMain.handle("google-calendar-disconnect", (event) => {
+    assertTrustedSender(event)
+    return deps.googleCalendar.disconnect()
+  })
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>
@@ -125,9 +143,10 @@ export function registerIpcHandlers(deps: Deps) {
     if (!bundle) throw new Error("Invalid native translation bundle")
     deps.setNativeTranslations(bundle)
   })
-  ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
+  ipcMain.handle("store-get", (event: IpcMainInvokeEvent, name: string, key: string) => {
+    assertTrustedSender(event)
     try {
-      const store = getStore(name)
+      const store = getStore(assertRendererStoreName(name))
       const value = store.get(key)
       if (value === undefined || value === null) return null
       return typeof value === "string" ? value : JSON.stringify(value)
@@ -135,23 +154,28 @@ export function registerIpcHandlers(deps: Deps) {
       return null
     }
   })
-  ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
-    getStore(name).set(key, value)
+  ipcMain.handle("store-set", (event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
+    assertTrustedSender(event)
+    getStore(assertRendererStoreName(name)).set(key, value)
   })
-  ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    getStore(name).delete(key)
+  ipcMain.handle("store-delete", (event: IpcMainInvokeEvent, name: string, key: string) => {
+    assertTrustedSender(event)
+    getStore(assertRendererStoreName(name)).delete(key)
     void removeStoreFileIfEmpty(name)
   })
-  ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
-    getStore(name).clear()
+  ipcMain.handle("store-clear", (event: IpcMainInvokeEvent, name: string) => {
+    assertTrustedSender(event)
+    getStore(assertRendererStoreName(name)).clear()
     void removeStoreFileIfEmpty(name)
   })
-  ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
+  ipcMain.handle("store-keys", (event: IpcMainInvokeEvent, name: string) => {
+    assertTrustedSender(event)
+    const store = getStore(assertRendererStoreName(name))
     return Object.keys(store.store)
   })
-  ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
+  ipcMain.handle("store-length", (event: IpcMainInvokeEvent, name: string) => {
+    assertTrustedSender(event)
+    const store = getStore(assertRendererStoreName(name))
     return Object.keys(store.store).length
   })
   ipcMain.handle("draft-get", (_event, key: string) => drafts.get(key))
@@ -222,15 +246,20 @@ export function registerIpcHandlers(deps: Deps) {
     },
   )
 
-  ipcMain.on("open-external", (_event: IpcMainEvent, url: string) => {
+  ipcMain.on("open-external", (event: IpcMainEvent, url: string) => {
+    assertTrustedSender(event)
     openExternalURL(url)
   })
 
-  ipcMain.on("open-local-file", (_event: IpcMainEvent, url: string) => {
+  ipcMain.on("open-local-file", (event: IpcMainEvent, url: string) => {
+    assertTrustedSender(event)
     openLocalFileURL(url)
   })
 
-  ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
+  ipcMain.handle("open-path", async (event: IpcMainInvokeEvent, path: string, appName?: string) => {
+    assertTrustedSender(event)
+    if (!(await stat(path)).isDirectory()) throw new Error("Only directories can be opened")
+    const app = appName ? await deps.resolveAppPath(assertAllowedApp(appName)) : undefined
     if (!app) return shell.openPath(path)
     await new Promise<void>((resolve, reject) => {
       const [cmd, args] =
@@ -311,6 +340,19 @@ export function registerIpcHandlers(deps: Deps) {
       relaunch: deps.relaunch,
     })
   })
+}
+
+function assertTrustedSender(event: IpcMainEvent | IpcMainInvokeEvent) {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (
+    !win ||
+    win.isDestroyed() ||
+    win.webContents !== event.sender ||
+    event.senderFrame !== event.sender.mainFrame ||
+    !isTrustedRendererUrl(event.senderFrame.url)
+  ) {
+    throw new Error("Invalid IPC sender")
+  }
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {

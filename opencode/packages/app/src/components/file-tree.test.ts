@@ -6,6 +6,7 @@ let dirsToExpand: typeof import("./file-tree").dirsToExpand
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
+    useBeforeLeave: () => undefined,
     useNavigate: () => () => undefined,
     useParams: () => ({}),
     useLocation: () => ({}),

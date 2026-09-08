@@ -4,12 +4,13 @@ import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { ConfigMarkdown } from "@opencode-ai/core/config/markdown"
 import { Effect, Option, Schema } from "effect"
-import matter from "gray-matter"
 import { ulid } from "ulid"
 
 const directory = "projects"
 const limit = 1_000
+const maxBytes = 1024 * 1024
 
 export const Status = Schema.Literals(["active", "paused", "archived"])
 export type Status = typeof Status.Type
@@ -139,7 +140,7 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
   if (input.expectedUpdatedAt !== undefined && input.expectedUpdatedAt !== card.info.updatedAt) {
     return yield* new ConflictError({ reason: "stale" })
   }
-  const projects = yield* list()
+  const projects = input.name === undefined ? [] : yield* list()
   const info = validate({
     ...card.info,
     ...(input.name !== undefined ? { name: input.name.trim() } : {}),
@@ -155,6 +156,7 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
     updatedAt: new Date().toISOString(),
   })
   if (
+    input.name !== undefined &&
     projects.some(
       (project) => project.id !== id && project.name.trim().toLowerCase() === info.name.trim().toLowerCase(),
     )
@@ -183,6 +185,12 @@ const readCard = Effect.fn("BrainProject.readCard")(function* (path: string) {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path, kind: "file" })
+  const info = yield* fs.stat(target.canonical).pipe(
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+    Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
+  )
+  if (!info) return yield* new NotFoundError({ id: path.split("/").pop()?.replace(/\.md$/, "") ?? path })
+  if (Number(info.size) > maxBytes) return yield* new InvalidError({ reason: "too_large" })
   const source = yield* fs.readFileStringSafe(target.canonical)
   if (source === undefined) return yield* new NotFoundError({ id: path.split("/").pop()?.replace(/\.md$/, "") ?? path })
   return yield* Effect.try({
@@ -192,7 +200,7 @@ const readCard = Effect.fn("BrainProject.readCard")(function* (path: string) {
 })
 
 export function decode(source: string): Card {
-  const parsed = matter(source)
+  const parsed = ConfigMarkdown.parse(source)
   const data = { ...(parsed.data as Record<string, unknown>) }
   const version = typeof data.version === "number" ? data.version : 1
   if (version > 2) throw new InvalidError({ reason: "unsupported_version" })
@@ -244,7 +252,7 @@ export function encode(info: Info, previous: Record<string, unknown>, body: stri
   setOptional(data, "next_milestone", info.nextMilestone)
   setOptional(data, "blocker", info.blocker)
   setOptional(data, "location", info.location)
-  return matter.stringify(body, data)
+  return ConfigMarkdown.stringify(body, data)
 }
 
 function validate(info: Info) {

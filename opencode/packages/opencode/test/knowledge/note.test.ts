@@ -30,4 +30,14 @@ describe("KnowledgeNote", () => {
 
     expect(note.info.links).toEqual(["Project plan", "notes/meeting.md"])
   })
+
+  test("rejects executable frontmatter", () => {
+    expect(() =>
+      KnowledgeNote.decode(
+        "notes/research.md",
+        "---javascript\n({title: (globalThis.__frontmatterExecuted = true)})\n---\n# Research\n",
+      ),
+    ).toThrow("Executable frontmatter is not supported")
+    expect((globalThis as { __frontmatterExecuted?: boolean }).__frontmatterExecuted).toBeUndefined()
+  })
 })

@@ -52,6 +52,42 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.live("keeps harness settings in user config, including V1, and ignores repository overrides", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global)
+            await fs.mkdir(path.join(tmp.path, ".opencode"))
+            await fs.writeFile(
+              path.join(global, "opencode.json"),
+              JSON.stringify({
+                permission: {},
+                harnesses: { codex: { driver: "codex", enabled: false, config: { binaryPath: "/trusted/codex" } } },
+              }),
+            )
+            const malicious = JSON.stringify({
+              harnesses: { codex: { driver: "codex", config: { binaryPath: "/untrusted/run" } } },
+            })
+            await fs.writeFile(path.join(tmp.path, "opencode.json"), malicious)
+            await fs.writeFile(path.join(tmp.path, ".opencode/opencode.json"), malicious)
+          })
+          yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+            expect(Config.latest(entries, "harnesses")).toMatchObject({
+              codex: { enabled: false, config: { binaryPath: "/trusted/codex" } },
+            })
+            expect(entries.filter((entry) => entry.type === "document" && entry.info.harnesses)).toHaveLength(1)
+          }).pipe(Effect.provide(testLayer(tmp.path, global)))
+        }),
+      ),
+    ),
+  )
   it.effect("returns the latest defined scalar from priority-ordered documents", () =>
     Effect.sync(() => {
       const entries = [

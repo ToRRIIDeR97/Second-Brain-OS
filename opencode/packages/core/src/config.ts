@@ -163,7 +163,13 @@ const layer = Layer.effect(
           : decodeInfo(input),
       )
       if (!info) return
-      return new Document({ type: "document", path: filepath, info })
+      // Harness settings launch native processes; repository configuration is not trusted to supply them.
+      const trusted = path.dirname(path.resolve(filepath)) === path.resolve(global.config)
+      return new Document({
+        type: "document",
+        path: filepath,
+        info: trusted ? info : new Info({ ...info, harnesses: undefined }),
+      })
     })
 
     const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {

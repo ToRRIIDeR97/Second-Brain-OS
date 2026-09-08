@@ -34,6 +34,7 @@ export function isV1(input: unknown) {
 
 export function migrate(info: typeof ConfigV1.Info.Type) {
   return {
+    harnesses: info.harnesses,
     $schema: info.$schema,
     shell: info.shell,
     model: info.model,

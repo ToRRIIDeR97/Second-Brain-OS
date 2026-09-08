@@ -4,8 +4,8 @@ import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { ConfigMarkdown } from "@opencode-ai/core/config/markdown"
 import { Effect, Schema } from "effect"
-import matter from "gray-matter"
 import { createHash } from "node:crypto"
 import { basename } from "node:path"
 
@@ -137,6 +137,12 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path, kind: "file" })
+  const info = yield* fs.stat(target.canonical).pipe(
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+    Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
+  )
+  if (!info) return yield* new NotFoundError({ path })
+  if (Number(info.size) > maxBytes) return yield* new InvalidError({ reason: "too_large" })
   const source = yield* fs.readFileStringSafe(target.canonical)
   if (source === undefined) return yield* new NotFoundError({ path })
   return decode(path, source)
@@ -153,7 +159,7 @@ const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {
 export function decode(path: string, raw: string): Card {
   const bom = raw.startsWith("\uFEFF")
   const source = bom ? raw.slice(1) : raw
-  const parsed = matter(source)
+  const parsed = ConfigMarkdown.parse(source)
   const data = { ...(parsed.data as Record<string, unknown>) }
   const projectIds = Array.isArray(data.project_ids)
     ? data.project_ids.filter((value): value is string => typeof value === "string" && projectPattern.test(value))
@@ -186,7 +192,7 @@ export function encode(info: Info, previous: Record<string, unknown>, body: stri
     tags: [...info.tags],
     updated_at: info.updatedAt,
   }
-  const source = matter.stringify(body, data)
+  const source = ConfigMarkdown.stringify(body, data)
   return bom ? `\uFEFF${source}` : source
 }
 

@@ -1,11 +1,22 @@
 export * as ConfigMarkdown from "./markdown"
 
 import matter from "gray-matter"
+
+const options = {
+  engines: {
+    javascript: {
+      parse() {
+        throw new Error("Executable frontmatter is not supported")
+      },
+    },
+  },
+}
+
 export function parse(content: string) {
   try {
-    return matter(content)
+    return matter(content, options)
   } catch {
-    return matter(sanitize(content))
+    return matter(sanitize(content), options)
   }
 }
 
@@ -33,4 +44,8 @@ export function sanitize(content: string) {
     return [`${entry[1]}: |-`, `  ${value}`]
   })
   return content.replace(frontmatter, () => result.join("\n"))
+}
+
+export function stringify(content: string, data: Record<string, unknown>) {
+  return matter.stringify(content, data, options)
 }

@@ -10,6 +10,7 @@ import {
   type LLMRequest,
   type Message,
 } from "@opencode-ai/llm"
+import { IMAGE_MIMES, validateMedia } from "@opencode-ai/llm/protocols/shared"
 import { Harness } from "@opencode-ai/schema/harness"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { SessionID } from "@opencode-ai/schema/session-id"
@@ -468,16 +469,12 @@ function codexStream(
   return Stream.unwrap(
     runtime.pipe(
       Effect.flatMap((runtime) =>
-        Effect.sync(() => {
-          const prompt = renderCodexPrompt(input.request, runtime.needsHandoff)
-          runtime.needsHandoff = false
-          return prompt
-        }).pipe(
+        renderCodexInput(input.request, runtime.needsHandoff).pipe(
           Effect.flatMap((prompt) =>
             runtime.client
               .request("turn/start", {
                 threadId: runtime.threadID,
-                input: [{ type: "text", text: prompt, text_elements: [] }],
+                input: prompt,
                 cwd: input.directory,
                 runtimeWorkspaceRoots: [input.directory],
                 model: input.model?.id,
@@ -489,6 +486,7 @@ function codexStream(
                 Effect.map((response) => {
                   const turnID = responseTurnID(response)
                   if (!turnID) return Stream.fail(new ProtocolError("Codex did not return a turn ID."))
+                  runtime.needsHandoff = false
                   const state = codexState()
                   const output = runtime.client.notifications.pipe(
                     Stream.filter((notification) => notificationBelongsToTurn(notification, runtime.threadID, turnID)),
@@ -788,10 +786,36 @@ export function renderCodexPrompt(request: LLMRequest, includeHistory = false) {
       .join("\n\n")
     return `Continue this existing Run. Its canonical conversation follows. Respond to the final user message.\n\n${transcript}`
   }
-  const latest = request.messages.findLast((message) => message.role === "user")
-  if (latest) return renderMessage(latest)
-  return request.messages.map(renderMessage).filter(Boolean).join("\n\n")
+  return codexMessages(request, false).map(renderMessage).filter(Boolean).join("\n\n")
 }
+
+function codexMessages(request: LLMRequest, includeHistory: boolean) {
+  if (includeHistory) return request.messages
+  const lastUser = request.messages.findLastIndex((message) => message.role === "user")
+  if (lastUser < 0) return request.messages
+  const previousAssistant = request.messages.findLastIndex(
+    (message, index) => index < lastUser && message.role === "assistant",
+  )
+  return request.messages.slice(previousAssistant + 1, lastUser + 1)
+}
+
+const codexImageMimes = new Set<string>(IMAGE_MIMES)
+
+export const renderCodexInput = Effect.fn("HarnessRuntime.renderCodexInput")(function* (
+  request: LLMRequest,
+  includeHistory = false,
+) {
+  const images = yield* Effect.forEach(
+    codexMessages(request, includeHistory).flatMap((message) =>
+      message.content.filter((part) => part.type === "media"),
+    ),
+    (part) =>
+      validateMedia("Codex", part, codexImageMimes).pipe(
+        Effect.map((image) => ({ type: "image" as const, url: image.dataUrl })),
+      ),
+  )
+  return [{ type: "text" as const, text: renderCodexPrompt(request, includeHistory), text_elements: [] }, ...images]
+})
 
 function renderMessage(message: Message) {
   return message.content.flatMap(renderContent).join("\n")

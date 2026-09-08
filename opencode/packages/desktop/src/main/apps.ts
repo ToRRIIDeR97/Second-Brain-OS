@@ -4,6 +4,29 @@ import { dirname, extname, join } from "node:path"
 import util from "node:util"
 
 const execFilePromise = util.promisify(execFile)
+const allowedApps = new Set([
+  "Visual Studio Code",
+  "Cursor",
+  "Zed",
+  "TextMate",
+  "Antigravity",
+  "Terminal",
+  "iTerm",
+  "Ghostty",
+  "Warp",
+  "Xcode",
+  "Android Studio",
+  "Sublime Text",
+  "code",
+  "cursor",
+  "zed",
+  "powershell",
+])
+
+export function assertAllowedApp(appName: string) {
+  if (!allowedApps.has(appName)) throw new Error("Invalid application")
+  return appName
+}
 
 const exists = (path: string) =>
   access(path)
@@ -11,12 +34,14 @@ const exists = (path: string) =>
     .catch(() => false)
 
 export function checkAppExists(appName: string) {
+  assertAllowedApp(appName)
   if (process.platform === "win32") return true
   if (process.platform === "linux") return true
   return checkMacosApp(appName)
 }
 
 export function resolveAppPath(appName: string) {
+  assertAllowedApp(appName)
   if (process.platform !== "win32") return appName
   return resolveWindowsAppPath(appName)
 }

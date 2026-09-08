@@ -18,6 +18,8 @@ import {
   normalizeGoogleEvent,
   normalizeGoogleTask,
   pkceChallenge,
+  retainGoogleOutbox,
+  requireWritableGoogleEvent,
   type GoogleEventResponse,
   type GoogleTaskResponse,
 } from "./google-calendar-domain"
@@ -56,6 +58,7 @@ type StoredTaskOutbox = {
   input: GoogleTaskWrite
   state: "pending" | "offline" | "failed" | "conflict" | "succeeded"
   attempts: number
+  attempted?: boolean
   createdAt: string
   lastError?: string
   result?: GoogleTaskProviderTask | null
@@ -98,6 +101,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
       failedWrites:
         outbox.filter((operation) => operation.state === "failed" || operation.state === "conflict").length +
         taskOutbox.filter((operation) => operation.state === "failed" || operation.state === "conflict").length,
+      errorCode: taskOutbox.find((operation) => operation.lastError === "google_task_create_uncertain")?.lastError,
       ...(config?.accountLabel ? { accountLabel: config.accountLabel } : {}),
       ...(config?.lastSyncedAt ? { lastSyncedAt: config.lastSyncedAt } : {}),
     }
@@ -132,9 +136,9 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
     const config = requireConfig()
     busy = true
     try {
-      await retryOutbox(config)
-      await retryTaskOutbox(config)
       const accessToken = await refreshAccessToken(config)
+      if (!(await retryOutbox(config, accessToken))) throw new Error("google_offline")
+      if (!(await retryTaskOutbox(config, accessToken))) throw new Error("google_offline")
       const events: GoogleCalendarProviderEvent[] = []
       let pageToken: string | undefined
       do {
@@ -155,7 +159,19 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
       const tasks = await fetchGoogleTasks(accessToken)
       const next = { ...config, lastSyncedAt: new Date().toISOString() }
       writeConfig(next)
-      return { events, tasks, connection: await status() }
+      const taskWrites = readTaskOutbox().map((operation) => ({
+        idempotencyKey: operation.input.idempotencyKey,
+        kind: operation.input.kind,
+        state:
+          operation.state === "succeeded"
+            ? ("synced" as const)
+            : operation.state === "pending"
+              ? ("offline" as const)
+              : operation.state,
+        task: operation.state === "succeeded" ? (operation.result ?? null) : operation.input.task,
+        errorCode: operation.lastError,
+      }))
+      return { events, tasks, taskWrites, connection: await status() }
     } finally {
       busy = false
     }
@@ -212,6 +228,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
         input,
         state: "pending",
         attempts: 0,
+        attempted: false,
         createdAt: new Date().toISOString(),
       } satisfies StoredTaskOutbox)
     if (!existing) persistTaskOutbox([...outbox, operation])
@@ -391,30 +408,36 @@ async function providerJson<T>(input: string | URL, accessToken: string, init?: 
   return (await response.json()) as T
 }
 
-async function dispatch(config: Config, operation: StoredOutbox) {
+async function dispatch(config: Config, operation: StoredOutbox, token?: string) {
   updateOperation(operation.id, { state: "pending", attempts: operation.attempts + 1, lastError: undefined })
   try {
-    const accessToken = await refreshAccessToken(config)
+    const accessToken = token ?? (await refreshAccessToken(config))
     const input = operation.input
+    const id = input.kind === "create" ? googleEventId(input.idempotencyKey) : input.event.providerId
+    const endpoint = input.kind === "create" ? eventsEndpoint : `${eventsEndpoint}/${encodeURIComponent(id)}`
+    const current =
+      input.kind === "create" ? undefined : await writableProviderEvent(endpoint, accessToken, input.kind === "delete")
+    if (input.kind === "delete" && !current) {
+      updateOperation(operation.id, { state: "succeeded", result: null, lastError: undefined })
+      return { state: "synced" as const, event: null }
+    }
+    if (current && (!input.event.etag || current.etag !== input.event.etag)) throw new Error("google_conflict")
     let result: GoogleCalendarProviderEvent | null
     if (input.kind === "delete") {
-      const headers = input.event.etag ? { "If-Match": input.event.etag } : undefined
-      const response = await net.fetch(`${eventsEndpoint}/${encodeURIComponent(input.event.providerId)}`, {
+      const response = await net.fetch(endpoint, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}`, ...headers },
+        headers: { Authorization: `Bearer ${accessToken}`, ...(current?.etag ? { "If-Match": current.etag } : {}) },
         signal: AbortSignal.timeout(30_000),
       })
       if (response.status === 412) throw new Error("google_conflict")
       if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
       result = null
     } else {
-      const id = input.kind === "create" ? googleEventId(input.idempotencyKey) : input.event.providerId
       const payload = {
         ...googleEventPayload(input.event),
         ...(input.kind === "create" ? { id } : {}),
       }
-      const endpoint = input.kind === "create" ? eventsEndpoint : `${eventsEndpoint}/${encodeURIComponent(id)}`
-      const headers = input.kind === "update" && input.event.etag ? { "If-Match": input.event.etag } : undefined
+      const headers = input.kind === "update" && current?.etag ? { "If-Match": current.etag } : undefined
       try {
         const saved = await providerJson<GoogleEventResponse>(endpoint, accessToken, {
           method: input.kind === "create" ? "POST" : "PATCH",
@@ -435,25 +458,41 @@ async function dispatch(config: Config, operation: StoredOutbox) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "google_write_failed"
     const state: "conflict" | "failed" | "offline" =
-      message === "google_conflict" ? "conflict" : message.startsWith("google_http_") ? "failed" : "offline"
+      message === "google_conflict"
+        ? "conflict"
+        : message.startsWith("google_http_") ||
+            message === "google_reconnect_required" ||
+            message === "google_write_requires_approval" ||
+            message === "google_event_invalid_response"
+          ? "failed"
+          : "offline"
     updateOperation(operation.id, { state, lastError: message })
     return { state, event: pendingEvent(operation.input) }
   }
 }
 
-async function retryOutbox(config: Config) {
+async function retryOutbox(config: Config, accessToken: string) {
   for (const operation of readOutbox()) {
     if (operation.state !== "pending" && operation.state !== "offline") continue
-    await dispatch(config, operation)
+    if ((await dispatch(config, operation, accessToken)).state === "offline") return false
   }
+  return true
 }
 
-async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
+async function dispatchTask(config: Config, operation: StoredTaskOutbox, token?: string) {
+  // Google Tasks has no create idempotency key. A lost response must not replay a POST.
+  let attempted = operation.input.kind === "create" && (operation.attempted ?? operation.attempts > 0)
   updateTaskOperation(operation.id, { state: "pending", attempts: operation.attempts + 1, lastError: undefined })
   try {
-    const accessToken = await refreshAccessToken(config)
+    if (attempted) throw new Error("google_task_create_uncertain")
+    const accessToken = token ?? (await refreshAccessToken(config))
     const input = operation.input
-    const collection = `${tasksEndpoint}/${encodeURIComponent(input.task.taskListId)}/tasks`
+    const taskList =
+      input.task.taskListId === "@default"
+        ? await providerJson<TaskListResponse>(`${taskListsEndpoint}/@default`, accessToken)
+        : { id: input.task.taskListId, title: input.task.taskListTitle }
+    if (!taskList.id) throw new Error("google_task_list_invalid")
+    const collection = `${tasksEndpoint}/${encodeURIComponent(taskList.id)}/tasks`
     let result: GoogleTaskProviderTask | null
     if (input.kind === "delete") {
       const response = await net.fetch(`${collection}/${encodeURIComponent(input.task.providerId)}`, {
@@ -470,29 +509,52 @@ async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
     } else {
       const endpoint =
         input.kind === "create" ? collection : `${collection}/${encodeURIComponent(input.task.providerId)}`
+      const body = JSON.stringify(googleTaskPayload(input.task))
+      if (input.kind === "create") {
+        updateTaskOperation(operation.id, { attempted: true })
+        attempted = true
+      }
       const saved = await providerJson<GoogleTaskResponse>(endpoint, accessToken, {
         method: input.kind === "create" ? "POST" : "PATCH",
         headers: input.kind === "update" && input.task.etag ? { "If-Match": input.task.etag } : undefined,
-        body: JSON.stringify(googleTaskPayload(input.task)),
+        body,
       })
-      result = normalizeGoogleTask(saved, { id: input.task.taskListId, title: input.task.taskListTitle }) ?? null
+      result =
+        normalizeGoogleTask(saved, { id: taskList.id, title: taskList.title ?? input.task.taskListTitle }) ?? null
       if (!result) throw new Error("google_task_invalid_response")
     }
     updateTaskOperation(operation.id, { state: "succeeded", result, lastError: undefined })
     return { state: "synced" as const, task: result }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "google_task_write_failed"
+    const cause = error instanceof Error ? error.message : "google_task_write_failed"
+    const rejected =
+      /^google_http_4\d\d$/.test(cause) || cause === "google_reconnect_required" || cause === "google_conflict"
+    const message = attempted && !rejected ? "google_task_create_uncertain" : cause
     const state: "conflict" | "failed" | "offline" =
-      message === "google_conflict" ? "conflict" : message.startsWith("google_http_") ? "failed" : "offline"
-    updateTaskOperation(operation.id, { state, lastError: message })
-    return { state, task: operation.input.kind === "delete" ? operation.input.task : operation.input.task }
+      message === "google_conflict"
+        ? "conflict"
+        : rejected || message.startsWith("google_http_") || message === "google_task_create_uncertain"
+          ? "failed"
+          : "offline"
+    updateTaskOperation(operation.id, { state, lastError: message, attempted: attempted && !rejected })
+    return { state, task: operation.input.task, errorCode: message }
   }
 }
 
-async function retryTaskOutbox(config: Config) {
+async function retryTaskOutbox(config: Config, accessToken: string) {
   for (const operation of readTaskOutbox()) {
     if (operation.state !== "pending" && operation.state !== "offline") continue
-    await dispatchTask(config, operation)
+    if ((await dispatchTask(config, operation, accessToken)).state === "offline") return false
+  }
+  return true
+}
+
+async function writableProviderEvent(endpoint: string, accessToken: string, missingAllowed: boolean) {
+  try {
+    return requireWritableGoogleEvent(await providerJson<GoogleEventResponse>(endpoint, accessToken))
+  } catch (error) {
+    if (missingAllowed && error instanceof Error && error.message === "google_http_404") return
+    throw error
   }
 }
 
@@ -594,7 +656,7 @@ function readOutbox() {
 }
 
 function persistOutbox(value: StoredOutbox[]) {
-  getStore(storeName).set("outbox", value.slice(-100))
+  getStore(storeName).set("outbox", retainGoogleOutbox(value))
 }
 
 function updateOperation(id: string, patch: Partial<StoredOutbox>) {
@@ -608,7 +670,7 @@ function readTaskOutbox() {
 }
 
 function persistTaskOutbox(value: StoredTaskOutbox[]) {
-  getStore(storeName).set("taskOutbox", value.slice(-100))
+  getStore(storeName).set("taskOutbox", retainGoogleOutbox(value))
 }
 
 function updateTaskOperation(id: string, patch: Partial<StoredTaskOutbox>) {

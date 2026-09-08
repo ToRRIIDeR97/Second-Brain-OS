@@ -1,11 +1,26 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Fiber, Option, Queue, Sink, Stream } from "effect"
+import { Effect, Cause, Fiber, Option, Queue, Sink, Stream } from "effect"
 import { make } from "../src/harness/codex-app-server"
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
 describe("Codex app-server client", () => {
+  test("rejects requests and notifications after the process exits", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const incoming = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+          const client = yield* make({ connection: { stdout: Stream.fromQueue(incoming), stdin: Sink.drain } })
+          yield* Queue.end(incoming)
+          const ended = yield* Stream.runDrain(client.notifications).pipe(Effect.flip)
+          expect(ended.message).toBe("Codex app-server exited.")
+          expect(yield* client.request("turn/start", {}).pipe(Effect.flip, Effect.timeout("1 second"))).toBe(ended)
+          expect(yield* client.notify("initialized").pipe(Effect.flip, Effect.timeout("1 second"))).toBe(ended)
+        }),
+      ),
+    )
+  })
   test("routes responses, notifications, and server requests over one connection", async () => {
     await Effect.runPromise(
       Effect.scoped(
