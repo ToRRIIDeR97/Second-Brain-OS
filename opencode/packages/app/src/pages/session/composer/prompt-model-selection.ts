@@ -30,19 +30,20 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
   const recent = () => models.recent.list().find(valid)
   const fallback = () => {
     const defaults = providers.default()
-    return providers.connected().flatMap((provider) => {
+    for (const provider of providers.connected()) {
       const modelID = defaults[provider.id] ?? Object.values(provider.models)[0]?.id
-      return modelID ? [{ providerID: provider.id, modelID }] : []
-    })[0]
+      if (modelID) return { providerID: provider.id, modelID }
+    }
+    return undefined
   }
 
-  const current = () => {
-    const key = [prompt.model.current(), input.agent()?.model, configured(), recent(), fallback()].find(
-      (item): item is ModelKey => !!item && valid(item),
-    )
-    if (!key) return
-    return models.find(key)
-  }
+  const current = createMemo(() => {
+    for (const read of [prompt.model.current, () => input.agent()?.model, configured, recent, fallback]) {
+      const key = read()
+      if (key && valid(key)) return models.find(key)
+    }
+    return undefined
+  })
   const recentModels = createMemo(() =>
     models.recent
       .list()

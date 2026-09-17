@@ -1,6 +1,7 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show } from "solid-js"
+import { Component, ComponentProps, createEffect, createMemo, createSelector, For, JSX, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createVirtualizer } from "@tanstack/solid-virtual"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
@@ -280,10 +281,10 @@ function createModelSelectorController(input: {
       }
       return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
     },
-    current: () => {
+    current: createMemo(() => {
       const value = model.current()
       return value ? modelKey(value) : undefined
-    },
+    }),
     select: (item: ModelItem) => {
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
       input.onSelect()
@@ -301,14 +302,41 @@ function ModelSelectorPopoverV2View(props: {
   onClose: () => void
 }) {
   const language = useLanguage()
-  const [store, setStore] = createStore({ open: false, search: "", active: "" })
+  const [store, setStore] = createStore({
+    open: false,
+    search: "",
+    active: "",
+    viewport: undefined as HTMLDivElement | undefined,
+  })
   let searchRef: HTMLInputElement | undefined
   let contentRef: HTMLDivElement | undefined
   const dismiss = createMenuDismissController(() => contentRef)
 
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
-  const keys = () => [...models().map(modelKey), manageKey]
+  const active = createSelector(() => store.active)
+  // ponytail: virtualize whole providers to retain sticky labels; split rows if a single provider becomes too large.
+  const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
+    get count() {
+      return groups().length
+    },
+    get enabled() {
+      return store.open
+    },
+    getScrollElement: () => store.viewport ?? null,
+    initialRect: { width: 284, height: 220 },
+    get estimateSize() {
+      const current = groups()
+      return (index: number) => (current[index].items.length + 1) * 28
+    },
+    get getItemKey() {
+      const current = groups()
+      return (index: number) => current[index].category
+    },
+    overscan: 1,
+  })
+  const visibleGroups = createMemo(() => new Map(virtualizer.getVirtualItems().map((item) => [item.index, item])))
+  const keys = createMemo(() => [...groups().flatMap((group) => group.items.map(modelKey)), manageKey])
   const initialActive = () => {
     const selected = props.current()
     const options = keys()
@@ -317,6 +345,11 @@ function ModelSelectorPopoverV2View(props: {
   }
   const activeItem = () =>
     store.active ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(store.active)}"]`) : undefined
+  const scrollActive = () => {
+    const index = groups().findIndex((group) => group.items.some((item) => modelKey(item) === store.active))
+    if (index >= 0 && !visibleGroups().has(index)) virtualizer.scrollToIndex(index, { align: "start" })
+    requestAnimationFrame(() => activeItem()?.scrollIntoView({ block: "nearest" }))
+  }
   const setOpen = (open: boolean) => {
     if (open) {
       dismiss.allowTriggerRestore()
@@ -324,7 +357,7 @@ function ModelSelectorPopoverV2View(props: {
       setTimeout(() =>
         requestAnimationFrame(() => {
           searchRef?.focus()
-          activeItem()?.scrollIntoView({ block: "nearest" })
+          scrollActive()
         }),
       )
       return
@@ -355,11 +388,12 @@ function ModelSelectorPopoverV2View(props: {
     const index = options.indexOf(store.active)
     const start = index === -1 ? 0 : index
     setStore("active", options[(start + delta + options.length) % options.length])
-    queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
+    queueMicrotask(scrollActive)
   }
   const setSearch = (value: string) => {
     const first = props.models(value)[0]
     setStore({ search: value, active: first ? modelKey(first) : manageKey })
+    queueMicrotask(scrollActive)
   }
 
   createEffect(() => {
@@ -437,8 +471,15 @@ function ModelSelectorPopoverV2View(props: {
             </div>
           </div>
           <div class="h-px bg-v2-border-border-muted" />
-          <ScrollView data-slot="model-selector-scroll" class="max-h-[220px] min-h-0">
-            <div class="flex flex-col p-0.5 pt-0">
+          <ScrollView
+            data-slot="model-selector-scroll"
+            class="max-h-[220px] min-h-0"
+            viewportRef={(element) => setStore("viewport", element)}
+          >
+            <div
+              class="relative p-0.5 pt-0"
+              style={{ height: `${models().length ? virtualizer.getTotalSize() : 48}px` }}
+            >
               <Show
                 when={models().length > 0}
                 fallback={
@@ -448,53 +489,57 @@ function ModelSelectorPopoverV2View(props: {
                 }
               >
                 <For each={groups()}>
-                  {(group) => (
-                    <MenuV2.Group>
-                      <MenuV2.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
-                        <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
-                      </MenuV2.GroupLabel>
-                      <MenuV2.RadioGroup value={props.current()}>
-                        <For each={group.items}>
-                          {(item) => (
-                            <TooltipV2
-                              class="w-full"
-                              placement="right-start"
-                              gutter={6}
-                              openDelay={0}
-                              value={
-                                <ModelTooltip
-                                  model={item}
-                                  latest={item.latest}
-                                  free={isFree(item.provider.id, item.cost)}
-                                  v2
-                                />
-                              }
-                            >
-                              <MenuV2.RadioItem
-                                value={modelKey(item)}
-                                data-option-key={modelKey(item)}
-                                data-selected-model={props.current() === modelKey(item) ? true : undefined}
-                                class="scroll-my-6 w-full"
-                                classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
-                                onMouseEnter={() => {
-                                  setStore("active", modelKey(item))
-                                  setTimeout(() => searchRef?.focus())
-                                }}
-                                onSelect={() => selectModel(item)}
-                              >
-                                <span class="min-w-0 truncate leading-5">{item.name}</span>
-                                <Show when={isFree(item.provider.id, item.cost)}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
-                                </Show>
-                                <Show when={item.latest}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
-                                </Show>
-                              </MenuV2.RadioItem>
-                            </TooltipV2>
-                          )}
-                        </For>
-                      </MenuV2.RadioGroup>
-                    </MenuV2.Group>
+                  {(group, index) => (
+                    <Show when={visibleGroups().get(index())}>
+                      {(row) => (
+                        <MenuV2.Group class="absolute inset-x-0.5" style={{ top: `${row().start}px` }}>
+                          <MenuV2.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
+                            <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
+                          </MenuV2.GroupLabel>
+                          <MenuV2.RadioGroup value={props.current()}>
+                            <For each={group.items}>
+                              {(item) => (
+                                <TooltipV2
+                                  class="w-full"
+                                  placement="right-start"
+                                  gutter={6}
+                                  openDelay={0}
+                                  value={
+                                    <ModelTooltip
+                                      model={item}
+                                      latest={item.latest}
+                                      free={isFree(item.provider.id, item.cost)}
+                                      v2
+                                    />
+                                  }
+                                >
+                                  <MenuV2.RadioItem
+                                    value={modelKey(item)}
+                                    data-option-key={modelKey(item)}
+                                    data-selected-model={props.current() === modelKey(item) ? true : undefined}
+                                    class="scroll-my-6 w-full"
+                                    classList={{ "!bg-v2-overlay-simple-overlay-hover": active(modelKey(item)) }}
+                                    onMouseEnter={() => {
+                                      setStore("active", modelKey(item))
+                                      setTimeout(() => searchRef?.focus())
+                                    }}
+                                    onSelect={() => selectModel(item)}
+                                  >
+                                    <span class="min-w-0 truncate leading-5">{item.name}</span>
+                                    <Show when={isFree(item.provider.id, item.cost)}>
+                                      <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
+                                    </Show>
+                                    <Show when={item.latest}>
+                                      <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
+                                    </Show>
+                                  </MenuV2.RadioItem>
+                                </TooltipV2>
+                              )}
+                            </For>
+                          </MenuV2.RadioGroup>
+                        </MenuV2.Group>
+                      )}
+                    </Show>
                   )}
                 </For>
               </Show>
@@ -504,7 +549,7 @@ function ModelSelectorPopoverV2View(props: {
           <div class="flex flex-col p-0.5">
             <MenuV2.Item
               data-option-key={manageKey}
-              classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === manageKey }}
+              classList={{ "!bg-v2-overlay-simple-overlay-hover": active(manageKey) }}
               onMouseEnter={() => {
                 setStore("active", manageKey)
                 setTimeout(() => searchRef?.focus())
