@@ -1,4 +1,4 @@
-import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
+import { createMemo, createEffect, createSignal, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { checksum } from "@opencode-ai/core/util/encode"
@@ -6,19 +6,21 @@ import { findLast } from "@opencode-ai/core/util/array"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
+import { Select } from "@opencode-ai/ui/select"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { File } from "@opencode-ai/session-ui/file"
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+import { Harness } from "@opencode-ai/schema/harness"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { getSessionContext } from "./session-context-metrics"
+import { getSessionContext, getSessionHarnesses } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
 
@@ -65,7 +67,7 @@ function RawMessage(props: {
   message: Message
   getParts: (id: string) => Part[]
   onRendered: () => void
-  time: (value: number | undefined) => string
+  time: (value: number | string | undefined) => string
 }) {
   return (
     <Accordion.Item value={props.message.id}>
@@ -138,7 +140,22 @@ export function SessionContextTab() {
       }),
   )
 
-  const ctx = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
+  const harnesses = createMemo(() => getSessionHarnesses(messages()))
+  const [selectedHarness, setSelectedHarness] = createSignal<string>()
+  createEffect(() => {
+    const available = harnesses()
+    if (available.includes(selectedHarness() ?? "")) return
+    setSelectedHarness(available.at(-1))
+  })
+  const harnessLabel = (id: string) => {
+    if (id === Harness.OpenCode) return language.t("harness.openCode")
+    if (id === Harness.Codex) return language.t("harness.codex")
+    return id
+  }
+  const harnessOptions = createMemo(() => harnesses().map((id) => ({ id, label: harnessLabel(id) })))
+  const ctx = createMemo(() =>
+    getSessionContext(messages(), [...providers.all().values()], selectedHarness()),
+  )
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const cost = createMemo(() => {
@@ -308,6 +325,22 @@ export function SessionContextTab() {
       onScroll={handleScroll}
     >
       <div class="px-6 pt-4 pb-10 flex flex-col gap-10">
+        <Show when={harnessOptions().length > 1}>
+          <div class="flex items-center justify-between gap-3 rounded-md border border-border-base bg-surface-base px-3 py-2">
+            <div class="text-12-regular text-text-weak">{language.t("harness.label")}</div>
+            <Select
+              options={harnessOptions()}
+              current={harnessOptions().find((item) => item.id === selectedHarness())}
+              value={(item) => item.id}
+              label={(item) => item.label}
+              onSelect={(item) => item && setSelectedHarness(item.id)}
+              variant="secondary"
+              size="small"
+              triggerStyle={{ "min-width": "140px", "justify-content": "space-between" }}
+            />
+          </div>
+        </Show>
+
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
           <For each={stats}>
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}

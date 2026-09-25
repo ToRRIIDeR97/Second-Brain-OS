@@ -32,6 +32,7 @@ import type { State, VcsCache } from "./types"
 import type { ServerSession } from "../server-session"
 import {
   cmp,
+  mergeProviderLists,
   normalizeAgentList,
   normalizePermissionRequest,
   normalizeProjectInfo,
@@ -234,12 +235,14 @@ export const loadProvidersQuery = (
           return normalizeProviderList(result.data!)
         }
         const location = directory ? { location: { directory } } : undefined
-        const [providers, models, defaultModel] = await Promise.all([
+        const [providers, models, legacyProviders] = await Promise.all([
           sdk.provider.list(location),
           sdk.model.list(location),
-          sdk.model.default(location),
+          legacy?.provider.list().catch(() => undefined),
         ])
-        return normalizeProviderList(providers.data, models.data, defaultModel.data)
+        const current = normalizeProviderList(providers.data, models.data)
+        if (!legacyProviders?.data) return current
+        return mergeProviderLists(normalizeProviderList(legacyProviders.data), current)
       }),
   })
 

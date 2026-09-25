@@ -320,7 +320,9 @@ export default function NotesPage() {
                     ? language.t("secondBrain.notes.allProjects")
                     : (projects()?.find((project) => project.id === projectID)?.name ?? projectID)
                 }
-                onSelect={(projectID) => setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))}
+                onSelect={(projectID) =>
+                  setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))
+                }
               />
             </div>
 

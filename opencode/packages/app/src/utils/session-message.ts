@@ -6,6 +6,7 @@ import type {
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
 import type { AssistantMessage, FilePart, Message, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
+import { Harness } from "@opencode-ai/schema/harness"
 import { Option, Schema } from "effect"
 
 const emptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -238,7 +239,11 @@ function userParts(sessionID: string, message: SessionMessageUser): Part[] {
   ]
 }
 
-function assistantMessage(sessionID: string, parentID: string, message: SessionMessageAssistant): AssistantMessage {
+function assistantMessage(
+  sessionID: string,
+  parentID: string,
+  message: SessionMessageAssistant,
+): AssistantMessage & { harnessInstanceID: string } {
   const error = message.error
     ? message.error.type.toLowerCase().includes("abort") || message.error.type.toLowerCase().includes("interrupt")
       ? { name: "MessageAbortedError" as const, data: { message: message.error.message } }
@@ -256,6 +261,8 @@ function assistantMessage(sessionID: string, parentID: string, message: SessionM
     variant: message.model.variant,
     mode: message.agent,
     agent: message.agent,
+    harnessInstanceID:
+      (message as SessionMessageAssistant & { harnessInstanceID?: string }).harnessInstanceID ?? Harness.OpenCode,
     path: { cwd: "", root: "" },
     cost: message.cost ?? 0,
     tokens: message.tokens ?? emptyTokens,

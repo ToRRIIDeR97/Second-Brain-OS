@@ -1002,7 +1002,9 @@ export default function CalendarPage() {
                                 options={["read", "write"] as const}
                                 current={state.googleAccess}
                                 label={(access) => language.t(`secondBrain.calendar.google.access.${access}`)}
-                                onSelect={(access) => setState("googleAccess", access === "write" ? "write" : "read")}
+                                onSelect={(access) =>
+                                  access && setState("googleAccess", access === "write" ? "write" : "read")
+                                }
                               />
                             </label>
                             <p class="text-[11px] leading-4 text-v2-text-text-faint">
@@ -1149,6 +1151,7 @@ export default function CalendarPage() {
                               : language.t("secondBrain.calendar.sync.local")
                           }
                           onSelect={(source) =>
+                            source &&
                             setState("draft", {
                               ...state.draft,
                               source: source === "google" ? "google" : "local",

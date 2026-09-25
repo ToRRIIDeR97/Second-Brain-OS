@@ -250,10 +250,6 @@ describe("query keys", () => {
           calls.push(["model", input])
           return { location: {}, data: [] }
         },
-        default: async (input: unknown) => {
-          calls.push(["default", input])
-          return { location: {}, data: null }
-        },
       },
     } as unknown as CatalogApi
 
@@ -262,7 +258,6 @@ describe("query keys", () => {
     expect(calls).toEqual([
       ["provider", { location: { directory: "/repo" } }],
       ["model", { location: { directory: "/repo" } }],
-      ["default", { location: { directory: "/repo" } }],
     ])
     expect(result.connected).toEqual(["openai"])
   })

@@ -12,9 +12,10 @@ export function createSessionContextFormatter(locale: string) {
       if (value === null) return "—"
       return value.toLocaleString(locale) + "%"
     },
-    time(value: number | undefined) {
+    time(value: number | string | undefined) {
       if (!value) return "—"
-      return DateTime.fromMillis(value).setLocale(locale).toLocaleString(DateTime.DATETIME_MED)
+      const time = typeof value === "number" ? DateTime.fromMillis(value) : DateTime.fromISO(value)
+      return time.setLocale(locale).toLocaleString(DateTime.DATETIME_MED)
     },
   }
 }

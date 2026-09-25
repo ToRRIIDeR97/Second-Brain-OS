@@ -1,5 +1,11 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { OpenCode, type OpenCodeClient, type SessionCreateInput, type SessionInfo } from "@opencode-ai/client/promise"
+import {
+  OpenCode,
+  type OpenCodeClient,
+  type SessionCreateInput,
+  type SessionInfo,
+  type SessionPromptInput,
+} from "@opencode-ai/client/promise"
 import type { Harness } from "@opencode-ai/schema/harness"
 import { Harness as HarnessSchema } from "@opencode-ai/schema/harness"
 import { Location } from "@opencode-ai/schema/location"
@@ -154,6 +160,48 @@ export async function createSessionForServer(
   })
   if (!isRecord(payload) || !isRecord(payload.data)) throw new SessionCreateError()
   return payload.data as SessionInfo
+}
+
+export async function promptSessionForServer(
+  input: {
+    server: ServerConnection.HttpBase
+    fetch?: typeof globalThis.fetch
+  },
+  value: SessionPromptInput,
+) {
+  const response = await (input.fetch ?? globalThis.fetch)(
+    `${input.server.url.replace(/\/+$/, "")}/api/session/${encodeURIComponent(value.sessionID)}/prompt`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(input.server.password
+          ? {
+              Authorization: `Basic ${authTokenFromCredentials({
+                username: input.server.username,
+                password: input.server.password,
+              })}`,
+            }
+          : {}),
+      },
+      body: JSON.stringify({
+        id: value.id,
+        prompt: {
+          text: value.text,
+          files: value.files?.map((file) => ({
+            uri: file.uri,
+            name: file.name,
+            description: file.description,
+            source: file.mention,
+          })),
+          agents: value.agents?.map((agent) => ({ name: agent.name, source: agent.mention })),
+        },
+        delivery: value.delivery,
+        resume: value.resume,
+      }),
+    },
+  )
+  if (!response.ok) throw new Error(`Harness prompt failed (${response.status}).`)
 }
 
 export async function switchHarnessForServer(

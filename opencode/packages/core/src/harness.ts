@@ -492,8 +492,8 @@ function codexStream(
                   const state = codexState()
                   const output = runtime.client.notifications.pipe(
                     Stream.filter((notification) => notificationBelongsToTurn(notification, runtime.threadID, turnID)),
+                    Stream.takeUntil((notification) => notification.method === "turn/completed"),
                     Stream.flatMap((notification) => Stream.fromIterable(parseCodexNotification(notification, state))),
-                    Stream.takeUntil(() => state.finished),
                   )
                   return Stream.concat(Stream.make(LLMEvent.stepStart({ index: 0 })), output).pipe(
                     Stream.ensuring(

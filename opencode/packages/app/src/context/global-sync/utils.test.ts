@@ -5,7 +5,14 @@ import type {
   ModelListOutput,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
-import { directoryKey, normalizeAgentList, normalizePermissionRequest, normalizeProviderList } from "./utils"
+import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import {
+  directoryKey,
+  mergeProviderLists,
+  normalizeAgentList,
+  normalizePermissionRequest,
+  normalizeProviderList,
+} from "./utils"
 
 describe("normalizeAgentList", () => {
   test("adapts current agents to the app agent shape", () => {
@@ -17,7 +24,7 @@ describe("normalizeAgentList", () => {
         hidden: false,
         color: "primary",
         model: { id: "gpt-5", providerID: "openai", variant: "high" },
-        request: { settings: { temperature: 0.2, topP: 0.9 }, headers: {}, body: {} },
+        request: { settings: {}, headers: {}, body: { temperature: 0.2, top_p: 0.9 } },
         system: "Build software",
         permissions: [{ action: "read", resource: "*", effect: "allow" }],
       },
@@ -36,7 +43,7 @@ describe("normalizeAgentList", () => {
         model: { providerID: "openai", modelID: "gpt-5" },
         variant: "high",
         prompt: "Build software",
-        options: { temperature: 0.2, topP: 0.9 },
+        options: { temperature: 0.2, top_p: 0.9 },
         steps: undefined,
       },
     ])
@@ -117,6 +124,29 @@ describe("normalizeProviderList", () => {
 
   test("preserves an empty current default", () => {
     expect(normalizeProviderList([] as ProviderListOutput["data"], [], null).defaultModel).toBeNull()
+  })
+
+  test("keeps legacy providers while preferring current models", () => {
+    const model = (id: string, providerID: string) => ({ id, providerID })
+    const legacy = {
+      all: new Map([
+        ["opencode", { id: "opencode", models: { old: model("old", "opencode") } }],
+        ["openrouter", { id: "openrouter", models: { router: model("router", "openrouter") } }],
+      ]),
+      connected: ["openrouter"],
+      default: { openrouter: "router" },
+    } as unknown as NormalizedProviderListResponse
+    const current = {
+      all: new Map([["opencode", { id: "opencode", models: { current: model("current", "opencode") } }]]),
+      connected: ["opencode"],
+      default: { opencode: "current" },
+    } as unknown as NormalizedProviderListResponse
+
+    const result = mergeProviderLists(legacy, current)
+
+    expect(result.connected).toEqual(["opencode", "openrouter"])
+    expect([...result.all.keys()]).toEqual(["opencode", "openrouter"])
+    expect(Object.keys(result.all.get("opencode")?.models ?? {})).toEqual(["old", "current"])
   })
 })
 

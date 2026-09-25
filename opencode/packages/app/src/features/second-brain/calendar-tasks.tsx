@@ -355,6 +355,7 @@ export function CalendarTasks(props: {
                       : language.t("secondBrain.calendar.sync.local")
                   }
                   onSelect={(source) =>
+                    source &&
                     setState("draft", {
                       ...state.draft,
                       source: source === "google" ? "google" : "local",

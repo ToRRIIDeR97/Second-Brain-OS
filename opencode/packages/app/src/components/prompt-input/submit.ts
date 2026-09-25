@@ -39,6 +39,7 @@ export type FollowupDraft = {
   context: (ContextItem & { key: string })[]
   agent: string
   model: { providerID: string; modelID: string }
+  harness?: boolean
   variant?: string
 }
 
@@ -172,6 +173,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       agent: input.draft.agent,
       model: input.draft.model,
       variant: input.draft.variant,
+      harness: input.draft.harness,
       legacyParts: requestParts,
       text: requestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
       files: requestParts.flatMap((part) => {
@@ -250,6 +252,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const [search] = useSearchParams<{ draftId?: string }>()
   const tabs = useTabs()
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk().scope, sessionID)
+  let creatingSession = false
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "message" in err && typeof err.message === "string" && err.message)
@@ -267,6 +270,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (!sessionID) return Promise.resolve()
 
     serverSync().session.set("todo", sessionID, [])
+    serverSync().session.set("session_status", sessionID, { type: "idle" })
 
     input.onAbort?.()
 
@@ -421,6 +425,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     let session = input.info()
     if (!session && isNewSession) {
+      if (creatingSession) return
+      creatingSession = true
       const created = await sdk()
         .api.session.create({
           harnessInstanceID: input.newSessionHarness?.(),
@@ -439,6 +445,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             description: errorMessage(err),
           })
           return undefined
+        })
+        .finally(() => {
+          creatingSession = false
         })
       if (created) {
         seed(sessionDirectory, created)
@@ -480,6 +489,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       context,
       agent,
       model,
+      harness: !usesHostModel,
       variant,
     }
 

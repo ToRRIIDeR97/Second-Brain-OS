@@ -563,10 +563,13 @@ function PromptInputV2ConfiguredSelect(props: {
 export function PromptInputV2Select(props: {
   title: string
   keybind?: string[]
-  options: PromptInputV2Option[]
+  options: Array<PromptInputV2Option & { disabled?: boolean; title?: string }>
   current: string
   currentIcon?: JSX.Element
   class?: string
+  control?: string
+  disabled?: boolean
+  capitalize?: boolean
   onOpenChange?: (open: boolean) => void
   onSelect: (id: string) => void
 }) {
@@ -587,10 +590,14 @@ export function PromptInputV2Select(props: {
           variant="ghost-muted"
           size="normal"
           class={`prompt-input-responsive-select max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          data-control={props.control}
+          disabled={props.disabled}
           aria-label={props.title}
         >
           <span class="prompt-input-control-icon flex shrink-0">{props.currentIcon}</span>
-          <span class="prompt-input-control-label truncate capitalize leading-5">{currentLabel()}</span>
+          <span class="prompt-input-control-label truncate leading-5" classList={{ capitalize: props.capitalize ?? true }}>
+            {currentLabel()}
+          </span>
           <span class="prompt-input-control-chevron -ms-0.5 -me-1 flex shrink-0">
             <IconV2 name="chevron-down" />
           </span>
@@ -600,7 +607,13 @@ export function PromptInputV2Select(props: {
             <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
               <For each={props.options}>
                 {(option) => (
-                  <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                  <MenuV2.RadioItem
+                    value={option.id}
+                    classList={{ capitalize: props.capitalize ?? true }}
+                    disabled={option.disabled}
+                    title={option.title}
+                    closeOnSelect
+                  >
                     {option.label}
                   </MenuV2.RadioItem>
                 )}

@@ -19,9 +19,8 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
     description: agent.description,
     mode: agent.mode,
     hidden: agent.hidden,
-    temperature:
-      typeof agent.request.settings.temperature === "number" ? agent.request.settings.temperature : undefined,
-    topP: typeof agent.request.settings.topP === "number" ? agent.request.settings.topP : undefined,
+    temperature: typeof agent.request.body.temperature === "number" ? agent.request.body.temperature : undefined,
+    topP: typeof agent.request.body.top_p === "number" ? agent.request.body.top_p : undefined,
     color: agent.color,
     permission: agent.permissions.map((rule) => ({
       permission: rule.action,
@@ -31,7 +30,7 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
     model: agent.model && { providerID: agent.model.providerID, modelID: agent.model.id },
     variant: agent.model?.variant,
     prompt: agent.system,
-    options: agent.request.settings,
+    options: agent.request.body,
     steps: agent.steps,
   }))
 }
@@ -149,6 +148,25 @@ export function normalizeProviderList(
         return model ? [[provider.id, model.id]] : []
       }),
     ),
+  }
+}
+
+export function mergeProviderLists(
+  legacy: NormalizedProviderListResponse,
+  current: NormalizedProviderListResponse,
+): NormalizedProviderListResponse {
+  const all = new Map(legacy.all)
+  for (const [id, provider] of current.all) {
+    const previous = all.get(id)
+    all.set(id, previous ? { ...previous, ...provider, models: { ...previous.models, ...provider.models } } : provider)
+  }
+  return {
+    ...legacy,
+    ...current,
+    all,
+    connected: [...new Set([...current.connected, ...legacy.connected])],
+    default: { ...legacy.default, ...current.default },
+    defaultModel: current.defaultModel ?? legacy.defaultModel,
   }
 }
 

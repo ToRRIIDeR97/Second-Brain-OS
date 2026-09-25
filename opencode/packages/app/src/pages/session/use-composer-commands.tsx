@@ -31,14 +31,10 @@ export const useComposerCommands = (
   const chooseModel = async () => {
     if (!openCode()) {
       const control =
-        document.querySelector<HTMLSelectElement>('[data-control="harness-model"]') ??
-        document.querySelector<HTMLSelectElement>('[data-control="harness"]')
+        document.querySelector<HTMLButtonElement>('[data-control="harness-model"]') ??
+        document.querySelector<HTMLButtonElement>('[data-control="harness"]')
       control?.focus()
-      try {
-        control?.showPicker()
-      } catch {
-        // Focus still makes the native picker keyboard-accessible on platforms without showPicker().
-      }
+      control?.click()
       return
     }
     const owner = sessionOwnership.capture()
