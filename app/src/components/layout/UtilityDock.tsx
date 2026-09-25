@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Bot,
   CalendarDays,
   CircleAlert,
   Files,
@@ -8,7 +9,10 @@ import {
   SquareTerminal,
   X,
 } from "lucide-react";
-import { ReferenceCalendar } from "../../features/planner/ReferenceCalendar";
+import { AgentWorkspace } from "../../features/agents";
+import { createIpcAgentSessionSource } from "../../features/agents/source";
+import type { AgentWorkspaceState } from "../../features/agents/types";
+import { PlannerWorkspace } from "../../features/planner";
 import { SourceControlWorkspace } from "../../features/source-control";
 import {
   ProblemsPanel,
@@ -21,9 +25,11 @@ import {
 } from "../../features/terminal/TerminalWorkspace";
 import type { GitFileDiff, GitWorkspaceStatus, IpcClient } from "../../lib/ipc";
 import { useWorkspace } from "../../state/workspace";
+import { useProjects } from "../../state/projects";
 import { WorkspaceNavigator } from "./WorkspaceNavigator";
 
 export type UtilityDockTab =
+  | "agent"
   | "files"
   | "calendar"
   | "git"
@@ -31,6 +37,7 @@ export type UtilityDockTab =
   | "terminal";
 
 const tabs = [
+  { id: "agent", label: "Ask", icon: Bot },
   { id: "files", label: "Files", icon: Files },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "git", label: "Git", icon: GitCompareArrows },
@@ -64,9 +71,16 @@ export function UtilityDock({
   diagnostics?: readonly SourceDiagnostic[];
 }) {
   const { activeWorkspace } = useWorkspace();
+  const { brainWorkspaceId } = useProjects();
   const [git, setGit] = useState<GitWorkspaceStatus>();
   const [diff, setDiff] = useState<{ path: string; data: GitFileDiff }>();
   const [gitError, setGitError] = useState("");
+  const [agents, setAgents] = useState<AgentWorkspaceState>({
+    workspaceId: "",
+    sessions: [],
+    activeSessionId: null,
+  });
+  const agentSource = useMemo(() => createIpcAgentSessionSource(ipc), [ipc]);
   const availableTabs = tabs.filter(({ id }) => !openTabs.includes(id));
 
   const refreshGit = useCallback(async () => {
@@ -212,21 +226,36 @@ export function UtilityDock({
                   <span>
                     <strong>{label}</strong>
                     <small>
-                      {id === "files"
-                        ? "Browse workspace files"
-                        : id === "calendar"
-                          ? "Calendar and Google Tasks"
-                          : id === "git"
-                            ? "Changes and file diffs"
-                            : id === "problems"
-                              ? "Lint and analysis diagnostics"
-                              : "Open a workspace shell"}
+                      {id === "agent"
+                        ? "Ask with the current workspace"
+                        : id === "files"
+                          ? "Browse workspace files"
+                          : id === "calendar"
+                            ? "Local tasks and calendar"
+                            : id === "git"
+                              ? "Changes and file diffs"
+                              : id === "problems"
+                                ? "Lint and analysis diagnostics"
+                                : "Open a workspace shell"}
                     </small>
                   </span>
                 </button>
               ))}
             </div>
           </section>
+        ) : null}
+        {activeTab === "agent" ? (
+          activeWorkspace ? (
+            <AgentWorkspace
+              state={{ ...agents, workspaceId: activeWorkspace.id }}
+              onChange={setAgents}
+              sessionSource={agentSource}
+            />
+          ) : (
+            <section className="utility-empty">
+              <h2>Open a workspace to ask Second Brain.</h2>
+            </section>
+          )
         ) : null}
         {activeTab === "files" ? (
           <WorkspaceNavigator
@@ -236,7 +265,13 @@ export function UtilityDock({
             onOpenDailyNote={onOpenDailyNote}
           />
         ) : null}
-        {activeTab === "calendar" ? <ReferenceCalendar compact /> : null}
+        {activeTab === "calendar" ? (
+          <PlannerWorkspace
+            ipc={ipc}
+            compact
+            {...(brainWorkspaceId ? { brainWorkspaceId } : {})}
+          />
+        ) : null}
         {activeTab === "git" ? (
           diff ? (
             <section

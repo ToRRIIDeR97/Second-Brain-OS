@@ -1015,6 +1015,8 @@ export const dict = {
   "secondBrain.projects.plan.empty": "No scheduled work is linked to this Project yet.",
   "secondBrain.projects.work.title": "Project work",
   "secondBrain.projects.files.title": "Project files",
+  "secondBrain.projects.files.managed":
+    "This managed Project folder contains the project card, notes, and the calendar-synced timeline.",
   "secondBrain.projects.files.description":
     "Open the linked OpenCode workspace to use its file explorer, editor, terminal, Git, and session tools.",
   "secondBrain.projects.files.unlinked": "Link an open workspace to browse and edit this Project's files.",

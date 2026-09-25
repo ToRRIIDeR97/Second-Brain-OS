@@ -5,13 +5,17 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
 } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
+  ChevronDown,
   PanelLeft,
   PanelRight,
-  Search,
+  Plus,
+  Sparkles,
   SquareTerminal,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -25,11 +29,15 @@ import {
   useShell,
   ShellProvider,
   type Activity,
+  type PlannerView,
+  type ProjectView,
   type WorkbenchResource,
 } from "../../state/shell";
 import { PreferencesProvider } from "../../state/preferences";
 import { ThemeProvider } from "../../state/theme";
 import { WorkspaceProvider } from "../../state/workspace";
+import { ProjectsProvider } from "../../state/projects";
+import { useProjects } from "../../state/projects";
 import { useWorkspace } from "../../state/workspace";
 import { CommandPalette } from "../common/CommandPalette";
 import { ConfirmDialog, ModalDialog } from "../common/ModalDialog";
@@ -38,13 +46,16 @@ import { Tabs } from "./Tabs";
 import { UtilityDock, type UtilityDockTab } from "./UtilityDock";
 import { WorkspaceNavigator } from "./WorkspaceNavigator";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { CreateProjectDialog } from "../../features/projects";
 
 const IntegratedWorkspaceSurface = lazy(async () => ({
   default: (await import("../../app/WorkspaceSurface")).WorkspaceSurface,
 }));
 const activityTitles: Record<Activity, string> = {
   home: "Home",
-  knowledge: "Files",
+  projects: "Projects",
+  activity: "Activity",
+  knowledge: "Knowledge",
   files: "Files",
   graph: "Graph",
   search: "Search",
@@ -59,6 +70,8 @@ const activityTitles: Record<Activity, string> = {
 function ShellFrame({ ipc }: { ipc: IpcClient }) {
   const { state, dispatch } = useShell();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [projectCreateOpen, setProjectCreateOpen] = useState(false);
+  const [newNoteRequest, setNewNoteRequest] = useState<number>();
   const [terminalRequest, setTerminalRequest] = useState<TerminalRequest>();
   const [noteRequest, setNoteRequest] = useState<{
     key: number;
@@ -76,22 +89,54 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
   }>();
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string>();
   const [, setGraphSelection] = useState<GraphSelectionContext>();
-  const [utilityOpen, setUtilityOpen] = useState(true);
+  const [utilityOpen, setUtilityOpen] = useState(false);
   const [utilityTabs, setUtilityTabs] = useState<UtilityDockTab[]>([]);
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>();
   const [terminalClosePending, setTerminalClosePending] = useState(false);
   const [diagnostics, setDiagnostics] = useState<SourceDiagnostic[]>([]);
   const utilityPanelRef = usePanelRef();
   const { activeWorkspace } = useWorkspace();
+  const { activeProjectId, selectProject } = useProjects();
+  const restoringHistory = useRef(false);
+  const createMenuRef = useRef<HTMLDetailsElement>(null);
+
+  const historyEntry = useCallback(
+    (
+      activity = state.activity,
+      projectView = state.projectView,
+      plannerView = state.plannerView,
+      projectId: string | null = activeProjectId ?? null,
+    ) => ({
+      id: `activity:${activity}:${projectView}:${plannerView}:${projectId ?? "all"}`,
+      activity,
+      projectView,
+      plannerView,
+      projectId,
+      ...(activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : {}),
+    }),
+    [
+      activeProjectId,
+      activeWorkspace?.id,
+      state.activity,
+      state.plannerView,
+      state.projectView,
+    ],
+  );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      dispatch({ type: "navigator/toggle", open: true });
-    }, 500);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [dispatch]);
+    if (state.history.index >= 0) return;
+    dispatch({ type: "history/push", entry: historyEntry() });
+  }, [dispatch, historyEntry, state.history.index]);
+
+  useEffect(() => {
+    if (restoringHistory.current) {
+      restoringHistory.current = false;
+      return;
+    }
+    if (state.activity !== "projects") return;
+    dispatch({ type: "history/push", entry: historyEntry() });
+  }, [activeProjectId, dispatch, historyEntry, state.activity]);
+
   const setActivity = useCallback(
     (activity: Activity) => {
       if (activity !== "graph" && activity !== "home") {
@@ -99,23 +144,53 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
         dispatch({ type: "selection/set", selection: null });
       }
       dispatch({ type: "activity/set", activity });
+      dispatch({ type: "history/push", entry: historyEntry(activity) });
     },
-    [dispatch],
+    [dispatch, historyEntry],
   );
 
-  const openActivityTab = useCallback(
-    (activity: Activity) => {
-      setActivity(activity);
+  const setProjectView = useCallback(
+    (view: ProjectView) => {
+      dispatch({ type: "project/view", view });
       dispatch({
-        type: "tab/open",
-        tab: {
-          id: `activity:${activity}`,
-          title: activityTitles[activity],
-          activity,
-        },
+        type: "history/push",
+        entry: historyEntry("projects", view),
       });
     },
-    [dispatch, setActivity],
+    [dispatch, historyEntry],
+  );
+
+  const setPlannerView = useCallback(
+    (view: PlannerView) => {
+      dispatch({ type: "planner/view", view });
+      dispatch({
+        type: "history/push",
+        entry: historyEntry("calendar", state.projectView, view),
+      });
+    },
+    [dispatch, historyEntry, state.projectView],
+  );
+
+  const moveHistory = useCallback(
+    (direction: -1 | 1) => {
+      const next = state.history.entries[state.history.index + direction];
+      if (!next) return;
+      if (
+        next.projectId !== undefined &&
+        (next.projectId ?? undefined) !== activeProjectId
+      ) {
+        restoringHistory.current = true;
+        selectProject(next.projectId ?? undefined);
+      }
+      dispatch({ type: direction < 0 ? "history/back" : "history/forward" });
+    },
+    [
+      activeProjectId,
+      dispatch,
+      selectProject,
+      state.history.entries,
+      state.history.index,
+    ],
   );
 
   const openUtility = useCallback((tab: UtilityDockTab) => {
@@ -174,7 +249,7 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
       workspaceId: string;
       relativePath: string;
       title: string;
-      activity: "knowledge" | "files";
+      activity: "knowledge" | "files" | "projects";
     }) => {
       const resource: WorkbenchResource = {
         id: `file:${input.workspaceId}:${input.relativePath}`,
@@ -279,7 +354,9 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
           key: Date.now(),
           workspaceId: detail.workspaceId,
           relativePath: detail.relativePath ?? "",
-          preset: detail.preset === "shell" ? "zsh" : (detail.preset ?? "zsh"),
+          ...(detail.preset && detail.preset !== "shell"
+            ? { preset: detail.preset }
+            : {}),
         });
       }
       openUtility("terminal");
@@ -368,43 +445,122 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
             .catch(() => undefined);
         }}
       >
-        <nav className="topbar-history" aria-label="Resource history">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Go back"
-            disabled={!historyCanGoBack}
-            onClick={() => {
-              dispatch({ type: "history/back" });
+        <div className="topbar-leading">
+          <nav className="topbar-history" aria-label="Resource history">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Go back"
+              disabled={!historyCanGoBack}
+              onClick={() => {
+                moveHistory(-1);
+              }}
+            >
+              <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Go forward"
+              disabled={!historyCanGoForward}
+              onClick={() => {
+                moveHistory(1);
+              }}
+            >
+              <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          </nav>
+          <span className="topbar-divider" aria-hidden="true" />
+          <WorkspaceSwitcher
+            onWorkspaceOpened={() => {
+              setActivity("knowledge");
             }}
-          >
-            <ArrowLeft size={15} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Go forward"
-            disabled={!historyCanGoForward}
-            onClick={() => {
-              dispatch({ type: "history/forward" });
-            }}
-          >
-            <ArrowRight size={15} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-        </nav>
-        <WorkspaceSwitcher />
-        <button
-          type="button"
-          className="search-trigger"
-          onClick={() => {
-            setSearchOpen(true);
-          }}
-        >
-          <Search size={15} strokeWidth={1.8} aria-hidden="true" />
-          <span>Search notes and workspace</span>
-          <kbd>⌘K</kbd>
-        </button>
+          />
+        </div>
         <div className="topbar-actions">
+          <details ref={createMenuRef} className="topbar-create-menu">
+            <summary className="button button-small" aria-label="Create">
+              <Plus size={15} strokeWidth={1.8} aria-hidden="true" />
+              Create
+              <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
+            </summary>
+            <div className="topbar-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(event) => {
+                  setProjectCreateOpen(true);
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
+                }}
+              >
+                Project
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(event) => {
+                  setActivity("knowledge");
+                  setNewNoteRequest(Date.now());
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
+                }}
+              >
+                Note
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(event) => {
+                  setPlannerView("tasks");
+                  setActivity("calendar");
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
+                }}
+              >
+                Task
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(event) => {
+                  setPlannerView("today");
+                  setActivity("calendar");
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
+                }}
+              >
+                Calendar event
+              </button>
+            </div>
+          </details>
+          <button
+            type="button"
+            className="button button-small topbar-ask"
+            aria-label="Ask Second Brain"
+            onClick={() => {
+              createMenuRef.current?.removeAttribute("open");
+              openUtility("agent");
+            }}
+          >
+            <Sparkles size={15} strokeWidth={1.8} aria-hidden="true" /> Ask
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Open needs attention"
+            title="Needs attention"
+            onClick={() => {
+              createMenuRef.current?.removeAttribute("open");
+              setActivity("activity");
+            }}
+          >
+            <Bell size={16} strokeWidth={1.8} aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="icon-button"
@@ -462,6 +618,14 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
               >
                 <WorkspaceNavigator
                   activity={state.activity}
+                  projectView={state.projectView}
+                  onProjectViewChange={(view) => {
+                    setProjectView(view);
+                  }}
+                  plannerView={state.plannerView}
+                  onPlannerViewChange={(view) => {
+                    setPlannerView(view);
+                  }}
                   ipc={ipc}
                   onOpenDailyNote={() => {
                     setNoteRequest({
@@ -503,7 +667,6 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
                     if (tab?.dirty) setPendingCloseTabId(id);
                     else dispatch({ type: "tab/close", id });
                   }}
-                  onAdd={openActivityTab}
                 />
               ) : null}
               <main className="workspace" data-route={state.activity}>
@@ -525,6 +688,19 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
                       setSearchOpen(false);
                     }}
                     onNavigate={setActivity}
+                    projectView={state.projectView}
+                    plannerView={state.plannerView}
+                    onPlannerViewChange={(view) => {
+                      setPlannerView(view);
+                    }}
+                    onCreateProject={() => {
+                      setProjectCreateOpen(true);
+                    }}
+                    onProjectViewChange={setProjectView}
+                    onOpenAgentPanel={() => {
+                      openUtility("agent");
+                    }}
+                    newNoteRequest={newNoteRequest}
                     noteRequest={noteRequest}
                     fileRequest={fileRequest}
                     saveRequest={saveRequest}
@@ -554,33 +730,35 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
             collapsedSize={0}
             groupResizeBehavior="preserve-pixel-size"
           >
-            <UtilityDock
-              {...(utilityTab ? { activeTab: utilityTab } : {})}
-              openTabs={utilityTabs}
-              ipc={ipc}
-              diagnostics={diagnostics}
-              {...(terminalRequest ? { terminalRequest } : {})}
-              onOpenTab={openUtility}
-              onTabChange={setUtilityTab}
-              onCloseTab={closeUtilityTab}
-              onClose={() => {
-                setUtilityOpen(false);
-              }}
-              onOpenDailyNote={() => {
-                setNoteRequest({
-                  key: Date.now(),
-                  relativePath: "notes/today.md",
-                });
-              }}
-              onOpenPath={(relativePath, line, column) => {
-                setFileRequest({
-                  key: Date.now(),
-                  relativePath,
-                  ...(line === undefined ? {} : { line }),
-                  ...(column === undefined ? {} : { column }),
-                });
-              }}
-            />
+            {utilityOpen || utilityTabs.length ? (
+              <UtilityDock
+                {...(utilityTab ? { activeTab: utilityTab } : {})}
+                openTabs={utilityTabs}
+                ipc={ipc}
+                diagnostics={diagnostics}
+                {...(terminalRequest ? { terminalRequest } : {})}
+                onOpenTab={openUtility}
+                onTabChange={setUtilityTab}
+                onCloseTab={closeUtilityTab}
+                onClose={() => {
+                  setUtilityOpen(false);
+                }}
+                onOpenDailyNote={() => {
+                  setNoteRequest({
+                    key: Date.now(),
+                    relativePath: "notes/today.md",
+                  });
+                }}
+                onOpenPath={(relativePath, line, column) => {
+                  setFileRequest({
+                    key: Date.now(),
+                    relativePath,
+                    ...(line === undefined ? {} : { line }),
+                    ...(column === undefined ? {} : { column }),
+                  });
+                }}
+              />
+            ) : null}
           </Panel>
         </Group>
       </div>
@@ -595,6 +773,17 @@ function ShellFrame({ ipc }: { ipc: IpcClient }) {
         }}
         onClose={() => {
           dispatch({ type: "palette/toggle", open: false });
+        }}
+      />
+      <CreateProjectDialog
+        open={projectCreateOpen}
+        ipc={ipc}
+        onClose={() => {
+          setProjectCreateOpen(false);
+        }}
+        onCreated={() => {
+          setActivity("projects");
+          setProjectView("overview");
         }}
       />
       <ConfirmDialog
@@ -672,9 +861,11 @@ export function AppShell({ ipc = ipcClient }: { ipc?: IpcClient }) {
     <ThemeProvider>
       <PreferencesProvider>
         <WorkspaceProvider ipc={ipc}>
-          <ShellProvider ipc={ipc}>
-            <ShellFrame ipc={ipc} />
-          </ShellProvider>
+          <ProjectsProvider ipc={ipc}>
+            <ShellProvider ipc={ipc}>
+              <ShellFrame ipc={ipc} />
+            </ShellProvider>
+          </ProjectsProvider>
         </WorkspaceProvider>
       </PreferencesProvider>
     </ThemeProvider>

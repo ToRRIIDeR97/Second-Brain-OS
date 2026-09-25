@@ -17,6 +17,7 @@ import type {
 export type WorkspaceRegistration = {
   name: string;
   rootPath: string;
+  rootGrantId: string;
   kind: WorkspaceKind;
   trustLevel: WorkspaceTrustLevel;
 };
@@ -29,6 +30,7 @@ type WorkspaceContextValue = {
   error: string;
   selectWorkspace: (workspaceId: string) => void;
   refreshWorkspaces: () => Promise<void>;
+  selectRoot: IpcClient["workspaces"]["selectRoot"];
   registerWorkspace: (
     registration: WorkspaceRegistration,
   ) => Promise<WorkspaceSummary | undefined>;
@@ -148,6 +150,7 @@ export function WorkspaceProvider({
       error,
       selectWorkspace,
       refreshWorkspaces,
+      selectRoot: ipc.workspaces.selectRoot,
       registerWorkspace,
     }),
     [
@@ -156,6 +159,7 @@ export function WorkspaceProvider({
       error,
       loading,
       refreshWorkspaces,
+      ipc.workspaces.selectRoot,
       registerWorkspace,
       selectWorkspace,
       workspaces,

@@ -3,22 +3,31 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
   type SetStateAction,
 } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
-  CalendarPlus,
-  Command,
-  FilePlus2,
+  BookOpen,
+  CalendarDays,
   FolderOpen,
+  GitBranch,
   LockKeyhole,
+  Plus,
   Search,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { ConfirmDialog } from "../components/common/ModalDialog";
-import type { AgentWorkspaceState } from "../features/agents";
+import {
+  AgentComposer,
+  createIpcAgentSessionSource,
+  type AgentAvailability,
+  type AgentWorkspaceState,
+} from "../features/agents";
 import {
   bytesToBase64,
   createImageAttachmentPlacement,
@@ -46,7 +55,10 @@ import type {
 import { KnowledgeSearchModal, type SearchResponse } from "../features/search";
 import type { SourceControlChange } from "../features/source-control";
 import type {
+  ActivityPage,
+  ActivityCategory,
   CommandResult,
+  AgentProviderProbeRecord,
   GitFileDiff,
   GitWorkspaceStatus,
   IpcClient,
@@ -56,12 +68,18 @@ import type {
   WorkspaceTrustLevel,
   ToolLanguage,
   LanguageToolStatus as ToolStatus,
+  IntegrationSettings,
+  IntegrationSettingsUpdate,
+  GoogleConnectionStatus,
+  PlannerItemRecord,
 } from "../lib/ipc";
 import type { Activity } from "../state/shell";
+import type { PlannerView, ProjectView } from "../state/shell";
+import { ProjectsWorkspace } from "../features/projects";
+import { useProjects } from "../state/projects";
 import { usePreferences } from "../state/preferences";
 import { useTheme } from "../state/theme";
 import { useWorkspace } from "../state/workspace";
-import { pickWorkspaceFolder } from "../lib/workspaceFolderPicker";
 
 const AgentWorkspace = lazy(async () => ({
   default: (await import("../features/agents")).AgentWorkspace,
@@ -78,12 +96,8 @@ const FocusedGraph = lazy(async () => ({
 const SourceControlWorkspace = lazy(async () => ({
   default: (await import("../features/source-control")).SourceControlWorkspace,
 }));
-const LocalPlanner = lazy(async () => ({
-  default: (await import("../features/planner")).LocalPlanner,
-}));
-const ReferenceCalendar = lazy(async () => ({
-  default: (await import("../features/planner/ReferenceCalendar"))
-    .ReferenceCalendar,
+const PlannerWorkspace = lazy(async () => ({
+  default: (await import("../features/planner")).PlannerWorkspace,
 }));
 
 type OpenDocument = {
@@ -99,10 +113,34 @@ type OpenDocument = {
 
 const emptySearch: SearchResponse = { results: [], structuredPlan: "" };
 const noopDiagnostics = () => undefined;
+const defaultIntegrationSettings: IntegrationSettings = {
+  version: 1,
+  google: {
+    oauthClientId: null,
+    consentMode: "read_only",
+    calendarEnabled: true,
+    tasksEnabled: true,
+  },
+  codex: { defaultSandbox: "read_only" },
+};
 
 function nameFromRoot(path: string) {
   const trimmed = path.replace(/[\\/]+$/, "");
   return trimmed.split(/[\\/]/).at(-1) || "Workspace";
+}
+
+function localDateKey(date = new Date()) {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function plannerDate(item: PlannerItemRecord) {
+  if (!item.schedule) return undefined;
+  if (item.schedule.kind === "exact")
+    return localDateKey(new Date(item.schedule.startEpochSeconds * 1000));
+  return item.schedule.date;
 }
 
 function parentPath(path: string) {
@@ -157,21 +195,38 @@ function errorMessage<T>(result: CommandResult<T>) {
   return result.ok ? "" : result.error.message;
 }
 
+function eventLabel(eventType: string) {
+  return eventType
+    .split(".")
+    .map((part) => part.replaceAll("_", " "))
+    .join(" · ");
+}
+
+function activitySubject(payload: Record<string, unknown> | null) {
+  if (!payload) return "Application event";
+  const subject = payload.path ?? payload.resourceId ?? payload.projectId;
+  return typeof subject === "string" ? subject : "Application event";
+}
+
 function EmptyWorkspace({
   onRegister,
+  onSelectRoot,
   busy,
   error,
 }: {
   onRegister: (input: {
     name: string;
     rootPath: string;
+    rootGrantId: string;
     kind: WorkspaceKind;
     trustLevel: WorkspaceTrustLevel;
-  }) => void;
+  }) => Promise<void>;
+  onSelectRoot: IpcClient["workspaces"]["selectRoot"];
   busy: boolean;
   error: string;
 }) {
   const [rootPath, setRootPath] = useState("");
+  const [rootGrantId, setRootGrantId] = useState("");
   const [name, setName] = useState("");
   const [trustLevel, setTrustLevel] = useState<WorkspaceTrustLevel>("trusted");
   const [folderPickerBusy, setFolderPickerBusy] = useState(false);
@@ -181,10 +236,15 @@ function EmptyWorkspace({
     setFolderPickerBusy(true);
     setFolderPickerError("");
     try {
-      const selected = await pickWorkspaceFolder();
-      if (!selected) return;
-      setRootPath(selected);
-      setName((current) => current.trim() || nameFromRoot(selected));
+      const result = await onSelectRoot();
+      if (!result.ok) throw new Error(result.error.message);
+      if (!result.data) return;
+      setRootPath(result.data.displayPath);
+      setRootGrantId(result.data.grantId);
+      setName(
+        (current) =>
+          current.trim() || result.data?.suggestedName || "Workspace",
+      );
     } catch (cause) {
       setFolderPickerError(
         cause instanceof Error
@@ -228,9 +288,10 @@ function EmptyWorkspace({
           className="workspace-onboarding-form"
           onSubmit={(event) => {
             event.preventDefault();
-            onRegister({
+            void onRegister({
               name: name.trim() || nameFromRoot(rootPath),
               rootPath: rootPath.trim(),
+              rootGrantId,
               kind: "brain",
               trustLevel,
             });
@@ -306,7 +367,7 @@ function EmptyWorkspace({
           <button
             className="button button-primary workspace-open-button"
             type="submit"
-            disabled={busy || !rootPath}
+            disabled={busy || !rootPath || !rootGrantId}
           >
             <span>{busy ? "Opening…" : "Open workspace"}</span>
             <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
@@ -540,7 +601,9 @@ function DocumentEditor({
           <button
             className="button button-primary"
             type="button"
-            disabled={!canWrite || saving}
+            disabled={
+              !canWrite || saving || document.content === document.baseContent
+            }
             onClick={onSave}
           >
             {saving ? "Saving…" : "Save"}
@@ -576,10 +639,16 @@ function DocumentEditor({
 export function WorkspaceSurface({
   activity,
   ipc,
-  onOpenPalette,
   searchOpen = false,
   onCloseSearch = () => undefined,
   onNavigate = () => undefined,
+  projectView = "overview",
+  plannerView = "today",
+  onPlannerViewChange = () => undefined,
+  onCreateProject = () => undefined,
+  onProjectViewChange = () => undefined,
+  onOpenAgentPanel = () => undefined,
+  newNoteRequest,
   noteRequest,
   fileRequest,
   saveRequest,
@@ -597,6 +666,13 @@ export function WorkspaceSurface({
   searchOpen?: boolean;
   onCloseSearch?: () => void;
   onNavigate?: (activity: Activity) => void;
+  projectView?: ProjectView;
+  plannerView?: PlannerView;
+  onPlannerViewChange?: (view: PlannerView) => void;
+  onCreateProject?: () => void;
+  onProjectViewChange?: (view: ProjectView) => void;
+  onOpenAgentPanel?: () => void;
+  newNoteRequest?: number | undefined;
   noteRequest?: { key: number; relativePath: string } | undefined;
   fileRequest?:
     | {
@@ -616,7 +692,7 @@ export function WorkspaceSurface({
     workspaceId: string;
     relativePath: string;
     title: string;
-    activity: "knowledge" | "files";
+    activity: "knowledge" | "files" | "projects";
   }) => void;
   onDocumentDirtyChange?: (resourceId: string, dirty: boolean) => void;
   onDocumentSaved?: (resourceId: string) => void;
@@ -637,6 +713,17 @@ export function WorkspaceSurface({
   const [error, setError] = useState("");
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<string>();
+
+  useEffect(() => {
+    if (newNoteRequest === undefined) return;
+    const timer = window.setTimeout(() => {
+      setNewNoteOpen(true);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [newNoteRequest]);
+
   const [bridgeResult, setBridgeResult] =
     useState<CommandResult<string> | null>(null);
   const [search, setSearch] = useState<SearchResponse>(emptySearch);
@@ -646,6 +733,11 @@ export function WorkspaceSurface({
     truncated: false,
   });
   const [git, setGit] = useState<GitWorkspaceStatus>();
+  const [auditActivity, setAuditActivity] = useState<ActivityPage>({
+    items: [],
+  });
+  const [activityCategory, setActivityCategory] =
+    useState<ActivityCategory>("all");
   const [gitDiff, setGitDiff] = useState<{
     path: string;
     data: GitFileDiff;
@@ -662,6 +754,48 @@ export function WorkspaceSurface({
     sessions: [],
     activeSessionId: null,
   });
+  const [agentAvailability, setAgentAvailability] = useState<AgentAvailability>(
+    { status: "degraded", reason: "Checking Codex App Server…" },
+  );
+  const [homePlannerItems, setHomePlannerItems] = useState<PlannerItemRecord[]>(
+    [],
+  );
+  const [integrationSettings, setIntegrationSettings] =
+    useState<IntegrationSettings>(defaultIntegrationSettings);
+  const [integrationDraft, setIntegrationDraft] =
+    useState<IntegrationSettingsUpdate>({
+      google: { ...defaultIntegrationSettings.google },
+      codex: { ...defaultIntegrationSettings.codex },
+    });
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [integrationLoading, setIntegrationLoading] = useState(true);
+  const [integrationSaving, setIntegrationSaving] = useState(false);
+  const [integrationMessage, setIntegrationMessage] = useState<{
+    kind: "success" | "error";
+    text: string;
+  }>();
+  const [googleStatus, setGoogleStatus] = useState<GoogleConnectionStatus>();
+  const [googleAction, setGoogleAction] = useState<
+    "connect" | "sync" | "disconnect"
+  >();
+  const googleClientSecretConfigured = Boolean(
+    googleClientSecret.trim() ||
+    (integrationDraft.google.oauthClientId?.trim() ===
+      integrationSettings.google.oauthClientId &&
+      googleStatus?.clientSecretConfigured),
+  );
+  const pendingIntegrationUpdate = useMemo<IntegrationSettingsUpdate>(
+    () => ({
+      google: {
+        ...integrationDraft.google,
+        oauthClientSecret: googleClientSecret.trim() || null,
+      },
+      codex: integrationDraft.codex,
+    }),
+    [googleClientSecret, integrationDraft],
+  );
+  const [codexProbe, setCodexProbe] = useState<AgentProviderProbeRecord>();
+  const agentSource = useMemo(() => createIpcAgentSessionSource(ipc), [ipc]);
   const {
     workspaces,
     activeWorkspace: workspace,
@@ -671,6 +805,12 @@ export function WorkspaceSurface({
     registerWorkspace,
     refreshWorkspaces,
   } = useWorkspace();
+  const {
+    projects,
+    brainWorkspaceId,
+    loading: projectsLoading,
+    selectProject,
+  } = useProjects();
   const document = activeWorkspaceId ? documents[activeWorkspaceId] : undefined;
   const setDocument = useCallback(
     (next: SetStateAction<OpenDocument | undefined>) => {
@@ -697,6 +837,137 @@ export function WorkspaceSurface({
   const checkDesktopBridge = useCallback(async () => {
     setBridgeResult(await ipc.system.ping());
   }, [ipc]);
+
+  useEffect(() => {
+    let current = true;
+    void ipc.integrations.get().then((result) => {
+      if (!current) return;
+      setIntegrationLoading(false);
+      if (!result.ok) {
+        setIntegrationMessage({ kind: "error", text: result.error.message });
+        return;
+      }
+      setIntegrationSettings(result.data);
+      setIntegrationDraft({
+        google: { ...result.data.google },
+        codex: { ...result.data.codex },
+      });
+    });
+    return () => {
+      current = false;
+    };
+  }, [ipc]);
+
+  useEffect(() => {
+    if (activity !== "settings") return;
+    let current = true;
+    void ipc.integrations.googleStatus().then((result) => {
+      if (current && result.ok) setGoogleStatus(result.data);
+    });
+    void ipc.agents.probe().then((result) => {
+      if (current && result.ok) setCodexProbe(result.data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [activity, ipc]);
+
+  const refreshGoogleStatus = useCallback(async () => {
+    const result = await ipc.integrations.googleStatus();
+    if (result.ok) setGoogleStatus(result.data);
+  }, [ipc]);
+
+  const connectGoogle = useCallback(async () => {
+    if (!brainWorkspaceId || googleAction) return;
+    setGoogleAction("connect");
+    setIntegrationMessage({
+      kind: "success",
+      text: "Waiting for Google in your browser…",
+    });
+    const saved = await ipc.integrations.save(pendingIntegrationUpdate);
+    if (!saved.ok) {
+      setIntegrationMessage({ kind: "error", text: saved.error.message });
+      setGoogleAction(undefined);
+      return;
+    }
+    setIntegrationSettings(saved.data);
+    setIntegrationDraft({
+      google: { ...saved.data.google },
+      codex: { ...saved.data.codex },
+    });
+    setGoogleClientSecret("");
+    const result = await ipc.integrations.googleConnect(brainWorkspaceId);
+    setGoogleAction(undefined);
+    if (!result.ok) {
+      setIntegrationMessage({ kind: "error", text: result.error.message });
+      await refreshGoogleStatus();
+      return;
+    }
+    setIntegrationMessage({
+      kind: "success",
+      text: `Google connected. Synced ${String(result.data.calendarItems)} calendar items and ${String(result.data.taskItems)} tasks.`,
+    });
+    await refreshGoogleStatus();
+  }, [
+    brainWorkspaceId,
+    googleAction,
+    ipc,
+    pendingIntegrationUpdate,
+    refreshGoogleStatus,
+  ]);
+
+  const syncGoogle = useCallback(async () => {
+    if (!brainWorkspaceId || googleAction) return;
+    setGoogleAction("sync");
+    setIntegrationMessage({ kind: "success", text: "Syncing Google…" });
+    const result = await ipc.integrations.googleSync(brainWorkspaceId);
+    setGoogleAction(undefined);
+    if (!result.ok) {
+      setIntegrationMessage({ kind: "error", text: result.error.message });
+      return;
+    }
+    setIntegrationMessage({
+      kind: "success",
+      text: `Google is up to date. Synced ${String(result.data.calendarItems)} calendar items and ${String(result.data.taskItems)} tasks.`,
+    });
+    await refreshGoogleStatus();
+  }, [brainWorkspaceId, googleAction, ipc, refreshGoogleStatus]);
+
+  const disconnectGoogle = useCallback(async () => {
+    if (googleAction) return;
+    setGoogleAction("disconnect");
+    setIntegrationMessage({ kind: "success", text: "Disconnecting Google…" });
+    const result = await ipc.integrations.googleDisconnect();
+    setGoogleAction(undefined);
+    if (!result.ok) {
+      setIntegrationMessage({ kind: "error", text: result.error.message });
+      return;
+    }
+    setGoogleStatus(result.data);
+    setIntegrationMessage({ kind: "success", text: result.data.message });
+  }, [googleAction, ipc]);
+
+  const saveIntegrationSettings = useCallback(async () => {
+    setIntegrationSaving(true);
+    setIntegrationMessage(undefined);
+    const result = await ipc.integrations.save(pendingIntegrationUpdate);
+    setIntegrationSaving(false);
+    if (!result.ok) {
+      setIntegrationMessage({ kind: "error", text: result.error.message });
+      return;
+    }
+    setIntegrationSettings(result.data);
+    setIntegrationDraft({
+      google: { ...result.data.google },
+      codex: { ...result.data.codex },
+    });
+    setGoogleClientSecret("");
+    setIntegrationMessage({
+      kind: "success",
+      text: "Integration settings saved.",
+    });
+    await refreshGoogleStatus();
+  }, [ipc, pendingIntegrationUpdate, refreshGoogleStatus]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1144,7 +1415,7 @@ export function WorkspaceSurface({
   );
 
   useEffect(() => {
-    if (activity !== "source-control") return;
+    if (activity !== "source-control" && activity !== "activity") return;
     const timer = window.setTimeout(() => {
       void refreshGit();
     }, 0);
@@ -1152,6 +1423,57 @@ export function WorkspaceSurface({
       window.clearTimeout(timer);
     };
   }, [activity, refreshGit]);
+
+  const refreshActivity = useCallback(async () => {
+    const result = await ipc.activity.list({
+      limit: 50,
+      category: activity === "activity" ? activityCategory : "all",
+    });
+    if (isSuccess(result)) setAuditActivity(result.data);
+    else setError(errorMessage(result));
+  }, [activity, activityCategory, ipc]);
+
+  useEffect(() => {
+    if (activity !== "activity" && activity !== "home") return;
+    const timer = window.setTimeout(() => void refreshActivity(), 0);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activity, refreshActivity]);
+
+  useEffect(() => {
+    if (!workspace || !["home", "activity", "agents"].includes(activity))
+      return;
+    let current = true;
+    void agentSource.probe().then((availability) => {
+      if (current) setAgentAvailability(availability);
+    });
+    void agentSource
+      .list(workspace.id)
+      .then((sessions) => {
+        if (!current) return;
+        setAgents({
+          workspaceId: workspace.id,
+          sessions,
+          activeSessionId: sessions[0]?.id ?? null,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [activity, agentSource, workspace]);
+
+  useEffect(() => {
+    if (activity !== "home" || !brainWorkspaceId) return;
+    let current = true;
+    void ipc.planner.list({ brainWorkspaceId }).then((result) => {
+      if (current && result.ok) setHomePlannerItems(result.data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [activity, brainWorkspaceId, ipc]);
 
   const refreshGraph = useCallback(async () => {
     if (!workspace) return;
@@ -1161,7 +1483,7 @@ export function WorkspaceSurface({
   }, [directory, ipc, workspace]);
 
   useEffect(() => {
-    if (activity !== "graph" && activity !== "home") return;
+    if (activity !== "graph") return;
     const timer = window.setTimeout(() => {
       void refreshGraph();
     }, 0);
@@ -1263,13 +1585,270 @@ export function WorkspaceSurface({
   if (!workspace)
     return surface(
       <EmptyWorkspace
-        onRegister={(registration) => {
-          void registerWorkspace(registration);
+        onSelectRoot={ipc.workspaces.selectRoot}
+        onRegister={async (registration) => {
+          const registered = await registerWorkspace(registration);
+          if (registered) onNavigate("knowledge");
         }}
         busy={loading}
         error={workspaceError || error}
       />,
     );
+
+  if (activity === "projects")
+    return surface(
+      <ProjectsWorkspace
+        view={projectView}
+        onViewChange={onProjectViewChange}
+        onCreate={onCreateProject}
+        onNavigate={onNavigate}
+        ipc={ipc}
+      />,
+    );
+
+  if (activity === "activity") {
+    const blockedProjects = projects.filter(
+      ({ status, blocker }) => status === "active" && Boolean(blocker),
+    );
+    const activityAgents =
+      agents.workspaceId === workspace.id ? agents.sessions : [];
+    const problemAgents = activityAgents.filter(({ state }) =>
+      ["waiting", "failed", "recoverable"].includes(state),
+    );
+    return surface(
+      <section className="activity-workspace" aria-labelledby="activity-title">
+        <header className="activity-workspace-header">
+          <div>
+            <p className="eyebrow">Activity</p>
+            <h1 id="activity-title">Work that needs your attention</h1>
+            <p>Real local state only. Disconnected services stay explicit.</p>
+          </div>
+        </header>
+        <div
+          className="activity-filter"
+          role="group"
+          aria-label="Filter Activity"
+        >
+          {(["all", "attention", "runs", "changes", "history"] as const).map(
+            (category) => (
+              <button
+                type="button"
+                aria-pressed={activityCategory === category}
+                key={category}
+                onClick={() => {
+                  setActivityCategory(category);
+                }}
+              >
+                {category.slice(0, 1).toUpperCase() + category.slice(1)}
+              </button>
+            ),
+          )}
+        </div>
+        {(activityCategory === "all" || activityCategory === "attention") &&
+        (blockedProjects.length || problemAgents.length) ? (
+          <section
+            className="activity-section"
+            aria-labelledby="attention-title"
+          >
+            <header>
+              <AlertTriangle size={18} aria-hidden="true" />
+              <div>
+                <h2 id="attention-title">Needs attention</h2>
+                <p>
+                  {blockedProjects.length} blocked Project
+                  {blockedProjects.length === 1 ? "" : "s"}
+                </p>
+              </div>
+            </header>
+            <div className="activity-rows">
+              {blockedProjects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  onClick={() => {
+                    selectProject(project.id);
+                    onNavigate("projects");
+                  }}
+                >
+                  <span>
+                    <strong>{project.name}</strong>
+                    <small>{project.blocker}</small>
+                  </span>
+                  <span>Review blocker</span>
+                </button>
+              ))}
+              {problemAgents.map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => {
+                    setAgents((current) => ({
+                      ...current,
+                      activeSessionId: session.id,
+                    }));
+                    onOpenAgentPanel();
+                  }}
+                >
+                  <span>
+                    <strong>{session.objective}</strong>
+                    <small>
+                      {session.error?.message ?? `Session is ${session.state}`}
+                    </small>
+                  </span>
+                  <span>Review run</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {activityCategory === "all" || activityCategory === "runs" ? (
+          <section className="activity-section" aria-labelledby="runs-title">
+            <header>
+              <Sparkles size={18} aria-hidden="true" />
+              <div>
+                <h2 id="runs-title">Agent runs</h2>
+                <p>{activityAgents.length} persisted local sessions</p>
+              </div>
+            </header>
+            {activityAgents.length ? (
+              <div className="activity-rows">
+                {activityAgents.map((session) => (
+                  <button
+                    type="button"
+                    key={session.id}
+                    onClick={() => {
+                      setAgents((current) => ({
+                        ...current,
+                        activeSessionId: session.id,
+                      }));
+                      onOpenAgentPanel();
+                    }}
+                  >
+                    <span>
+                      <strong>{session.objective}</strong>
+                      <small>{session.currentAction ?? session.state}</small>
+                    </span>
+                    <span>{session.state}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="activity-section-empty">No agent runs yet.</p>
+            )}
+          </section>
+        ) : null}
+        {activityCategory === "all" || activityCategory === "changes" ? (
+          <section className="activity-section" aria-labelledby="changes-title">
+            <header>
+              <GitBranch size={18} aria-hidden="true" />
+              <div>
+                <h2 id="changes-title">Changes</h2>
+                <p>
+                  {git?.changes.length ?? 0} working-tree changes in{" "}
+                  {workspace.name}
+                </p>
+              </div>
+            </header>
+            {git?.changes.length ? (
+              <div className="activity-rows">
+                {git.changes.slice(0, 8).map((change) => (
+                  <button
+                    key={`${change.staged ? "staged" : "working"}:${change.path}`}
+                    type="button"
+                    onClick={() => {
+                      onNavigate("source-control");
+                    }}
+                  >
+                    <span>
+                      <strong>{change.path}</strong>
+                      <small>{change.staged ? "Staged" : "Working tree"}</small>
+                    </span>
+                    <span>{change.status}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="activity-section-empty">No local file changes.</p>
+            )}
+          </section>
+        ) : null}
+        {activityCategory === "all" ? (
+          <section
+            className="activity-connections"
+            aria-labelledby="connections-title"
+          >
+            <h2 id="connections-title">Connections</h2>
+            <div>
+              <span>
+                <Sparkles size={17} aria-hidden="true" />
+              </span>
+              <p>
+                <strong>Agent provider</strong>
+                <small>
+                  {agentAvailability.reason ??
+                    "Codex App Server is ready for managed sessions"}
+                </small>
+              </p>
+              <span
+                className="status-label"
+                data-status={
+                  agentAvailability.status === "available" ? "active" : "paused"
+                }
+              >
+                {agentAvailability.status === "available"
+                  ? "Available"
+                  : "Unavailable"}
+              </span>
+            </div>
+            <div>
+              <span>
+                <CalendarDays size={17} aria-hidden="true" />
+              </span>
+              <p>
+                <strong>External calendar sync</strong>
+                <small>
+                  Local planning works without a provider connection
+                </small>
+              </p>
+              <span className="status-label" data-status="paused">
+                Disconnected
+              </span>
+            </div>
+          </section>
+        ) : null}
+        {activityCategory === "all" || activityCategory === "history" ? (
+          <section className="activity-section" aria-labelledby="history-title">
+            <header>
+              <BookOpen size={18} aria-hidden="true" />
+              <div>
+                <h2 id="history-title">History</h2>
+                <p>Persisted, redacted application events</p>
+              </div>
+            </header>
+            {auditActivity.items.length ? (
+              <div className="activity-rows">
+                {auditActivity.items.map((item) => (
+                  <div className="activity-history-row" key={item.id}>
+                    <span>
+                      <strong>{activitySubject(item.payload)}</strong>
+                      <small>{eventLabel(item.eventType)}</small>
+                    </span>
+                    <time dateTime={item.timestamp}>
+                      {new Date(item.timestamp).toLocaleString()}
+                    </time>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="activity-section-empty">
+                No persisted Activity yet.
+              </p>
+            )}
+          </section>
+        ) : null}
+      </section>,
+    );
+  }
 
   if (
     workspace.kind === "collection" &&
@@ -1358,6 +1937,8 @@ export function WorkspaceSurface({
         onChange={(next) => {
           setAgents(next);
         }}
+        sessionSource={agentSource}
+        defaultSandbox={integrationSettings.codex.defaultSandbox}
       />,
     );
 
@@ -1429,19 +2010,39 @@ export function WorkspaceSurface({
 
   if (activity === "planner")
     return surface(
-      <section className="tasks-workspace" aria-labelledby="tasks-heading">
-        <header className="surface-toolbar">
-          <div>
-            <p className="eyebrow">Tasks</p>
-            <h1 id="tasks-heading">All Tasks</h1>
-          </div>
-          <span className="surface-status">Local planner</span>
-        </header>
-        <LocalPlanner />
-      </section>,
+      <PlannerWorkspace
+        ipc={ipc}
+        {...(brainWorkspaceId ? { brainWorkspaceId } : {})}
+        initialView="tasks"
+        onOpenSettings={() => {
+          onNavigate("settings");
+        }}
+      />,
     );
 
-  if (activity === "calendar") return surface(<ReferenceCalendar />);
+  if (activity === "calendar")
+    return surface(
+      <PlannerWorkspace
+        ipc={ipc}
+        {...(brainWorkspaceId ? { brainWorkspaceId } : {})}
+        view={plannerView}
+        onViewChange={onPlannerViewChange}
+        onOpenSettings={() => {
+          onNavigate("settings");
+        }}
+      />,
+    );
+
+  if (activity === "graph")
+    return surface(
+      <FocusedGraph
+        page={graph}
+        theme={resolvedTheme}
+        onExpand={(nodeId) => expandGraphNode(nodeId)}
+        onCommand={handleGraphCommand}
+        onSelectionContextChange={onGraphSelectionContextChange}
+      />,
+    );
 
   if (activity === "settings")
     return surface(
@@ -1449,8 +2050,10 @@ export function WorkspaceSurface({
         <header className="settings-heading">
           <div>
             <p className="eyebrow">Settings</p>
-            <h1 id="settings-title">Workspace</h1>
-            <p>Configure how Second Brain OS works for this local workspace.</p>
+            <h1 id="settings-title">Application settings</h1>
+            <p>
+              Configure your workspace, connected services, and agent runtime.
+            </p>
           </div>
           <button
             className="button button-small"
@@ -1589,71 +2192,678 @@ export function WorkspaceSurface({
             ) : null}
           </dl>
         </fieldset>
-        <fieldset className="settings-group">
-          <legend>Sync & Collaboration</legend>
-          <dl className="settings-rows">
+        <fieldset className="settings-group settings-integration-group">
+          <legend>Google Calendar &amp; Tasks</legend>
+          <div className="settings-integration-heading">
             <div>
-              <dt>Cloud sync</dt>
-              <dd>Not configured</dd>
+              <strong>Google workspace connection</strong>
+              <p>
+                Add the desktop OAuth client used for calendar and task sync.
+              </p>
             </div>
-            <div>
-              <dt>Shared links</dt>
-              <dd>Unavailable in this local build</dd>
+            <span
+              className="status-label"
+              data-status={
+                googleStatus?.state === "connected"
+                  ? "active"
+                  : googleStatus?.state === "connecting"
+                    ? "waiting"
+                    : googleStatus?.state === "error"
+                      ? "failed"
+                      : "paused"
+              }
+            >
+              {googleStatus?.state === "connected"
+                ? "Connected"
+                : googleStatus?.state === "connecting"
+                  ? "Connecting"
+                  : integrationDraft.google.oauthClientId?.trim() &&
+                      googleClientSecretConfigured
+                    ? "Ready to connect"
+                    : "Not configured"}
+            </span>
+          </div>
+          <label className="settings-field">
+            <span>
+              <strong>OAuth client ID</strong>
+              <small>
+                Create a Desktop app credential in Google Cloud, then paste its
+                client ID here. Secrets and tokens are never stored in notes.
+              </small>
+            </span>
+            <input
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={512}
+              value={integrationDraft.google.oauthClientId ?? ""}
+              placeholder="123456789.apps.googleusercontent.com"
+              onChange={(event) => {
+                setIntegrationMessage(undefined);
+                setIntegrationDraft((current) => ({
+                  ...current,
+                  google: {
+                    ...current.google,
+                    oauthClientId: event.target.value || null,
+                  },
+                }));
+              }}
+            />
+          </label>
+          <label className="settings-field">
+            <span>
+              <strong>OAuth client secret</strong>
+              <small>
+                Paste the client_secret from the downloaded Desktop OAuth JSON.
+                It is stored only in Windows Credential Manager. Leave this
+                blank to keep the saved secret.
+              </small>
+            </span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              spellCheck={false}
+              maxLength={512}
+              value={googleClientSecret}
+              placeholder={
+                googleClientSecretConfigured
+                  ? "Saved in Windows Credential Manager"
+                  : "Paste the matching client secret"
+              }
+              onChange={(event) => {
+                setIntegrationMessage(undefined);
+                setGoogleClientSecret(event.target.value);
+              }}
+            />
+          </label>
+          <div className="settings-form-grid">
+            <label className="settings-field">
+              <span>
+                <strong>Google access</strong>
+                <small>Start read-only and enable writes deliberately.</small>
+              </span>
+              <select
+                value={integrationDraft.google.consentMode}
+                onChange={(event) => {
+                  setIntegrationMessage(undefined);
+                  setIntegrationDraft((current) => ({
+                    ...current,
+                    google: {
+                      ...current.google,
+                      consentMode:
+                        event.target.value === "read_write"
+                          ? "read_write"
+                          : "read_only",
+                    },
+                  }));
+                }}
+              >
+                <option value="read_only">Read only</option>
+                <option value="read_write">Read and write</option>
+              </select>
+            </label>
+            <div className="settings-service-toggles">
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={integrationDraft.google.calendarEnabled}
+                  onChange={(event) => {
+                    setIntegrationMessage(undefined);
+                    setIntegrationDraft((current) => ({
+                      ...current,
+                      google: {
+                        ...current.google,
+                        calendarEnabled: event.target.checked,
+                      },
+                    }));
+                  }}
+                />
+                <span>
+                  <strong>Google Calendar</strong>
+                  <small>Include calendar events in Planner.</small>
+                </span>
+              </label>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={integrationDraft.google.tasksEnabled}
+                  onChange={(event) => {
+                    setIntegrationMessage(undefined);
+                    setIntegrationDraft((current) => ({
+                      ...current,
+                      google: {
+                        ...current.google,
+                        tasksEnabled: event.target.checked,
+                      },
+                    }));
+                  }}
+                />
+                <span>
+                  <strong>Google Tasks</strong>
+                  <small>Include Google tasks in Planner.</small>
+                </span>
+              </label>
             </div>
+          </div>
+          <div className="settings-connection-card">
             <div>
-              <dt>Collaborative editing</dt>
-              <dd>Local-only</dd>
+              <strong>
+                {googleStatus?.message ?? "Checking Google connection…"}
+              </strong>
+              <small>
+                {googleStatus?.lastSyncedAt
+                  ? `Last synced ${new Date(googleStatus.lastSyncedAt).toLocaleString()}`
+                  : "No Google data has been synced yet."}
+              </small>
+            </div>
+            <div className="settings-connection-actions">
+              {googleStatus?.connected ? (
+                <>
+                  <button
+                    type="button"
+                    className="button button-small"
+                    disabled={!brainWorkspaceId || Boolean(googleAction)}
+                    onClick={() => void syncGoogle()}
+                  >
+                    {googleAction === "sync" ? "Syncing…" : "Sync now"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-small button-danger-quiet"
+                    disabled={Boolean(googleAction)}
+                    onClick={() => void disconnectGoogle()}
+                  >
+                    {googleAction === "disconnect"
+                      ? "Disconnecting…"
+                      : "Disconnect"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="button button-primary button-small"
+                  disabled={
+                    !brainWorkspaceId ||
+                    !integrationDraft.google.oauthClientId?.trim() ||
+                    !googleClientSecretConfigured ||
+                    (!integrationDraft.google.calendarEnabled &&
+                      !integrationDraft.google.tasksEnabled) ||
+                    Boolean(googleAction)
+                  }
+                  onClick={() => void connectGoogle()}
+                >
+                  {googleAction === "connect"
+                    ? "Waiting for Google…"
+                    : "Connect Google"}
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="settings-integration-note">
+            Sign-in opens in your default browser and returns through a private
+            loopback callback. The OAuth client secret and refresh token are
+            stored in Windows Credential Manager; your local planner remains
+            available offline.
+          </p>
+        </fieldset>
+        <fieldset className="settings-group settings-integration-group">
+          <legend>Codex</legend>
+          <div className="settings-integration-heading">
+            <div>
+              <strong>Managed agent runtime</strong>
+              <p>
+                Second Brain uses the supported local Codex App Server for agent
+                sessions.
+              </p>
+            </div>
+            <span
+              className="status-label"
+              data-status={
+                codexProbe?.status === "available" ? "active" : "paused"
+              }
+            >
+              {codexProbe?.status === "available" ? "Ready" : "Needs setup"}
+            </span>
+          </div>
+          <dl className="settings-rows settings-runtime-rows">
+            <div>
+              <dt>Installed runtime</dt>
+              <dd>
+                {codexProbe?.version ?? codexProbe?.reason ?? "Checking…"}
+              </dd>
             </div>
           </dl>
+          <div className="settings-form-grid settings-codex-controls">
+            <label className="settings-field">
+              <span>
+                <strong>Default agent access</strong>
+                <small>You can still change access before each run.</small>
+              </span>
+              <select
+                value={integrationDraft.codex.defaultSandbox}
+                onChange={(event) => {
+                  setIntegrationMessage(undefined);
+                  setIntegrationDraft((current) => ({
+                    ...current,
+                    codex: {
+                      defaultSandbox:
+                        event.target.value === "workspace_write"
+                          ? "workspace_write"
+                          : "read_only",
+                    },
+                  }));
+                }}
+              >
+                <option value="read_only">Read only</option>
+                <option value="workspace_write">Workspace write</option>
+              </select>
+            </label>
+            <div className="settings-runtime-action">
+              <span>
+                <strong>Sign in or update Codex</strong>
+                <small>
+                  Opens the protected Codex terminal inside this app.
+                </small>
+              </span>
+              <button
+                type="button"
+                className="button"
+                disabled={!workspace.canUseTerminal}
+                onClick={() => {
+                  onOpenTerminal({
+                    workspaceId: workspace.id,
+                    relativePath: "",
+                    preset: "codex",
+                  });
+                }}
+              >
+                Open Codex setup
+              </button>
+            </div>
+          </div>
         </fieldset>
+        <div className="settings-save-row">
+          <p
+            role={integrationMessage?.kind === "error" ? "alert" : "status"}
+            data-kind={integrationMessage?.kind}
+          >
+            {integrationLoading
+              ? "Loading integration settings…"
+              : (integrationMessage?.text ??
+                "Configuration is stored locally for this installation.")}
+          </p>
+          <button
+            type="button"
+            className="button button-primary"
+            disabled={integrationLoading || integrationSaving}
+            onClick={() => void saveIntegrationSettings()}
+          >
+            {integrationSaving ? "Saving…" : "Save integration settings"}
+          </button>
+        </div>
       </section>,
     );
 
+  const activeProjects = projects.filter(({ status }) => status === "active");
+  const attentionProjects = activeProjects.filter(({ blocker }) => blocker);
+  const currentAgentSessions =
+    agents.workspaceId === workspace.id ? agents.sessions : [];
+  const attentionAgents = currentAgentSessions.filter(({ state }) =>
+    ["waiting", "failed", "recoverable"].includes(state),
+  );
+  const recentRuns = currentAgentSessions.slice(0, 3);
+  const todayPlannerItems = homePlannerItems.filter(
+    (item) =>
+      item.status !== "archived" && plannerDate(item) === localDateKey(),
+  );
   return surface(
-    <section className="home-surface" aria-labelledby="home-title">
-      <h1 id="home-title" className="visually-hidden">
-        Home
-      </h1>
-      <div className="quick-actions">
+    <section className="home-workspace" aria-labelledby="home-title">
+      <header className="home-heading">
+        <div>
+          <p className="eyebrow">Control center</p>
+          <h1 id="home-title">What should move forward?</h1>
+          <p>
+            Pick up active work, capture a thought, or ask for help without
+            hunting through the interface.
+          </p>
+        </div>
         <button
-          className="quick-action"
           type="button"
-          onClick={createDailyNote}
+          className="button button-primary"
+          onClick={onCreateProject}
         >
-          <span>
-            <CalendarPlus size={16} strokeWidth={1.8} aria-hidden="true" />
-          </span>
-          <strong>Today’s note</strong>
-          <small>Open notes/today.md</small>
+          <Plus size={16} aria-hidden="true" /> Create Project
         </button>
-        <button
-          className="quick-action"
-          type="button"
-          onClick={() => {
-            setNewNoteOpen(true);
+      </header>
+
+      <section className="home-ask" aria-labelledby="home-ask-title">
+        <h2 className="sr-only" id="home-ask-title">
+          Ask Second Brain
+        </h2>
+        <AgentComposer
+          workspaceId={workspace.id}
+          source={agentSource}
+          defaultSandbox={integrationSettings.codex.defaultSandbox}
+          onStarted={(session) => {
+            setAgents((current) => ({
+              workspaceId: workspace.id,
+              sessions:
+                current.workspaceId === workspace.id
+                  ? [
+                      ...current.sessions.filter(({ id }) => id !== session.id),
+                      session,
+                    ]
+                  : [session],
+              activeSessionId: session.id,
+            }));
+            onOpenAgentPanel();
           }}
+        />
+      </section>
+
+      {projectsLoading && !projects.length ? (
+        <section className="home-first-run" aria-live="polite">
+          <div>
+            <p className="eyebrow">Projects</p>
+            <h2>Loading your control center…</h2>
+          </div>
+        </section>
+      ) : !projects.length ? (
+        <section className="home-first-run" aria-labelledby="first-run-title">
+          <div>
+            <p className="eyebrow">Start here</p>
+            <h2 id="first-run-title">Build your first working context</h2>
+            <p>
+              A Project connects an outcome to its files, plan, progress, and
+              agent instructions. It can start without a folder.
+            </p>
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={onCreateProject}
+            >
+              Create your first Project
+            </button>
+          </div>
+          <ol>
+            <li>
+              <span>1</span>
+              <p>
+                <strong>Name the outcome</strong>
+                <small>Make success concrete.</small>
+              </p>
+            </li>
+            <li>
+              <span>2</span>
+              <p>
+                <strong>Connect files when ready</strong>
+                <small>Folder access stays explicit.</small>
+              </p>
+            </li>
+            <li>
+              <span>3</span>
+              <p>
+                <strong>Add a next milestone</strong>
+                <small>Home keeps it visible.</small>
+              </p>
+            </li>
+          </ol>
+        </section>
+      ) : null}
+
+      {attentionProjects.length || attentionAgents.length ? (
+        <section
+          className="home-section home-attention"
+          aria-labelledby="home-attention-title"
         >
-          <span>
-            <FilePlus2 size={16} strokeWidth={1.8} aria-hidden="true" />
-          </span>
-          <strong>New note</strong>
-          <small>Create a Markdown node in notes.</small>
-        </button>
-        <button className="quick-action" type="button" onClick={onOpenPalette}>
-          <span>
-            <Command size={16} strokeWidth={1.8} aria-hidden="true" />
-          </span>
-          <strong>Commands</strong>
-          <small>Open the action palette.</small>
-        </button>
-      </div>
-      <FocusedGraph
-        page={graph}
-        theme={resolvedTheme}
-        onExpand={(nodeId) => expandGraphNode(nodeId)}
-        onCommand={handleGraphCommand}
-        onSelectionContextChange={onGraphSelectionContextChange}
-      />
+          <header>
+            <div>
+              <p className="eyebrow">Needs attention</p>
+              <h2 id="home-attention-title">Clear the blockers</h2>
+            </div>
+            <button
+              type="button"
+              className="button button-small"
+              onClick={() => {
+                onNavigate("activity");
+              }}
+            >
+              View Activity
+            </button>
+          </header>
+          {attentionProjects.map((project) => (
+            <button
+              key={project.id}
+              type="button"
+              onClick={() => {
+                selectProject(project.id);
+                onNavigate("projects");
+              }}
+            >
+              <AlertTriangle size={17} aria-hidden="true" />
+              <span>
+                <strong>{project.name}</strong>
+                <small>{project.blocker}</small>
+              </span>
+              <span>Review</span>
+            </button>
+          ))}
+          {attentionAgents.map((session) => (
+            <button
+              key={session.id}
+              type="button"
+              onClick={() => {
+                setAgents((current) => ({
+                  ...current,
+                  activeSessionId: session.id,
+                }));
+                onOpenAgentPanel();
+              }}
+            >
+              <Sparkles size={17} aria-hidden="true" />
+              <span>
+                <strong>{session.objective}</strong>
+                <small>
+                  {session.state === "waiting"
+                    ? "Waiting for approval"
+                    : (session.error?.message ?? `Session is ${session.state}`)}
+                </small>
+              </span>
+              <span>Review run</span>
+            </button>
+          ))}
+        </section>
+      ) : null}
+
+      {activeProjects.length ? (
+        <section
+          className="home-section"
+          aria-labelledby="active-projects-title"
+        >
+          <header>
+            <div>
+              <p className="eyebrow">Active Projects</p>
+              <h2 id="active-projects-title">Keep momentum</h2>
+            </div>
+            <button
+              type="button"
+              className="button button-small"
+              onClick={() => {
+                onNavigate("projects");
+              }}
+            >
+              All Projects
+            </button>
+          </header>
+          <div className="home-project-list">
+            {activeProjects.slice(0, 5).map((project) => (
+              <button
+                key={project.id}
+                type="button"
+                onClick={() => {
+                  selectProject(project.id);
+                  onNavigate("projects");
+                }}
+              >
+                <span className="home-project-title">
+                  <strong>{project.name}</strong>
+                  <small>{project.outcome}</small>
+                </span>
+                <span className="home-project-next">
+                  <small>Next milestone</small>
+                  {project.nextMilestone ?? "Set the next milestone"}
+                </span>
+                <span className="home-project-progress">
+                  <span>
+                    <span
+                      style={{ width: `${String(project.progressPercent)}%` }}
+                    />
+                  </span>
+                  <small>{project.progressPercent}%</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {recentRuns.length ? (
+        <section className="home-section" aria-labelledby="recent-runs-title">
+          <header>
+            <div>
+              <p className="eyebrow">Agent runs</p>
+              <h2 id="recent-runs-title">Recent delegated work</h2>
+            </div>
+            <button
+              type="button"
+              className="button button-small"
+              onClick={() => {
+                onOpenAgentPanel();
+              }}
+            >
+              All runs
+            </button>
+          </header>
+          <div className="home-run-list">
+            {recentRuns.map((session) => (
+              <button
+                type="button"
+                key={session.id}
+                onClick={() => {
+                  setAgents((current) => ({
+                    ...current,
+                    activeSessionId: session.id,
+                  }));
+                  onOpenAgentPanel();
+                }}
+              >
+                <span>
+                  <strong>{session.objective}</strong>
+                  <small>{session.currentAction ?? session.state}</small>
+                </span>
+                <span className="status-label" data-status={session.state}>
+                  {session.state}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section
+        className="home-section home-today"
+        aria-labelledby="today-title"
+      >
+        <header>
+          <div>
+            <p className="eyebrow">Today</p>
+            <h2 id="today-title">Capture and plan</h2>
+          </div>
+        </header>
+        {todayPlannerItems.length ? (
+          <div className="home-planner-list" aria-label="Today’s plan">
+            {todayPlannerItems.slice(0, 5).map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => {
+                  onNavigate("calendar");
+                }}
+              >
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.projectId ? "Project work" : "Personal plan"}
+                  </small>
+                </span>
+                <span>{item.status.replaceAll("_", " ")}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="home-today-empty">Nothing scheduled for today.</p>
+        )}
+        <div className="home-inline-actions">
+          <button type="button" onClick={createDailyNote}>
+            <BookOpen size={17} aria-hidden="true" />
+            <span>
+              <strong>Today’s note</strong>
+              <small>Open notes/today.md</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setNewNoteOpen(true);
+            }}
+          >
+            <Plus size={17} aria-hidden="true" />
+            <span>
+              <strong>New note</strong>
+              <small>Capture a thought in Markdown</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate("calendar");
+            }}
+          >
+            <CalendarDays size={17} aria-hidden="true" />
+            <span>
+              <strong>Calendar</strong>
+              <small>Open local planning</small>
+            </span>
+          </button>
+        </div>
+      </section>
+      {document ? (
+        <section className="home-section" aria-labelledby="resume-title">
+          <header>
+            <div>
+              <p className="eyebrow">Resume</p>
+              <h2 id="resume-title">Continue where you left off</h2>
+            </div>
+          </header>
+          <button
+            type="button"
+            className="home-resume"
+            onClick={() => {
+              onNavigate(
+                isMarkdown(document.relativePath) ? "knowledge" : "files",
+              );
+            }}
+          >
+            <BookOpen size={18} aria-hidden="true" />
+            <span>
+              <strong>{document.relativePath.split("/").at(-1)}</strong>
+              <small>{document.relativePath}</small>
+            </span>
+            <span>Open</span>
+          </button>
+        </section>
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
     </section>,
   );

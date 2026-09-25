@@ -6,6 +6,7 @@
 
 [data-component="icon-button-v2"] {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   border-radius: 6px;

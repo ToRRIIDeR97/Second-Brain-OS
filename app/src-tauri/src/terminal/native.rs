@@ -139,6 +139,12 @@ impl NativePtyAdapter {
             "zsh" | "bash" => request.args == ["-l"],
             "fish" => request.args == ["-l"],
             "pwsh" => request.args == ["-NoLogo"],
+            "powershell.exe" => matches!(
+                request.args,
+                ["-NoLogo"]
+                    | ["-NoLogo", "-NoExit", "-Command", "codex"]
+                    | ["-NoLogo", "-NoExit", "-Command", "claude"]
+            ),
             "codex" | "claude" => request.args.is_empty(),
             _ => false,
         }
@@ -162,6 +168,24 @@ impl NativePtyAdapter {
             "TMPDIR",
             "XDG_CONFIG_HOME",
             "XDG_DATA_HOME",
+        ] {
+            if let Some(value) = std::env::var_os(key) {
+                command.env(key, value);
+            }
+        }
+        #[cfg(target_os = "windows")]
+        for key in [
+            "APPDATA",
+            "COMSPEC",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "LOCALAPPDATA",
+            "PATHEXT",
+            "SystemDrive",
+            "SystemRoot",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
         ] {
             if let Some(value) = std::env::var_os(key) {
                 command.env(key, value);
@@ -297,6 +321,7 @@ impl Drop for NativePtyAdapter {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    #[cfg(unix)]
     use std::time::{Duration, Instant};
 
     #[test]
@@ -313,6 +338,34 @@ mod tests {
             },
         });
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn accepts_the_fixed_powershell_arguments() {
+        assert!(NativePtyAdapter::allowed_preset(&SpawnRequest {
+            terminal_id: TerminalId::from("term_powershell"),
+            executable: "powershell.exe",
+            args: &["-NoLogo"],
+            cwd: PathBuf::from("."),
+            size: TerminalSize {
+                columns: 80,
+                rows: 24,
+            },
+        }));
+    }
+
+    #[test]
+    fn accepts_the_fixed_windows_agent_arguments() {
+        assert!(NativePtyAdapter::allowed_preset(&SpawnRequest {
+            terminal_id: TerminalId::from("term_claude"),
+            executable: "powershell.exe",
+            args: &["-NoLogo", "-NoExit", "-Command", "claude"],
+            cwd: PathBuf::from("."),
+            size: TerminalSize {
+                columns: 80,
+                rows: 24,
+            },
+        }));
     }
 
     #[cfg(unix)]

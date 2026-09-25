@@ -18,7 +18,7 @@ types.
 | Contract | Owner | Version carrier |
 |---|---|---|
 | Workspace manifest | `workspace` | `schema_version` + `version` |
-| Project card | `workspace` | `version` |
+| Project card ([v1](project-card-v1.md), [v2](project-card-v2.md)) | `workspace` | `version` |
 | Markdown document | `knowledge` | `extension_version` + `version` |
 | Graph ontology | `knowledge` | `version` |
 | Event envelope | `events`/calling domain | `version` + `payload_schema_version` |

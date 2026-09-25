@@ -1,6 +1,7 @@
 import { useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { createEffect, createMemo, createResource, For, Show } from "solid-js"
@@ -253,18 +254,16 @@ export default function ProjectsPage() {
         <Show when={locations().length > 0}>
           <label class="flex items-center gap-2 text-[12px] text-v2-text-text-muted">
             <span>{language.t("secondBrain.projects.brainLocation")}</span>
-            <select
-              class="h-8 max-w-56 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-              value={state.brainDirectory}
+            <SelectV2
+              aria-label={language.t("secondBrain.projects.brainLocation")}
+              class="!h-8 !w-auto max-w-56"
+              options={locations()}
+              current={locations().find((location) => location.worktree === state.brainDirectory)}
+              value={(location) => location.worktree}
+              label={(location) => location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree}
               disabled={overviewDirty() || state.saving}
-              onChange={(event) => setState({ brainDirectory: event.currentTarget.value, selectedId: "" })}
-            >
-              <For each={locations()}>
-                {(location) => (
-                  <option value={location.worktree}>{location.name ?? location.worktree.split(/[\\/]/).pop()}</option>
-                )}
-              </For>
-            </select>
+              onSelect={(location) => location && setState({ brainDirectory: location.worktree, selectedId: "" })}
+            />
           </label>
           <ButtonV2
             variant="contrast"
@@ -539,17 +538,22 @@ function CreateProjectForm(props: {
         </label>
         <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-location">
           {props.language.t("secondBrain.projects.location")}
-          <select
+          <SelectV2
             id="project-location"
-            class="h-9 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[13px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-            value={props.state.draft.locationId}
-            onChange={(event) => props.setState("draft", "locationId", event.currentTarget.value)}
-          >
-            <option value="">{props.language.t("secondBrain.projects.location.none")}</option>
-            <For each={props.locations}>
-              {(location) => <option value={location.id}>{location.name ?? location.worktree}</option>}
-            </For>
-          </select>
+            aria-label={props.language.t("secondBrain.projects.location")}
+            class="!h-9 !w-full"
+            appearance="large"
+            options={["__none__", ...props.locations.map((location) => location.id)]}
+            current={props.state.draft.locationId || "__none__"}
+            label={(locationID) => {
+              if (locationID === "__none__") return props.language.t("secondBrain.projects.location.none")
+              const location = props.locations.find((item) => item.id === locationID)
+              return location?.name ?? location?.worktree ?? locationID
+            }}
+            onSelect={(locationID) =>
+              props.setState("draft", "locationId", locationID === "__none__" ? "" : (locationID ?? ""))
+            }
+          />
         </label>
         <details class="rounded-[8px] border border-v2-border-border-weak px-4 py-3">
           <summary class="cursor-pointer text-[13px] text-v2-text-text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus">
@@ -776,6 +780,10 @@ function ProjectFiles(props: {
   return (
     <ProjectSurface title={props.language.t("secondBrain.projects.files.title")}>
       <div class="mx-auto flex max-w-xl flex-col items-start gap-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-5">
+        <p class="text-[13px] leading-5 text-v2-text-text-muted">
+          {props.language.t("secondBrain.projects.files.managed")}
+        </p>
+        <code class="max-w-full truncate text-[11px] text-v2-text-text-faint">{props.project.folder}</code>
         <p class="text-[13px] leading-5 text-v2-text-text-muted">
           {props.canOpen
             ? props.language.t("secondBrain.projects.files.description")

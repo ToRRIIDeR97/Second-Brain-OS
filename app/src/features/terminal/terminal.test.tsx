@@ -189,6 +189,30 @@ describe("terminal workspace state", () => {
     expect(calls[0]?.args).toMatchObject({ confirmed: true });
   });
 
+  it("leaves the default shell selection to the desktop backend", async () => {
+    const mock = createMockIpc();
+    mock.setResponse("terminal_start", success(nativeSession));
+    mock.setResponse(
+      "terminal_read",
+      success({ content: "", remainingBytes: 0, droppedBytes: 0 }),
+    );
+    render(
+      <TerminalWorkspace
+        ipc={mock.client}
+        request={{ key: 3, workspaceId: "workspace-1", relativePath: "" }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        mock.calls.find(({ command }) => command === "terminal_start"),
+      ).toEqual({
+        command: "terminal_start",
+        args: { workspaceId: "workspace-1", relativePath: "" },
+      });
+    });
+  });
+
   it("enforces six sessions per workspace and preserves them across view modes", () => {
     const six = Array.from({ length: 6 }, (_, index) => session(String(index)));
     const unchanged = terminalReducer(state(six), {

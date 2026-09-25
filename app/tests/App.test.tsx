@@ -1,6 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeEach } from "vitest";
 import { AppShell } from "../src/components/layout/AppShell";
 import { createMockIpc } from "../src/lib/ipc";
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 test("renders the persistent application shell", () => {
   const mock = createMockIpc();
@@ -10,10 +15,13 @@ test("renders the persistent application shell", () => {
   expect(
     screen.getByRole("navigation", { name: "Primary activity" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: /welcome/i })).toBeInTheDocument();
+  expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   expect(
-    screen.getByRole("heading", { name: "Open a utility" }),
-  ).toBeInTheDocument();
+    screen.queryByRole("heading", { name: "Open a utility" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Search notes and workspace" }),
+  ).not.toBeInTheDocument();
   expect(screen.queryByRole("tab", { name: "Files" })).not.toBeInTheDocument();
   expect(
     screen.queryByRole("complementary", { name: "Inspector" }),
@@ -23,21 +31,42 @@ test("renders the persistent application shell", () => {
   ).not.toBeInTheDocument();
 });
 
-test("opens the calendar and Google Tasks in the right utility panel", () => {
+test("changes the main route from the primary activity rail", () => {
   const mock = createMockIpc();
   render(<AppShell ipc={mock.client} />);
 
-  fireEvent.click(
-    screen.getByRole("button", { name: /Calendar and Google Tasks/ }),
-  );
-  expect(screen.getByRole("tab", { name: "Calendar" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: /Week of/ })).toBeInTheDocument();
-  expect(
-    screen.getByRole("heading", { name: "Task list" }),
-  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+  expect(screen.getByRole("main")).toHaveAttribute("data-route", "projects");
 });
 
-test("keeps the graph integrated into Home and opens knowledge search", async () => {
+test("opens global creation and agent actions", async () => {
+  const mock = createMockIpc();
+  render(<AppShell ipc={mock.client} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Ask Second Brain" }));
+  expect(await screen.findByRole("tab", { name: "Ask" })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByLabelText("Create"));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+  expect(screen.getByRole("main")).toHaveAttribute("data-route", "calendar");
+});
+
+test("opens the local planner in the right utility panel", async () => {
+  const mock = createMockIpc();
+  render(<AppShell ipc={mock.client} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Show utility panel" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Local tasks and calendar/ }),
+  );
+  expect(screen.getByRole("tab", { name: "Calendar" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Create a Brain to start planning." }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/Google/)).not.toBeInTheDocument();
+});
+
+test("keeps the graph out of Home and opens knowledge search", async () => {
   const mock = createMockIpc();
   render(<AppShell ipc={mock.client} />);
 
@@ -85,7 +114,8 @@ test("keeps an open terminal mounted when another utility tab is selected", asyn
   );
   const terminal = await screen.findByLabelText("Terminal workspace");
   fireEvent.click(screen.getByLabelText("Add utility tab"));
-  fireEvent.click(screen.getByRole("button", { name: /Calendar/ }));
+  const utility = screen.getByRole("complementary", { name: "Utility panel" });
+  fireEvent.click(within(utility).getByRole("button", { name: /Calendar/ }));
 
   expect(terminal).toBeInTheDocument();
   expect(terminal).toHaveAttribute("hidden");

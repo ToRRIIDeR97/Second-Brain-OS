@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { Check, ChevronDown, FolderPlus } from "lucide-react";
 import { ModalDialog } from "../common/ModalDialog";
 import type { WorkspaceTrustLevel } from "../../lib/ipc";
-import { pickWorkspaceFolder } from "../../lib/workspaceFolderPicker";
 import { useWorkspace } from "../../state/workspace";
+import { useProjects } from "../../state/projects";
 
 export type WorkspaceChangeGuard = (workspaceId?: string) => string | undefined;
 
@@ -33,20 +33,25 @@ function kindLabel(kind: string) {
 
 export function WorkspaceSwitcher({
   onBeforeWorkspaceChange,
+  onWorkspaceOpened,
 }: {
   onBeforeWorkspaceChange?: WorkspaceChangeGuard;
+  onWorkspaceOpened?: () => void;
 }) {
   const {
     activeWorkspace,
     error,
     loading,
     registerWorkspace,
+    selectRoot,
     selectWorkspace,
     workspaces,
   } = useWorkspace();
+  const { activeProject } = useProjects();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [rootPath, setRootPath] = useState("");
+  const [rootGrantId, setRootGrantId] = useState("");
   const [name, setName] = useState("");
   const [trustLevel, setTrustLevel] = useState<WorkspaceTrustLevel>("trusted");
   const [folderPickerBusy, setFolderPickerBusy] = useState(false);
@@ -94,7 +99,8 @@ export function WorkspaceSwitcher({
   const openNewWorkspace = () => {
     setFormError("");
     setSwitchError("");
-    setRootPath(activeWorkspace?.rootPath ?? "");
+    setRootPath("");
+    setRootGrantId("");
     setName("");
     setTrustLevel("trusted");
     setPopoverOpen(false);
@@ -105,10 +111,15 @@ export function WorkspaceSwitcher({
     setFolderPickerBusy(true);
     setFormError("");
     try {
-      const selected = await pickWorkspaceFolder();
-      if (!selected) return;
-      setRootPath(selected);
-      setName((current) => current.trim() || nameFromRoot(selected));
+      const result = await selectRoot();
+      if (!result.ok) throw new Error(result.error.message);
+      if (!result.data) return;
+      setRootPath(result.data.displayPath);
+      setRootGrantId(result.data.grantId);
+      setName(
+        (current) =>
+          current.trim() || result.data?.suggestedName || "Workspace",
+      );
     } catch (cause) {
       setFormError(
         cause instanceof Error
@@ -123,7 +134,7 @@ export function WorkspaceSwitcher({
   const submitNewWorkspace = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const selectedRoot = rootPath.trim();
-    if (!selectedRoot) {
+    if (!selectedRoot || !rootGrantId) {
       setFormError("Choose a workspace folder first.");
       return;
     }
@@ -137,6 +148,7 @@ export function WorkspaceSwitcher({
     const workspace = await registerWorkspace({
       name: name.trim() || nameFromRoot(selectedRoot),
       rootPath: selectedRoot,
+      rootGrantId,
       kind: "brain",
       trustLevel,
     });
@@ -146,6 +158,7 @@ export function WorkspaceSwitcher({
       return;
     }
     setNewWorkspaceOpen(false);
+    onWorkspaceOpened?.();
   };
 
   const activeLabel = activeWorkspace?.name ?? "No workspace";
@@ -158,17 +171,24 @@ export function WorkspaceSwitcher({
         className="workspace-switcher"
         aria-haspopup="dialog"
         aria-expanded={popoverOpen}
-        aria-label={`Switch workspace, current ${activeLabel}`}
+        aria-label={`Switch context, current ${activeProject?.name ?? activeLabel}`}
         onClick={() => {
           setSwitchError("");
           setPopoverOpen((open) => !open);
         }}
       >
-        <span className="workspace-avatar" aria-hidden="true">
-          {activeLabel.slice(0, 1).toUpperCase() || "?"}
-        </span>
-        <span>
-          <strong>{activeLabel}</strong>
+        <span className="workspace-switcher-label workspace-breadcrumb">
+          <small>Brain</small>
+          <strong>
+            {workspaces.find(({ kind }) => kind === "brain")?.name ??
+              activeLabel}
+          </strong>
+          {activeProject ? (
+            <>
+              <span aria-hidden="true">/</span>
+              <strong>{activeProject.name}</strong>
+            </>
+          ) : null}
         </span>
         <ChevronDown size={14} aria-hidden="true" />
       </button>
@@ -324,7 +344,7 @@ export function WorkspaceSwitcher({
             <button
               className="button button-primary"
               type="submit"
-              disabled={busy || !rootPath.trim()}
+              disabled={busy || !rootPath.trim() || !rootGrantId}
             >
               {registrationBusy ? "Opening…" : "Open workspace"}
             </button>

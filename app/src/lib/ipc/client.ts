@@ -1,5 +1,7 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import type {
+  ActivityListRequest,
+  ActivityPage,
   CommandResult,
   FileAttachmentCreateRequest,
   FileAttachmentCreateResult,
@@ -14,12 +16,31 @@ import type {
   LanguageDiagnostic,
   LanguageFormatResult,
   LanguageToolStatus,
+  IntegrationSettings,
+  IntegrationSettingsUpdate,
+  GoogleConnectionStatus,
+  GoogleSyncSummary,
   LspServerKind,
   LspSessionSummary,
   NativeTerminalOutput,
   NativeTerminalPreset,
   NativeTerminalSession,
+  PlannerCreateRequest,
+  PlannerItemRecord,
+  PlannerItemPatchRecord,
+  PlannerListRequest,
+  AgentProviderProbeRecord,
+  ManagedAgentApprovalRequest,
+  ManagedAgentMessageRequest,
+  ManagedAgentSessionRecord,
+  ManagedAgentSessionRequest,
+  ManagedAgentStartRequest,
+  ProjectCreateRequest,
+  ProjectPatch,
+  ProjectRecord,
+  ProjectStatus,
   RendererDiagnostic,
+  RootSelection,
   ShellLayout,
   WorkspaceDirectoryPage,
   WorkspaceGraphPage,
@@ -86,6 +107,18 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
       saveLayout: (layout: ShellLayout) =>
         call<ShellLayout>("shell_save_layout", { layout }),
     },
+    integrations: {
+      get: () => call<IntegrationSettings>("integration_settings_get"),
+      save: (update: IntegrationSettingsUpdate) =>
+        call<IntegrationSettings>("integration_settings_save", { update }),
+      googleStatus: () =>
+        call<GoogleConnectionStatus>("google_connection_status_get"),
+      googleConnect: (brainWorkspaceId: string) =>
+        call<GoogleSyncSummary>("google_connect", { brainWorkspaceId }),
+      googleSync: (brainWorkspaceId: string) =>
+        call<GoogleSyncSummary>("google_sync", { brainWorkspaceId }),
+      googleDisconnect: () => call<GoogleConnectionStatus>("google_disconnect"),
+    },
     files: {
       readText: (path: WorkspacePath) =>
         call<FileReadResult>("file_read_text", { path }),
@@ -101,6 +134,7 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
     },
     workspaces: {
       list: () => call<WorkspaceSummary[]>("workspace_list"),
+      selectRoot: () => call<RootSelection | null>("workspace_select_root"),
       register: (registration: WorkspaceRegistration) =>
         call<WorkspaceSummary>("workspace_register", { registration }),
       listDirectory: (path: WorkspacePath, cursor?: number, limit?: number) =>
@@ -109,6 +143,69 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
           cursor,
           limit,
         }),
+    },
+    projects: {
+      list: (brainWorkspaceId: string) =>
+        call<ProjectRecord[]>("project_list", { brainWorkspaceId }),
+      get: (brainWorkspaceId: string, projectId: string) =>
+        call<ProjectRecord>("project_get", {
+          request: { brainWorkspaceId, projectId },
+        }),
+      create: (request: ProjectCreateRequest) =>
+        call<ProjectRecord>("project_create", { request }),
+      update: (
+        brainWorkspaceId: string,
+        projectId: string,
+        patch: ProjectPatch,
+      ) =>
+        call<ProjectRecord>("project_update", {
+          request: { brainWorkspaceId, projectId, patch },
+        }),
+      setStatus: (
+        brainWorkspaceId: string,
+        projectId: string,
+        status: ProjectStatus,
+      ) =>
+        call<ProjectRecord>("project_set_status", {
+          request: { brainWorkspaceId, projectId, status },
+        }),
+    },
+    activity: {
+      list: (request: ActivityListRequest) =>
+        call<ActivityPage>("activity_list", { request }),
+    },
+    planner: {
+      list: (request: PlannerListRequest) =>
+        call<PlannerItemRecord[]>("planner_list", { request }),
+      create: (request: PlannerCreateRequest) =>
+        call<PlannerItemRecord>("planner_create", { request }),
+      update: (
+        brainWorkspaceId: string,
+        itemId: string,
+        patch: PlannerItemPatchRecord,
+      ) =>
+        call<PlannerItemRecord>("planner_update", {
+          request: { brainWorkspaceId, itemId, patch },
+        }),
+      delete: (brainWorkspaceId: string, itemId: string) =>
+        call<null>("planner_delete", {
+          request: { brainWorkspaceId, itemId },
+        }),
+    },
+    agents: {
+      probe: () => call<AgentProviderProbeRecord>("agent_provider_probe"),
+      list: (workspaceId: string) =>
+        call<ManagedAgentSessionRecord[]>("agent_session_list", {
+          workspaceId,
+        }),
+      start: (request: ManagedAgentStartRequest) =>
+        call<ManagedAgentSessionRecord>("agent_session_start", { request }),
+      message: (request: ManagedAgentMessageRequest) =>
+        call<null>("agent_session_message", { request }),
+      cancel: (request: ManagedAgentSessionRequest) =>
+        call<null>("agent_session_cancel", { request }),
+      decideApproval: (request: ManagedAgentApprovalRequest) =>
+        call<null>("agent_approval_decide", { request }),
     },
     git: {
       status: (workspaceId: string) =>
@@ -180,12 +277,12 @@ export function createIpcClient(invoke: InvokePort = tauriPort) {
       start: (
         workspaceId: string,
         relativePath = "",
-        preset: NativeTerminalPreset = "zsh",
+        preset?: NativeTerminalPreset,
       ) =>
         call<NativeTerminalSession>("terminal_start", {
           workspaceId,
           relativePath,
-          preset,
+          ...(preset ? { preset } : {}),
         }),
       sessions: (workspaceId: string) =>
         call<NativeTerminalSession[]>("terminal_sessions", { workspaceId }),

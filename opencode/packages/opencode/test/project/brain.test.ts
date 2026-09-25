@@ -26,6 +26,7 @@ Keep this body intact.
     const card = BrainProject.decode(source)
 
     expect(card.info.outcome).toBe("Release an installable beta.")
+    expect(card.info.folder).toBe("projects/project_01ABC")
     expect(card.info.location).toEqual({ workspaceId: "workspace_01ABC", displayPath: "C:/Projects/desktop" })
 
     const encoded = BrainProject.encode(card.info, card.data, card.body)
@@ -33,5 +34,33 @@ Keep this body intact.
     expect(encoded).toContain("custom_field: keep-me")
     expect(encoded).not.toContain("workspace_id:")
     expect(encoded).toContain("## Notes\n\nKeep this body intact.")
+  })
+
+  test("projects the global calendar into one managed timeline", () => {
+    const snapshot = {
+      version: 2 as const,
+      revision: "revision_1",
+      events: [
+        {
+          id: "event_a",
+          title: "A",
+          date: "2026-08-30",
+          projectId: "project_01ABC",
+          source: "local" as const,
+          syncState: "local" as const,
+        },
+        {
+          id: "event_b",
+          title: "B",
+          date: "2026-08-30",
+          projectId: "project_OTHER",
+          source: "local" as const,
+          syncState: "local" as const,
+        },
+      ],
+      tasks: [],
+    }
+
+    expect(BrainProject.projectTimeline(snapshot, "project_01ABC").events.map((event) => event.id)).toEqual(["event_a"])
   })
 })

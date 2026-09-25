@@ -1,6 +1,7 @@
 import { useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { createEffect, createMemo, createResource, For, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -206,7 +207,7 @@ export default function NotesPage() {
       setState("error", language.t("secondBrain.notes.error.title"))
       return
     }
-    const path = `notes/${slug}.md`
+    const path = state.filterProjectId ? `projects/${state.filterProjectId}/notes/${slug}.md` : `notes/${slug}.md`
     setState({ saving: true, error: "" })
     try {
       const document = await writeNote(client(state.directory), {
@@ -309,15 +310,18 @@ export default function NotesPage() {
                   onInput={(event) => setState("search", event.currentTarget.value)}
                 />
               </label>
-              <select
-                class="h-8 w-full cursor-pointer rounded-[6px] border border-transparent bg-transparent px-2 text-[12px] text-v2-text-text-muted outline-none hover:bg-v2-background-bg-layer-01 focus-visible:border-v2-border-border-focus"
+              <SelectV2
+                class="!h-8 !w-full !bg-transparent !shadow-none hover:!bg-v2-background-bg-layer-01"
                 aria-label={language.t("secondBrain.notes.filterProject")}
-                value={state.filterProjectId}
-                onChange={(event) => setState("filterProjectId", event.currentTarget.value)}
-              >
-                <option value="">{language.t("secondBrain.notes.allProjects")}</option>
-                <For each={projects()}>{(project) => <option value={project.id}>{project.name}</option>}</For>
-              </select>
+                options={["__all__", ...(projects() ?? []).map((project) => project.id)]}
+                current={state.filterProjectId || "__all__"}
+                label={(projectID) =>
+                  projectID === "__all__"
+                    ? language.t("secondBrain.notes.allProjects")
+                    : (projects()?.find((project) => project.id === projectID)?.name ?? projectID)
+                }
+                onSelect={(projectID) => setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))}
+              />
             </div>
 
             <Show when={state.creating}>
@@ -385,20 +389,18 @@ export default function NotesPage() {
             <Show when={workspaces().length > 0}>
               <label class="shrink-0 border-t border-v2-border-border-base p-2">
                 <span class="sr-only">{language.t("secondBrain.workspace")}</span>
-                <select
-                  class="h-8 w-full cursor-pointer truncate rounded-[6px] border border-transparent bg-transparent px-2 text-[11px] text-v2-text-text-faint outline-none hover:bg-v2-background-bg-layer-01 focus-visible:border-v2-border-border-focus"
-                  value={state.directory}
+                <SelectV2
+                  aria-label={language.t("secondBrain.workspace")}
+                  class="!h-8 !w-full !bg-transparent !shadow-none hover:!bg-v2-background-bg-layer-01"
+                  options={workspaces()}
+                  current={workspaces().find((project) => project.worktree === state.directory)}
+                  value={(project) => project.worktree}
+                  label={(project) => project.name ?? project.worktree.split(/[\\/]/).pop() ?? project.worktree}
                   disabled={dirty()}
-                  onChange={(event) =>
-                    setState({ directory: event.currentTarget.value, path: "", body: "", baseBody: "" })
+                  onSelect={(project) =>
+                    project && setState({ directory: project.worktree, path: "", body: "", baseBody: "" })
                   }
-                >
-                  <For each={workspaces()}>
-                    {(project) => (
-                      <option value={project.worktree}>{project.name ?? project.worktree.split(/[\\/]/).pop()}</option>
-                    )}
-                  </For>
-                </select>
+                />
               </label>
             </Show>
           </aside>

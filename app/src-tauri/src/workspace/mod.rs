@@ -12,6 +12,7 @@ pub mod lsp;
 mod manifest;
 pub mod mutations;
 mod path_policy;
+pub mod project;
 mod reader;
 mod registry;
 pub mod trash;

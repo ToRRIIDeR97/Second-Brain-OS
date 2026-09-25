@@ -2,15 +2,11 @@ import { type ForceGraphMethods, type NodeObject } from "react-force-graph-3d";
 import ForceGraph3D from "react-force-graph-3d";
 import { Focus, Maximize2, Minimize2, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Group, MOUSE, Vector3 } from "three";
 import {
-  CanvasTexture,
-  Group,
-  MOUSE,
-  Sprite,
-  SpriteMaterial,
-  SRGBColorSpace,
-  Vector3,
-} from "three";
+  CSS2DObject,
+  CSS2DRenderer,
+} from "three/addons/renderers/CSS2DRenderer.js";
 import { isInferred } from "./model";
 import type { GraphEdge, GraphNode, GraphPage } from "./types";
 
@@ -56,46 +52,17 @@ function nodeLabel(node: GraphNode): string {
   return `${fileName(node)} · ${node.type}`;
 }
 
-function createNodeName(node: GraphNode, theme: "light" | "dark"): Group {
+function createNodeName(node: GraphNode): Group {
   const label = displayName(node);
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 128;
-  const context = canvas.getContext("2d");
-  if (context) {
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.font = "600 44px system-ui, sans-serif";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.lineWidth = 8;
-    context.strokeStyle = theme === "dark" ? "#171b21" : "#fbfcfd";
-    context.strokeText(label, canvas.width / 2, canvas.height / 2);
-    context.fillStyle = theme === "dark" ? "#eef2f5" : "#27313a";
-    context.fillText(label, canvas.width / 2, canvas.height / 2);
-  }
-
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  const material = new SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-  });
-  const sprite = new Sprite(material);
-  sprite.position.y = 6;
-  sprite.scale.set(20, 5, 1);
-  sprite.renderOrder = 1;
-  const worldPosition = new Vector3();
-  sprite.onBeforeRender = (_renderer, _scene, camera) => {
-    const distance = camera.position.distanceTo(
-      sprite.getWorldPosition(worldPosition),
-    );
-    material.opacity = Math.max(0, Math.min(1, (210 - distance) / 100));
-  };
+  const element = document.createElement("span");
+  element.className = "focused-graph-node-label";
+  element.textContent = label;
+  const name = new CSS2DObject(element);
+  name.position.y = 6;
+  name.renderOrder = 1;
   const group = new Group();
   group.name = label;
-  group.add(sprite);
+  group.add(name);
   return group;
 }
 
@@ -108,6 +75,14 @@ function supportsWebGL(): boolean {
   } catch {
     return false;
   }
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  const matchMedia = Reflect.get(window, "matchMedia") as
+    | ((query: string) => MediaQueryList)
+    | undefined;
+  return matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
 export function GraphViewport3D({
@@ -132,6 +107,8 @@ export function GraphViewport3D({
   const [hoveredNodeId, setHoveredNodeId] = useState<string>();
   const [hoveredLinkNodeIds, setHoveredLinkNodeIds] = useState<Set<string>>();
   const [webglAvailable] = useState(supportsWebGL);
+  const [reducedMotion] = useState(prefersReducedMotion);
+  const labelRenderers = useMemo(() => [new CSS2DRenderer()], []);
   const backgroundColor = theme === "dark" ? "#171b21" : "#fbfcfd";
 
   const graphData = useMemo(() => {
@@ -186,26 +163,32 @@ export function GraphViewport3D({
     };
   }, []);
 
-  const fitGraph = useCallback((duration = 350) => {
-    forceGraphRef.current?.zoomToFit(duration, 55);
-  }, []);
+  const fitGraph = useCallback(
+    (duration = reducedMotion ? 0 : 350) => {
+      forceGraphRef.current?.zoomToFit(duration, 55);
+    },
+    [reducedMotion],
+  );
 
-  const zoomGraph = useCallback((factor: number) => {
-    const graph = forceGraphRef.current;
-    if (!graph) return;
-    const camera = graph.camera();
-    const target =
-      (graph.controls() as { target?: Vector3 }).target ?? new Vector3();
-    graph.cameraPosition(
-      {
-        x: target.x + (camera.position.x - target.x) * factor,
-        y: target.y + (camera.position.y - target.y) * factor,
-        z: target.z + (camera.position.z - target.z) * factor,
-      },
-      target,
-      180,
-    );
-  }, []);
+  const zoomGraph = useCallback(
+    (factor: number) => {
+      const graph = forceGraphRef.current;
+      if (!graph) return;
+      const camera = graph.camera();
+      const target =
+        (graph.controls() as { target?: Vector3 }).target ?? new Vector3();
+      graph.cameraPosition(
+        {
+          x: target.x + (camera.position.x - target.x) * factor,
+          y: target.y + (camera.position.y - target.y) * factor,
+          z: target.z + (camera.position.z - target.z) * factor,
+        },
+        target,
+        reducedMotion ? 0 : 180,
+      );
+    },
+    [reducedMotion],
+  );
 
   useEffect(() => {
     const controls = forceGraphRef.current?.controls() as
@@ -221,34 +204,36 @@ export function GraphViewport3D({
   }, [graphData]);
 
   const nodeNameObject = useCallback(
-    (node: Graph3DNode) => createNodeName(node, theme),
-    [theme],
+    (node: Graph3DNode) => createNodeName(node),
+    [],
   );
 
   useEffect(() => {
-    // Sparse focused graphs occupy only a few pixels at the renderer's default
-    // camera distance. Let the force layout establish coordinates, then frame
-    // the graph just as the explicit "Fit graph" control does.
+    // Precompute the force layout and frame it immediately. Camera movement is
+    // reserved for direct user actions, so opening a Project Map never drifts.
     const timer = window.setTimeout(() => {
-      fitGraph();
-    }, 500);
+      fitGraph(0);
+    }, 0);
     return () => {
       window.clearTimeout(timer);
     };
   }, [fitGraph, graphData, size.height, size.width]);
 
-  const focusNode = useCallback((node: NodeObject<Graph3DNode>) => {
-    if (node.x === undefined || node.y === undefined || node.z === undefined)
-      return;
-    const distance = 85;
-    const magnitude = Math.hypot(node.x, node.y, node.z) || 1;
-    const ratio = 1 + distance / magnitude;
-    forceGraphRef.current?.cameraPosition(
-      { x: node.x * ratio, y: node.y * ratio, z: node.z * ratio },
-      { x: node.x, y: node.y, z: node.z },
-      500,
-    );
-  }, []);
+  const focusNode = useCallback(
+    (node: NodeObject<Graph3DNode>) => {
+      if (node.x === undefined || node.y === undefined || node.z === undefined)
+        return;
+      const distance = 85;
+      const magnitude = Math.hypot(node.x, node.y, node.z) || 1;
+      const ratio = 1 + distance / magnitude;
+      forceGraphRef.current?.cameraPosition(
+        { x: node.x * ratio, y: node.y * ratio, z: node.z * ratio },
+        { x: node.x, y: node.y, z: node.z },
+        reducedMotion ? 0 : 500,
+      );
+    },
+    [reducedMotion],
+  );
 
   const handleNodeClick = useCallback(
     (node: NodeObject<Graph3DNode>) => {
@@ -277,11 +262,12 @@ export function GraphViewport3D({
             graphData={graphData}
             width={size.width}
             height={size.height}
+            extraRenderers={labelRenderers}
             backgroundColor={backgroundColor}
             controlType="orbit"
             showNavInfo={false}
-            warmupTicks={60}
-            cooldownTime={5_000}
+            warmupTicks={120}
+            cooldownTime={0}
             d3VelocityDecay={0.45}
             nodeRelSize={2.7}
             nodeResolution={16}

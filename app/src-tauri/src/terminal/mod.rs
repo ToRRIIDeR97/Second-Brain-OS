@@ -68,6 +68,22 @@ pub struct TerminalPreset {
 }
 
 impl PresetId {
+    #[must_use]
+    pub const fn default_for_current_platform() -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            Self::PowerShell
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Self::Zsh
+        }
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        {
+            Self::Bash
+        }
+    }
+
     /// Presets are backend-owned fixed argument arrays. Renderer-provided
     /// executables, arguments, and shell interpolation never enter this path.
     #[must_use]
@@ -97,25 +113,69 @@ impl PresetId {
             Self::PowerShell => TerminalPreset {
                 id: self,
                 label: "PowerShell",
-                executable: "pwsh",
+                executable: powershell_executable(),
                 args: &["-NoLogo"],
                 protected: false,
             },
             Self::Codex => TerminalPreset {
                 id: self,
                 label: "Codex",
-                executable: "codex",
-                args: &[],
+                executable: agent_executable("codex"),
+                args: codex_args(),
                 protected: true,
             },
             Self::Claude => TerminalPreset {
                 id: self,
                 label: "Claude",
-                executable: "claude",
-                args: &[],
+                executable: agent_executable("claude"),
+                args: claude_args(),
                 protected: true,
             },
         }
+    }
+}
+
+const fn powershell_executable() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "powershell.exe"
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        "pwsh"
+    }
+}
+
+const fn agent_executable(_command: &'static str) -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "powershell.exe"
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        _command
+    }
+}
+
+const fn codex_args() -> &'static [&'static str] {
+    #[cfg(target_os = "windows")]
+    {
+        &["-NoLogo", "-NoExit", "-Command", "codex"]
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        &[]
+    }
+}
+
+const fn claude_args() -> &'static [&'static str] {
+    #[cfg(target_os = "windows")]
+    {
+        &["-NoLogo", "-NoExit", "-Command", "claude"]
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        &[]
     }
 }
 
@@ -751,6 +811,11 @@ fn parse_osc7(sequence: &[u8]) -> Result<PathBuf, TerminalError> {
     if path.contains('\0') {
         return Err(TerminalError::InvalidOsc7);
     }
+    #[cfg(target_os = "windows")]
+    let path = path
+        .strip_prefix('/')
+        .filter(|candidate| candidate.as_bytes().get(1) == Some(&b':'))
+        .unwrap_or(path);
     Ok(PathBuf::from(path))
 }
 
@@ -828,6 +893,28 @@ mod tests {
             index_enabled: true,
             deleted: false,
         }
+    }
+
+    #[test]
+    fn chooses_a_platform_default_shell() {
+        let preset = PresetId::default_for_current_platform();
+        #[cfg(target_os = "windows")]
+        assert_eq!(preset, PresetId::PowerShell);
+        #[cfg(target_os = "macos")]
+        assert_eq!(preset, PresetId::Zsh);
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        assert_eq!(preset, PresetId::Bash);
+    }
+
+    #[test]
+    fn resolves_a_powershell_executable_for_the_platform() {
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            PresetId::PowerShell.definition().executable,
+            "powershell.exe"
+        );
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(PresetId::PowerShell.definition().executable, "pwsh");
     }
 
     fn start(
@@ -920,10 +1007,7 @@ mod tests {
         let workspace = workspace(root.path(), "one");
         let mut manager = TerminalManager::new(MockPty::default());
         let id = start(&mut manager, &workspace, PresetId::Zsh);
-        let encoded = child
-            .to_string_lossy()
-            .replace(' ', "%20")
-            .replace("資料", "%E8%B3%87%E6%96%99");
+        let encoded = osc7_uri_path(&child);
         let sequence = format!("\u{1b}]7;file://localhost{encoded}\u{7}");
         manager
             .report_trusted_osc7(&workspace, &PathPolicy::default(), &id, sequence.as_bytes())
@@ -937,7 +1021,10 @@ mod tests {
         );
 
         let outside = TempDir::new().expect("outside");
-        let sequence = format!("\u{1b}]7;file://localhost{}\u{7}", outside.path().display());
+        let sequence = format!(
+            "\u{1b}]7;file://localhost{}\u{7}",
+            osc7_uri_path(outside.path())
+        );
         assert_eq!(
             manager.report_trusted_osc7(
                 &workspace,
@@ -947,6 +1034,22 @@ mod tests {
             ),
             Err(TerminalError::CwdOutsideWorkspace)
         );
+    }
+
+    fn osc7_uri_path(path: &Path) -> String {
+        let path = path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .replace(' ', "%20")
+            .replace("資料", "%E8%B3%87%E6%96%99");
+        #[cfg(target_os = "windows")]
+        {
+            format!("/{path}")
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            path
+        }
     }
 
     #[test]

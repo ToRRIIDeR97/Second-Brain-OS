@@ -7,6 +7,7 @@ import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Effect, Option, Schema } from "effect"
 import matter from "gray-matter"
 import { ulid } from "ulid"
+import type { PlannerCalendar } from "../planner/calendar"
 
 const directory = "projects"
 const limit = 1_000
@@ -22,6 +23,7 @@ export type ProjectLocation = typeof ProjectLocation.Type
 
 export const Info = Schema.Struct({
   id: Schema.String,
+  folder: Schema.String,
   name: Schema.String,
   outcome: Schema.String,
   templateId: Schema.optional(Schema.NullOr(Schema.String)),
@@ -79,7 +81,7 @@ type Card = { info: Info; data: Record<string, unknown>; body: string; source: s
 export const list = Effect.fn("BrainProject.list")(function* () {
   const location = yield* Location.Service
   const fs = yield* FSUtil.Service
-  const paths = yield* fs.glob(`${directory}/*.md`, {
+  const paths = yield* fs.glob(`{${directory}/*.md,${directory}/*/project.md}`, {
     cwd: location.directory,
     absolute: false,
     include: "file",
@@ -99,15 +101,17 @@ export const list = Effect.fn("BrainProject.list")(function* () {
 })
 
 export const get = Effect.fn("BrainProject.get")(function* (id: string) {
-  const path = yield* projectPath(id)
+  const path = yield* existingProjectPath(id)
   return (yield* readCard(path)).info
 })
 
 export const create = Effect.fn("BrainProject.create")(function* (input: CreateInput) {
   const projects = yield* list()
   const now = new Date().toISOString()
+  const id = `project_${ulid()}`
   const info = validate({
-    id: `project_${ulid()}`,
+    id,
+    folder: managedFolder(id),
     name: input.name.trim(),
     outcome: input.outcome.trim(),
     templateId: optional(input.templateId),
@@ -126,7 +130,14 @@ export const create = Effect.fn("BrainProject.create")(function* (input: CreateI
   }
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
-  const target = yield* mutation.resolve({ path: yield* projectPath(info.id), kind: "file" })
+  const notesTarget = yield* mutation.resolve({ path: `${info.folder}/notes/.gitkeep`, kind: "file" })
+  const timelineTarget = yield* mutation.resolve({ path: `${info.folder}/timeline/calendar.json`, kind: "file" })
+  yield* files.write({ target: notesTarget, content: "" })
+  yield* files.write({
+    target: timelineTarget,
+    content: timelineSource({ version: 2, revision: "", events: [], tasks: [] }),
+  })
+  const target = yield* mutation.resolve({ path: managedProjectPath(info.id), kind: "file" })
   yield* files
     .create({ target, content: encode(info, {}, `# ${info.name}\n\n${info.outcome}\n`) })
     .pipe(Effect.catchTag("FileMutation.TargetExistsError", () => Effect.fail(new ConflictError({ reason: "exists" }))))
@@ -134,7 +145,7 @@ export const create = Effect.fn("BrainProject.create")(function* (input: CreateI
 })
 
 export const update = Effect.fn("BrainProject.update")(function* (id: string, input: UpdateInput) {
-  const path = yield* projectPath(id)
+  const path = yield* existingProjectPath(id)
   const card = yield* readCard(path)
   if (input.expectedUpdatedAt !== undefined && input.expectedUpdatedAt !== card.info.updatedAt) {
     return yield* new ConflictError({ reason: "stale" })
@@ -174,9 +185,48 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
   return info
 })
 
-const projectPath = Effect.fn("BrainProject.projectPath")(function* (id: string) {
+const existingProjectPath = Effect.fn("BrainProject.existingProjectPath")(function* (id: string) {
   if (!/^project_[0-9A-Z]+$/i.test(id)) return yield* new InvalidError({ reason: "invalid_id" })
+  const location = yield* Location.Service
+  const fs = yield* FSUtil.Service
+  const managed = managedProjectPath(id)
+  const managedTarget = yield* fs.resolve(`${location.directory}/${managed}`)
+  if (yield* fs.existsSafe(managedTarget)) return managed
   return `${directory}/${id}.md`
+})
+
+export function managedFolder(id: string) {
+  return `${directory}/${id}`
+}
+
+export function managedProjectPath(id: string) {
+  return `${managedFolder(id)}/project.md`
+}
+
+export function projectTimeline(snapshot: PlannerCalendar.Snapshot, id: string): PlannerCalendar.Snapshot {
+  return {
+    ...snapshot,
+    events: snapshot.events.filter((event) => event.projectId === id),
+    tasks: snapshot.tasks.filter((task) => task.projectId === id),
+  }
+}
+
+export const syncTimelines = Effect.fn("BrainProject.syncTimelines")(function* (snapshot: PlannerCalendar.Snapshot) {
+  const projects = yield* list()
+  const mutation = yield* LocationMutation.Service
+  const files = yield* FileMutation.Service
+  yield* Effect.forEach(
+    projects,
+    (project) =>
+      Effect.gen(function* () {
+        const target = yield* mutation.resolve({
+          path: `${managedFolder(project.id)}/timeline/calendar.json`,
+          kind: "file",
+        })
+        yield* files.write({ target, content: timelineSource(projectTimeline(snapshot, project.id)) })
+      }),
+    { concurrency: 8, discard: true },
+  )
 })
 
 const readCard = Effect.fn("BrainProject.readCard")(function* (path: string) {
@@ -202,6 +252,7 @@ export function decode(source: string): Card {
       : data.location
   const raw = {
     id: data.id,
+    folder: typeof data.id === "string" ? managedFolder(data.id) : "",
     name: data.title,
     outcome: typeof data.outcome === "string" ? data.outcome : firstParagraph(parsed.content),
     templateId: data.template_id,
@@ -248,6 +299,9 @@ export function encode(info: Info, previous: Record<string, unknown>, body: stri
 }
 
 function validate(info: Info) {
+  if (!/^project_[0-9A-Z]+$/i.test(info.id) || info.folder !== managedFolder(info.id)) {
+    throw new InvalidError({ reason: "invalid_id" })
+  }
   if (info.name.length === 0 || [...info.name].length > 200) throw new InvalidError({ reason: "invalid_name" })
   if (info.outcome.length === 0 || [...info.outcome].length > 4_000)
     throw new InvalidError({ reason: "invalid_outcome" })
@@ -262,6 +316,10 @@ function validate(info: Info) {
   if (info.location && (!info.location.workspaceId.trim() || !info.location.displayPath.trim()))
     throw new InvalidError({ reason: "invalid_location" })
   return info
+}
+
+function timelineSource(snapshot: PlannerCalendar.Snapshot) {
+  return JSON.stringify(snapshot, null, 2) + "\n"
 }
 
 function normalizeTags(tags: ReadonlyArray<string>) {

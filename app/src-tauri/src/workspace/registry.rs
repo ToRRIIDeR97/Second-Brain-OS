@@ -289,6 +289,18 @@ impl WorkspaceRegistry {
     pub fn records(&self) -> impl Iterator<Item = &WorkspaceRecord> {
         self.records.values().filter(|record| !record.deleted)
     }
+
+    #[must_use]
+    pub fn find_by_canonical_root(&self, root: &Path) -> Option<&WorkspaceRecord> {
+        let key = path_key(root);
+        self.records.values().find(|record| {
+            !record.deleted
+                && record
+                    .canonical_root
+                    .as_deref()
+                    .is_some_and(|candidate| path_key(Path::new(candidate)) == key)
+        })
+    }
 }
 
 fn canonical_directory(path: &Path) -> Result<PathBuf, WorkspaceError> {

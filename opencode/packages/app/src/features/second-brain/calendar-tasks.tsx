@@ -1,4 +1,5 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { createEffect, createMemo, For, Show } from "solid-js"
@@ -342,34 +343,44 @@ export function CalendarTasks(props: {
             >
               <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="task-source">
                 {language.t("secondBrain.tasks.google.destination")}
-                <select
+                <SelectV2
                   id="task-source"
-                  class="h-8 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-                  value={state.draft.source}
-                  onChange={(event) =>
+                  aria-label={language.t("secondBrain.tasks.google.destination")}
+                  class="!h-8 !w-full"
+                  options={["local", "google"] as const}
+                  current={state.draft.source === "google" ? "google" : "local"}
+                  label={(source) =>
+                    source === "google"
+                      ? language.t("secondBrain.tasks.google.defaultList")
+                      : language.t("secondBrain.calendar.sync.local")
+                  }
+                  onSelect={(source) =>
                     setState("draft", {
                       ...state.draft,
-                      source: event.currentTarget.value === "google" ? "google" : "local",
-                      syncState: event.currentTarget.value === "google" ? "pending" : "local",
+                      source: source === "google" ? "google" : "local",
+                      syncState: source === "google" ? "pending" : "local",
                     })
                   }
-                >
-                  <option value="local">{language.t("secondBrain.calendar.sync.local")}</option>
-                  <option value="google">{language.t("secondBrain.tasks.google.defaultList")}</option>
-                </select>
+                />
               </label>
             </Show>
             <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="task-project">
               {language.t("secondBrain.calendar.project")}
-              <select
+              <SelectV2
                 id="task-project"
-                class="h-8 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-                value={state.draft.projectId}
-                onChange={(event) => setState("draft", "projectId", event.currentTarget.value)}
-              >
-                <option value="">{language.t("secondBrain.calendar.noProject")}</option>
-                <For each={props.projects}>{(project) => <option value={project.id}>{project.name}</option>}</For>
-              </select>
+                aria-label={language.t("secondBrain.calendar.project")}
+                class="!h-8 !w-full"
+                options={["__none__", ...props.projects.map((project) => project.id)]}
+                current={state.draft.projectId || "__none__"}
+                label={(projectID) =>
+                  projectID === "__none__"
+                    ? language.t("secondBrain.calendar.noProject")
+                    : (props.projects.find((project) => project.id === projectID)?.name ?? projectID)
+                }
+                onSelect={(projectID) =>
+                  setState("draft", "projectId", projectID === "__none__" ? "" : (projectID ?? ""))
+                }
+              />
             </label>
             <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="task-due">
               {language.t("secondBrain.tasks.due")}

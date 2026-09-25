@@ -1,8 +1,23 @@
+use crate::agents::live_codex::{
+    AgentSessionSnapshot, CodexAppServerRuntime, ManagedApprovalDecisionRequest, ManagedSandbox,
+    ManagedSessionMessageRequest, ManagedSessionRequest, ProviderProbe, StartManagedSession,
+    list_persisted_sessions, mark_orphaned_sessions_recoverable,
+};
 use crate::db::Database;
 use crate::errors::{AppError, AppResult, redact_text};
+use crate::events::{Actor, EventBus, EventEnvelope, EventKind, RedactionClass};
 use crate::knowledge::parser::ParserRegistry;
 use crate::knowledge::search::parse_query;
-use crate::platform::{Clock, SystemClock, ensure_application_data_dir};
+use crate::planner::google::{CalendarEvent, GoogleTask, SyncCursor, sync_calendar, sync_tasks};
+use crate::planner::google_live::{
+    GOOGLE_ACCOUNT_ID, GOOGLE_CREDENTIAL_KEY, GoogleAccess, LiveGoogleProvider,
+    authorize as authorize_google, delete_refresh_token, load_client_secret, load_refresh_token,
+    provider_to_app_error, revoke as revoke_google, store_client_secret, store_refresh_token,
+};
+use crate::planner::local::DateOnly;
+use crate::platform::{
+    Clock, IdGenerator, SystemClock, UlidGenerator, ensure_application_data_dir,
+};
 use crate::terminal::{
     NativePtyAdapter, PresetId, TerminalId, TerminalManager, TerminalSession, TerminalSize,
 };
@@ -12,6 +27,10 @@ use crate::workspace::language_tools::{
 };
 use crate::workspace::lsp::{LspError, LspManager, LspServerKind, LspSessionId, LspSessionSummary};
 use crate::workspace::mutations::{MutationActor, MutationService};
+use crate::workspace::project::{
+    CreateProject, ProjectCatalog, ProjectId, ProjectLocation, ProjectPatch, ProjectRecord,
+    ProjectStatus,
+};
 use crate::workspace::{
     ApplicationPolicy, FileKind, PathPolicy, ReadError, RegisterWorkspace, TrustLevel, WorkspaceId,
     WorkspaceKind, WorkspacePath, WorkspaceRegistry, evaluate_policy, list_directory, open_file,
@@ -21,25 +40,46 @@ use base64::Engine as _;
 use ignore::WalkBuilder;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
-use std::time::Duration;
-use tauri::State;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 
 const IPC_CONTRACT: &str = "ipc_result";
 const IPC_VERSION: u32 = 1;
 const SHELL_LAYOUT_KEY: &str = "shell.layout";
 const WORKSPACES_KEY: &str = "workspace.registry.v1";
+const INTEGRATION_SETTINGS_KEY: &str = "integrations.settings.v1";
+const INTEGRATION_SETTINGS_VERSION: u32 = 1;
+const MAX_GOOGLE_CLIENT_ID_CHARS: usize = 512;
+const MAX_GOOGLE_CLIENT_SECRET_CHARS: usize = 512;
 const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ATTACHMENT_BASE64_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4;
 const MAX_DIAGNOSTIC_SOURCE_CHARS: usize = 64;
 const MAX_DIAGNOSTIC_TEXT_CHARS: usize = 2_048;
+const ROOT_GRANT_LIFETIME: Duration = Duration::from_secs(5 * 60);
+
+#[derive(Debug)]
+struct RootSelectionGrant {
+    canonical_path: PathBuf,
+    display_path: String,
+    expires_at: Instant,
+}
 
 /// Process-local application state. The domain registry deliberately stays
 /// independent of Tauri; this adapter is the only place that grants renderer
 /// requests access to registered workspace records.
 pub struct AppRuntime {
     workspaces: Mutex<WorkspaceRegistry>,
+    root_selection_grants: Mutex<BTreeMap<String, RootSelectionGrant>>,
+    database: Option<Database>,
+    events: EventBus,
+    agents: Mutex<CodexAppServerRuntime>,
+    google_operation_active: AtomicBool,
     terminals: Mutex<TerminalManager<NativePtyAdapter>>,
     lsp: Mutex<LspManager>,
 }
@@ -48,8 +88,22 @@ impl AppRuntime {
     #[must_use]
     pub fn load() -> Self {
         let workspaces = load_workspace_registry().unwrap_or_default();
+        let database = database().ok();
+        let events = EventBus::with_audit_sink(
+            database
+                .clone()
+                .map(|database| Arc::new(database) as Arc<dyn crate::events::AuditSink>),
+        );
+        if let Some(database) = database.as_ref() {
+            let _ = mark_orphaned_sessions_recoverable(database);
+        }
         Self {
             workspaces: Mutex::new(workspaces),
+            root_selection_grants: Mutex::new(BTreeMap::new()),
+            database,
+            events,
+            agents: Mutex::new(CodexAppServerRuntime::new()),
+            google_operation_active: AtomicBool::new(false),
             terminals: Mutex::new(TerminalManager::new(NativePtyAdapter::new())),
             lsp: Mutex::new(LspManager::new()),
         }
@@ -66,7 +120,9 @@ impl Default for AppRuntime {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceRegistration {
     pub name: String,
+    /// Display-only echo. Filesystem authority comes from `root_grant_id`.
     pub root_path: String,
+    pub root_grant_id: Option<String>,
     pub kind: WorkspaceKind,
     pub trust_level: TrustLevel,
 }
@@ -83,6 +139,342 @@ pub struct WorkspaceSummary {
     pub can_read: bool,
     pub can_write: bool,
     pub can_use_terminal: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RootSelection {
+    pub grant_id: String,
+    pub display_path: String,
+    pub suggested_name: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoogleConsentMode {
+    ReadOnly,
+    ReadWrite,
+}
+
+impl Default for GoogleConsentMode {
+    fn default() -> Self {
+        Self::ReadOnly
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct GoogleIntegrationSettings {
+    pub oauth_client_id: Option<String>,
+    pub consent_mode: GoogleConsentMode,
+    pub calendar_enabled: bool,
+    pub tasks_enabled: bool,
+}
+
+impl Default for GoogleIntegrationSettings {
+    fn default() -> Self {
+        Self {
+            oauth_client_id: None,
+            consent_mode: GoogleConsentMode::ReadOnly,
+            calendar_enabled: true,
+            tasks_enabled: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CodexIntegrationSettings {
+    pub default_sandbox: ManagedSandbox,
+}
+
+impl Default for CodexIntegrationSettings {
+    fn default() -> Self {
+        Self {
+            default_sandbox: ManagedSandbox::ReadOnly,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct IntegrationSettings {
+    pub version: u32,
+    pub google: GoogleIntegrationSettings,
+    pub codex: CodexIntegrationSettings,
+}
+
+impl Default for IntegrationSettings {
+    fn default() -> Self {
+        Self {
+            version: INTEGRATION_SETTINGS_VERSION,
+            google: GoogleIntegrationSettings::default(),
+            codex: CodexIntegrationSettings::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntegrationSettingsUpdate {
+    pub google: GoogleIntegrationSettingsUpdate,
+    pub codex: CodexIntegrationSettings,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct GoogleIntegrationSettingsUpdate {
+    pub oauth_client_id: Option<String>,
+    pub oauth_client_secret: Option<String>,
+    pub consent_mode: GoogleConsentMode,
+    pub calendar_enabled: bool,
+    pub tasks_enabled: bool,
+}
+
+impl Default for GoogleIntegrationSettingsUpdate {
+    fn default() -> Self {
+        Self {
+            oauth_client_id: None,
+            oauth_client_secret: None,
+            consent_mode: GoogleConsentMode::ReadOnly,
+            calendar_enabled: true,
+            tasks_enabled: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleConnectionStatus {
+    pub state: String,
+    pub connected: bool,
+    pub client_secret_configured: bool,
+    pub consent_mode: GoogleConsentMode,
+    pub calendar_enabled: bool,
+    pub tasks_enabled: bool,
+    pub last_synced_at: Option<String>,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleSyncSummary {
+    pub calendar_items: usize,
+    pub task_items: usize,
+    pub task_lists: usize,
+    pub last_synced_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "mode")]
+pub enum ProjectLocationInput {
+    None,
+    ExistingWorkspace {
+        workspace_id: String,
+    },
+    RootSelection {
+        grant_id: String,
+        trust_level: TrustLevel,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCreateRequest {
+    pub brain_workspace_id: String,
+    pub name: String,
+    pub outcome: String,
+    pub template_id: Option<String>,
+    #[serde(default)]
+    pub instructions: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub location: ProjectLocationInput,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectUpdateRequest {
+    pub brain_workspace_id: String,
+    pub project_id: String,
+    pub patch: ProjectPatch,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectReadRequest {
+    pub brain_workspace_id: String,
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectStatusRequest {
+    pub brain_workspace_id: String,
+    pub project_id: String,
+    pub status: ProjectStatus,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityListRequest {
+    pub workspace_id: Option<String>,
+    pub project_id: Option<String>,
+    pub category: Option<String>,
+    pub cursor: Option<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityItem {
+    pub id: String,
+    pub event_type: String,
+    pub timestamp: String,
+    pub workspace_id: Option<String>,
+    pub correlation_id: String,
+    pub actor_type: String,
+    pub category: String,
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityPage {
+    pub items: Vec<ActivityItem>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum PlannerScheduleRecord {
+    DateOnly {
+        date: String,
+    },
+    AllDay {
+        date: String,
+    },
+    Exact {
+        start_epoch_seconds: i64,
+        end_epoch_seconds: Option<i64>,
+        timezone: String,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerSourceLinkRecord {
+    pub workspace_id: String,
+    pub relative_path: String,
+    pub start_line: Option<u32>,
+    pub end_line: Option<u32>,
+    pub explicit_task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerProviderLinkRecord {
+    pub provider: String,
+    pub object_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerItemRecord {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub details: Option<String>,
+    #[serde(default)]
+    pub location: Option<String>,
+    pub schedule: Option<PlannerScheduleRecord>,
+    pub status: String,
+    pub project_id: Option<String>,
+    pub source: String,
+    pub source_link: Option<PlannerSourceLinkRecord>,
+    pub provider_link: Option<PlannerProviderLinkRecord>,
+    pub recurrence_rule: Option<String>,
+    pub sync_status: String,
+    pub conflict_message: Option<String>,
+    pub created_at_epoch_seconds: i64,
+    pub updated_at_epoch_seconds: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerListRequest {
+    pub brain_workspace_id: String,
+    pub project_id: Option<String>,
+    pub range: Option<PlannerListRangeRecord>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerListRangeRecord {
+    pub start_date: String,
+    pub end_date: String,
+    pub start_epoch_seconds: i64,
+    pub end_epoch_seconds: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerItemDraftRecord {
+    pub kind: Option<String>,
+    pub title: String,
+    pub details: Option<String>,
+    pub location: Option<String>,
+    pub schedule: Option<PlannerScheduleRecord>,
+    pub project_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerCreateRequest {
+    pub brain_workspace_id: String,
+    pub draft: PlannerItemDraftRecord,
+    pub sync_target: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerItemPatchRecord {
+    pub title: Option<String>,
+    pub details: Option<String>,
+    pub clear_details: Option<bool>,
+    pub location: Option<String>,
+    pub clear_location: Option<bool>,
+    pub schedule: Option<PlannerScheduleRecord>,
+    pub clear_schedule: Option<bool>,
+    pub status: Option<String>,
+    pub project_id: Option<String>,
+    pub clear_project: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerUpdateRequest {
+    pub brain_workspace_id: String,
+    pub item_id: String,
+    pub patch: PlannerItemPatchRecord,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannerDeleteRequest {
+    pub brain_workspace_id: String,
+    pub item_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlannerLocalSnapshot {
+    schema_version: u32,
+    item: PlannerItemRecord,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -434,6 +826,906 @@ fn save_layout(database: &Database, layout: &ShellLayout) -> AppResult<()> {
     })
 }
 
+fn load_integration_settings(database: &Database) -> AppResult<IntegrationSettings> {
+    let value = database.with_connection(|connection| {
+        connection
+            .query_row(
+                "SELECT value_json FROM app_settings WHERE key = ?1",
+                [INTEGRATION_SETTINGS_KEY],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+    })?;
+    let Some(value) = value else {
+        return Ok(IntegrationSettings::default());
+    };
+    serde_json::from_str(&value).map_err(|error| {
+        AppError::new(
+            "settings.invalid",
+            "The saved integration settings could not be read.",
+        )
+        .with_details(serde_json::Value::String(error.to_string()))
+    })
+}
+
+fn normalize_google_client_id(value: Option<String>) -> AppResult<Option<String>> {
+    let Some(value) = value.map(|value| value.trim().to_owned()) else {
+        return Ok(None);
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.chars().count() > MAX_GOOGLE_CLIENT_ID_CHARS
+        || value.chars().any(char::is_whitespace)
+        || !value.ends_with(".apps.googleusercontent.com")
+    {
+        return Err(AppError::new(
+            "settings.google_client_id_invalid",
+            "Enter a valid Google OAuth client ID ending in .apps.googleusercontent.com.",
+        ));
+    }
+    Ok(Some(value))
+}
+
+fn normalize_google_client_secret(value: Option<String>) -> AppResult<Option<String>> {
+    let Some(value) = value.map(|value| value.trim().to_owned()) else {
+        return Ok(None);
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.chars().count() > MAX_GOOGLE_CLIENT_SECRET_CHARS
+        || value.chars().any(char::is_whitespace)
+    {
+        return Err(AppError::new(
+            "settings.google_client_secret_invalid",
+            "Enter the client secret exactly as it appears in the Google Desktop OAuth JSON.",
+        ));
+    }
+    Ok(Some(value))
+}
+
+fn save_integration_settings(
+    database: &Database,
+    update: IntegrationSettingsUpdate,
+) -> AppResult<IntegrationSettings> {
+    let previous_google = load_integration_settings(database)?.google;
+    let GoogleIntegrationSettingsUpdate {
+        oauth_client_id,
+        oauth_client_secret,
+        consent_mode,
+        calendar_enabled,
+        tasks_enabled,
+    } = update.google;
+    let oauth_client_id = normalize_google_client_id(oauth_client_id)?;
+    let oauth_client_secret = normalize_google_client_secret(oauth_client_secret)?;
+    if let Some(client_secret) = oauth_client_secret.as_deref() {
+        let client_id = oauth_client_id.as_deref().ok_or_else(|| {
+            AppError::new(
+                "google.client_id_required",
+                "Enter the Google Desktop OAuth client ID before saving its secret.",
+            )
+        })?;
+        store_client_secret(client_id, client_secret)?;
+    }
+    let settings = IntegrationSettings {
+        version: INTEGRATION_SETTINGS_VERSION,
+        google: GoogleIntegrationSettings {
+            oauth_client_id,
+            consent_mode,
+            calendar_enabled,
+            tasks_enabled,
+        },
+        codex: update.codex,
+    };
+    let value = serde_json::to_string(&settings).map_err(|error| {
+        AppError::new(
+            "settings.serialize",
+            "The integration settings could not be saved.",
+        )
+        .with_details(serde_json::Value::String(error.to_string()))
+    })?;
+    let google_changed = previous_google != settings.google || oauth_client_secret.is_some();
+    database.with_connection(|connection| {
+        connection.execute(
+            "INSERT INTO app_settings (key, value_json, schema_version, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(key) DO UPDATE SET
+               value_json = excluded.value_json,
+               schema_version = excluded.schema_version,
+               updated_at = excluded.updated_at",
+            params![
+                INTEGRATION_SETTINGS_KEY,
+                value,
+                INTEGRATION_SETTINGS_VERSION,
+                SystemClock.now_utc()
+            ],
+        )?;
+        if google_changed {
+            connection.execute(
+                "UPDATE planner_accounts SET connection_state = 'needs_reconnect'
+                 WHERE account_id = ?1 AND connection_state = 'connected'",
+                [GOOGLE_ACCOUNT_ID],
+            )?;
+        }
+        Ok(())
+    })?;
+    Ok(settings)
+}
+
+fn google_access(settings: &GoogleIntegrationSettings) -> GoogleAccess {
+    GoogleAccess {
+        read_write: settings.consent_mode == GoogleConsentMode::ReadWrite,
+        calendar_enabled: settings.calendar_enabled,
+        tasks_enabled: settings.tasks_enabled,
+    }
+}
+
+fn google_client_id(settings: &GoogleIntegrationSettings) -> AppResult<&str> {
+    settings.oauth_client_id.as_deref().ok_or_else(|| {
+        AppError::new(
+            "google.client_id_required",
+            "Save a Google Desktop OAuth client ID before connecting.",
+        )
+    })
+}
+
+fn google_client_secret(client_id: &str) -> AppResult<String> {
+    load_client_secret(client_id)?.ok_or_else(|| {
+        AppError::new(
+            "google.client_secret_required",
+            "Save the client secret from the matching Google Desktop OAuth JSON before connecting.",
+        )
+    })
+}
+
+fn google_connection_status(
+    database: &Database,
+    operation_active: bool,
+) -> AppResult<GoogleConnectionStatus> {
+    let settings = load_integration_settings(database)?.google;
+    let account_state = database.with_connection(|connection| {
+        connection
+            .query_row(
+                "SELECT connection_state FROM planner_accounts WHERE account_id = ?1",
+                [GOOGLE_ACCOUNT_ID],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+    })?;
+    let last_synced_at = database.with_connection(|connection| {
+        connection
+            .query_row(
+                "SELECT MAX(last_synced_at) FROM planner_sync_cursors WHERE account_id = ?1",
+                [GOOGLE_ACCOUNT_ID],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map(|value| value.flatten())
+    })?;
+    let has_credential = load_refresh_token()?.is_some();
+    let has_client_id = settings.oauth_client_id.is_some();
+    let client_secret_configured = match settings.oauth_client_id.as_deref() {
+        Some(client_id) => load_client_secret(client_id)?.is_some(),
+        None => false,
+    };
+    let configured = has_client_id && client_secret_configured;
+    let connected = configured && has_credential && account_state.as_deref() == Some("connected");
+    let (state, message) = if operation_active {
+        (
+            "connecting",
+            "A Google connection or synchronization is in progress.",
+        )
+    } else if !has_client_id {
+        (
+            "not_configured",
+            "Add and save a Desktop OAuth client ID to connect Google.",
+        )
+    } else if !client_secret_configured {
+        (
+            "not_configured",
+            "Add the client secret from the matching Desktop OAuth JSON.",
+        )
+    } else if connected {
+        (
+            "connected",
+            "Google Calendar and Tasks are connected to Planner.",
+        )
+    } else if account_state.as_deref() == Some("error") {
+        (
+            "error",
+            "The Google connection needs attention. Connect it again.",
+        )
+    } else {
+        (
+            "disconnected",
+            "OAuth is configured. Connect your Google account to start syncing.",
+        )
+    };
+    Ok(GoogleConnectionStatus {
+        state: state.into(),
+        connected,
+        client_secret_configured,
+        consent_mode: settings.consent_mode,
+        calendar_enabled: settings.calendar_enabled,
+        tasks_enabled: settings.tasks_enabled,
+        last_synced_at,
+        message: message.into(),
+    })
+}
+
+fn upsert_google_account(
+    database: &Database,
+    settings: &GoogleIntegrationSettings,
+) -> AppResult<()> {
+    let now = SystemClock.now_utc();
+    database.with_connection(|connection| {
+        connection.execute(
+            "INSERT INTO planner_accounts (
+                account_id, provider, provider_subject, consent_mode, credential_key,
+                connection_state, connected_at, disconnected_at
+             ) VALUES (?1, 'google', 'primary', ?2, ?3, 'connected', ?4, NULL)
+             ON CONFLICT(account_id) DO UPDATE SET
+                consent_mode = excluded.consent_mode,
+                credential_key = excluded.credential_key,
+                connection_state = 'connected',
+                connected_at = excluded.connected_at,
+                disconnected_at = NULL",
+            params![
+                GOOGLE_ACCOUNT_ID,
+                if settings.consent_mode == GoogleConsentMode::ReadWrite {
+                    "write"
+                } else {
+                    "read"
+                },
+                GOOGLE_CREDENTIAL_KEY,
+                now,
+            ],
+        )?;
+        Ok(())
+    })
+}
+
+fn mark_google_disconnected(database: &Database) -> AppResult<()> {
+    let now = SystemClock.now_utc();
+    database.with_connection(|connection| {
+        connection.execute(
+            "UPDATE planner_accounts SET connection_state = 'disconnected', disconnected_at = ?2
+             WHERE account_id = ?1",
+            params![GOOGLE_ACCOUNT_ID, now],
+        )?;
+        Ok(())
+    })
+}
+
+fn load_google_cursor(
+    database: &Database,
+    scope_kind: &str,
+    scope_id: &str,
+) -> AppResult<SyncCursor> {
+    let sync_token = database.with_connection(|connection| {
+        connection
+            .query_row(
+                "SELECT cursor FROM planner_sync_cursors
+                 WHERE account_id = ?1 AND scope_kind = ?2 AND scope_id = ?3",
+                params![GOOGLE_ACCOUNT_ID, scope_kind, scope_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map(|value| value.flatten())
+    })?;
+    Ok(SyncCursor {
+        sync_token,
+        page_token: None,
+        generation: 0,
+    })
+}
+
+fn save_google_cursor(
+    database: &Database,
+    scope_kind: &str,
+    scope_id: &str,
+    cursor: &SyncCursor,
+    synced_at: &str,
+) -> AppResult<()> {
+    database.with_connection(|connection| {
+        connection.execute(
+            "INSERT INTO planner_sync_cursors (
+                account_id, scope_kind, scope_id, cursor, last_synced_at, state
+             ) VALUES (?1, ?2, ?3, ?4, ?5, 'ready')
+             ON CONFLICT(account_id, scope_kind, scope_id) DO UPDATE SET
+                cursor = excluded.cursor,
+                last_synced_at = excluded.last_synced_at,
+                state = 'ready'",
+            params![
+                GOOGLE_ACCOUNT_ID,
+                scope_kind,
+                scope_id,
+                cursor.sync_token,
+                synced_at,
+            ],
+        )?;
+        Ok(())
+    })
+}
+
+fn truncate_chars(value: String, limit: usize) -> String {
+    if value.chars().count() <= limit {
+        value
+    } else {
+        value.chars().take(limit).collect()
+    }
+}
+
+fn google_updated_epoch(value: &str, fallback: i64) -> i64 {
+    time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+        .map(|value| value.unix_timestamp())
+        .unwrap_or(fallback)
+}
+
+fn google_exact_schedule(
+    start: &str,
+    end: &str,
+    timezone: Option<&str>,
+) -> Option<PlannerScheduleRecord> {
+    let start_epoch_seconds =
+        time::OffsetDateTime::parse(start, &time::format_description::well_known::Rfc3339)
+            .ok()?
+            .unix_timestamp();
+    let end_epoch_seconds =
+        time::OffsetDateTime::parse(end, &time::format_description::well_known::Rfc3339)
+            .ok()
+            .map(|value| value.unix_timestamp());
+    Some(PlannerScheduleRecord::Exact {
+        start_epoch_seconds,
+        end_epoch_seconds,
+        timezone: timezone.unwrap_or("UTC").to_owned(),
+    })
+}
+
+fn planner_item_from_google_event(event: &CalendarEvent) -> PlannerItemRecord {
+    let now = now_epoch_seconds();
+    let object_id = format!("calendar:primary:{}", event.provider_id);
+    let title = if event.title.trim().is_empty() {
+        "Untitled event".into()
+    } else {
+        truncate_chars(event.title.trim().to_owned(), 240)
+    };
+    PlannerItemRecord {
+        id: format!(
+            "planner_google_{}",
+            &blake3::hash(object_id.as_bytes()).to_hex()[..24]
+        ),
+        kind: "calendar".into(),
+        title,
+        details: event
+            .description
+            .as_ref()
+            .map(|value| truncate_chars(value.clone(), 20_000)),
+        location: event
+            .location
+            .as_ref()
+            .map(|value| truncate_chars(value.clone(), 500)),
+        schedule: if event.all_day {
+            DateOnly::new(&event.start)
+                .ok()
+                .map(|_| PlannerScheduleRecord::AllDay {
+                    date: event.start.clone(),
+                })
+        } else {
+            google_exact_schedule(&event.start, &event.end, event.timezone.as_deref())
+        },
+        status: if event.deleted { "archived" } else { "open" }.into(),
+        project_id: None,
+        source: "provider".into(),
+        source_link: None,
+        provider_link: Some(PlannerProviderLinkRecord {
+            provider: "google".into(),
+            object_id,
+        }),
+        recurrence_rule: event.recurring_series_id.clone(),
+        sync_status: "synced".into(),
+        conflict_message: None,
+        created_at_epoch_seconds: now,
+        updated_at_epoch_seconds: google_updated_epoch(&event.updated_at, now),
+    }
+}
+
+fn planner_item_from_google_task(task: &GoogleTask) -> PlannerItemRecord {
+    let now = now_epoch_seconds();
+    let object_id = format!("tasks:{}:{}", task.task_list_id, task.provider_id);
+    let title = if task.title.trim().is_empty() {
+        "Untitled task".into()
+    } else {
+        truncate_chars(task.title.trim().to_owned(), 240)
+    };
+    let due_date = task
+        .due_date
+        .as_deref()
+        .and_then(|value| value.get(..10))
+        .filter(|value| DateOnly::new(*value).is_ok())
+        .map(ToOwned::to_owned);
+    PlannerItemRecord {
+        id: format!(
+            "planner_google_{}",
+            &blake3::hash(object_id.as_bytes()).to_hex()[..24]
+        ),
+        kind: "task".into(),
+        title,
+        details: task
+            .notes
+            .as_ref()
+            .map(|value| truncate_chars(value.clone(), 20_000)),
+        location: None,
+        schedule: due_date.map(|date| PlannerScheduleRecord::DateOnly { date }),
+        status: if task.deleted {
+            "archived"
+        } else if task.status == "completed" {
+            "completed"
+        } else {
+            "open"
+        }
+        .into(),
+        project_id: None,
+        source: "provider".into(),
+        source_link: None,
+        provider_link: Some(PlannerProviderLinkRecord {
+            provider: "google".into(),
+            object_id,
+        }),
+        recurrence_rule: None,
+        sync_status: "synced".into(),
+        conflict_message: None,
+        created_at_epoch_seconds: now,
+        updated_at_epoch_seconds: google_updated_epoch(&task.updated_at, now),
+    }
+}
+
+fn planner_upsert_google_item(
+    database: &Database,
+    brain_workspace_id: &str,
+    mut item: PlannerItemRecord,
+    provider_etag: Option<&str>,
+    provider_hash: &str,
+) -> AppResult<()> {
+    validate_planner_item(&item)?;
+    let object_id = item
+        .provider_link
+        .as_ref()
+        .map(|link| link.object_id.as_str())
+        .ok_or_else(|| AppError::new("google.item_invalid", "A Google item link was missing."))?;
+    let existing = database.with_connection(|connection| {
+        connection
+            .query_row(
+                "SELECT item_id, created_at FROM planner_items
+                 WHERE provider = 'google' AND provider_item_id = ?1",
+                [object_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+    })?;
+    if let Some((item_id, created_at)) = existing.as_ref() {
+        item.id.clone_from(item_id);
+        item.created_at_epoch_seconds = created_at.parse().unwrap_or(item.created_at_epoch_seconds);
+    }
+    let value = serde_json::to_string(&PlannerLocalSnapshot {
+        schema_version: 1,
+        item: item.clone(),
+    })
+    .map_err(|_| {
+        AppError::new(
+            "planner.serialize_failed",
+            "The Google planner item could not be saved.",
+        )
+    })?;
+    let provider_fields = serde_json::json!({
+        "schemaVersion": 1,
+        "payloadHash": provider_hash,
+    })
+    .to_string();
+    let (schedule_kind, scheduled_value, timezone) =
+        planner_schedule_columns(item.schedule.as_ref());
+    database.with_connection(|connection| {
+        if existing.is_some() {
+            connection.execute(
+                "UPDATE planner_items SET
+                    workspace_id = ?2, kind = ?3, project_id = ?4, title = ?5,
+                    status = ?6, schedule_kind = ?7, scheduled_value = ?8,
+                    timezone = ?9, local_enrichment_json = ?10,
+                    provider_fields_json = ?11, provider_etag = ?12,
+                    sync_status = 'synced', conflict_status = 'none', updated_at = ?13
+                 WHERE provider = 'google' AND provider_item_id = ?1",
+                params![
+                    object_id,
+                    brain_workspace_id,
+                    item.kind,
+                    item.project_id,
+                    item.title,
+                    item.status,
+                    schedule_kind,
+                    scheduled_value,
+                    timezone,
+                    value,
+                    provider_fields,
+                    provider_etag,
+                    item.updated_at_epoch_seconds.to_string(),
+                ],
+            )?;
+        } else {
+            connection.execute(
+                "INSERT INTO planner_items (
+                    item_id, workspace_id, kind, provider, provider_item_id, project_id,
+                    title, status, schedule_kind, scheduled_value, timezone,
+                    source_document_id, source_task_id, source_start_line, source_end_line,
+                    local_enrichment_json, provider_fields_json, provider_etag, sync_status,
+                    conflict_status, created_at, updated_at
+                 ) VALUES (
+                    ?1, ?2, ?3, 'google', ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                    NULL, NULL, NULL, NULL, ?11, ?12, ?13, 'synced', 'none', ?14, ?15
+                 )",
+                params![
+                    item.id,
+                    brain_workspace_id,
+                    item.kind,
+                    object_id,
+                    item.project_id,
+                    item.title,
+                    item.status,
+                    schedule_kind,
+                    scheduled_value,
+                    timezone,
+                    value,
+                    provider_fields,
+                    provider_etag,
+                    item.created_at_epoch_seconds.to_string(),
+                    item.updated_at_epoch_seconds.to_string(),
+                ],
+            )?;
+        }
+        Ok(())
+    })
+}
+
+fn sync_google(database: &Database, brain_workspace_id: &str) -> AppResult<GoogleSyncSummary> {
+    let settings = load_integration_settings(database)?.google;
+    let client_id = google_client_id(&settings)?;
+    let client_secret = google_client_secret(client_id)?;
+    let refresh_token = load_refresh_token()?.ok_or_else(|| {
+        AppError::new(
+            "google.connection_required",
+            "Connect your Google account in Settings before syncing.",
+        )
+    })?;
+    let mut provider = LiveGoogleProvider::connect(client_id, &client_secret, &refresh_token)?;
+    let synced_at = SystemClock.now_utc();
+    let mut calendar_items = 0;
+    let mut task_items = 0;
+    let mut task_lists = 0;
+    if settings.calendar_enabled {
+        let cursor = load_google_cursor(database, "calendar", "primary")?;
+        let outcome =
+            sync_calendar(&mut provider, "primary", cursor).map_err(provider_to_app_error)?;
+        if outcome.reset {
+            database.with_connection(|connection| {
+                connection.execute(
+                    "DELETE FROM planner_items
+                     WHERE provider = 'google' AND provider_item_id LIKE 'calendar:primary:%'",
+                    [],
+                )?;
+                Ok(())
+            })?;
+        }
+        calendar_items = outcome.items.len();
+        for event in &outcome.items {
+            planner_upsert_google_item(
+                database,
+                brain_workspace_id,
+                planner_item_from_google_event(event),
+                event.etag.as_deref(),
+                &event.payload_hash,
+            )?;
+        }
+        save_google_cursor(database, "calendar", "primary", &outcome.cursor, &synced_at)?;
+    }
+    if settings.tasks_enabled {
+        let lists = provider.task_lists()?;
+        task_lists = lists.len();
+        for list in lists {
+            let cursor = load_google_cursor(database, "tasks", &list.provider_id)?;
+            let outcome = sync_tasks(&mut provider, &list.provider_id, cursor)
+                .map_err(provider_to_app_error)?;
+            task_items += outcome.items.len();
+            for task in &outcome.items {
+                planner_upsert_google_item(
+                    database,
+                    brain_workspace_id,
+                    planner_item_from_google_task(task),
+                    task.etag.as_deref(),
+                    &task.payload_hash,
+                )?;
+            }
+            save_google_cursor(
+                database,
+                "tasks",
+                &list.provider_id,
+                &outcome.cursor,
+                &synced_at,
+            )?;
+        }
+    }
+    Ok(GoogleSyncSummary {
+        calendar_items,
+        task_items,
+        task_lists,
+        last_synced_at: synced_at,
+    })
+}
+
+fn google_write_provider(database: &Database, kind: &str) -> AppResult<LiveGoogleProvider> {
+    let settings = load_integration_settings(database)?.google;
+    if settings.consent_mode != GoogleConsentMode::ReadWrite {
+        return Err(AppError::new(
+            "google.write_access_required",
+            "Turn on read and write access in Google connection settings, then reconnect.",
+        ));
+    }
+    let enabled = match kind {
+        "task" => settings.tasks_enabled,
+        "calendar" => settings.calendar_enabled,
+        _ => false,
+    };
+    if !enabled {
+        return Err(AppError::new(
+            "google.service_disabled",
+            "Turn on the matching Google service in connection settings.",
+        ));
+    }
+    let client_id = google_client_id(&settings)?;
+    let client_secret = google_client_secret(client_id)?;
+    let refresh_token = load_refresh_token()?.ok_or_else(|| {
+        AppError::new(
+            "google.connection_required",
+            "Connect your Google account in Settings before making this change.",
+        )
+    })?;
+    LiveGoogleProvider::connect(client_id, &client_secret, &refresh_token)
+}
+
+fn google_task_due(schedule: Option<&PlannerScheduleRecord>) -> AppResult<Option<String>> {
+    let date = match schedule {
+        None => return Ok(None),
+        Some(PlannerScheduleRecord::DateOnly { date })
+        | Some(PlannerScheduleRecord::AllDay { date }) => date.clone(),
+        Some(PlannerScheduleRecord::Exact {
+            start_epoch_seconds,
+            ..
+        }) => time::OffsetDateTime::from_unix_timestamp(*start_epoch_seconds)
+            .map_err(|_| AppError::new("planner.schedule_invalid", "Check the task date."))?
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|_| AppError::new("planner.schedule_invalid", "Check the task date."))?
+            .chars()
+            .take(10)
+            .collect(),
+    };
+    Ok(Some(format!("{date}T00:00:00.000Z")))
+}
+
+fn next_google_date(value: &str) -> AppResult<String> {
+    let mut parts = value.split('-');
+    let year = parts.next().and_then(|part| part.parse::<i32>().ok());
+    let month = parts.next().and_then(|part| part.parse::<u8>().ok());
+    let day = parts.next().and_then(|part| part.parse::<u8>().ok());
+    let (Some(year), Some(month), Some(day)) = (year, month, day) else {
+        return Err(AppError::new(
+            "planner.date_invalid",
+            "Check the calendar date.",
+        ));
+    };
+    let month = time::Month::try_from(month)
+        .map_err(|_| AppError::new("planner.date_invalid", "Check the calendar date."))?;
+    time::Date::from_calendar_date(year, month, day)
+        .ok()
+        .and_then(time::Date::next_day)
+        .map(|date| date.to_string())
+        .ok_or_else(|| AppError::new("planner.date_invalid", "Check the calendar date."))
+}
+
+fn google_event_payload(item: &PlannerItemRecord) -> AppResult<serde_json::Value> {
+    let (start, end) = match item.schedule.as_ref() {
+        Some(PlannerScheduleRecord::DateOnly { date })
+        | Some(PlannerScheduleRecord::AllDay { date }) => (
+            serde_json::json!({ "date": date }),
+            serde_json::json!({ "date": next_google_date(date)? }),
+        ),
+        Some(PlannerScheduleRecord::Exact {
+            start_epoch_seconds,
+            end_epoch_seconds,
+            timezone,
+        }) => {
+            let format_epoch = |epoch| {
+                time::OffsetDateTime::from_unix_timestamp(epoch)
+                    .map_err(|_| {
+                        AppError::new("planner.schedule_invalid", "Check the event time.")
+                    })?
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .map_err(|_| AppError::new("planner.schedule_invalid", "Check the event time."))
+            };
+            let end_epoch = end_epoch_seconds.unwrap_or(start_epoch_seconds + 3_600);
+            (
+                serde_json::json!({
+                    "dateTime": format_epoch(*start_epoch_seconds)?,
+                    "timeZone": timezone,
+                }),
+                serde_json::json!({
+                    "dateTime": format_epoch(end_epoch)?,
+                    "timeZone": timezone,
+                }),
+            )
+        }
+        None => {
+            return Err(AppError::new(
+                "planner.schedule_required",
+                "Choose a date or time for the calendar event.",
+            ));
+        }
+    };
+    Ok(serde_json::json!({
+        "summary": item.title,
+        "description": item.details,
+        "location": item.location,
+        "start": start,
+        "end": end,
+    }))
+}
+
+fn create_google_planner_item(
+    database: &Database,
+    brain_workspace_id: &str,
+    draft: PlannerItemDraftRecord,
+) -> AppResult<PlannerItemRecord> {
+    let now = now_epoch_seconds();
+    let kind = draft.kind.unwrap_or_else(|| "task".into());
+    let candidate = PlannerItemRecord {
+        id: format!("planner_{}", UlidGenerator.next_id()),
+        kind: kind.clone(),
+        title: draft.title.trim().to_owned(),
+        details: draft.details,
+        location: draft.location,
+        schedule: draft.schedule,
+        status: "open".into(),
+        project_id: draft.project_id,
+        source: "local".into(),
+        source_link: None,
+        provider_link: None,
+        recurrence_rule: None,
+        sync_status: "pending".into(),
+        conflict_message: None,
+        created_at_epoch_seconds: now,
+        updated_at_epoch_seconds: now,
+    };
+    validate_planner_item(&candidate)?;
+    let provider = google_write_provider(database, &kind)?;
+    let (mut item, provider_etag, provider_hash) = if kind == "task" {
+        let list = provider.task_lists()?.into_iter().next().ok_or_else(|| {
+            AppError::new(
+                "google.task_list_missing",
+                "Create a Google Tasks list first.",
+            )
+        })?;
+        let due = google_task_due(candidate.schedule.as_ref())?;
+        let task = provider.create_task(
+            &list.provider_id,
+            &candidate.title,
+            candidate.details.as_deref(),
+            due.as_deref(),
+        )?;
+        let etag = task.etag.clone();
+        let hash = task.payload_hash.clone();
+        (planner_item_from_google_task(&task), etag, hash)
+    } else if kind == "calendar" {
+        let event = provider.create_event(&google_event_payload(&candidate)?)?;
+        let etag = event.etag.clone();
+        let hash = event.payload_hash.clone();
+        (planner_item_from_google_event(&event), etag, hash)
+    } else {
+        return Err(AppError::new(
+            "google.kind_unsupported",
+            "Only tasks and calendar events can be added to Google.",
+        ));
+    };
+    item.project_id = candidate.project_id;
+    item.provider_link
+        .as_ref()
+        .ok_or_else(|| AppError::new("google.item_invalid", "Google returned an invalid item."))?;
+    planner_upsert_google_item(
+        database,
+        brain_workspace_id,
+        item.clone(),
+        provider_etag.as_deref(),
+        &provider_hash,
+    )?;
+    Ok(item)
+}
+
+fn update_google_planner_item(
+    database: &Database,
+    brain_workspace_id: &str,
+    candidate: &PlannerItemRecord,
+) -> AppResult<PlannerItemRecord> {
+    let provider = google_write_provider(database, &candidate.kind)?;
+    let object_id = candidate
+        .provider_link
+        .as_ref()
+        .filter(|link| link.provider == "google")
+        .map(|link| link.object_id.as_str())
+        .ok_or_else(|| AppError::new("google.item_invalid", "The Google item link is invalid."))?;
+    let (mut item, provider_etag, provider_hash) =
+        if let Some(value) = object_id.strip_prefix("tasks:") {
+            let (task_list_id, task_id) = value.split_once(':').ok_or_else(|| {
+                AppError::new("google.item_invalid", "The Google task link is invalid.")
+            })?;
+            let due = google_task_due(candidate.schedule.as_ref())?;
+            let status = if candidate.status == "completed" {
+                "completed"
+            } else {
+                "needsAction"
+            };
+            let task = provider.update_task(
+                task_list_id,
+                task_id,
+                &candidate.title,
+                candidate.details.as_deref(),
+                due.as_deref(),
+                status,
+            )?;
+            let etag = task.etag.clone();
+            let hash = task.payload_hash.clone();
+            (planner_item_from_google_task(&task), etag, hash)
+        } else if let Some(event_id) = object_id.strip_prefix("calendar:primary:") {
+            let event = provider.update_event(event_id, &google_event_payload(candidate)?)?;
+            let etag = event.etag.clone();
+            let hash = event.payload_hash.clone();
+            (planner_item_from_google_event(&event), etag, hash)
+        } else {
+            return Err(AppError::new(
+                "google.item_invalid",
+                "The Google item link is invalid.",
+            ));
+        };
+    item.project_id.clone_from(&candidate.project_id);
+    planner_upsert_google_item(
+        database,
+        brain_workspace_id,
+        item.clone(),
+        provider_etag.as_deref(),
+        &provider_hash,
+    )?;
+    Ok(item)
+}
+
+fn delete_google_planner_item(database: &Database, item: &PlannerItemRecord) -> AppResult<()> {
+    let provider = google_write_provider(database, &item.kind)?;
+    let object_id = item
+        .provider_link
+        .as_ref()
+        .filter(|link| link.provider == "google")
+        .map(|link| link.object_id.as_str())
+        .ok_or_else(|| AppError::new("google.item_invalid", "The Google item link is invalid."))?;
+    if let Some(value) = object_id.strip_prefix("tasks:") {
+        let (task_list_id, task_id) = value.split_once(':').ok_or_else(|| {
+            AppError::new("google.item_invalid", "The Google task link is invalid.")
+        })?;
+        provider.delete_task(task_list_id, task_id)
+    } else if let Some(event_id) = object_id.strip_prefix("calendar:primary:") {
+        provider.delete_event(event_id)
+    } else {
+        Err(AppError::new(
+            "google.item_invalid",
+            "The Google item link is invalid.",
+        ))
+    }
+}
+
 fn load_workspace_registry() -> AppResult<WorkspaceRegistry> {
     let database = database()?;
     let stored = database.with_connection(|connection| {
@@ -577,6 +1869,191 @@ pub fn shell_save_layout(layout: ShellLayout) -> CommandResult<ShellLayout> {
 }
 
 #[tauri::command]
+pub fn integration_settings_get() -> CommandResult<IntegrationSettings> {
+    let result = database().and_then(|database| load_integration_settings(&database));
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn integration_settings_save(
+    update: IntegrationSettingsUpdate,
+) -> CommandResult<IntegrationSettings> {
+    let result = database().and_then(|database| save_integration_settings(&database, update));
+    CommandResult::from_result(result, correlation_id())
+}
+
+fn google_operation_busy() -> AppError {
+    AppError::new(
+        "google.operation_in_progress",
+        "Another Google connection or synchronization is already in progress.",
+    )
+    .retryable(true)
+}
+
+#[tauri::command]
+pub fn google_connection_status_get(
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<GoogleConnectionStatus> {
+    let result = runtime
+        .database
+        .as_ref()
+        .ok_or_else(|| {
+            AppError::new(
+                "google.storage_unavailable",
+                "Google connection storage is unavailable. Restart the application and try again.",
+            )
+        })
+        .and_then(|database| {
+            google_connection_status(
+                database,
+                runtime.google_operation_active.load(Ordering::Acquire),
+            )
+        });
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub async fn google_connect(
+    brain_workspace_id: String,
+    runtime: State<'_, AppRuntime>,
+) -> Result<CommandResult<GoogleSyncSummary>, ()> {
+    let command_correlation = correlation_id();
+    let initial = (|| {
+        ensure_planner_brain(&runtime, &brain_workspace_id, true)?;
+        let database = runtime.database.as_ref().cloned().ok_or_else(|| {
+            AppError::new(
+                "google.storage_unavailable",
+                "Google connection storage is unavailable. Restart the application and try again.",
+            )
+        })?;
+        runtime
+            .google_operation_active
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| google_operation_busy())?;
+        Ok(database)
+    })();
+    let database = match initial {
+        Ok(database) => database,
+        Err(error) => return Ok(CommandResult::from_result(Err(error), command_correlation)),
+    };
+    let workspace_id = brain_workspace_id;
+    let worker_database = database.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let settings = load_integration_settings(&worker_database)?.google;
+        let client_id = google_client_id(&settings)?;
+        let client_secret = google_client_secret(client_id)?;
+        let authorization = authorize_google(client_id, &client_secret, google_access(&settings))?;
+        store_refresh_token(&authorization.refresh_token)?;
+        upsert_google_account(&worker_database, &settings)?;
+        sync_google(&worker_database, &workspace_id)
+    })
+    .await
+    .map_err(|_| {
+        AppError::new(
+            "google.operation_failed",
+            "The Google connection stopped unexpectedly. Try again.",
+        )
+    })
+    .and_then(|result| result);
+    runtime
+        .google_operation_active
+        .store(false, Ordering::Release);
+    Ok(CommandResult::from_result(result, command_correlation))
+}
+
+#[tauri::command]
+pub async fn google_sync(
+    brain_workspace_id: String,
+    runtime: State<'_, AppRuntime>,
+) -> Result<CommandResult<GoogleSyncSummary>, ()> {
+    let command_correlation = correlation_id();
+    let initial = (|| {
+        ensure_planner_brain(&runtime, &brain_workspace_id, true)?;
+        let database = runtime.database.as_ref().cloned().ok_or_else(|| {
+            AppError::new(
+                "google.storage_unavailable",
+                "Google sync storage is unavailable. Restart the application and try again.",
+            )
+        })?;
+        runtime
+            .google_operation_active
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| google_operation_busy())?;
+        Ok(database)
+    })();
+    let database = match initial {
+        Ok(database) => database,
+        Err(error) => return Ok(CommandResult::from_result(Err(error), command_correlation)),
+    };
+    let result =
+        tauri::async_runtime::spawn_blocking(move || sync_google(&database, &brain_workspace_id))
+            .await
+            .map_err(|_| {
+                AppError::new(
+                    "google.sync_failed",
+                    "Google sync stopped unexpectedly. Try again.",
+                )
+            })
+            .and_then(|result| result);
+    runtime
+        .google_operation_active
+        .store(false, Ordering::Release);
+    Ok(CommandResult::from_result(result, command_correlation))
+}
+
+#[tauri::command]
+pub async fn google_disconnect(
+    runtime: State<'_, AppRuntime>,
+) -> Result<CommandResult<GoogleConnectionStatus>, ()> {
+    let command_correlation = correlation_id();
+    let initial = (|| {
+        let database = runtime.database.as_ref().cloned().ok_or_else(|| {
+            AppError::new(
+                "google.storage_unavailable",
+                "Google connection storage is unavailable. Restart the application and try again.",
+            )
+        })?;
+        runtime
+            .google_operation_active
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| google_operation_busy())?;
+        Ok(database)
+    })();
+    let database = match initial {
+        Ok(database) => database,
+        Err(error) => return Ok(CommandResult::from_result(Err(error), command_correlation)),
+    };
+    let worker_database = database.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let settings = load_integration_settings(&worker_database)?.google;
+        let token = load_refresh_token()?;
+        let remote_revoked = match (settings.oauth_client_id.as_deref(), token.as_deref()) {
+            (Some(_client_id), Some(refresh_token)) => revoke_google(refresh_token).is_ok(),
+            _ => true,
+        };
+        delete_refresh_token()?;
+        mark_google_disconnected(&worker_database)?;
+        let mut status = google_connection_status(&worker_database, false)?;
+        if !remote_revoked {
+            status.message = "Disconnected locally. Google could not be reached to revoke the grant; you can also remove Second Brain OS from your Google Account.".into();
+        }
+        Ok(status)
+    })
+    .await
+    .map_err(|_| {
+        AppError::new(
+            "google.disconnect_failed",
+            "Google disconnect stopped unexpectedly. Try again.",
+        )
+    })
+    .and_then(|result| result);
+    runtime
+        .google_operation_active
+        .store(false, Ordering::Release);
+    Ok(CommandResult::from_result(result, command_correlation))
+}
+
+#[tauri::command]
 pub fn job_cancel(job_id: String) -> CommandResult<JobCancellation> {
     CommandResult::from_result(
         Ok(JobCancellation {
@@ -609,6 +2086,16 @@ fn runtime_terminals(
     })
 }
 
+fn runtime_agents(runtime: &AppRuntime) -> AppResult<MutexGuard<'_, CodexAppServerRuntime>> {
+    runtime.agents.lock().map_err(|_| {
+        AppError::new(
+            "agent.runtime_locked",
+            "The managed agent runtime is unavailable.",
+        )
+        .retryable(true)
+    })
+}
+
 fn workspace_summary(record: &crate::workspace::WorkspaceRecord) -> WorkspaceSummary {
     let capabilities = record.trust_level.capabilities();
     WorkspaceSummary {
@@ -621,6 +2108,606 @@ fn workspace_summary(record: &crate::workspace::WorkspaceRecord) -> WorkspaceSum
         can_write: capabilities.write,
         can_use_terminal: capabilities.terminal,
     }
+}
+
+fn project_catalog(
+    runtime: &AppRuntime,
+    brain_workspace_id: &str,
+    write: bool,
+) -> AppResult<ProjectCatalog> {
+    let record = {
+        let registry = runtime_workspaces(runtime)?;
+        registry
+            .get(&WorkspaceId::from(brain_workspace_id))
+            .map_err(|error| app_error("project.brain_unavailable", error))?
+            .clone()
+    };
+    if record.kind != WorkspaceKind::Brain {
+        return Err(AppError::new(
+            "project.brain_required",
+            "Projects must be stored in a Brain workspace.",
+        ));
+    }
+    let capabilities = record.trust_level.capabilities();
+    if !capabilities.read || (write && !capabilities.write) {
+        return Err(AppError::new(
+            "project.brain_access_denied",
+            if write {
+                "The Brain workspace is not writable."
+            } else {
+                "The Brain workspace is not readable."
+            },
+        ));
+    }
+    let root = record.root_path().ok_or_else(|| {
+        AppError::new(
+            "project.brain_unavailable",
+            "The Brain workspace has no available root.",
+        )
+    })?;
+    ProjectCatalog::new(record.id.as_str(), root)
+        .map_err(|error| app_error("project.catalog_unavailable", error))
+}
+
+fn consume_root_selection(runtime: &AppRuntime, grant_id: &str) -> AppResult<RootSelectionGrant> {
+    let mut grants = runtime.root_selection_grants.lock().map_err(|_| {
+        AppError::new(
+            "runtime.unavailable",
+            "Folder selection is temporarily unavailable. Please try again.",
+        )
+        .retryable(true)
+    })?;
+    grants.retain(|_, grant| grant.expires_at > Instant::now());
+    grants.remove(grant_id).ok_or_else(|| {
+        AppError::new(
+            "workspace.root_grant_invalid",
+            "This folder selection expired or was already used. Choose the folder again.",
+        )
+        .retryable(true)
+    })
+}
+
+fn resolve_project_location(
+    runtime: &AppRuntime,
+    project_name: &str,
+    input: ProjectLocationInput,
+) -> AppResult<Option<ProjectLocation>> {
+    match input {
+        ProjectLocationInput::None => Ok(None),
+        ProjectLocationInput::ExistingWorkspace { workspace_id } => {
+            let record = {
+                let registry = runtime_workspaces(runtime)?;
+                registry
+                    .get(&WorkspaceId::from(workspace_id.as_str()))
+                    .map_err(|error| app_error("project.location_unavailable", error))?
+                    .clone()
+            };
+            if record.kind == WorkspaceKind::Collection || record.root_path().is_none() {
+                return Err(AppError::new(
+                    "project.location_invalid",
+                    "Choose a workspace with an available folder.",
+                ));
+            }
+            Ok(Some(ProjectLocation {
+                workspace_id: record.id.as_str().to_owned(),
+                display_path: record.display_root.unwrap_or_default(),
+            }))
+        }
+        ProjectLocationInput::RootSelection {
+            grant_id,
+            trust_level,
+        } => {
+            let grant = consume_root_selection(runtime, &grant_id)?;
+            let mut registry = runtime_workspaces(runtime)?;
+            let record = if let Some(existing) = registry
+                .find_by_canonical_root(&grant.canonical_path)
+                .cloned()
+            {
+                existing
+            } else {
+                let record = registry
+                    .register(RegisterWorkspace {
+                        id: None,
+                        name: project_name.to_owned(),
+                        kind: WorkspaceKind::Project,
+                        display_root: Some(grant.canonical_path),
+                        trust_level: Some(trust_level),
+                    })
+                    .map_err(|error| app_error("project.location_registration_failed", error))?;
+                persist_workspace_registry(&registry)?;
+                record
+            };
+            Ok(Some(ProjectLocation {
+                workspace_id: record.id.as_str().to_owned(),
+                display_path: grant.display_path,
+            }))
+        }
+    }
+}
+
+fn publish_audit_event(
+    runtime: &AppRuntime,
+    kind: EventKind,
+    payload: serde_json::Value,
+    workspace_id: Option<String>,
+    correlation: Option<String>,
+) -> AppResult<()> {
+    let event = EventEnvelope::new(
+        kind,
+        payload,
+        workspace_id,
+        correlation,
+        Actor {
+            kind: "user".into(),
+            id: Some("desktop".into()),
+        },
+        1,
+        RedactionClass::Internal,
+        true,
+    )?;
+    runtime.events.publish(event)?;
+    Ok(())
+}
+
+fn activity_category(event_type: &str) -> &'static str {
+    if event_type.starts_with("agent.") {
+        "runs"
+    } else if event_type.starts_with("file.") || event_type.starts_with("git.") {
+        "changes"
+    } else if event_type.contains("approval")
+        || event_type.contains("conflict")
+        || event_type.ends_with("failed")
+    {
+        "attention"
+    } else {
+        "history"
+    }
+}
+
+fn list_activity(database: &Database, request: &ActivityListRequest) -> AppResult<ActivityPage> {
+    let limit = request.limit.unwrap_or(50).clamp(1, 100);
+    let category = request.category.as_deref().unwrap_or("all");
+    if !matches!(
+        category,
+        "all" | "attention" | "runs" | "changes" | "history"
+    ) {
+        return Err(AppError::new(
+            "activity.category_invalid",
+            "Choose a supported Activity category.",
+        ));
+    }
+    let project_path = request
+        .project_id
+        .as_ref()
+        .map(|_| "$.payload.projectId".to_owned());
+    let mut items = database
+        .with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT event_id, event_type, occurred_at, workspace_id,
+                    correlation_id, actor_type, payload_json
+             FROM audit_events
+             WHERE (?1 IS NULL OR workspace_id = ?1)
+               AND (?2 IS NULL OR json_extract(payload_json, ?3) = ?2)
+               AND (
+                 ?4 = 'all'
+                 OR (?4 = 'runs' AND event_type LIKE 'agent.%')
+                 OR (?4 = 'changes' AND (event_type LIKE 'file.%' OR event_type LIKE 'git.%'))
+                 OR (?4 = 'attention' AND (
+                   event_type LIKE '%.approval.%'
+                   OR event_type LIKE '%.conflict.%'
+                   OR event_type LIKE '%.failed'
+                 ))
+                 OR (?4 = 'history' AND event_type NOT LIKE 'agent.%')
+               )
+               AND (
+                 ?5 IS NULL
+                 OR (occurred_at, event_id) < (
+                   SELECT occurred_at, event_id FROM audit_events WHERE event_id = ?5
+                 )
+               )
+             ORDER BY occurred_at DESC, event_id DESC
+             LIMIT ?6",
+            )?;
+            let rows = statement.query_map(
+                params![
+                    request.workspace_id,
+                    request.project_id,
+                    project_path,
+                    category,
+                    request.cursor,
+                    i64::try_from(limit + 1).unwrap_or(101),
+                ],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                    ))
+                },
+            )?;
+            rows.collect::<Result<Vec<_>, _>>()
+        })?
+        .into_iter()
+        .map(
+            |(
+                id,
+                event_type,
+                timestamp,
+                workspace_id,
+                correlation_id,
+                actor_type,
+                payload_json,
+            )| {
+                let envelope: serde_json::Value =
+                    serde_json::from_str(&payload_json).map_err(|error| {
+                        AppError::new("activity.payload_invalid", "An Activity record is invalid.")
+                            .with_details(serde_json::json!({ "reason": error.to_string() }))
+                    })?;
+                let payload = envelope
+                    .get("payload")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                Ok(ActivityItem {
+                    id,
+                    category: activity_category(&event_type).into(),
+                    event_type,
+                    timestamp,
+                    workspace_id,
+                    correlation_id,
+                    actor_type,
+                    payload,
+                })
+            },
+        )
+        .collect::<AppResult<Vec<_>>>()?;
+    let next_cursor = (items.len() > limit)
+        .then(|| items.get(limit - 1).map(|item| item.id.clone()))
+        .flatten();
+    items.truncate(limit);
+    Ok(ActivityPage { items, next_cursor })
+}
+
+fn now_epoch_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| i64::try_from(duration.as_secs()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
+
+fn validate_planner_kind(kind: &str) -> AppResult<()> {
+    if matches!(kind, "task" | "milestone" | "focus_block" | "calendar") {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "planner.kind_invalid",
+            "Choose a task, milestone, focus block, or calendar item.",
+        ))
+    }
+}
+
+fn validate_planner_status(status: &str) -> AppResult<()> {
+    if matches!(status, "open" | "in_progress" | "completed" | "archived") {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "planner.status_invalid",
+            "Choose a supported planner status.",
+        ))
+    }
+}
+
+fn validate_planner_schedule(schedule: &PlannerScheduleRecord) -> AppResult<()> {
+    match schedule {
+        PlannerScheduleRecord::DateOnly { date } | PlannerScheduleRecord::AllDay { date } => {
+            DateOnly::new(date)
+                .map(|_| ())
+                .map_err(|error| app_error("planner.date_invalid", error))
+        }
+        PlannerScheduleRecord::Exact {
+            start_epoch_seconds,
+            end_epoch_seconds,
+            timezone,
+        } => {
+            if timezone.trim().is_empty()
+                || end_epoch_seconds.is_some_and(|end| end < *start_epoch_seconds)
+            {
+                Err(AppError::new(
+                    "planner.schedule_invalid",
+                    "Check the planner date, time, and timezone.",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
+fn validate_planner_item(item: &PlannerItemRecord) -> AppResult<()> {
+    let title_length = item.title.trim().chars().count();
+    if title_length == 0 || title_length > 240 {
+        return Err(AppError::new(
+            "planner.title_invalid",
+            "Enter a title between 1 and 240 characters.",
+        ));
+    }
+    if item
+        .details
+        .as_ref()
+        .is_some_and(|value| value.chars().count() > 20_000)
+    {
+        return Err(AppError::new(
+            "planner.details_too_long",
+            "Planner details must be 20,000 characters or fewer.",
+        ));
+    }
+    if item
+        .location
+        .as_ref()
+        .is_some_and(|value| value.chars().count() > 500)
+    {
+        return Err(AppError::new(
+            "planner.location_too_long",
+            "Event locations must be 500 characters or fewer.",
+        ));
+    }
+    validate_planner_kind(&item.kind)?;
+    validate_planner_status(&item.status)?;
+    if let Some(schedule) = item.schedule.as_ref() {
+        validate_planner_schedule(schedule)?;
+    }
+    Ok(())
+}
+
+fn ensure_planner_brain(runtime: &AppRuntime, workspace_id: &str, write: bool) -> AppResult<()> {
+    let record = registered_workspace(runtime, workspace_id)?;
+    if record.kind != WorkspaceKind::Brain {
+        return Err(AppError::new(
+            "planner.brain_required",
+            "Planner items must belong to the Brain workspace.",
+        ));
+    }
+    let capabilities = record.trust_level.capabilities();
+    if !capabilities.read || (write && !capabilities.write) {
+        return Err(AppError::new(
+            "planner.access_denied",
+            "This Brain does not grant the access required for that planner action.",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_planner_project(
+    runtime: &AppRuntime,
+    brain_workspace_id: &str,
+    project_id: Option<&str>,
+) -> AppResult<()> {
+    let Some(project_id) = project_id else {
+        return Ok(());
+    };
+    project_catalog(runtime, brain_workspace_id, false)?
+        .get(&ProjectId::from(project_id))
+        .map(|_| ())
+        .map_err(|error| app_error("planner.project_unavailable", error))
+}
+
+fn planner_schedule_columns(
+    schedule: Option<&PlannerScheduleRecord>,
+) -> (&'static str, Option<String>, Option<String>) {
+    match schedule {
+        None => ("none", None, None),
+        Some(PlannerScheduleRecord::DateOnly { date }) => ("date_only", Some(date.clone()), None),
+        Some(PlannerScheduleRecord::AllDay { date }) => ("all_day", Some(date.clone()), None),
+        Some(PlannerScheduleRecord::Exact {
+            start_epoch_seconds,
+            end_epoch_seconds,
+            timezone,
+        }) => (
+            "exact",
+            Some(
+                serde_json::json!({
+                    "startEpochSeconds": start_epoch_seconds,
+                    "endEpochSeconds": end_epoch_seconds,
+                })
+                .to_string(),
+            ),
+            Some(timezone.clone()),
+        ),
+    }
+}
+
+fn planner_store_item(
+    database: &Database,
+    brain_workspace_id: &str,
+    item: &PlannerItemRecord,
+    insert: bool,
+) -> AppResult<()> {
+    let value = serde_json::to_string(&PlannerLocalSnapshot {
+        schema_version: 1,
+        item: item.clone(),
+    })
+    .map_err(|error| {
+        AppError::new(
+            "planner.serialize_failed",
+            "The planner item could not be saved.",
+        )
+        .with_details(serde_json::json!({ "reason": error.to_string() }))
+    })?;
+    let (schedule_kind, scheduled_value, timezone) =
+        planner_schedule_columns(item.schedule.as_ref());
+    // This column references a knowledge document identity, not a display path.
+    // Until planner ingestion resolves that identity, the source link stays in
+    // the versioned local snapshot and the foreign key remains empty.
+    let source_document_id: Option<&str> = None;
+    let source_task_id = item
+        .source_link
+        .as_ref()
+        .and_then(|link| link.explicit_task_id.as_deref());
+    let source_start_line = item
+        .source_link
+        .as_ref()
+        .and_then(|link| link.start_line)
+        .map(i64::from);
+    let source_end_line = item
+        .source_link
+        .as_ref()
+        .and_then(|link| link.end_line)
+        .map(i64::from);
+    let result = database.with_connection(|connection| {
+        if insert {
+            connection.execute(
+                "INSERT INTO planner_items (
+                    item_id, workspace_id, kind, provider, provider_item_id, project_id,
+                    title, status, schedule_kind, scheduled_value, timezone,
+                    source_document_id, source_task_id, source_start_line, source_end_line,
+                    local_enrichment_json, provider_fields_json, provider_etag, sync_status,
+                    conflict_status, created_at, updated_at
+                 ) VALUES (
+                    ?1, ?2, ?3, 'local', NULL, ?4, ?5, ?6, ?7, ?8, ?9,
+                    ?10, ?11, ?12, ?13, ?14, '{}', NULL, ?15, 'none', ?16, ?17
+                 )",
+                params![
+                    item.id,
+                    brain_workspace_id,
+                    item.kind,
+                    item.project_id,
+                    item.title,
+                    item.status,
+                    schedule_kind,
+                    scheduled_value,
+                    timezone,
+                    source_document_id,
+                    source_task_id,
+                    source_start_line,
+                    source_end_line,
+                    value,
+                    item.sync_status,
+                    item.created_at_epoch_seconds.to_string(),
+                    item.updated_at_epoch_seconds.to_string(),
+                ],
+            )?;
+        } else {
+            connection.execute(
+                "UPDATE planner_items SET
+                    project_id = ?3, title = ?4, status = ?5, schedule_kind = ?6,
+                    scheduled_value = ?7, timezone = ?8, source_document_id = ?9,
+                    source_task_id = ?10, source_start_line = ?11, source_end_line = ?12,
+                    local_enrichment_json = ?13, sync_status = ?14, updated_at = ?15
+                 WHERE item_id = ?1 AND workspace_id = ?2 AND provider = 'local'",
+                params![
+                    item.id,
+                    brain_workspace_id,
+                    item.project_id,
+                    item.title,
+                    item.status,
+                    schedule_kind,
+                    scheduled_value,
+                    timezone,
+                    source_document_id,
+                    source_task_id,
+                    source_start_line,
+                    source_end_line,
+                    value,
+                    item.sync_status,
+                    item.updated_at_epoch_seconds.to_string(),
+                ],
+            )?;
+        }
+        Ok(())
+    });
+    result.map_err(|error| {
+        if error.to_string().contains("planner_source_task") {
+            AppError::new(
+                "planner.source_duplicate",
+                "That Markdown task is already linked to another planner item.",
+            )
+        } else {
+            error
+        }
+    })
+}
+
+fn planner_list_items(
+    database: &Database,
+    request: &PlannerListRequest,
+) -> AppResult<Vec<PlannerItemRecord>> {
+    let values = database.with_connection(|connection| {
+        let range = request.range.as_ref();
+        let mut statement = connection.prepare(
+            "SELECT local_enrichment_json FROM planner_items
+             WHERE workspace_id = ?1 AND (?2 IS NULL OR project_id = ?2)
+               AND (
+                 kind = 'task' OR ?3 IS NULL OR
+                 (schedule_kind IN ('date_only', 'all_day')
+                   AND scheduled_value >= ?3 AND scheduled_value < ?4) OR
+                 (schedule_kind = 'exact'
+                   AND CAST(json_extract(scheduled_value, '$.startEpochSeconds') AS INTEGER) >= ?5
+                   AND CAST(json_extract(scheduled_value, '$.startEpochSeconds') AS INTEGER) < ?6)
+               )
+             ORDER BY updated_at DESC, item_id ASC",
+        )?;
+        let rows = statement.query_map(
+            params![
+                request.brain_workspace_id,
+                request.project_id,
+                range.map(|value| value.start_date.as_str()),
+                range.map(|value| value.end_date.as_str()),
+                range.map(|value| value.start_epoch_seconds),
+                range.map(|value| value.end_epoch_seconds),
+            ],
+            |row| row.get::<_, String>(0),
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+    })?;
+    values
+        .into_iter()
+        .map(|value| {
+            serde_json::from_str::<PlannerLocalSnapshot>(&value)
+                .map(|snapshot| snapshot.item)
+                .map_err(|error| {
+                    AppError::new(
+                        "planner.item_invalid",
+                        "A stored planner item could not be read.",
+                    )
+                    .with_details(serde_json::json!({ "reason": error.to_string() }))
+                })
+        })
+        .collect()
+}
+
+fn planner_get_item(
+    database: &Database,
+    brain_workspace_id: &str,
+    item_id: &str,
+) -> AppResult<PlannerItemRecord> {
+    let value = database.with_connection(|connection| {
+        connection
+            .query_row(
+                "SELECT local_enrichment_json FROM planner_items
+                 WHERE item_id = ?1 AND workspace_id = ?2",
+                params![item_id, brain_workspace_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+    })?;
+    let value = value.ok_or_else(|| {
+        AppError::new(
+            "planner.item_missing",
+            "That planner item no longer exists.",
+        )
+    })?;
+    serde_json::from_str::<PlannerLocalSnapshot>(&value)
+        .map(|snapshot| snapshot.item)
+        .map_err(|error| {
+            AppError::new(
+                "planner.item_invalid",
+                "The stored planner item could not be read.",
+            )
+            .with_details(serde_json::json!({ "reason": error.to_string() }))
+        })
 }
 
 fn app_error(code: &str, error: impl std::fmt::Display) -> AppError {
@@ -1016,13 +3103,81 @@ fn git_change_status(change: &crate::workspace::git::GitChange) -> String {
 }
 
 #[tauri::command]
+pub fn workspace_select_root(
+    app: AppHandle,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<Option<RootSelection>> {
+    let result = (|| {
+        let Some(selected) = app
+            .dialog()
+            .file()
+            .set_title("Choose a Project folder")
+            .set_can_create_directories(true)
+            .blocking_pick_folder()
+        else {
+            return Ok(None);
+        };
+        let display_path = selected
+            .into_path()
+            .map_err(|error| app_error("workspace.folder_selection_invalid", error))?;
+        let canonical_path = std::fs::canonicalize(&display_path)
+            .map_err(|error| app_error("workspace.folder_selection_invalid", error))?;
+        if !canonical_path.is_dir() {
+            return Err(AppError::new(
+                "workspace.folder_selection_invalid",
+                "The selected location is not a folder.",
+            ));
+        }
+        let grant_id = format!("root_grant_{}", ulid::Ulid::new());
+        let display_path = display_path.to_string_lossy().into_owned();
+        let suggested_name = canonical_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Project")
+            .to_owned();
+        let mut grants = runtime.root_selection_grants.lock().map_err(|_| {
+            AppError::new(
+                "runtime.unavailable",
+                "Folder selection is temporarily unavailable. Please try again.",
+            )
+            .retryable(true)
+        })?;
+        grants.retain(|_, grant| grant.expires_at > Instant::now());
+        grants.insert(
+            grant_id.clone(),
+            RootSelectionGrant {
+                canonical_path,
+                display_path: display_path.clone(),
+                expires_at: Instant::now() + ROOT_GRANT_LIFETIME,
+            },
+        );
+        Ok(Some(RootSelection {
+            grant_id,
+            display_path,
+            suggested_name,
+        }))
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
 pub fn workspace_register(
     registration: WorkspaceRegistration,
     runtime: State<'_, AppRuntime>,
 ) -> CommandResult<WorkspaceSummary> {
     let result = (|| {
-        let display_root =
-            (registration.kind != WorkspaceKind::Collection).then(|| registration.root_path.into());
+        let display_root = if registration.kind == WorkspaceKind::Collection {
+            None
+        } else {
+            let grant_id = registration.root_grant_id.as_deref().ok_or_else(|| {
+                AppError::new(
+                    "workspace.root_grant_required",
+                    "Choose the workspace folder again before registering it.",
+                )
+            })?;
+            let grant = consume_root_selection(&runtime, grant_id)?;
+            Some(grant.canonical_path)
+        };
         let mut registry = runtime_workspaces(&runtime)?;
         let record = registry
             .register(RegisterWorkspace {
@@ -1037,6 +3192,430 @@ pub fn workspace_register(
         Ok(workspace_summary(&record))
     })();
     CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn project_list(
+    brain_workspace_id: String,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<Vec<ProjectRecord>> {
+    let result = project_catalog(&runtime, &brain_workspace_id, false).and_then(|catalog| {
+        catalog
+            .list()
+            .map_err(|error| app_error("project.list_failed", error))
+    });
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn project_get(
+    request: ProjectReadRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<ProjectRecord> {
+    let result =
+        project_catalog(&runtime, &request.brain_workspace_id, false).and_then(|catalog| {
+            catalog
+                .get(&ProjectId::from(request.project_id.as_str()))
+                .map_err(|error| app_error("project.read_failed", error))
+        });
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn project_create(
+    request: ProjectCreateRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<ProjectRecord> {
+    let command_correlation = correlation_id();
+    let result = (|| {
+        let location = resolve_project_location(&runtime, &request.name, request.location)?;
+        let catalog = project_catalog(&runtime, &request.brain_workspace_id, true)?;
+        let project = catalog
+            .create(CreateProject {
+                name: request.name,
+                outcome: request.outcome,
+                template_id: request.template_id,
+                instructions: request.instructions,
+                tags: request.tags,
+                location,
+            })
+            .map_err(|error| app_error("project.create_failed", error))?;
+        publish_audit_event(
+            &runtime,
+            EventKind::Custom("project.created".into()),
+            serde_json::json!({
+                "projectId": project.id.as_str(),
+                "changedFields": ["name", "outcome", "status", "progressPercent", "location"],
+                "linkedWorkspaceId": project.location.as_ref().map(|location| &location.workspace_id),
+            }),
+            Some(request.brain_workspace_id),
+            Some(command_correlation.clone()),
+        )?;
+        Ok(project)
+    })();
+    CommandResult::from_result(result, command_correlation)
+}
+
+#[tauri::command]
+pub fn project_update(
+    request: ProjectUpdateRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<ProjectRecord> {
+    let command_correlation = correlation_id();
+    let changed_fields = project_patch_fields(&request.patch);
+    let result = project_catalog(&runtime, &request.brain_workspace_id, true).and_then(|catalog| {
+        let project = catalog
+            .update(&ProjectId::from(request.project_id.as_str()), request.patch)
+            .map_err(|error| app_error("project.update_failed", error))?;
+        publish_audit_event(
+            &runtime,
+            EventKind::Custom("project.updated".into()),
+            serde_json::json!({
+                "projectId": project.id.as_str(),
+                "changedFields": changed_fields,
+                "linkedWorkspaceId": project.location.as_ref().map(|location| &location.workspace_id),
+            }),
+            Some(request.brain_workspace_id.clone()),
+            Some(command_correlation.clone()),
+        )?;
+        Ok(project)
+    });
+    CommandResult::from_result(result, command_correlation)
+}
+
+#[tauri::command]
+pub fn project_set_status(
+    request: ProjectStatusRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<ProjectRecord> {
+    let command_correlation = correlation_id();
+    let result = project_catalog(&runtime, &request.brain_workspace_id, true).and_then(|catalog| {
+        let project = catalog
+            .update(
+                &ProjectId::from(request.project_id.as_str()),
+                ProjectPatch {
+                    status: Some(request.status),
+                    ..ProjectPatch::default()
+                },
+            )
+            .map_err(|error| app_error("project.status_failed", error))?;
+        publish_audit_event(
+            &runtime,
+            EventKind::Custom("project.status_changed".into()),
+            serde_json::json!({
+                "projectId": project.id.as_str(),
+                "status": project.status,
+                "changedFields": ["status"],
+            }),
+            Some(request.brain_workspace_id.clone()),
+            Some(command_correlation.clone()),
+        )?;
+        Ok(project)
+    });
+    CommandResult::from_result(result, command_correlation)
+}
+
+fn project_patch_fields(patch: &ProjectPatch) -> Vec<&'static str> {
+    [
+        patch.name.as_ref().map(|_| "name"),
+        patch.outcome.as_ref().map(|_| "outcome"),
+        patch.template_id.as_ref().map(|_| "templateId"),
+        patch.instructions.as_ref().map(|_| "instructions"),
+        patch.status.as_ref().map(|_| "status"),
+        patch.progress_percent.as_ref().map(|_| "progressPercent"),
+        patch.next_milestone.as_ref().map(|_| "nextMilestone"),
+        patch.blocker.as_ref().map(|_| "blocker"),
+        patch.tags.as_ref().map(|_| "tags"),
+        patch.location.as_ref().map(|_| "location"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+#[tauri::command]
+pub fn activity_list(
+    request: ActivityListRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<ActivityPage> {
+    let result = runtime
+        .database
+        .as_ref()
+        .ok_or_else(|| {
+            AppError::new(
+                "activity.unavailable",
+                "Activity storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })
+        .and_then(|database| list_activity(database, &request));
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn planner_list(
+    request: PlannerListRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<Vec<PlannerItemRecord>> {
+    let result = (|| {
+        ensure_planner_brain(&runtime, &request.brain_workspace_id, false)?;
+        if let Some(range) = &request.range {
+            DateOnly::try_from(range.start_date.as_str())
+                .map_err(|error| app_error("planner.date_invalid", error))?;
+            DateOnly::try_from(range.end_date.as_str())
+                .map_err(|error| app_error("planner.date_invalid", error))?;
+            let valid_epoch_range = range
+                .end_epoch_seconds
+                .checked_sub(range.start_epoch_seconds)
+                .is_some_and(|seconds| seconds > 0 && seconds <= 63 * 86_400);
+            if range.start_date >= range.end_date || !valid_epoch_range {
+                return Err(AppError::new(
+                    "planner.range_invalid",
+                    "Choose a calendar range of 63 days or fewer.",
+                ));
+            }
+        }
+        ensure_planner_project(
+            &runtime,
+            &request.brain_workspace_id,
+            request.project_id.as_deref(),
+        )?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "planner.unavailable",
+                "Local planning storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        planner_list_items(database, &request)
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn planner_create(
+    request: PlannerCreateRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<PlannerItemRecord> {
+    let command_correlation = correlation_id();
+    let result = (|| {
+        ensure_planner_brain(&runtime, &request.brain_workspace_id, true)?;
+        ensure_planner_project(
+            &runtime,
+            &request.brain_workspace_id,
+            request.draft.project_id.as_deref(),
+        )?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "planner.unavailable",
+                "Local planning storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        match request.sync_target.as_deref() {
+            Some("google") => {
+                let item = create_google_planner_item(
+                    database,
+                    &request.brain_workspace_id,
+                    request.draft,
+                )?;
+                publish_audit_event(
+                    &runtime,
+                    EventKind::Custom("planner.item.created".into()),
+                    serde_json::json!({
+                        "itemId": item.id,
+                        "projectId": item.project_id,
+                        "kind": item.kind,
+                        "status": item.status,
+                        "provider": "google",
+                    }),
+                    Some(request.brain_workspace_id),
+                    Some(command_correlation.clone()),
+                )?;
+                return Ok(item);
+            }
+            None | Some("local") => {}
+            Some(_) => {
+                return Err(AppError::new(
+                    "planner.sync_target_invalid",
+                    "Choose Local or Google as the planner destination.",
+                ));
+            }
+        }
+        let now = now_epoch_seconds();
+        let item = PlannerItemRecord {
+            id: format!("planner_{}", UlidGenerator.next_id()),
+            kind: request.draft.kind.unwrap_or_else(|| "task".into()),
+            title: request.draft.title.trim().to_owned(),
+            details: request.draft.details,
+            location: request.draft.location,
+            schedule: request.draft.schedule,
+            status: "open".into(),
+            project_id: request.draft.project_id,
+            source: "local".into(),
+            source_link: None,
+            provider_link: None,
+            recurrence_rule: None,
+            sync_status: "local_only".into(),
+            conflict_message: None,
+            created_at_epoch_seconds: now,
+            updated_at_epoch_seconds: now,
+        };
+        validate_planner_item(&item)?;
+        planner_store_item(database, &request.brain_workspace_id, &item, true)?;
+        let schedule_kind = planner_schedule_columns(item.schedule.as_ref()).0;
+        publish_audit_event(
+            &runtime,
+            EventKind::Custom("planner.item.created".into()),
+            serde_json::json!({
+                "itemId": item.id,
+                "projectId": item.project_id,
+                "kind": item.kind,
+                "status": item.status,
+                "scheduleKind": schedule_kind,
+            }),
+            Some(request.brain_workspace_id),
+            Some(command_correlation.clone()),
+        )?;
+        Ok(item)
+    })();
+    CommandResult::from_result(result, command_correlation)
+}
+
+#[tauri::command]
+pub fn planner_update(
+    request: PlannerUpdateRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<PlannerItemRecord> {
+    let command_correlation = correlation_id();
+    let result = (|| {
+        ensure_planner_brain(&runtime, &request.brain_workspace_id, true)?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "planner.unavailable",
+                "Local planning storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        let mut item = planner_get_item(database, &request.brain_workspace_id, &request.item_id)?;
+        let mut changed_fields = Vec::new();
+        if let Some(title) = request.patch.title {
+            item.title = title.trim().to_owned();
+            changed_fields.push("title");
+        }
+        if request.patch.clear_details.unwrap_or(false) {
+            item.details = None;
+            changed_fields.push("details");
+        } else if let Some(details) = request.patch.details {
+            item.details = Some(details);
+            changed_fields.push("details");
+        }
+        if request.patch.clear_location.unwrap_or(false) {
+            item.location = None;
+            changed_fields.push("location");
+        } else if let Some(location) = request.patch.location {
+            item.location = Some(location.trim().to_owned());
+            changed_fields.push("location");
+        }
+        if request.patch.clear_schedule.unwrap_or(false) {
+            item.schedule = None;
+            changed_fields.push("schedule");
+        } else if let Some(schedule) = request.patch.schedule {
+            item.schedule = Some(schedule);
+            changed_fields.push("schedule");
+        }
+        if let Some(status) = request.patch.status {
+            item.status = status;
+            changed_fields.push("status");
+        }
+        if request.patch.clear_project.unwrap_or(false) {
+            item.project_id = None;
+            changed_fields.push("projectId");
+        } else if let Some(project_id) = request.patch.project_id {
+            item.project_id = Some(project_id);
+            changed_fields.push("projectId");
+        }
+        ensure_planner_project(
+            &runtime,
+            &request.brain_workspace_id,
+            item.project_id.as_deref(),
+        )?;
+        item.updated_at_epoch_seconds = now_epoch_seconds();
+        validate_planner_item(&item)?;
+        item = if item
+            .provider_link
+            .as_ref()
+            .is_some_and(|link| link.provider == "google")
+        {
+            update_google_planner_item(database, &request.brain_workspace_id, &item)?
+        } else {
+            planner_store_item(database, &request.brain_workspace_id, &item, false)?;
+            item
+        };
+        let schedule_kind = planner_schedule_columns(item.schedule.as_ref()).0;
+        publish_audit_event(
+            &runtime,
+            EventKind::Custom("planner.item.updated".into()),
+            serde_json::json!({
+                "itemId": item.id,
+                "projectId": item.project_id,
+                "kind": item.kind,
+                "status": item.status,
+                "scheduleKind": schedule_kind,
+                "changedFields": changed_fields,
+            }),
+            Some(request.brain_workspace_id),
+            Some(command_correlation.clone()),
+        )?;
+        Ok(item)
+    })();
+    CommandResult::from_result(result, command_correlation)
+}
+
+#[tauri::command]
+pub fn planner_delete(
+    request: PlannerDeleteRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<()> {
+    let command_correlation = correlation_id();
+    let result = (|| {
+        ensure_planner_brain(&runtime, &request.brain_workspace_id, true)?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "planner.unavailable",
+                "Local planning storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        let item = planner_get_item(database, &request.brain_workspace_id, &request.item_id)?;
+        if item
+            .provider_link
+            .as_ref()
+            .is_some_and(|link| link.provider == "google")
+        {
+            delete_google_planner_item(database, &item)?;
+        }
+        database.with_connection(|connection| {
+            connection.execute(
+                "DELETE FROM planner_items WHERE item_id = ?1 AND workspace_id = ?2",
+                params![request.item_id, request.brain_workspace_id],
+            )?;
+            Ok(())
+        })?;
+        publish_audit_event(
+            &runtime,
+            EventKind::Custom("planner.item.deleted".into()),
+            serde_json::json!({
+                "itemId": item.id,
+                "kind": item.kind,
+                "provider": item.provider_link.as_ref().map(|link| link.provider.as_str()).unwrap_or("local"),
+            }),
+            Some(request.brain_workspace_id),
+            Some(command_correlation.clone()),
+        )?;
+        Ok(())
+    })();
+    CommandResult::from_result(result, command_correlation)
 }
 
 #[tauri::command]
@@ -1084,6 +3663,142 @@ pub fn workspace_list_directory(
                 .collect(),
             next_cursor: page.next_cursor,
         })
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn agent_provider_probe() -> CommandResult<ProviderProbe> {
+    CommandResult::from_result(Ok(CodexAppServerRuntime::probe()), correlation_id())
+}
+
+#[tauri::command]
+pub fn agent_session_start(
+    request: StartManagedSession,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<AgentSessionSnapshot> {
+    let command_correlation = correlation_id();
+    let result = (|| {
+        let workspace = registered_workspace(&runtime, &request.workspace_id)?;
+        let capabilities = workspace.trust_level.capabilities();
+        if !capabilities.read {
+            return Err(AppError::new(
+                "agent.read_denied",
+                "This workspace does not permit managed agent reads.",
+            ));
+        }
+        let root = workspace.root_path().ok_or_else(|| {
+            AppError::new(
+                "agent.invalid_root",
+                "The managed agent requires a registered local workspace root.",
+            )
+        })?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "agent.storage_unavailable",
+                "Managed agent storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        let workspace_id = request.workspace_id.clone();
+        let sandbox = request.sandbox;
+        let snapshot =
+            runtime_agents(&runtime)?.start(database, request, root, capabilities.write)?;
+        publish_audit_event(
+            &runtime,
+            EventKind::AgentSessionStarted,
+            serde_json::json!({
+                "sessionId": snapshot.id,
+                "provider": "codex",
+                "sandbox": sandbox,
+            }),
+            Some(workspace_id),
+            Some(command_correlation.clone()),
+        )?;
+        Ok(snapshot)
+    })();
+    CommandResult::from_result(result, command_correlation)
+}
+
+#[tauri::command]
+pub fn agent_session_list(
+    workspace_id: String,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<Vec<AgentSessionSnapshot>> {
+    let result = (|| {
+        let workspace = registered_workspace(&runtime, &workspace_id)?;
+        if !workspace.trust_level.capabilities().read {
+            return Err(AppError::new(
+                "agent.read_denied",
+                "This workspace does not permit managed agent reads.",
+            ));
+        }
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "agent.storage_unavailable",
+                "Managed agent storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        runtime_agents(&runtime)?.pump_all(database)?;
+        list_persisted_sessions(database, &workspace_id)
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn agent_session_message(
+    request: ManagedSessionMessageRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<()> {
+    let result = (|| {
+        registered_workspace(&runtime, &request.workspace_id)?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "agent.storage_unavailable",
+                "Managed agent storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        runtime_agents(&runtime)?.send_message(database, &request)
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn agent_session_cancel(
+    request: ManagedSessionRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<()> {
+    let result = (|| {
+        registered_workspace(&runtime, &request.workspace_id)?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "agent.storage_unavailable",
+                "Managed agent storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        runtime_agents(&runtime)?.cancel(database, &request)
+    })();
+    CommandResult::from_result(result, correlation_id())
+}
+
+#[tauri::command]
+pub fn agent_approval_decide(
+    request: ManagedApprovalDecisionRequest,
+    runtime: State<'_, AppRuntime>,
+) -> CommandResult<()> {
+    let result = (|| {
+        registered_workspace(&runtime, &request.workspace_id)?;
+        let database = runtime.database.as_ref().ok_or_else(|| {
+            AppError::new(
+                "agent.storage_unavailable",
+                "Managed agent storage is unavailable. Restart the application and try again.",
+            )
+            .retryable(true)
+        })?;
+        runtime_agents(&runtime)?.decide_approval(database, &request)
     })();
     CommandResult::from_result(result, correlation_id())
 }
@@ -1256,6 +3971,7 @@ pub fn file_write_text(
     request: FileWriteRequest,
     runtime: State<'_, AppRuntime>,
 ) -> CommandResult<FileWriteResult> {
+    let command_correlation = request.correlation_id.clone();
     let result = (|| {
         let record = registered_workspace(&runtime, &request.path.workspace_id)?;
         if !record.trust_level.capabilities().write {
@@ -1272,6 +3988,9 @@ pub fn file_write_text(
         })?;
         let service = MutationService::new(record.id.as_str(), root)
             .map_err(|error| app_error("file.write_unavailable", error))?;
+        let workspace_id = request.path.workspace_id.clone();
+        let relative_path = request.path.relative_path.clone();
+        let created = request.base_hash.is_none();
         let mutation_path = crate::workspace::mutations::WorkspacePath::new(
             request.path.workspace_id,
             request.path.relative_path,
@@ -1295,6 +4014,25 @@ pub fn file_write_text(
                 "The save completed without a text content hash.",
             )
         })?;
+        publish_audit_event(
+            &runtime,
+            if created {
+                EventKind::FileCreated
+            } else {
+                EventKind::FileModified
+            },
+            serde_json::json!({
+                "resourceKind": "file",
+                "resourceId": relative_path,
+                "path": relative_path,
+                "operationId": mutation.operation_id.clone(),
+                "revisionId": mutation.revision_id.clone(),
+                "contentHash": content_hash.clone(),
+                "sizeBytes": mutation.size_bytes,
+            }),
+            Some(workspace_id),
+            Some(command_correlation.clone()),
+        )?;
         Ok(FileWriteResult {
             operation_id: mutation.operation_id,
             revision_id: mutation.revision_id,
@@ -1303,7 +4041,7 @@ pub fn file_write_text(
             merge_notice: mutation.merge_notice,
         })
     })();
-    CommandResult::from_result(result, correlation_id())
+    CommandResult::from_result(result, command_correlation)
 }
 
 #[tauri::command]
@@ -1555,10 +4293,16 @@ pub fn git_stage(
     paths: Vec<String>,
     runtime: State<'_, AppRuntime>,
 ) -> CommandResult<()> {
-    let result = git_mutation(&runtime, &workspace_id, &paths, |git, values| {
-        git.stage(values)
-    });
-    CommandResult::from_result(result, correlation_id())
+    let command_correlation = correlation_id();
+    let result = git_mutation(
+        &runtime,
+        &workspace_id,
+        &paths,
+        "staged",
+        &command_correlation,
+        |git, values| git.stage(values),
+    );
+    CommandResult::from_result(result, command_correlation)
 }
 
 #[tauri::command]
@@ -1567,10 +4311,16 @@ pub fn git_unstage(
     paths: Vec<String>,
     runtime: State<'_, AppRuntime>,
 ) -> CommandResult<()> {
-    let result = git_mutation(&runtime, &workspace_id, &paths, |git, values| {
-        git.unstage(values)
-    });
-    CommandResult::from_result(result, correlation_id())
+    let command_correlation = correlation_id();
+    let result = git_mutation(
+        &runtime,
+        &workspace_id,
+        &paths,
+        "unstaged",
+        &command_correlation,
+        |git, values| git.unstage(values),
+    );
+    CommandResult::from_result(result, command_correlation)
 }
 
 #[tauri::command]
@@ -1580,6 +4330,7 @@ pub fn git_discard(
     confirmed: bool,
     runtime: State<'_, AppRuntime>,
 ) -> CommandResult<()> {
+    let command_correlation = correlation_id();
     let result = (|| {
         let record = registered_workspace(&runtime, &workspace_id)?;
         let root = record.root_path().ok_or_else(|| {
@@ -1591,15 +4342,24 @@ pub fn git_discard(
         GitAdapter::new(root)
             .discard(&paths, confirmed)
             .map_err(|error| app_error("git.discard_failed", error))?;
+        publish_audit_event(
+            &runtime,
+            EventKind::Custom("git.discarded".into()),
+            serde_json::json!({ "operation": "discarded", "paths": paths }),
+            Some(workspace_id.clone()),
+            Some(command_correlation.clone()),
+        )?;
         Ok(())
     })();
-    CommandResult::from_result(result, correlation_id())
+    CommandResult::from_result(result, command_correlation)
 }
 
 fn git_mutation(
     runtime: &AppRuntime,
     workspace_id: &str,
     paths: &[String],
+    event_operation: &str,
+    command_correlation: &str,
     operation: impl FnOnce(
         &GitAdapter,
         &[String],
@@ -1617,6 +4377,13 @@ fn git_mutation(
     })?;
     operation(&GitAdapter::new(root), paths)
         .map_err(|error| app_error("git.operation_failed", error))?;
+    publish_audit_event(
+        runtime,
+        EventKind::Custom(format!("git.{event_operation}")),
+        serde_json::json!({ "operation": event_operation, "paths": paths }),
+        Some(workspace_id.to_owned()),
+        Some(command_correlation.to_owned()),
+    )?;
     Ok(())
 }
 
@@ -1763,7 +4530,7 @@ pub fn terminal_start(
                 &policy,
                 &PathPolicy::default(),
                 &path,
-                preset.unwrap_or(PresetId::Zsh),
+                preset.unwrap_or_else(PresetId::default_for_current_platform),
                 TerminalSize {
                     columns: 100,
                     rows: 28,
@@ -2016,12 +4783,27 @@ mod tests {
     use base64::Engine as _;
 
     use super::{
-        MAX_ATTACHMENT_BYTES, SHELL_LAYOUT_KEY, ShellLayout, attachment_media_type,
-        decode_attachment, load_layout, sanitize_diagnostic, save_layout, system_sample_error,
-        workspace_path,
+        ActivityListRequest, AppRuntime, CodexAppServerRuntime, CodexIntegrationSettings,
+        GoogleConsentMode, GoogleIntegrationSettingsUpdate, INTEGRATION_SETTINGS_KEY,
+        IntegrationSettingsUpdate, MAX_ATTACHMENT_BYTES, PlannerItemRecord, PlannerListRangeRecord,
+        PlannerListRequest, PlannerScheduleRecord, RootSelectionGrant, SHELL_LAYOUT_KEY,
+        ShellLayout, attachment_media_type, consume_root_selection, decode_attachment,
+        list_activity, load_integration_settings, load_layout, normalize_google_client_secret,
+        planner_get_item, planner_item_from_google_event, planner_list_items, planner_store_item,
+        planner_upsert_google_item, sanitize_diagnostic, save_integration_settings, save_layout,
+        system_sample_error, workspace_path,
     };
+    use crate::agents::live_codex::ManagedSandbox;
     use crate::db::Database;
+    use crate::events::{Actor, EventBus, EventEnvelope, EventKind, RedactionClass};
+    use crate::terminal::{NativePtyAdapter, TerminalManager};
+    use crate::workspace::WorkspaceRegistry;
+    use crate::workspace::lsp::LspManager;
     use rusqlite::params;
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn shell_layout_round_trips_through_settings() {
@@ -2075,6 +4857,76 @@ mod tests {
         assert_eq!(restored.drawer_height, 30);
         assert_eq!(restored.theme_mode, "light");
         assert_eq!(restored.inspector_tab, "overview");
+    }
+
+    #[test]
+    fn integration_settings_round_trip_with_normalized_google_client_id() {
+        let database = Database::open(":memory:").expect("database");
+        let saved = save_integration_settings(
+            &database,
+            IntegrationSettingsUpdate {
+                google: GoogleIntegrationSettingsUpdate {
+                    oauth_client_id: Some("  123-example.apps.googleusercontent.com  ".to_owned()),
+                    oauth_client_secret: None,
+                    consent_mode: GoogleConsentMode::ReadWrite,
+                    calendar_enabled: true,
+                    tasks_enabled: false,
+                },
+                codex: CodexIntegrationSettings {
+                    default_sandbox: ManagedSandbox::WorkspaceWrite,
+                },
+            },
+        )
+        .expect("save");
+
+        assert_eq!(
+            saved.google.oauth_client_id.as_deref(),
+            Some("123-example.apps.googleusercontent.com")
+        );
+        assert_eq!(saved.google.consent_mode, GoogleConsentMode::ReadWrite);
+        assert_eq!(saved.codex.default_sandbox, ManagedSandbox::WorkspaceWrite);
+        assert_eq!(load_integration_settings(&database).expect("load"), saved);
+        let schema_version = database
+            .with_connection(|connection| {
+                connection.query_row(
+                    "SELECT schema_version FROM app_settings WHERE key = ?1",
+                    [INTEGRATION_SETTINGS_KEY],
+                    |row| row.get::<_, u32>(0),
+                )
+            })
+            .expect("schema version");
+        assert_eq!(schema_version, 1);
+    }
+
+    #[test]
+    fn integration_settings_reject_invalid_google_client_id() {
+        let database = Database::open(":memory:").expect("database");
+        let error = save_integration_settings(
+            &database,
+            IntegrationSettingsUpdate {
+                google: GoogleIntegrationSettingsUpdate {
+                    oauth_client_id: Some("not a client id".to_owned()),
+                    ..GoogleIntegrationSettingsUpdate::default()
+                },
+                codex: CodexIntegrationSettings::default(),
+            },
+        )
+        .expect_err("invalid client id");
+
+        assert_eq!(error.code, "settings.google_client_id_invalid");
+    }
+
+    #[test]
+    fn google_client_secret_is_trimmed_and_rejects_whitespace() {
+        assert_eq!(
+            normalize_google_client_secret(Some("  GOCSPX-secret  ".to_owned()))
+                .expect("valid secret")
+                .as_deref(),
+            Some("GOCSPX-secret")
+        );
+        let error = normalize_google_client_secret(Some("secret value".to_owned()))
+            .expect_err("whitespace must be rejected");
+        assert_eq!(error.code, "settings.google_client_secret_invalid");
     }
 
     #[test]
@@ -2145,5 +4997,236 @@ mod tests {
             relative_path: "/tmp/image.png".into(),
         };
         assert!(workspace_path(&path).is_err());
+    }
+
+    fn runtime_with_grant(expires_at: Instant) -> AppRuntime {
+        let database = Database::open(":memory:").expect("database");
+        AppRuntime {
+            workspaces: Mutex::new(WorkspaceRegistry::new()),
+            root_selection_grants: Mutex::new(BTreeMap::from([(
+                "root_grant_test".into(),
+                RootSelectionGrant {
+                    canonical_path: PathBuf::from("C:/selected"),
+                    display_path: "C:/selected".into(),
+                    expires_at,
+                },
+            )])),
+            database: Some(database.clone()),
+            events: EventBus::with_audit_sink(Some(Arc::new(database))),
+            agents: Mutex::new(CodexAppServerRuntime::new()),
+            google_operation_active: std::sync::atomic::AtomicBool::new(false),
+            terminals: Mutex::new(TerminalManager::new(NativePtyAdapter::new())),
+            lsp: Mutex::new(LspManager::new()),
+        }
+    }
+
+    #[test]
+    fn activity_read_model_filters_projects_and_keeps_payloads_redacted() {
+        let database = Database::open(":memory:").expect("database");
+        let event = EventEnvelope::new(
+            EventKind::Custom("project.updated".into()),
+            serde_json::json!({
+                "projectId": "project_alpha",
+                "changedFields": ["progress"],
+                "token": "Bearer definitely-secret"
+            }),
+            Some("brain".into()),
+            Some("correlation_test".into()),
+            Actor::system(),
+            1,
+            RedactionClass::Internal,
+            true,
+        )
+        .expect("event");
+        database.insert_audit_event(&event).expect("audit event");
+
+        let page = list_activity(
+            &database,
+            &ActivityListRequest {
+                workspace_id: Some("brain".into()),
+                project_id: Some("project_alpha".into()),
+                category: Some("history".into()),
+                cursor: None,
+                limit: Some(10),
+            },
+        )
+        .expect("activity");
+
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].event_type, "project.updated");
+        assert_eq!(page.items[0].payload["token"], "[REDACTED] [REDACTED]");
+
+        let other_project = list_activity(
+            &database,
+            &ActivityListRequest {
+                workspace_id: None,
+                project_id: Some("project_beta".into()),
+                category: None,
+                cursor: None,
+                limit: None,
+            },
+        )
+        .expect("activity");
+        assert!(other_project.items.is_empty());
+    }
+
+    #[test]
+    fn planner_items_persist_with_identity_schedule_and_project_filter() {
+        let database = Database::open(":memory:").expect("database");
+        let item = PlannerItemRecord {
+            id: "planner_test".into(),
+            kind: "task".into(),
+            title: "Protect identity".into(),
+            details: Some("Schedule and unschedule without replacing the item.".into()),
+            location: Some("Studio 4".into()),
+            schedule: Some(PlannerScheduleRecord::Exact {
+                start_epoch_seconds: 1_800_000_000,
+                end_epoch_seconds: Some(1_800_003_600),
+                timezone: "Asia/Singapore".into(),
+            }),
+            status: "open".into(),
+            project_id: Some("project_alpha".into()),
+            source: "local".into(),
+            source_link: None,
+            provider_link: None,
+            recurrence_rule: None,
+            sync_status: "local_only".into(),
+            conflict_message: None,
+            created_at_epoch_seconds: 10,
+            updated_at_epoch_seconds: 10,
+        };
+        planner_store_item(&database, "brain", &item, true).expect("insert planner item");
+
+        let restored = planner_get_item(&database, "brain", "planner_test").expect("planner item");
+        assert_eq!(restored.id, "planner_test");
+        assert_eq!(restored.location.as_deref(), Some("Studio 4"));
+        assert!(matches!(
+            restored.schedule,
+            Some(PlannerScheduleRecord::Exact {
+                start_epoch_seconds: 1_800_000_000,
+                ..
+            })
+        ));
+
+        let project_items = planner_list_items(
+            &database,
+            &PlannerListRequest {
+                brain_workspace_id: "brain".into(),
+                project_id: Some("project_alpha".into()),
+                range: None,
+            },
+        )
+        .expect("project items");
+        assert_eq!(project_items.len(), 1);
+
+        let other_project = planner_list_items(
+            &database,
+            &PlannerListRequest {
+                brain_workspace_id: "brain".into(),
+                project_id: Some("project_beta".into()),
+                range: None,
+            },
+        )
+        .expect("other Project items");
+        assert!(other_project.is_empty());
+    }
+
+    #[test]
+    fn google_events_upsert_into_the_shared_planner_without_duplicate_identities() {
+        let database = Database::open(":memory:").expect("database");
+        let mut event = crate::planner::google::CalendarEvent {
+            provider_id: "event_alpha".into(),
+            calendar_id: "primary".into(),
+            title: "Design review".into(),
+            description: None,
+            location: Some("Marina Bay Sands, Singapore".into()),
+            start: "2026-08-22T09:00:00+08:00".into(),
+            end: "2026-08-22T10:00:00+08:00".into(),
+            timezone: Some("Asia/Singapore".into()),
+            all_day: false,
+            recurring_series_id: None,
+            deleted: false,
+            etag: Some("etag-one".into()),
+            updated_at: "2026-08-22T01:00:00Z".into(),
+            payload_hash: "hash-one".into(),
+        };
+        planner_upsert_google_item(
+            &database,
+            "brain",
+            planner_item_from_google_event(&event),
+            event.etag.as_deref(),
+            &event.payload_hash,
+        )
+        .expect("first Google event");
+        event.title = "Design review updated".into();
+        event.etag = Some("etag-two".into());
+        planner_upsert_google_item(
+            &database,
+            "brain",
+            planner_item_from_google_event(&event),
+            event.etag.as_deref(),
+            &event.payload_hash,
+        )
+        .expect("updated Google event");
+
+        let outside_range = planner_list_items(
+            &database,
+            &PlannerListRequest {
+                brain_workspace_id: "brain".into(),
+                project_id: None,
+                range: Some(PlannerListRangeRecord {
+                    start_date: "2026-07-01".into(),
+                    end_date: "2026-08-01".into(),
+                    start_epoch_seconds: 1_782_864_000,
+                    end_epoch_seconds: 1_785_542_400,
+                }),
+            },
+        )
+        .expect("outside planner range");
+        assert!(outside_range.is_empty());
+
+        let items = planner_list_items(
+            &database,
+            &PlannerListRequest {
+                brain_workspace_id: "brain".into(),
+                project_id: None,
+                range: Some(PlannerListRangeRecord {
+                    start_date: "2026-08-01".into(),
+                    end_date: "2026-09-01".into(),
+                    start_epoch_seconds: 1_785_513_600,
+                    end_epoch_seconds: 1_788_192_000,
+                }),
+            },
+        )
+        .expect("planner list");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Design review updated");
+        assert_eq!(
+            items[0].location.as_deref(),
+            Some("Marina Bay Sands, Singapore")
+        );
+        assert_eq!(items[0].source, "provider");
+        assert_eq!(
+            items[0]
+                .provider_link
+                .as_ref()
+                .map(|link| link.provider.as_str()),
+            Some("google")
+        );
+    }
+
+    #[test]
+    fn root_selection_grants_are_consumed_once() {
+        let runtime = runtime_with_grant(Instant::now() + Duration::from_secs(60));
+        assert!(consume_root_selection(&runtime, "root_grant_test").is_ok());
+        let second = consume_root_selection(&runtime, "root_grant_test").expect_err("one use");
+        assert_eq!(second.code, "workspace.root_grant_invalid");
+    }
+
+    #[test]
+    fn expired_root_selection_grants_fail_closed() {
+        let runtime = runtime_with_grant(Instant::now() - Duration::from_secs(1));
+        let result = consume_root_selection(&runtime, "root_grant_test").expect_err("expired");
+        assert_eq!(result.code, "workspace.root_grant_invalid");
     }
 }

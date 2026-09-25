@@ -6,12 +6,15 @@ import type { GraphEdge, GraphNode, GraphPage } from "./types";
 
 type ForceGraphRenderProps = {
   backgroundColor?: string;
+  cooldownTime?: number;
+  extraRenderers?: unknown[];
   nodeColor?: (node: GraphNode) => string;
   nodeLabel?: (node: GraphNode) => string;
   nodeResolution?: number;
   nodeThreeObject?: (node: GraphNode) => Object3D;
   nodeThreeObjectExtend?: boolean;
   onLinkHover?: (edge: GraphEdge | null) => void;
+  warmupTicks?: number;
 };
 
 const { cameraPosition, orbitControls, renderForceGraph, zoomToFit } =
@@ -126,7 +129,7 @@ describe("GraphViewport3D", () => {
     expect(onCollapseAll).toHaveBeenCalledOnce();
   });
 
-  it("frames a sparse graph after its initial force layout", () => {
+  it("frames a sparse graph without an ambient camera animation", () => {
     vi.useFakeTimers();
     vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
       "Mozilla/5.0 TestBrowser",
@@ -145,11 +148,13 @@ describe("GraphViewport3D", () => {
       />,
     );
 
-    expect(zoomToFit).not.toHaveBeenCalled();
     act(() => {
-      vi.advanceTimersByTime(500);
+      vi.runOnlyPendingTimers();
     });
-    expect(zoomToFit).toHaveBeenCalledWith(350, 55);
+    expect(zoomToFit).toHaveBeenCalledWith(0, 55);
+    expect(renderForceGraph).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cooldownTime: 0, warmupTicks: 120 }),
+    );
   });
 
   it("updates the opaque WebGL background with the resolved theme", () => {
@@ -192,12 +197,19 @@ describe("GraphViewport3D", () => {
       fillText: vi.fn(),
       strokeText: vi.fn(),
     } as unknown as WebGLRenderingContext);
-    expect(
-      renderForceGraph.mock.lastCall?.[0].nodeThreeObject?.({
-        ...sampleNode,
-        label: "abcdefghijklmnop.md",
-      }).name,
-    ).toBe("abcdefghij..");
+    const labelObject = renderForceGraph.mock.lastCall?.[0].nodeThreeObject?.({
+      ...sampleNode,
+      label: "abcdefghijklmnop.md",
+    });
+    expect(labelObject?.name).toBe("abcdefghij..");
+    const labelElement = (
+      labelObject?.children[0] as unknown as {
+        element: HTMLElement;
+      }
+    ).element;
+    expect(labelElement).toHaveClass("focused-graph-node-label");
+    expect(labelElement).toHaveTextContent("abcdefghij..");
+    expect(renderForceGraph.mock.lastCall?.[0].extraRenderers).toHaveLength(1);
 
     act(() => {
       renderForceGraph.mock.lastCall?.[0].onLinkHover?.(graph.edges[0] ?? null);
@@ -235,6 +247,44 @@ describe("GraphViewport3D", () => {
     );
     expect(renderForceGraph).toHaveBeenLastCalledWith(
       expect.objectContaining({ backgroundColor: "#171b21" }),
+    );
+  });
+
+  it("removes graph and camera animation when reduced motion is requested", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: true }),
+    });
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 TestBrowser",
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      {} as WebGLRenderingContext,
+    );
+
+    render(
+      <GraphViewport3D
+        graph={graph}
+        onSelect={vi.fn()}
+        onExpand={vi.fn()}
+        onContextMenu={vi.fn()}
+        onClearSelection={vi.fn()}
+      />,
+    );
+
+    expect(renderForceGraph).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cooldownTime: 0, warmupTicks: 120 }),
+    );
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(zoomToFit).toHaveBeenLastCalledWith(0, 55);
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(cameraPosition).toHaveBeenLastCalledWith(
+      { x: 0, y: 0, z: 78 },
+      { x: 0, y: 0, z: 0 },
+      0,
     );
   });
 });

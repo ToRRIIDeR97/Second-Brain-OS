@@ -6,7 +6,8 @@ import {
   statusLabel,
   type AgentAction,
 } from "./model";
-import { unavailableAgentSessionSource } from "./source";
+import { AgentComposer } from "./AgentComposer";
+import { defaultAgentSessionSource } from "./source";
 import type {
   AgentAvailability,
   AgentEvent,
@@ -29,6 +30,7 @@ export type AgentWorkspaceProps = {
   sessionSource?: AgentSessionSource;
   /** Alias kept for callers that already use the shorter name. */
   source?: AgentSessionSource;
+  defaultSandbox?: "read_only" | "workspace_write";
 };
 
 export function AgentWorkspace({
@@ -38,8 +40,9 @@ export function AgentWorkspace({
   onApprove,
   sessionSource,
   source,
+  defaultSandbox = "read_only",
 }: AgentWorkspaceProps) {
-  const runtime = sessionSource ?? source ?? unavailableAgentSessionSource;
+  const runtime = sessionSource ?? source ?? defaultAgentSessionSource;
   const [sourceIssue, setSourceIssue] = useState<string>();
   const loadedSource = useRef<AgentSessionSource | undefined>(undefined);
   const loadedWorkspace = useRef<string | undefined>(undefined);
@@ -122,13 +125,18 @@ export function AgentWorkspace({
     ) => {
       try {
         const result = await operation;
-        if (!result.ok) setSourceIssue(result.error.message);
+        if (!result.ok) {
+          setSourceIssue(result.error.message);
+          return false;
+        }
+        return true;
       } catch (error: unknown) {
         setSourceIssue(
           error instanceof Error
             ? error.message
             : "The agent runtime rejected that action.",
         );
+        return false;
       }
     },
     [],
@@ -170,6 +178,16 @@ export function AgentWorkspace({
         </p>
       ) : null}
 
+      <AgentComposer
+        workspaceId={state.workspaceId}
+        source={runtime}
+        compact
+        defaultSandbox={defaultSandbox}
+        onStarted={(session) => {
+          dispatch({ type: "session/open", session });
+        }}
+      />
+
       {state.sessions.length > 0 ? (
         <div className="agent-session-layout">
           <nav aria-label="Agent sessions" className="agent-session-list">
@@ -203,19 +221,30 @@ export function AgentWorkspace({
           {active ? (
             <AgentSessionPanel
               session={active}
+              onSend={async (message) => {
+                if (unavailable) return false;
+                const accepted = await command(
+                  runtime.sendMessage(state.workspaceId, active.id, message),
+                );
+                if (accepted)
+                  dispatch({
+                    type: "session/state",
+                    id: active.id,
+                    state: "starting",
+                  });
+                return accepted;
+              }}
               onCancel={() => {
-                dispatch({ type: "session/cancel", id: active.id });
                 onCancel?.(active.id);
                 if (!unavailable)
-                  void command(runtime.cancel(state.workspaceId, active.id));
+                  void command(
+                    runtime.cancel(state.workspaceId, active.id),
+                  ).then((accepted) => {
+                    if (accepted)
+                      dispatch({ type: "session/cancel", id: active.id });
+                  });
               }}
               onApprove={(approvalId, decision) => {
-                dispatch({
-                  type: "approval/decide",
-                  sessionId: active.id,
-                  approvalId,
-                  decision,
-                });
                 onApprove?.(active.id, approvalId, decision);
                 if (!unavailable)
                   void command(
@@ -225,7 +254,15 @@ export function AgentWorkspace({
                       approvalId,
                       decision,
                     ),
-                  );
+                  ).then((accepted) => {
+                    if (accepted)
+                      dispatch({
+                        type: "approval/decide",
+                        sessionId: active.id,
+                        approvalId,
+                        decision,
+                      });
+                  });
               }}
             />
           ) : (
@@ -257,21 +294,36 @@ export function AgentWorkspace({
 
 function AgentSessionPanel({
   session,
+  onSend,
   onCancel,
   onApprove,
 }: {
   session: AgentSession;
+  onSend: (message: string) => Promise<boolean>;
   onCancel: () => void;
   onApprove: (
     approvalId: string,
     decision: Exclude<ApprovalDecision, "pending">,
   ) => void;
 }) {
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
   const terminal =
     session.state === "completed" ||
     session.state === "failed" ||
     session.state === "recoverable";
   const events = session.events ?? [];
+  const canFollowUp =
+    session.state === "completed" || session.state === "failed";
+
+  const sendFollowUp = async () => {
+    const next = message.trim();
+    if (!next || sending || !canFollowUp) return;
+    setSending(true);
+    const accepted = await onSend(next);
+    if (accepted) setMessage("");
+    setSending(false);
+  };
 
   return (
     <article
@@ -448,6 +500,45 @@ function AgentSessionPanel({
           {session.error.code}: {session.error.message}
           {session.error.retryable ? " You can retry this session." : ""}
         </p>
+      ) : null}
+      {canFollowUp ? (
+        <form
+          className="agent-follow-up"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendFollowUp();
+          }}
+        >
+          <label htmlFor={`agent-follow-up-${session.id}`}>
+            Continue this session
+          </label>
+          <textarea
+            id={`agent-follow-up-${session.id}`}
+            rows={3}
+            maxLength={4000}
+            value={message}
+            placeholder="Ask a follow-up or refine the result…"
+            onChange={(event) => {
+              setMessage(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                void sendFollowUp();
+              }
+            }}
+          />
+          <div>
+            <span>Ctrl/⌘ + Enter</span>
+            <button
+              type="submit"
+              className="button button-primary"
+              disabled={sending || !message.trim()}
+            >
+              {sending ? "Sending…" : "Continue"}
+            </button>
+          </div>
+        </form>
       ) : null}
       <button
         type="button"

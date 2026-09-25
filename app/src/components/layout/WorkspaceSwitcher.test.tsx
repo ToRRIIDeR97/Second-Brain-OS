@@ -1,13 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createMockIpc } from "../../lib/ipc";
 import { WorkspaceProvider } from "../../state/workspace";
+import { ProjectsProvider } from "../../state/projects";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  open: vi.fn(),
-}));
 
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
 
@@ -44,7 +40,6 @@ const project = {
 
 beforeEach(() => {
   window.localStorage.clear();
-  vi.mocked(open).mockReset();
 });
 
 test("keeps Brain as the default and persists a selected workspace", async () => {
@@ -53,22 +48,26 @@ test("keeps Brain as the default and persists a selected workspace", async () =>
 
   render(
     <WorkspaceProvider ipc={mock.client}>
-      <WorkspaceSwitcher />
+      <ProjectsProvider ipc={mock.client}>
+        <WorkspaceSwitcher />
+      </ProjectsProvider>
     </WorkspaceProvider>,
   );
 
   expect(
     await screen.findByRole("button", {
-      name: "Switch workspace, current Brain",
+      name: "Switch context, current Brain",
     }),
   ).toBeInTheDocument();
-  expect(
-    window.localStorage.getItem("second-brain-os.active-workspace.v1"),
-  ).toBe("ws_brain");
+  await waitFor(() => {
+    expect(
+      window.localStorage.getItem("second-brain-os.active-workspace.v1"),
+    ).toBe("ws_brain");
+  });
 
   fireEvent.click(
     screen.getByRole("button", {
-      name: "Switch workspace, current Brain",
+      name: "Switch context, current Brain",
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: /Project/ }));
@@ -82,29 +81,37 @@ test("keeps Brain as the default and persists a selected workspace", async () =>
 
 test("registers a folder with an editable derived name and trust level", async () => {
   const mock = createMockIpc();
-  vi.mocked(open).mockResolvedValue("/Users/test/Research Brain");
   mock.setResponse("workspace_list", success([]));
+  mock.setResponse(
+    "workspace_select_root",
+    success({
+      grantId: "root_grant_test",
+      displayPath: "/Users/test/Research Brain",
+      suggestedName: "Research Brain",
+    }),
+  );
   mock.setResponse("workspace_register", success(brain));
 
+  const onWorkspaceOpened = vi.fn();
   render(
     <WorkspaceProvider ipc={mock.client}>
-      <WorkspaceSwitcher />
+      <ProjectsProvider ipc={mock.client}>
+        <WorkspaceSwitcher onWorkspaceOpened={onWorkspaceOpened} />
+      </ProjectsProvider>
     </WorkspaceProvider>,
   );
 
   fireEvent.click(
     await screen.findByRole("button", {
-      name: "Switch workspace, current No workspace",
+      name: "Switch context, current No workspace",
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: /New workspace/ }));
   fireEvent.click(screen.getByRole("button", { name: "Choose folder…" }));
 
-  expect(open).toHaveBeenCalledWith({
-    directory: true,
-    multiple: false,
-    title: "Select workspace folder",
-  });
+  expect(
+    mock.calls.some(({ command }) => command === "workspace_select_root"),
+  ).toBe(true);
   expect(
     await screen.findByLabelText("Selected workspace folder"),
   ).toHaveTextContent("/Users/test/Research Brain");
@@ -126,27 +133,31 @@ test("registers a folder with an editable derived name and trust level", async (
         registration: {
           name: "Research notes",
           rootPath: "/Users/test/Research Brain",
+          rootGrantId: "root_grant_test",
           kind: "brain",
           trustLevel: "untrusted",
         },
       },
     });
   });
+  expect(onWorkspaceOpened).toHaveBeenCalledOnce();
 });
 
-test("preloads the active Brain root for a new workspace", async () => {
+test("requires a fresh native grant for each new workspace", async () => {
   const mock = createMockIpc();
   mock.setResponse("workspace_list", success([brain]));
 
   render(
     <WorkspaceProvider ipc={mock.client}>
-      <WorkspaceSwitcher />
+      <ProjectsProvider ipc={mock.client}>
+        <WorkspaceSwitcher />
+      </ProjectsProvider>
     </WorkspaceProvider>,
   );
 
   fireEvent.click(
     await screen.findByRole("button", {
-      name: "Switch workspace, current Brain",
+      name: "Switch context, current Brain",
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: /New workspace/ }));
@@ -154,8 +165,9 @@ test("preloads the active Brain root for a new workspace", async () => {
   const dialog = screen.getByRole("dialog", { name: "New workspace" });
   expect(dialog.parentElement?.parentElement).toBe(document.body);
   expect(screen.getByLabelText("Selected workspace folder")).toHaveTextContent(
-    "/Users/test/Brain",
+    "No folder selected yet.",
   );
+  expect(screen.getByRole("button", { name: "Open workspace" })).toBeDisabled();
 });
 
 test("blocks workspace changes when the shell reports dirty tabs", async () => {
@@ -164,17 +176,19 @@ test("blocks workspace changes when the shell reports dirty tabs", async () => {
 
   render(
     <WorkspaceProvider ipc={mock.client}>
-      <WorkspaceSwitcher
-        onBeforeWorkspaceChange={() =>
-          "Save or discard unsaved changes before switching workspaces."
-        }
-      />
+      <ProjectsProvider ipc={mock.client}>
+        <WorkspaceSwitcher
+          onBeforeWorkspaceChange={() =>
+            "Save or discard unsaved changes before switching workspaces."
+          }
+        />
+      </ProjectsProvider>
     </WorkspaceProvider>,
   );
 
   fireEvent.click(
     await screen.findByRole("button", {
-      name: "Switch workspace, current Brain",
+      name: "Switch context, current Brain",
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: /Project/ }));

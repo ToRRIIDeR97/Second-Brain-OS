@@ -1,6 +1,7 @@
 import { useNavigate } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { createEffect, createMemo, createResource, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -149,22 +150,21 @@ export default function BrainHomePage() {
         <Show when={locations().length > 0}>
           <label class="flex items-center gap-2 text-[12px] text-v2-text-text-muted" for="brain-home-location">
             <span class="hidden sm:inline">{language.t("secondBrain.workspace")}</span>
-            <select
+            <SelectV2
               id="brain-home-location"
-              class="h-8 max-w-56 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
-              value={state.directory}
-              onChange={(event) => {
-                const directory = event.currentTarget.value
+              aria-label={language.t("secondBrain.workspace")}
+              class="!h-8 !w-auto max-w-56"
+              options={locations()}
+              current={locations().find((location) => location.worktree === state.directory)}
+              value={(location) => location.worktree}
+              label={(location) => location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree}
+              onSelect={(location) => {
+                if (!location) return
+                const directory = location.worktree
                 setState("directory", directory)
                 layout.home.setSelection({ server: server.key, directory })
               }}
-            >
-              <For each={locations()}>
-                {(location) => (
-                  <option value={location.worktree}>{location.name ?? location.worktree.split(/[\\/]/).pop()}</option>
-                )}
-              </For>
-            </select>
+            />
           </label>
         </Show>
       </header>
@@ -205,27 +205,21 @@ export default function BrainHomePage() {
                 </label>
                 <label class="flex items-center gap-2 text-[12px] text-v2-text-text-faint">
                   <span>{language.t("harness.label")}</span>
-                  <select
-                    class="h-7 cursor-pointer rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-base px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus disabled:cursor-wait disabled:opacity-60"
-                    value={state.harnessInstanceID}
+                  <SelectV2
+                    aria-label={language.t("harness.label")}
+                    class="!h-7 !w-auto max-w-[220px]"
+                    appearance="inline"
+                    options={[...(harnesses() ?? [])]}
+                    current={harnesses()?.find((instance) => instance.id === state.harnessInstanceID)}
+                    value={(instance) => instance.id}
+                    label={(instance) =>
+                      `${instance.name}${instance.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}`
+                    }
+                    optionDisabled={(instance) => instance.status === "unavailable"}
+                    placeholder={language.t("harness.checking")}
                     disabled={harnesses.loading || !harnesses()}
-                    onChange={(event) => setState("harnessInstanceID", Harness.InstanceID.make(event.currentTarget.value))}
-                  >
-                    <Show when={harnesses()} fallback={<option>{language.t("harness.checking")}</option>}>
-                      <For each={harnesses()}>
-                        {(instance) => (
-                          <option
-                            value={instance.id}
-                            disabled={instance.status === "unavailable"}
-                            title={instance.error}
-                          >
-                            {instance.name}
-                            {instance.status === "unavailable" ? ` — ${language.t("harness.unavailable")}` : ""}
-                          </option>
-                        )}
-                      </For>
-                    </Show>
-                  </select>
+                    onSelect={(instance) => instance && setState("harnessInstanceID", instance.id)}
+                  />
                 </label>
               </div>
               <div class="flex gap-2">

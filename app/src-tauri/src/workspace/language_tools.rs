@@ -993,11 +993,21 @@ mod tests {
     use std::time::Duration;
     use tempfile::tempdir;
 
-    fn fake_tool(root: &Path, name: &str, body: &str) {
+    fn fake_tool(root: &Path, name: &str, unix_body: &str, windows_body: &str) {
+        #[cfg(windows)]
+        let _ = unix_body;
+        #[cfg(unix)]
+        let _ = windows_body;
         let bin = root.join("node_modules").join(".bin");
         fs::create_dir_all(&bin).expect("bin");
-        let path = bin.join(name);
-        fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("tool");
+        #[cfg(unix)]
+        let (path, script) = (bin.join(name), format!("#!/bin/sh\n{unix_body}\n"));
+        #[cfg(windows)]
+        let (path, script) = (
+            bin.join(format!("{name}.cmd")),
+            format!("@echo off\r\n{windows_body}\r\n"),
+        );
+        fs::write(&path, script).expect("tool");
         #[cfg(unix)]
         {
             let mut permissions = fs::metadata(&path).expect("metadata").permissions();
@@ -1013,6 +1023,7 @@ mod tests {
             root.path(),
             "prettier",
             "cat >/dev/null; printf 'formatted\\n'",
+            "more >NUL & echo formatted",
         );
         let original = root.path().join("src.ts");
         fs::write(&original, "original").expect("source");
@@ -1020,16 +1031,16 @@ mod tests {
         let result = service
             .format(ToolLanguage::TypeScript, "src.ts", "input")
             .expect("format");
-        assert_eq!(result.content, "formatted\n");
+        assert_eq!(result.content.replace("\r\n", "\n"), "formatted\n");
         assert_eq!(fs::read_to_string(original).expect("read"), "original");
     }
 
     #[test]
     fn rejects_paths_that_escape_through_parent_or_symlink() {
         let root = tempdir().expect("tempdir");
-        let outside = tempdir().expect("outside");
+        let _outside = tempdir().expect("outside");
         #[cfg(unix)]
-        std::os::unix::fs::symlink(outside.path(), root.path().join("link")).expect("symlink");
+        std::os::unix::fs::symlink(_outside.path(), root.path().join("link")).expect("symlink");
         let service = LanguageToolService::new(root.path());
         assert!(matches!(
             service.format(ToolLanguage::TypeScript, "../outside.ts", "x"),
@@ -1047,11 +1058,18 @@ mod tests {
         let root = tempdir().expect("tempdir");
         let file = root.path().join("src.ts");
         fs::write(&file, "x").expect("source");
-        let eslint = format!(
-            r#"[{{"filePath":"{}","messages":[{{"line":2,"column":3,"severity":2,"message":"bad","ruleId":"no-x"}}]}}]"#,
-            file.display()
-        );
-        let diagnostics = parse_eslint(root.path(), eslint.as_bytes()).expect("eslint");
+        let eslint = serde_json::to_vec(&serde_json::json!([{
+            "filePath": file,
+            "messages": [{
+                "line": 2,
+                "column": 3,
+                "severity": 2,
+                "message": "bad",
+                "ruleId": "no-x"
+            }]
+        }]))
+        .expect("eslint json");
+        let diagnostics = parse_eslint(root.path(), &eslint).expect("eslint");
         assert_eq!(diagnostics[0].relative_path, "src.ts");
         assert_eq!(diagnostics[0].severity, "error");
         assert!(

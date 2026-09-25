@@ -1,4 +1,6 @@
 export { LocalPlanner } from "./LocalPlanner";
+export { PlannerWorkspace } from "./PlannerWorkspace";
+export type { PlannerWorkspaceView } from "./PlannerWorkspace";
 export {
   LocalPlannerStore,
   PlannerValidationError,

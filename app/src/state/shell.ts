@@ -14,6 +14,8 @@ import type { InspectorTab, ShellLayout } from "../lib/ipc";
 
 export const ACTIVITIES = [
   "home",
+  "projects",
+  "activity",
   "knowledge",
   "files",
   "graph",
@@ -24,6 +26,24 @@ export const ACTIVITIES = [
   "terminal",
   "source-control",
   "settings",
+] as const;
+export const PROJECT_VIEWS = [
+  "overview",
+  "plan",
+  "work",
+  "files",
+  "activity",
+  "map",
+  "settings",
+] as const;
+export const PLANNER_VIEWS = [
+  "today",
+  "week",
+  "month",
+  "agenda",
+  "tasks",
+  "unscheduled",
+  "completed",
 ] as const;
 export const DRAWERS = ["terminal"] as const;
 export const THEME_MODES = ["auto", "light", "dark"] as const;
@@ -40,6 +60,8 @@ export const WORKBENCH_RESOURCE_KINDS = [
 ] as const;
 
 export type Activity = (typeof ACTIVITIES)[number];
+export type ProjectView = (typeof PROJECT_VIEWS)[number];
+export type PlannerView = (typeof PLANNER_VIEWS)[number];
 export type Drawer = (typeof DRAWERS)[number];
 export type ThemeMode = (typeof THEME_MODES)[number];
 export type WorkbenchResourceKind = (typeof WORKBENCH_RESOURCE_KINDS)[number];
@@ -103,6 +125,10 @@ export type WorkbenchHistoryEntry = {
   resourceId?: string;
   workspaceId?: string;
   selection?: WorkbenchSelection | null;
+  activity?: Activity;
+  projectView?: ProjectView;
+  plannerView?: PlannerView;
+  projectId?: string | null;
 };
 
 export type WorkbenchHistory = {
@@ -133,6 +159,8 @@ export type ShellTab = {
 
 export type ShellState = {
   activity: Activity;
+  projectView: ProjectView;
+  plannerView: PlannerView;
   themeMode: ThemeMode;
   sidebarWidth: number;
   /** Alias used by the workbench design; kept in sync with sidebarWidth. */
@@ -164,18 +192,20 @@ const emptyHistory = (): WorkbenchHistory => ({ entries: [], index: -1 });
 
 export const defaultShellState: ShellState = {
   activity: "home",
+  projectView: "overview",
+  plannerView: "today",
   themeMode: "light",
   sidebarWidth: 21,
   navigatorWidth: 21,
   navigatorOpen: true,
   inspectorWidth: 22,
-  inspectorOpen: true,
+  inspectorOpen: false,
   drawerOpen: false,
   drawer: "terminal",
   drawerHeight: 30,
   activeInspectorTab: "overview",
-  tabs: [{ id: "welcome", title: "Welcome", activity: "home" }],
-  activeTabId: "welcome",
+  tabs: [],
+  activeTabId: "",
   commandPaletteOpen: false,
   activeWorkspaceId: null,
   tabsByWorkspace: {},
@@ -189,6 +219,8 @@ export const defaultShellState: ShellState = {
 
 export type ShellAction =
   | { type: "activity/set"; activity: Activity }
+  | { type: "project/view"; view: ProjectView }
+  | { type: "planner/view"; view: PlannerView }
   | { type: "sidebar/resize"; width: number }
   | { type: "navigator/toggle"; open?: boolean }
   | { type: "inspector/resize"; width: number }
@@ -261,6 +293,20 @@ function isActivity(value: unknown): value is Activity {
   return (
     typeof value === "string" &&
     (ACTIVITIES as readonly string[]).includes(value)
+  );
+}
+
+function isProjectView(value: unknown): value is ProjectView {
+  return (
+    typeof value === "string" &&
+    (PROJECT_VIEWS as readonly string[]).includes(value)
+  );
+}
+
+function isPlannerView(value: unknown): value is PlannerView {
+  return (
+    typeof value === "string" &&
+    (PLANNER_VIEWS as readonly string[]).includes(value)
   );
 }
 
@@ -347,6 +393,14 @@ function normalizeHistory(value: unknown): WorkbenchHistory {
             normalized.resourceId = raw.resourceId;
           if (typeof raw.workspaceId === "string")
             normalized.workspaceId = raw.workspaceId;
+          if (isActivity(raw.activity)) normalized.activity = raw.activity;
+          if (isProjectView(raw.projectView))
+            normalized.projectView = raw.projectView;
+          if (isPlannerView(raw.plannerView))
+            normalized.plannerView = raw.plannerView;
+          if (typeof raw.projectId === "string")
+            normalized.projectId = raw.projectId;
+          else if (raw.projectId === null) normalized.projectId = null;
           if (isSelection(raw.selection)) normalized.selection = raw.selection;
           else if (raw.selection === null) normalized.selection = null;
           return normalized;
@@ -409,7 +463,12 @@ function normalizeTabs(value: unknown): ShellTab[] {
   return Array.isArray(value)
     ? value
         .map((tab) => normalizeTab(tab))
-        .filter((tab): tab is ShellTab => tab !== null)
+        .filter(
+          (tab): tab is ShellTab =>
+            tab !== null &&
+            (Boolean(tab.resource) ||
+              Boolean(tab.kind && tab.kind !== "activity")),
+        )
     : [];
 }
 
@@ -435,11 +494,6 @@ function normalizeHistoryMap(value: unknown): Record<string, WorkbenchHistory> {
 function normalizeState(value: Partial<ShellState> | ShellState): ShellState {
   const raw = value as Partial<ShellState>;
   const rawTabs = normalizeTabs(raw.tabs);
-  const fallbackTab: ShellTab = {
-    id: "welcome",
-    title: "Welcome",
-    activity: "home",
-  };
   const tabMap = normalizeTabMap(raw.tabsByWorkspace ?? raw.workspaceTabs);
   const activeWorkspaceId =
     typeof raw.activeWorkspaceId === "string" ? raw.activeWorkspaceId : null;
@@ -448,8 +502,7 @@ function normalizeState(value: Partial<ShellState> | ShellState): ShellState {
     activeWorkspaceId && workspaceTabs[activeWorkspaceId]
       ? workspaceTabs[activeWorkspaceId]
       : undefined;
-  const tabs =
-    rawTabs.length > 0 ? rawTabs : (restoredWorkspaceTabs ?? [fallbackTab]);
+  const tabs = rawTabs.length > 0 ? rawTabs : (restoredWorkspaceTabs ?? []);
   const activeTabIdsByWorkspace: Record<string, string> = {};
   for (const [workspaceId, workspaceTabList] of Object.entries(workspaceTabs)) {
     const requested = raw.activeTabIdsByWorkspace?.[workspaceId];
@@ -463,14 +516,21 @@ function normalizeState(value: Partial<ShellState> | ShellState): ShellState {
     typeof raw.activeTabId === "string" &&
     tabs.some((tab) => tab.id === raw.activeTabId)
       ? raw.activeTabId
-      : (tabs[0]?.id ?? fallbackTab.id);
-  const activeTab =
-    tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? fallbackTab;
+      : (tabs[0]?.id ?? "");
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const history = normalizeHistory(raw.navigationHistory ?? raw.history);
   return {
     activity: isActivity(raw.activity)
       ? raw.activity
-      : tabActivity(activeTab, "home"),
+      : activeTab
+        ? tabActivity(activeTab, "home")
+        : "home",
+    projectView: isProjectView(raw.projectView)
+      ? raw.projectView
+      : defaultShellState.projectView,
+    plannerView: isPlannerView(raw.plannerView)
+      ? raw.plannerView
+      : defaultShellState.plannerView,
     themeMode: isThemeMode(raw.themeMode)
       ? raw.themeMode
       : defaultShellState.themeMode,
@@ -683,7 +743,6 @@ function closeTab(
   const tabs = targetWorkspaceId
     ? (state.tabsByWorkspace[targetWorkspaceId] ?? [])
     : state.tabs;
-  if (tabs.length === 1) return state;
   const index = tabs.findIndex((tab) => tab.id === id);
   if (index < 0) return state;
   const remaining = tabs.filter((tab) => tab.id !== id);
@@ -715,7 +774,7 @@ function closeTab(
   const next = remaining[Math.max(0, index - 1)] ?? remaining[0];
   return next
     ? updateTabs(state, remaining, next.id, targetWorkspaceId)
-    : state;
+    : updateTabs(state, [], "", targetWorkspaceId);
 }
 
 function setTabDirty(
@@ -767,6 +826,11 @@ function navigateHistory(
     targetWorkspaceId ?? undefined,
   );
   if (nextId) next = activateTab(next, nextId, targetWorkspaceId ?? undefined);
+  if (nextEntry?.activity) next = { ...next, activity: nextEntry.activity };
+  if (nextEntry?.projectView)
+    next = { ...next, projectView: nextEntry.projectView };
+  if (nextEntry?.plannerView)
+    next = { ...next, plannerView: nextEntry.plannerView };
   if (nextEntry?.selection !== undefined)
     next = { ...next, selection: nextEntry.selection };
   return next;
@@ -779,6 +843,10 @@ export function shellReducer(
   switch (action.type) {
     case "activity/set":
       return { ...state, activity: action.activity };
+    case "project/view":
+      return { ...state, projectView: action.view };
+    case "planner/view":
+      return { ...state, plannerView: action.view };
     case "sidebar/resize": {
       const width = clamp(action.width, 12, 40);
       return { ...state, sidebarWidth: width, navigatorWidth: width };

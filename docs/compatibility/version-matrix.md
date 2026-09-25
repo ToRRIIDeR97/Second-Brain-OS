@@ -8,7 +8,7 @@ independent so a Markdown extension change does not silently change IPC or MCP.
 | Application | package/Cargo version | compatible metadata | release migration note |
 | Database (current: 37) | migration table | nullable/defaulted column + migration | migration with rollback; refuse newer schemas |
 | Workspace manifest | `schema_version` (+ `version`) | optional field preserved | new schema + read-only/migration path |
-| Project card | `version` | optional front-matter field | card migration preserving body |
+| Project card (current: 2) | `version` | optional front-matter field | v1 reader adapter; v2 write preserving body and unknown fields |
 | Markdown extensions | `extension_version` | syntax that round-trips as old data | codec migration/golden fixtures |
 | Graph ontology | `version` | new node/edge with explicit semantics | rename/removal + extraction migration |
 | Event envelope | `version` + payload schema version | additive payload field | new envelope/payload adapter |

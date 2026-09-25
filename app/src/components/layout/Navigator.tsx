@@ -40,12 +40,14 @@ export type NavigatorWorkspace = {
 
 const items: Record<Activity, readonly string[]> = {
   home: ["Overview", "Recent", "Pinned"],
+  projects: ["Overview", "Plan", "Work", "Files", "Activity", "Map"],
+  activity: ["Needs attention", "Agent runs", "Changes", "History"],
   knowledge: ["All notes"],
   files: ["Workspace files", "Favorites", "Recent files"],
   graph: ["Focused graph", "Saved lenses", "Backlinks"],
   search: ["Search everywhere", "Recent searches", "Filters"],
-  planner: ["Today", "Tasks", "Calendar"],
-  calendar: ["Calendar", "Agenda", "Upcoming"],
+  planner: ["Tasks"],
+  calendar: ["Calendar", "Tasks"],
   agents: ["Sessions", "Review queue", "Context packets"],
   terminal: ["Terminal tabs", "Presets", "Output"],
   "source-control": ["Changes", "History", "Branches"],
@@ -60,6 +62,8 @@ const title = (activity: Activity) => {
       return "Tasks";
     case "agents":
       return "Agents";
+    case "activity":
+      return "Activity";
     default:
       return `${activity.slice(0, 1).toUpperCase()}${activity.slice(1)}`;
   }

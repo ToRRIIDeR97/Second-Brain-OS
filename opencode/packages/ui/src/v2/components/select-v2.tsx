@@ -58,6 +58,7 @@ export type SelectV2Props<T> = Omit<
   invalid?: boolean
   numeric?: boolean
   children?: (item: T) => JSX.Element
+  triggerIcon?: JSX.Element
   valueClass?: string
 }
 
@@ -75,6 +76,7 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
     "onHighlight",
     "onOpenChange",
     "children",
+    "triggerIcon",
     "appearance",
     "invalid",
     "numeric",
@@ -186,6 +188,9 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
           [local.class ?? ""]: !!local.class,
         }}
       >
+        <Show when={local.triggerIcon}>
+          <span data-slot="select-v2-trigger-icon">{local.triggerIcon}</span>
+        </Show>
         <div data-slot="select-v2-value">
           <Kobalte.Value<T> data-slot="select-v2-value-text" class={local.valueClass}>
             {(st) => {

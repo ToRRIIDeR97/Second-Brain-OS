@@ -180,7 +180,9 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
         Effect.catchTag("PlatformError", () => Effect.fail(new HttpApiError.BadRequest({}))),
         Effect.catchTag("FileSystemError", () => Effect.fail(new HttpApiError.BadRequest({}))),
       )
-      return { version: next.version, revision: next.revision, events: next.events, tasks: next.tasks }
+      const snapshot = { version: next.version, revision: next.revision, events: next.events, tasks: next.tasks }
+      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(Effect.catch(() => Effect.void))
+      return snapshot
     })
 
     const listProjects = Effect.fn("SecondBrain.listProjects")(function* () {
@@ -190,7 +192,10 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
     const createProject = Effect.fn("SecondBrain.createProject")(function* (ctx: {
       payload: BrainProject.CreateInput
     }) {
-      return yield* projectConflict(filesystem(BrainProject.create(ctx.payload)))
+      const project = yield* projectConflict(filesystem(BrainProject.create(ctx.payload)))
+      const snapshot = (yield* calendarFile()).snapshot
+      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(Effect.catch(() => Effect.void))
+      return project
     })
 
     const readProject = Effect.fn("SecondBrain.readProject")(function* (ctx: { query: { id: string } }) {

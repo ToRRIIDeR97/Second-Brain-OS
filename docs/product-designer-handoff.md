@@ -1,5 +1,11 @@
 # Second Brain OS — Product Designer Handoff
 
+> **Direction update, 2026-08-22:** The v1 product definition and navigation
+> have been reset. Use [`PRODUCT-BRIEF-V1.md`](./product/PRODUCT-BRIEF-V1.md)
+> and [`NAVIGATION-MAP-V1.md`](./product/NAVIGATION-MAP-V1.md) for current
+> product direction. This document remains the detailed inventory of existing
+> behavior and states.
+
 **Document status:** Designer-ready UX map  
 **Prepared from:** Current frontend implementation, tests, security contracts, implementation checkpoints, and the master product plan  
 **Product type:** macOS-first local desktop application (Tauri), with Windows and Linux compatibility preserved  

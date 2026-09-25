@@ -20,40 +20,89 @@ export function createMockIpc() {
         ? "pong"
         : command === "workspace_list"
           ? []
-          : command === "workspace_list_directory"
-            ? { entries: [] }
-            : command === "file_create_attachment"
+          : command === "integration_settings_get"
+            ? {
+                version: 1,
+                google: {
+                  oauthClientId: null,
+                  consentMode: "read_only",
+                  calendarEnabled: true,
+                  tasksEnabled: true,
+                },
+                codex: { defaultSandbox: "read_only" },
+              }
+            : command === "google_connection_status_get"
               ? {
-                  path: (args?.request as { path?: unknown } | undefined)?.path,
-                  mediaType: "image/png",
-                  sizeBytes: 0,
+                  state: "disconnected",
+                  connected: false,
+                  clientSecretConfigured: false,
+                  consentMode: "read_only",
+                  calendarEnabled: true,
+                  tasksEnabled: true,
+                  lastSyncedAt: null,
+                  message:
+                    "OAuth is configured. Connect your Google account to start syncing.",
                 }
-              : command === "file_read_attachment"
-                ? { base64: "", mediaType: "image/png", sizeBytes: 0 }
-                : command === "git_status"
-                  ? { changes: [] }
-                  : command === "git_diff"
-                    ? {
-                        staged: Boolean(args?.staged),
-                        patch: "",
-                        truncated: false,
-                      }
-                    : command === "git_file_diff"
-                      ? {
-                          path: typeof args?.path === "string" ? args.path : "",
-                          kind: args?.staged === true ? "staged" : "unstaged",
-                          staged: Boolean(args?.staged),
-                          original: "",
-                          modified: "",
-                          originalLabel: "HEAD",
-                          modifiedLabel: "Working tree",
-                          binary: false,
-                          oversized: false,
-                        }
-                      : command === "language_tools_status" ||
-                          command === "language_analyze"
-                        ? []
-                        : (args?.layout ?? null);
+              : command === "workspace_select_root"
+                ? null
+                : command === "project_list"
+                  ? []
+                  : command === "activity_list"
+                    ? { items: [] }
+                    : command === "planner_list"
+                      ? []
+                      : command === "agent_provider_probe"
+                        ? { provider: "codex", status: "available" }
+                        : command === "agent_session_list"
+                          ? []
+                          : command === "workspace_list_directory"
+                            ? { entries: [] }
+                            : command === "file_create_attachment"
+                              ? {
+                                  path: (
+                                    args?.request as
+                                      | { path?: unknown }
+                                      | undefined
+                                  )?.path,
+                                  mediaType: "image/png",
+                                  sizeBytes: 0,
+                                }
+                              : command === "file_read_attachment"
+                                ? {
+                                    base64: "",
+                                    mediaType: "image/png",
+                                    sizeBytes: 0,
+                                  }
+                                : command === "git_status"
+                                  ? { changes: [] }
+                                  : command === "git_diff"
+                                    ? {
+                                        staged: Boolean(args?.staged),
+                                        patch: "",
+                                        truncated: false,
+                                      }
+                                    : command === "git_file_diff"
+                                      ? {
+                                          path:
+                                            typeof args?.path === "string"
+                                              ? args.path
+                                              : "",
+                                          kind:
+                                            args?.staged === true
+                                              ? "staged"
+                                              : "unstaged",
+                                          staged: Boolean(args?.staged),
+                                          original: "",
+                                          modified: "",
+                                          originalLabel: "HEAD",
+                                          modifiedLabel: "Working tree",
+                                          binary: false,
+                                          oversized: false,
+                                        }
+                                      : command === "language_tools_status" ||
+                                          command === "language_analyze"
+                                        ? []
+                                        : (args?.layout ?? null);
     return Promise.resolve({
       contract: "ipc_result",
       version: 1,
