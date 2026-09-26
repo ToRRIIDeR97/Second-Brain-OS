@@ -1,10 +1,11 @@
-import { useSearchParams } from "@solidjs/router"
+import { useBeforeLeave, useNavigate, useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { createEffect, createMemo, createResource, For, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { noteKeys, normalizeWikiTarget, previewNoteLinks } from "@/features/second-brain/note-links"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -49,10 +50,11 @@ type State = {
 
 export default function NotesPage() {
   const language = useLanguage()
+  const navigate = useNavigate()
   const layout = useLayout()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
-  const [search] = useSearchParams<{ project?: string }>()
+  const [search] = useSearchParams<{ project?: string; note?: string }>()
   const [state, setState] = createStore<State>({
     directory: "",
     path: "",
@@ -105,20 +107,17 @@ export default function NotesPage() {
     () => state.directory || undefined,
     (directory) => listProjects(client(directory)),
   )
+  const [matches, matchActions] = createResource(
+    () => (state.directory && state.search.trim() ? ([state.directory, state.search.trim()] as const) : undefined),
+    ([directory, query]) => listNotes(client(directory), query),
+  )
   const [loadedNote] = createResource(
     () => (state.directory && state.path ? ([state.directory, state.path] as const) : undefined),
     ([directory, path]) => readNote(client(directory), path),
   )
   const visibleNotes = createMemo(() => {
-    const query = state.search.trim().toLowerCase()
-    return (notes() ?? []).filter(
-      (note) =>
-        (!state.filterProjectId || note.projectIds.includes(state.filterProjectId)) &&
-        (!query ||
-          note.title.toLowerCase().includes(query) ||
-          note.path.toLowerCase().includes(query) ||
-          note.tags.some((tag) => tag.toLowerCase().includes(query)) ||
-          note.links.some((link) => link.toLowerCase().includes(query))),
+    return (state.search.trim() ? (matches() ?? []) : (notes() ?? [])).filter(
+      (note) => !state.filterProjectId || note.projectIds.includes(state.filterProjectId),
     )
   })
   const currentKeys = createMemo(() => noteKeys({ path: state.path, title: state.title }))
@@ -168,6 +167,11 @@ export default function NotesPage() {
     event.preventDefault()
     event.returnValue = ""
   }
+  useBeforeLeave((event) => {
+    if (!dirty()) return
+    event.preventDefault()
+    setState("error", language.t("secondBrain.notes.error.unsaved"))
+  })
   window.addEventListener("beforeunload", beforeUnload)
   onCleanup(() => window.removeEventListener("beforeunload", beforeUnload))
 
@@ -175,7 +179,7 @@ export default function NotesPage() {
     setState(
       "error",
       error instanceof SecondBrainRequestError && error.status === 409
-        ? language.t("secondBrain.notes.error.conflict")
+        ? language.t(state.creating ? "secondBrain.notes.error.exists" : "secondBrain.notes.error.conflict")
         : language.t("secondBrain.error.request"),
     )
   }
@@ -200,6 +204,21 @@ export default function NotesPage() {
     })
   }
 
+  let openedLink: string | undefined
+  createEffect(
+    on(
+      () => [search.note, notes()] as const,
+      ([path, items]) => {
+        if (!path) openedLink = undefined
+        const note = items?.find((item) => item.path === path)
+        if (note && openedLink !== path && !dirty()) {
+          openedLink = path
+          chooseNote(note)
+        }
+      },
+    ),
+  )
+
   const createNote = async () => {
     const title = state.newTitle.trim()
     const slug = slugify(title)
@@ -219,6 +238,7 @@ export default function NotesPage() {
         create: true,
       })
       await noteActions.refetch()
+      if (state.search.trim()) await matchActions.refetch()
       setState({ path, newTitle: "", creating: false })
       applyDocument(document)
     } catch (error) {
@@ -250,6 +270,7 @@ export default function NotesPage() {
       })
       applyDocument(document)
       await noteActions.refetch()
+      if (state.search.trim()) await matchActions.refetch()
     } catch (error) {
       report(error)
     } finally {
@@ -279,7 +300,7 @@ export default function NotesPage() {
           </div>
         }
       >
-        <div class="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
           <aside class="flex max-h-[188px] w-full shrink-0 flex-col overflow-hidden border-b border-v2-border-border-base bg-v2-background-bg-layer-01 md:max-h-none md:w-[208px] md:border-b-0 md:border-r">
             <div class="flex h-11 shrink-0 items-center gap-2 px-3">
               <span class="min-w-0 flex-1 truncate text-[13px] text-v2-text-text-base [font-weight:560]">
@@ -320,9 +341,7 @@ export default function NotesPage() {
                     ? language.t("secondBrain.notes.allProjects")
                     : (projects()?.find((project) => project.id === projectID)?.name ?? projectID)
                 }
-                onSelect={(projectID) =>
-                  setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))
-                }
+                onSelect={(projectID) => setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))}
               />
             </div>
 
@@ -339,11 +358,17 @@ export default function NotesPage() {
                 </label>
                 <TextInputV2
                   id="new-note-title"
+                  class="!w-full min-w-0"
                   appearance="large"
                   autofocus
                   value={state.newTitle}
                   onInput={(event) => setState("newTitle", event.currentTarget.value)}
                 />
+                <Show when={state.error}>
+                  <p role="alert" class="text-[12px] text-v2-text-text-critical">
+                    {state.error}
+                  </p>
+                </Show>
                 <div class="flex justify-end gap-2">
                   <ButtonV2 type="button" size="small" variant="ghost" onClick={() => setState("creating", false)}>
                     {language.t("common.cancel")}
@@ -366,7 +391,9 @@ export default function NotesPage() {
                 <Show
                   when={visibleNotes().length > 0}
                   fallback={
-                    <p class="p-2 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.notes.empty")}</p>
+                    <p class="p-2 text-[12px] text-v2-text-text-faint">
+                      {language.t(state.search.trim() ? "secondBrain.notes.noMatches" : "secondBrain.notes.empty")}
+                    </p>
                   }
                 >
                   <For each={visibleNotes()}>
@@ -568,10 +595,28 @@ export default function NotesPage() {
                   <div class="mt-5 flex min-h-[360px] flex-1">
                     <NoteEditor
                       value={state.body}
+                      onOpenNote={(path) =>
+                        navigate(
+                          `/notes?note=${encodeURIComponent(path)}&project=${encodeURIComponent(state.filterProjectId)}`,
+                        )
+                      }
+                      previewText={previewNoteLinks(state.body, notes() ?? [])}
                       loading={loadedNote.loading}
                       onChange={(value) => setState("body", value)}
                       onSave={save}
+                      commandLabel={(id) => language.t(`secondBrain.notes.command.${id}`)}
                       labels={{
+                        words: (count) => language.t("secondBrain.notes.words", { count }),
+                        previewRegion: language.t("secondBrain.notes.previewRegion"),
+                        fullscreen: language.t("secondBrain.notes.fullscreen"),
+                        exitFullscreen: language.t("secondBrain.notes.exitFullscreen"),
+                        sideBySide: language.t("secondBrain.notes.sideBySide"),
+                        stacked: language.t("secondBrain.notes.stacked"),
+                        resize: language.t("secondBrain.notes.resize"),
+                        slashMenu: language.t("secondBrain.notes.slashMenu"),
+                        slashEmpty: language.t("secondBrain.notes.slashEmpty"),
+                        placeholder: language.t("secondBrain.notes.placeholder"),
+                        insert: language.t("secondBrain.notes.insert"),
                         editor: language.t("secondBrain.notes.editor"),
                         toolbar: language.t("secondBrain.notes.format.toolbar"),
                         write: language.t("secondBrain.notes.write"),
@@ -588,19 +633,4 @@ export default function NotesPage() {
       </Show>
     </section>
   )
-}
-
-function normalizeWikiTarget(value: string) {
-  return value
-    .split("#", 1)[0]!
-    .trim()
-    .replaceAll("\\", "/")
-    .replace(/^notes\//i, "")
-    .replace(/\.md$/i, "")
-    .toLowerCase()
-}
-
-function noteKeys(note: Pick<NoteSummary, "path" | "title">) {
-  const path = normalizeWikiTarget(note.path)
-  return new Set([normalizeWikiTarget(note.title), path, path.split("/").pop() ?? path])
 }

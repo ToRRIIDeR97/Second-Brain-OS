@@ -23,6 +23,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { debounce } from "@solid-primitives/scheduled"
+import { sessionDiffForServer } from "@/utils/server"
 import { useLocal } from "@/context/local"
 import { FileProvider, selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
@@ -697,7 +698,7 @@ export default function Page() {
     return open
   }, desktopReviewOpen())
 
-  const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
+  const legacyTurnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => {
     const project = sync().project
     return !!project && project.vcs !== "git"
@@ -720,6 +721,27 @@ export default function Page() {
         (desktopReviewOpen() && (activeTab() === "review" || (newSessionDesign() && !!activeFileTab())))
       : store.mobileTab === "changes",
   )
+  const turnQuery = createQuery(() => ({
+    queryKey: [
+      "session-turn-diff",
+      serverSDK().scope,
+      params.id,
+      lastUserMessage()?.id,
+      sync().data.session_status[params.id ?? ""]?.type ?? "idle",
+    ],
+    enabled:
+      wantsReview() &&
+      reviewMode() === "turn" &&
+      !!params.id &&
+      !!lastUserMessage() &&
+      serverSDK().protocolKind() === "v2",
+    queryFn: () =>
+      sessionDiffForServer(
+        { server: serverSDK().server.http, fetch: platform.fetch },
+        { sessionID: params.id!, messageID: lastUserMessage()!.id },
+      ),
+  }))
+  const turnDiffs = () => (serverSDK().protocolKind() === "v2" ? (turnQuery.data ?? []) : legacyTurnDiffs())
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     const mode = reviewMode()
     if (mode === "git" || mode === "branch") return mode
@@ -740,10 +762,6 @@ export default function Page() {
             sdk()
               .api.vcs.diff({ location: { directory: sdk().directory }, mode: mode === "git" ? "working" : mode })
               .then((result) => result.data)
-              .catch((error) => {
-                console.debug("[session-review] failed to load vcs diff", { mode, error })
-                return []
-              })
         : skipToken,
     }
   })
@@ -764,8 +782,9 @@ export default function Page() {
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
-    return true
+    return serverSDK().protocolKind() !== "v2" || !lastUserMessage() || !turnQuery.isPending
   }
+  const reviewError = () => (vcsMode() ? vcsQuery.error : turnQuery.error)
   const loadReviewDiff = async (file: string, version?: number): Promise<VcsFileDiff | undefined> => {
     const mode = vcsMode()
     if (!mode) return
@@ -1280,6 +1299,13 @@ export default function Page() {
   })
 
   const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
+    if (reviewError())
+      return (
+        <div role="alert" class={input.emptyClass}>
+          {language.t("common.requestFailed")}
+        </div>
+      )
+    if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
     if (reviewMode() === "git" || reviewMode() === "branch") {
       if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
       return empty(reviewEmptyText())
@@ -1298,7 +1324,13 @@ export default function Page() {
   }
 
   const reviewEmptyV2 = () => {
-    if ((reviewMode() === "git" || reviewMode() === "branch") && !reviewReady()) {
+    if (reviewError())
+      return (
+        <div role="alert" class="px-6 py-4 text-text-weak">
+          {language.t("common.requestFailed")}
+        </div>
+      )
+    if (!reviewReady()) {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
     if (reviewMode() === "turn" && nogit()) {
@@ -1355,7 +1387,7 @@ export default function Page() {
     diffs: reviewDiffs,
     diffsReady: reviewReady,
     get diffVersion() {
-      return vcsQuery.dataUpdatedAt
+      return reviewMode() === "turn" ? turnQuery.dataUpdatedAt : vcsQuery.dataUpdatedAt
     },
     loadDiff: loadReviewDiff,
     get activeFile() {

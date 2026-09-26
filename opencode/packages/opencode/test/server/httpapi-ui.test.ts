@@ -145,7 +145,7 @@ function routeOrderingApp() {
     ).pipe(
       Layer.provide([
         fsUtilLayer,
-        RuntimeFlags.layer({ disableEmbeddedWebUi: true }),
+        RuntimeFlags.layer({ disableEmbeddedWebUi: false }),
         httpClient(new Response("ui"), (request) => {
           proxiedUrl = request.url
         }),
@@ -184,12 +184,33 @@ function responseText(response: Response) {
 }
 
 describe("HttpApi UI fallback", () => {
+  it.live("returns local JSON errors for disabled desktop UI and unmatched API routes", () =>
+    Effect.gen(function* () {
+      let requests = 0
+      const client = httpClient(new Response("<html>upstream</html>"), () => {
+        requests++
+      })
+      for (const disableEmbeddedWebUi of [false, true]) {
+        const server = uiApp({ disableEmbeddedWebUi, client })
+        for (const path of disableEmbeddedWebUi
+          ? ["/", "/assets/app.js", "/api/project"]
+          : ["/api", "/api/project", "/api/mcp"]) {
+          const response = yield* server.request(path)
+          expect(response.status).toBe(404)
+          expect(response.headers.get("content-type")).toContain("application/json")
+          expect(yield* responseText(response)).toBe(JSON.stringify({ error: "Not Found" }))
+        }
+      }
+      expect(requests).toBe(0)
+    }),
+  )
+
   it.live("serves the web UI through the HTTP API app", () =>
     Effect.gen(function* () {
       let proxiedUrl: string | undefined
 
       const response = yield* uiApp({
-        disableEmbeddedWebUi: true,
+        disableEmbeddedWebUi: false,
         client: httpClient(
           new Response("<html>opencode</html>", { headers: { "content-type": "text/html" } }),
           (request) => {
@@ -221,7 +242,7 @@ describe("HttpApi UI fallback", () => {
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            RuntimeFlags.layer({ disableEmbeddedWebUi: true }),
+            RuntimeFlags.layer({ disableEmbeddedWebUi: false }),
             Layer.succeed(
               HttpClient.HttpClient,
               HttpClient.make((request) => {
@@ -271,7 +292,7 @@ describe("HttpApi UI fallback", () => {
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            RuntimeFlags.layer({ disableEmbeddedWebUi: true }),
+            RuntimeFlags.layer({ disableEmbeddedWebUi: false }),
             Layer.succeed(
               HttpClient.HttpClient,
               HttpClient.make((request) =>
@@ -371,7 +392,7 @@ describe("HttpApi UI fallback", () => {
       const response = yield* uiApp({
         password: "secret",
         username: "opencode",
-        disableEmbeddedWebUi: true,
+        disableEmbeddedWebUi: false,
       }).request("/")
 
       expect(response.status).toBe(401)
@@ -384,7 +405,7 @@ describe("HttpApi UI fallback", () => {
       const response = yield* uiApp({
         password: "secret",
         username: "opencode",
-        disableEmbeddedWebUi: true,
+        disableEmbeddedWebUi: false,
         client: httpClient(new Response("<html>opencode</html>", { headers: { "content-type": "text/html" } })),
       }).request(`/?auth_token=${btoa("opencode:secret")}`)
 
@@ -398,7 +419,7 @@ describe("HttpApi UI fallback", () => {
       const response = yield* uiApp({
         password: "secret",
         username: "opencode",
-        disableEmbeddedWebUi: true,
+        disableEmbeddedWebUi: false,
       }).request("/", {
         headers: { authorization: `Basic ${btoa("opencode:secret")}` },
       })
@@ -412,7 +433,7 @@ describe("HttpApi UI fallback", () => {
       const response = yield* uiApp({
         password: "sec:ret",
         username: "opencode",
-        disableEmbeddedWebUi: true,
+        disableEmbeddedWebUi: false,
       }).request("/", {
         headers: { authorization: `Basic ${btoa("opencode:sec:ret")}` },
       })
@@ -432,7 +453,7 @@ describe("HttpApi UI fallback", () => {
         const response = yield* uiApp({
           password: "secret",
           username: "opencode",
-          disableEmbeddedWebUi: true,
+          disableEmbeddedWebUi: false,
           client: httpClient(new Response("ok")),
         }).request(path)
         expect(response.status).not.toBe(401)

@@ -209,7 +209,7 @@ const layer = Layer.effect(
           ),
           stream: (input) =>
             instance.enabled
-              ? llm.stream(input.request)
+              ? withProviderIdleTimeout(llm.stream(input.request))
               : Stream.fail(llmError("HarnessRuntime", "stream", `${instance.name} is disabled.`)),
         })
         continue
@@ -917,4 +917,20 @@ function string(value: unknown) {
 
 function number(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+export function withProviderIdleTimeout<A, E, R>(stream: Stream.Stream<A, E, R>) {
+  return stream.pipe(
+    Stream.timeoutOrElse({
+      duration: "2 minutes",
+      orElse: () =>
+        Stream.fail(
+          llmError(
+            "HarnessRuntime",
+            "stream",
+            "The provider stopped responding for two minutes. Retry the request or choose another provider.",
+          ),
+        ),
+    }),
+  )
 }

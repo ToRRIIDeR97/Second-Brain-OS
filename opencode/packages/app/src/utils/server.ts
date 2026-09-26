@@ -6,6 +6,7 @@ import {
   type SessionInfo,
   type SessionPromptInput,
 } from "@opencode-ai/client/promise"
+import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { Harness } from "@opencode-ai/schema/harness"
 import { Harness as HarnessSchema } from "@opencode-ai/schema/harness"
 import { Location } from "@opencode-ai/schema/location"
@@ -235,4 +236,30 @@ export async function switchHarnessForServer(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export async function sessionDiffForServer(
+  input: { server: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch },
+  value: { sessionID: string; messageID: string },
+): Promise<VcsFileDiff[]> {
+  const url = new URL(`${input.server.url.replace(/\/+$/, "")}/api/session/${encodeURIComponent(value.sessionID)}/diff`)
+  url.searchParams.set("messageID", value.messageID)
+  const response = await (input.fetch ?? globalThis.fetch)(url, {
+    headers: input.server.password
+      ? {
+          Authorization: `Basic ${authTokenFromCredentials({ username: input.server.username, password: input.server.password })}`,
+        }
+      : undefined,
+  })
+  if (!response.ok) throw new Error(`Session diff failed (${response.status})`)
+  const payload = (await response.json()) as {
+    data: {
+      path: string
+      patch: string
+      additions: number
+      deletions: number
+      status: "added" | "modified" | "deleted"
+    }[]
+  }
+  return payload.data.map(({ path, ...diff }) => ({ ...diff, file: path }))
 }

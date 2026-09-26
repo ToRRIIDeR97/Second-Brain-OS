@@ -29,13 +29,18 @@ export type NoteEditorLabels = Partial<{
   slashMenu: string
   slashEmpty: string
   placeholder: string
+  insert: string
+  words: (count: number) => string
 }>
 
 export type NoteEditorProps = {
   value: string
+  onOpenNote?: (path: string) => void
+  previewText?: string
   onChange: (value: string) => void
   onSave: () => void | Promise<void>
   loading?: boolean
+  commandLabel?: (id: NoteEditorCommand) => string
   labels?: NoteEditorLabels
 }
 
@@ -53,6 +58,8 @@ const defaults: Required<NoteEditorLabels> = {
   resize: "Resize editor and preview",
   slashMenu: "Insert block",
   slashEmpty: "No matching commands",
+  insert: "Insert",
+  words: (count) => `${count} words`,
   placeholder: "Write Markdown, or type / at the start of a line for commands...",
 }
 
@@ -68,6 +75,8 @@ const insertCommands = noteEditorCommands.filter((command) => !toolbarCommands.i
 
 export function NoteEditor(props: NoteEditorProps) {
   const label = <K extends keyof Required<NoteEditorLabels>>(key: K) => props.labels?.[key] ?? defaults[key]
+  const commandLabel = (command: (typeof noteEditorCommands)[number]) =>
+    props.commandLabel?.(command.id) ?? command.label
   const [mode, setMode] = createSignal<EditorMode>(props.value.trim() ? "preview" : "write")
   const [orientation, setOrientation] = createSignal<SplitOrientation>("side-by-side")
   const [split, setSplit] = createSignal(50)
@@ -84,7 +93,7 @@ export function NoteEditor(props: NoteEditorProps) {
     const query = slash()?.query.trim().toLowerCase() ?? ""
     if (!query) return noteEditorCommands
     return noteEditorCommands.filter((command) =>
-      `${command.label} ${command.keywords} ${command.id}`.toLowerCase().includes(query),
+      `${commandLabel(command)} ${command.keywords} ${command.id}`.toLowerCase().includes(query),
     )
   })
 
@@ -238,7 +247,7 @@ export function NoteEditor(props: NoteEditorProps) {
           </button>
         </Show>
         <span class="ml-auto hidden text-[11px] tabular-nums text-v2-text-text-faint sm:inline">
-          {props.value.trim() ? props.value.trim().split(/\s+/).length : 0} words
+          {label("words")(props.value.trim() ? props.value.trim().split(/\s+/).length : 0)}
         </span>
         <button
           type="button"
@@ -262,8 +271,8 @@ export function NoteEditor(props: NoteEditorProps) {
               <button
                 type="button"
                 class={controlClass}
-                aria-label={command.label}
-                title={command.label}
+                aria-label={commandLabel(command)}
+                title={commandLabel(command)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => run(command.id)}
               >
@@ -280,7 +289,7 @@ export function NoteEditor(props: NoteEditorProps) {
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => setInsertOpen((value) => !value)}
           >
-            Insert
+            {label("insert")}
           </button>
           <Show when={insertOpen()}>
             <div
@@ -296,7 +305,7 @@ export function NoteEditor(props: NoteEditorProps) {
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => run(command.id)}
                   >
-                    <span>{command.label}</span>
+                    <span>{commandLabel(command)}</span>
                     <span class="text-[10px] text-v2-text-text-faint">{command.shortLabel}</span>
                   </button>
                 )}
@@ -369,7 +378,7 @@ export function NoteEditor(props: NoteEditorProps) {
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => run(command.id, slash())}
                         >
-                          <span>{command.label}</span>
+                          <span>{commandLabel(command)}</span>
                           <span class="text-[10px] text-v2-text-text-faint">{command.shortLabel}</span>
                         </button>
                       )}
@@ -415,8 +424,19 @@ export function NoteEditor(props: NoteEditorProps) {
               style={{ "flex-basis": mode() === "split" ? `${100 - split()}%` : "100%" }}
               role="region"
               aria-label={label("previewRegion")}
+              on:click={(event) => {
+                const link = event.target instanceof Element ? event.target.closest("a") : null
+                if (!props.onOpenNote || !link) return
+                const url = new URL(link.href)
+                if (url.origin !== window.location.origin || url.pathname !== "/notes") return
+                const path = url.searchParams.get("note")
+                if (!path) return
+                event.preventDefault()
+                event.stopPropagation()
+                props.onOpenNote(path)
+              }}
             >
-              <Markdown text={props.value} class="max-w-none text-[15px] leading-7 [&_h1:first-child]:hidden" />
+              <Markdown text={props.previewText ?? props.value} class="max-w-none text-[15px] leading-7" />
             </div>
           </Show>
         </div>

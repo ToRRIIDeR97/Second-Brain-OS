@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { Harness } from "@opencode-ai/schema/harness"
 import { createApiForServer, createSdkForServer, createSessionForServer, promptSessionForServer } from "./server"
 import { createCompatibleApi } from "./server-compat"
+import { detectServerCapabilities } from "./server-protocol"
 
 function setup(
   protocol: "v1" | "v2" | Promise<"v1" | "v2">,
   responses?: { vcs?: { branch: string; default_branch: string } },
+  mixed = false,
 ) {
   const requests: Request[] = []
   const fetcher = Object.assign(
@@ -48,6 +50,7 @@ function setup(
   const server = { url: "http://localhost:4096" }
   const api = createCompatibleApi({
     protocol: typeof protocol === "string" ? Promise.resolve(protocol) : protocol,
+    legacyProjectsAndMcp: Promise.resolve(mixed),
     current: createApiForServer({ server, fetch: fetcher }),
     createSession: (input) => createSessionForServer({ server, fetch: fetcher }, input),
     promptSession: (input) => promptSessionForServer({ server, fetch: fetcher }, input),
@@ -58,6 +61,65 @@ function setup(
 }
 
 describe("createCompatibleApi", () => {
+  test("uses supported bootstrap routes on the managed sidecar while retaining current sessions", async () => {
+    const paths: string[] = []
+    const project = { id: "project", worktree: "/repo", sandboxes: [], time: { created: 1, updated: 1 } }
+    const fetcher = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const path = new URL(request.url).pathname
+        paths.push(path)
+        const routes: Record<string, unknown> = {
+          "/api/health": { healthy: true },
+          "/global/health": { healthy: true, version: "1.18.21" },
+          "/project": [project],
+          "/project/current": project,
+          "/mcp": { docs: { status: "connected" } },
+          "/experimental/resource": { guide: { client: "docs", name: "Guide", uri: "docs://guide" } },
+          "/mcp/docs/connect": true,
+          "/mcp/docs/disconnect": true,
+          "/api/session": { data: [], cursor: {} },
+        }
+        if (!(path in routes)) return Response.json({ error: "Not Found" }, { status: 404 })
+        if (!["/api/health", "/global/health", "/project", "/api/session"].includes(path)) {
+          if (request.method === "GET") expect(new URL(request.url).searchParams.get("directory")).toBe("/repo")
+          else expect(request.headers.get("x-opencode-directory")).toBe("%2Frepo")
+        }
+        return Response.json(routes[path])
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const server = { url: "http://localhost:4096" }
+    const capabilities = detectServerCapabilities(server, fetcher)
+    const api = createCompatibleApi({
+      protocol: capabilities.then((value) => value.protocol),
+      legacyProjectsAndMcp: capabilities.then((value) => value.legacyProjectsAndMcp),
+      current: createApiForServer({ server, fetch: fetcher }),
+      legacy: (directory) => createSdkForServer({ server, fetch: fetcher, directory, throwOnError: true }),
+    })
+    const location = { directory: "/repo" }
+    expect(await api.project.list()).toEqual([project])
+    expect(await api.project.current({ location })).toEqual({ id: "project", directory: "/repo" })
+    expect((await api.mcp.list({ location })).data).toEqual([{ name: "docs", status: { status: "connected" } }])
+    expect((await api.mcp.resource.catalog({ location })).data.resources).toEqual([
+      { server: "docs", name: "Guide", uri: "docs://guide" },
+    ])
+    await api.mcp.connect({ location, server: "docs" })
+    await api.mcp.disconnect({ location, server: "docs" })
+    await api.session.list({ directory: "/repo" })
+    expect(paths).toEqual([
+      "/api/health",
+      "/global/health",
+      "/project",
+      "/project/current",
+      "/mcp",
+      "/experimental/resource",
+      "/mcp/docs/connect",
+      "/mcp/docs/disconnect",
+      "/api/session",
+    ])
+  })
+
   test("keeps harness sessions on the current API when the server also exposes V1", async () => {
     const { api, requests } = setup("v1")
     await api.session.create({
@@ -273,4 +335,18 @@ describe("createCompatibleApi", () => {
     expect(requests[1]!.headers.get("x-opencode-directory")).toBe("%2Frepo")
     expect(requests[2]!.headers.get("x-opencode-directory")).toBeNull()
   })
+})
+
+test("managed current servers use supported rename, file and Git routes", async () => {
+  const { api, requests } = setup("v2", undefined, true)
+  await api.session.rename({ sessionID: "ses_1", title: "Renamed", directory: "/repo" })
+  await api.file.find({ location: { directory: "/repo" }, query: "fresh", type: "file", limit: 20 })
+  await api.vcs.diff({ location: { directory: "/repo" }, mode: "working" })
+  expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+    "/session/ses_1",
+    "/find/file",
+    "/vcs/diff",
+  ])
+  expect(await requests[0]!.json()).toEqual({ title: "Renamed" })
+  for (const request of requests.slice(1)) expect(new URL(request.url).searchParams.get("directory")).toBe("/repo")
 })

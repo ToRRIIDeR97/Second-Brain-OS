@@ -166,6 +166,30 @@ describe("Snapshot", () => {
   )
 })
 
+testEffect(Layer.empty).live("captures edits when Git is initialized after the workspace is opened", () =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => tmpdir()),
+    (tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        yield* Effect.promise(() => fs.mkdir(project))
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          expect(yield* snapshot.capture()).toBeUndefined()
+          yield* Effect.promise(() => $`git init`.cwd(project).quiet())
+          const before = yield* snapshot.capture()
+          expect(before).toBeDefined()
+          yield* Effect.promise(() => fs.writeFile(path.join(project, "agent-output.md"), "agent edit\n"))
+          const after = yield* snapshot.capture()
+          expect(after).toBeDefined()
+          const diffs = yield* snapshot.diff({ from: before!, to: after! })
+          expect(diffs).toMatchObject([{ path: "agent-output.md", status: "added", additions: 1 }])
+        }).pipe(Effect.provide(snapshotLayer(path.join(tmp.path, "profile"), project)))
+      }),
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  ),
+)
+
 function snapshotLayer(data: string, directory: string) {
   return AppNodeBuilder.build(Snapshot.node, [
     [Location.node, Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))],

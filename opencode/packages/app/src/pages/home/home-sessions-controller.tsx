@@ -213,11 +213,17 @@ export function createHomeSessionsController(home: HomeController) {
           server: ServerConnection.key(conn),
           session,
           archive: (sessionID) =>
-            ctx.sdk.client.session.update({
-              sessionID,
-              directory: session.directory,
-              time: { archived: Date.now() },
-            }),
+            ctx.sdk.client.session
+              .update({
+                sessionID,
+                directory: session.directory,
+                time: { archived: Date.now() },
+              })
+              .then((result) => {
+                if (result.data)
+                  ctx.sync.homeSessions.apply({ type: "session.updated", properties: { sessionID, info: result.data } })
+                return result
+              }),
           remove: () =>
             setStore(
               produce((draft) => {

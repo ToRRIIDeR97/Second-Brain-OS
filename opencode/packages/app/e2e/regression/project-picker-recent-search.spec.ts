@@ -35,7 +35,7 @@ async function openProjectDialog(page: Page) {
       }),
     )
   }, worktrees)
-  await page.goto("/")
+  await page.goto("/workspaces")
   const add = page.getByRole("button", { name: "Add project" }).first()
   await expectAppVisible(add)
   await add.click()

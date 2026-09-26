@@ -10,3 +10,8 @@ app/src-tauri/gen/
 .vscode/
 /temp/
 /temp repos/
+/.cache/
+/artifacts/notes-ui-polish-audit/
+/notes/test.md
+/handover files/2026-08-23-second-brain-os-v1-gap-fixes-handover.md
+/handover files/2026-09-26-second-brain-main-merge-handover.md

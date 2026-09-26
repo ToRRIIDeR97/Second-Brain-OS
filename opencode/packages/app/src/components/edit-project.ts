@@ -6,10 +6,13 @@ import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobal } from "@/context/global"
 import { type LocalProject } from "@/context/layout"
+import { useLanguage } from "@/context/language"
+import { showToast } from "@/utils/toast"
 import { ServerConnection } from "@/context/server"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
   const dialog = useDialog()
+  const language = useLanguage()
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
   const folderName = createMemo(() => getFilename(props.project.worktree))
@@ -66,12 +69,18 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
   }
 
   const save = useMutation(() => ({
+    onError: (error) =>
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+      }),
     mutationFn: async () => {
       const name = store.name.trim() === folderName() ? "" : store.name.trim()
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        if ((await serverCtx().sdk.protocol) !== "v1") return
+        if ((await serverCtx().sdk.protocol) !== "v1" && !(await serverCtx().sdk.legacyProjectsAndMcp))
+          throw new Error(language.t("common.requestFailed"))
         const project = await serverCtx()
           .sdk.client.project.update({
             projectID: props.project.id,

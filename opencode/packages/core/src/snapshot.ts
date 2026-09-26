@@ -91,11 +91,11 @@ const layer = Layer.effect(
     const git = yield* Git.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
-    const source = yield* git.repo.discover(location.project.directory)
-    const worktree = source
+    let source = yield* git.repo.discover(location.project.directory)
+    let worktree = source
       ? AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
       : location.project.directory
-    const gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
+    let gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
 
     const scope = Effect.fnUntraced(function* () {
       const relative = path.relative(worktree, location.directory)
@@ -122,8 +122,15 @@ const layer = Layer.effect(
     })
 
     const enabled = Effect.fnUntraced(function* () {
-      if (location.vcs?.type !== "git") return false
-      return Config.latest(yield* config.entries(), "snapshots") !== false
+      if (Config.latest(yield* config.entries(), "snapshots") === false) return false
+      // Git can be initialized after this Location was opened.
+      if (!source) {
+        source = yield* git.repo.discover(location.directory)
+        if (!source) return false
+        worktree = AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
+        gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
+      }
+      return true
     })
 
     const capture = Effect.fn("Snapshot.capture")(function* () {

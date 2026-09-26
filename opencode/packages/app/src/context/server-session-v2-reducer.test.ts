@@ -187,3 +187,17 @@ describe("v2 session reducer", () => {
     })
   })
 })
+
+test("fork import events hydrate copied history once", () => {
+  const reducer = createV2SessionReducer()
+  const message = { id: "msg_fork", type: "user" as const, text: "copied context", time: { created: 1 } }
+  const imported = event({
+    ...base,
+    id: "evt_imported",
+    type: "session.next.message.imported",
+    data: { sessionID: "ses_1", timestamp: 2, message },
+  })
+  const first = reducer.reduce([], imported)!
+  expect(first).toMatchObject({ sessionID: "ses_1", messages: [message], touched: ["msg_fork"] })
+  expect(reducer.reduce(first.messages, imported)!.messages).toEqual([message])
+})

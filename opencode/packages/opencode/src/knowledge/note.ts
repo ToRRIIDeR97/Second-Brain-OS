@@ -59,7 +59,7 @@ type Card = Document & {
   bom: boolean
 }
 
-export const list = Effect.fn("KnowledgeNote.list")(function* () {
+export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
   const paths = yield* fs.glob(`{${directory}/**/*.md,projects/*/notes/**/*.md}`, {
@@ -71,7 +71,15 @@ export const list = Effect.fn("KnowledgeNote.list")(function* () {
   const notes = yield* Effect.forEach(paths.slice(0, limit), (path) => readCard(path.replaceAll("\\", "/")), {
     concurrency: 8,
   })
+  const query = search.trim().toLowerCase()
   return notes
+    .filter(
+      (note) =>
+        !query ||
+        [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
+          value.toLowerCase().includes(query),
+        ),
+    )
     .map((note) => note.info)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.title.localeCompare(right.title))
 })

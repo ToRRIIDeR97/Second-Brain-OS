@@ -7,19 +7,14 @@
     "dev": "bun run --cwd opencode dev:desktop",
     "desktop:dev": "bun run --cwd opencode dev:desktop",
     "build": "bun run --cwd opencode/packages/desktop build",
-    "desktop:build": "bun run --cwd opencode/packages/desktop package:win",
-    "typecheck": "bun run --cwd opencode/packages/desktop typecheck",
+    "desktop:build": "bun run build && bun run --cwd opencode/packages/desktop package:win --publish never",
+    "typecheck": "bun run --cwd opencode/packages/desktop typecheck && bun run --cwd opencode/packages/core typecheck && bun run --cwd opencode/packages/opencode typecheck",
     "lint": "bun run --cwd opencode lint",
-    "test": "bun test --cwd opencode/packages/desktop",
-    "legacy:dev": "corepack pnpm --filter @second-brain-os/app dev",
-    "legacy:desktop:dev": "corepack pnpm --filter @second-brain-os/app tauri dev",
-    "legacy:build": "corepack pnpm --filter @second-brain-os/app build",
-    "legacy:test": "corepack pnpm --filter @second-brain-os/app test && cargo test --workspace"
-  },
-  "workspaces": [
-    "app"
-  ],
-  "overrides": {
-    "brace-expansion": "5.0.8"
+    "test": "bun run test:desktop && bun run test:app && bun run test:second-brain",
+    "test:desktop": "bun run --cwd opencode/packages/desktop test",
+    "test:app": "bun run --cwd opencode/packages/app test",
+    "test:second-brain": "bun run --cwd opencode/packages/opencode test ./test/knowledge ./test/planner ./test/project/brain.test.ts",
+    "test:routes": "bun run --cwd opencode/packages/app test:e2e e2e/regression/brain-home-routing.spec.ts e2e/regression/project-picker-recent-search.spec.ts e2e/regression/session-list-path-loading.spec.ts --workers=1",
+    "test:engine": "bun run --cwd opencode/packages/core test && bun run --cwd opencode/packages/opencode test"
   }
 }

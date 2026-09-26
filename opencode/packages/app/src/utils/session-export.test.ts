@@ -59,3 +59,38 @@ describe("fetchSessionExport", () => {
     ).rejects.toThrow("Session not found: ses_missing")
   })
 })
+
+test("exports all current history pages in chronological order without calling the legacy transcript", async () => {
+  const calls: unknown[] = []
+  const result = await fetchSessionExport({
+    sessionID: "ses_current",
+    client: {
+      session: {
+        get: async () => ({ data: { id: "ses_current" } as Session }),
+        messages: async () => {
+          throw new Error("legacy transcript called")
+        },
+      },
+    },
+    messageApi: {
+      list: async (input) => {
+        calls.push(input)
+        return input.cursor
+          ? {
+              data: [{ id: "msg_old", type: "user" as const, text: "older context", time: { created: 1 } }],
+              cursor: {},
+            }
+          : {
+              data: [{ id: "msg_new", type: "user" as const, text: "latest prompt", time: { created: 2 } }],
+              cursor: { next: "older-page" },
+            }
+      },
+    },
+  })
+  expect(calls).toEqual([
+    { sessionID: "ses_current", limit: 200, order: "desc" },
+    { sessionID: "ses_current", limit: 200, cursor: "older-page" },
+  ])
+  expect(result.messages.map((message) => message.info.id)).toEqual(["msg_old", "msg_new"])
+  expect(result.messages[0]!.parts).toMatchObject([{ type: "text", text: "older context" }])
+})

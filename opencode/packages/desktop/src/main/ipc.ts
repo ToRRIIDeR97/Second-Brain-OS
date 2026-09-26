@@ -24,6 +24,7 @@ import {
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
+import { saveSessionExport } from "./session-export"
 import { nativeT } from "./native-translations"
 
 const pickerFilters = (ext?: string[]) => {
@@ -220,6 +221,19 @@ export function registerIpcHandlers(deps: Deps) {
       if (result.canceled) return null
       return result.filePath ?? null
     },
+  )
+
+  ipcMain.handle("save-session-export", (event: IpcMainInvokeEvent, input: { filename: string; json: string }) =>
+    saveSessionExport(input, async (filename) => {
+      const options = {
+        title: nativeT("desktop.dialog.saveFile"),
+        defaultPath: filename,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      }
+      const owner = BrowserWindow.fromWebContents(event.sender)
+      const result = await (owner ? dialog.showSaveDialog(owner, options) : dialog.showSaveDialog(options))
+      return result.canceled ? null : (result.filePath ?? null)
+    }),
   )
 
   ipcMain.on("open-external", (_event: IpcMainEvent, url: string) => {

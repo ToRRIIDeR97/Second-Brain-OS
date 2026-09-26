@@ -1,28 +1,19 @@
 # Development setup
 
-The pinned versions live in `.node-version`, `package.json`, and
-`rust-toolchain.toml`.
+Use the [root setup guide](../../README.md#setup) for prerequisites,
+installation, and the Windows long-path fallback. The active app uses Bun,
+Node.js, and Electron. Rust, pnpm, WebView2, and WebKitGTK belonged to the
+retired Tauri application and are not this app's setup instructions.
 
-## macOS
-
-1. Install Xcode Command Line Tools.
-2. Install the pinned Node.js and pnpm versions.
-3. Install Rust through rustup; the repository selects Rust 1.88.0.
-4. Run `pnpm install --frozen-lockfile`.
-
-## Windows
-
-Install Microsoft C++ Build Tools and WebView2, then the pinned Node.js, pnpm,
-and Rust versions.
-
-## Linux
-
-Install the WebKitGTK and native build packages listed in the current Tauri 2
-prerequisites, then the pinned Node.js, pnpm, and Rust versions.
+The root [command table](../../README.md#common-commands) is the canonical
+entry point for development and checks. See [architecture](../architecture/README.md)
+for runtime boundaries and [release operations](../release-operations.md) for
+candidate packaging and verification limits.
 
 ## Dependency updates
 
-Runtime and toolchain versions are exact by default. Update them in one change,
-regenerate both lockfiles, run `pnpm check`, and record compatibility-impacting
-updates in `docs/compatibility.md`.
-
+Toolchain versions live in `.node-version` and the root and `opencode/`
+package manifests. Workspace dependencies and patches live in
+`opencode/package.json`, `opencode/bun.lock`, and `opencode/patches/`.
+Update these together and run the relevant checks from the root command table.
+The archive's SQL files are reference material, not active migrations.

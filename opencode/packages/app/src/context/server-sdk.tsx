@@ -24,7 +24,7 @@ import { ServerConnection, useServer } from "./server"
 import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
-import { detectServerProtocol, type ServerProtocol } from "@/utils/server-protocol"
+import { detectServerCapabilities, type ServerProtocol } from "@/utils/server-protocol"
 import { createCompatibleApi, type CompatibleApi } from "@/utils/server-compat"
 
 const isAbortError = (error: unknown) =>
@@ -225,6 +225,7 @@ type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
   protocol: Promise<ServerProtocol>
+  legacyProjectsAndMcp: Promise<boolean>
   protocolKind: Accessor<ServerProtocol | undefined>
   url: string
   client: ReturnType<typeof createSdkForServer>
@@ -262,7 +263,9 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     fetch: eventFetch,
     server: server.http,
   })
-  const protocol = detectServerProtocol(server.http, platform.fetch ?? globalThis.fetch)
+  const capabilities = detectServerCapabilities(server.http, platform.fetch ?? globalThis.fetch)
+  const protocol = capabilities.then((value) => value.protocol)
+  const legacyProjectsAndMcp = capabilities.then((value) => value.legacyProjectsAndMcp)
   const [protocolKind] = createResource(
     () => protocol,
     (value) => value,
@@ -402,12 +405,20 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       throwOnError: true,
       directory,
     })
-  const api = createCompatibleApi({ protocol, current: currentApi, createSession, promptSession, legacy })
+  const api = createCompatibleApi({
+    protocol,
+    legacyProjectsAndMcp,
+    current: currentApi,
+    createSession,
+    promptSession,
+    legacy,
+  })
 
   return {
     server,
     scope,
     protocol,
+    legacyProjectsAndMcp,
     protocolKind,
     url: server.http.url,
     client: sdk,
@@ -483,10 +494,12 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
   return {
     scope: serverSDK.scope,
     protocol: serverSDK.protocol,
+    legacyProjectsAndMcp: serverSDK.legacyProjectsAndMcp,
     directory,
     client,
     api: createCompatibleApi({
       protocol: serverSDK.protocol,
+      legacyProjectsAndMcp: serverSDK.legacyProjectsAndMcp,
       current: serverSDK.currentApi,
       createSession: serverSDK.createSession,
       promptSession: serverSDK.promptSession,

@@ -61,11 +61,14 @@ export const DialogServerV2: Component<{
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">
           <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.url")}</label>
+            <label class="settings-v2-server-dialog-label" for="server-url">
+              {language.t("dialog.server.add.url")}
+            </label>
             <TextInputV2
               type="text"
               appearance="large"
               class="!w-full self-stretch"
+              id="server-url"
               value={controller.formValue()}
               placeholder={language.t("dialog.server.add.placeholder")}
               invalid={!!controller.formError()}
@@ -75,15 +78,20 @@ export const DialogServerV2: Component<{
               onKeyDown={keyDown}
             />
             <Show when={controller.formError()}>
-              <span class="settings-v2-server-dialog-error">{controller.formError()}</span>
+              <span role="alert" class="settings-v2-server-dialog-error">
+                {controller.formError()}
+              </span>
             </Show>
           </div>
           <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.name")}</label>
+            <label class="settings-v2-server-dialog-label" for="server-name">
+              {language.t("dialog.server.add.name")}
+            </label>
             <TextInputV2
               type="text"
               appearance="large"
               class="!w-full self-stretch"
+              id="server-name"
               value={controller.formName()}
               placeholder={language.t("dialog.server.add.namePlaceholder")}
               disabled={controller.formBusy()}
@@ -93,11 +101,14 @@ export const DialogServerV2: Component<{
           </div>
           <div class="grid w-full min-w-0 grid-cols-2 gap-4">
             <div class="flex min-w-0 flex-col gap-2">
-              <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.username")}</label>
+              <label class="settings-v2-server-dialog-label" for="server-username">
+                {language.t("dialog.server.add.username")}
+              </label>
               <TextInputV2
                 type="text"
                 appearance="large"
                 class="!w-full self-stretch"
+                id="server-username"
                 value={controller.formUsername()}
                 placeholder={language.t("dialog.server.add.usernamePlaceholder")}
                 disabled={controller.formBusy()}
@@ -106,11 +117,14 @@ export const DialogServerV2: Component<{
               />
             </div>
             <div class="flex min-w-0 flex-col gap-2">
-              <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.password")}</label>
+              <label class="settings-v2-server-dialog-label" for="server-password">
+                {language.t("dialog.server.add.password")}
+              </label>
               <TextInputV2
                 type="password"
                 appearance="large"
                 class="!w-full self-stretch"
+                id="server-password"
                 value={controller.formPassword()}
                 placeholder={language.t("dialog.server.add.passwordPlaceholder")}
                 disabled={controller.formBusy()}

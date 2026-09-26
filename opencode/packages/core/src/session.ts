@@ -79,6 +79,8 @@ export type ListInput = typeof ListInput.Type
 
 type CreateInput = {
   id?: SessionSchema.ID
+  title?: string
+  parentID?: SessionSchema.ID
   harnessInstanceID?: Harness.InstanceID
   harnessModel?: Harness.ModelSelection
   agent?: AgentV2.ID
@@ -116,6 +118,14 @@ export type Error = NotFoundError | MessageDecodeError | OperationUnavailableErr
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
+  readonly fork: (input: {
+    sessionID: SessionSchema.ID
+    messageID?: SessionMessage.ID
+  }) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageDecodeError | MessageNotFoundError>
+  readonly diff: (input: {
+    sessionID: SessionSchema.ID
+    messageID?: SessionMessage.ID
+  }) => Effect.Effect<readonly Revert.FileDiff[], NotFoundError | MessageDecodeError | Snapshot.Error>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -233,7 +243,8 @@ const layer = Layer.effect(
           directory: input.location.directory,
           path: path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
           workspaceID: input.location.workspaceID ? WorkspaceV2.ID.make(input.location.workspaceID) : undefined,
-          title: `New session - ${new Date(now).toISOString()}`,
+          title: input.title ?? `New session - ${new Date(now).toISOString()}`,
+          parentID: input.parentID,
           metadata: {
             harnessInstanceID: input.harnessInstanceID ?? Harness.OpenCode,
             ...(input.harnessModel ? { harnessModel: input.harnessModel } : {}),
@@ -272,6 +283,58 @@ const layer = Layer.effect(
         if (projected.type === "existing") return projected.session
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
+      }),
+      fork: Effect.fn("V2Session.fork")(function* (input) {
+        const original = yield* result.get(input.sessionID)
+        const history = yield* result.messages({ sessionID: original.id, order: "asc" })
+        const boundary = input.messageID
+          ? history.findIndex((message) => message.id === input.messageID)
+          : history.length
+        if (boundary < 0)
+          return yield* new MessageNotFoundError({ sessionID: original.id, messageID: input.messageID! })
+        const fork = yield* result.create({
+          location: original.location,
+          harnessInstanceID: original.harnessInstanceID,
+          harnessModel: original.harnessModel,
+          agent: original.agent,
+          model: original.model,
+          title: `${original.title} (fork)`,
+          parentID: original.id,
+        })
+        for (const source of history.slice(0, boundary)) {
+          const message = { ...source, id: SessionMessage.ID.create(), metadata: undefined }
+          if (message.type === "synthetic") message.sessionID = fork.id
+          if (message.type === "assistant") message.snapshot = undefined
+          yield* events.publish(
+            SessionEvent.MessageImported,
+            {
+              sessionID: fork.id,
+              timestamp: yield* DateTime.now,
+              message,
+            },
+            { location: fork.location },
+          )
+        }
+        return yield* result.get(fork.id)
+      }),
+      diff: Effect.fn("V2Session.diff")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const messages = yield* result.messages({ sessionID: session.id, order: "asc" })
+        const start = input.messageID
+          ? messages.findIndex((message) => message.id === input.messageID)
+          : messages.findLastIndex((message) => message.type === "user")
+        if (start < 0) return []
+        const next = messages.findIndex((message, index) => index > start && message.type === "user")
+        const turn = messages
+          .slice(start, next < 0 ? undefined : next)
+          .filter((message) => message.type === "assistant")
+        const from = turn.find((message) => message.snapshot?.start)?.snapshot?.start
+        const to = turn.findLast((message) => message.snapshot?.end)?.snapshot?.end
+        if (!from || !to) return []
+        return yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          return yield* snapshot.diff({ from: Snapshot.ID.make(from), to: Snapshot.ID.make(to) })
+        }).pipe(Effect.provide(locations.get(session.location)))
       }),
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const session = yield* store.get(sessionID)

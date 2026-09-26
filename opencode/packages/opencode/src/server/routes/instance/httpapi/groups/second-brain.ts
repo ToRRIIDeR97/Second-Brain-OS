@@ -38,7 +38,7 @@ export const SecondBrainApi = HttpApi.make("secondBrain").add(
   HttpApiGroup.make("secondBrain")
     .add(
       HttpApiEndpoint.get("listNotes", SecondBrainPaths.notes, {
-        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        query: Schema.Struct({ ...WorkspaceRoutingQueryFields, search: Schema.optional(Schema.String) }),
         success: described(Schema.Array(KnowledgeNote.Info), "Notes"),
         error: HttpApiError.BadRequest,
       }),

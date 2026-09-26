@@ -90,6 +90,48 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.fork",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.fork({ ...ctx.params, ...ctx.payload }).pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(new SessionNotFoundError({ sessionID: error.sessionID, message: "Session not found" })),
+              ),
+              Effect.catchTag("Session.MessageNotFoundError", (error) =>
+                Effect.fail(
+                  new MessageNotFoundError({
+                    sessionID: error.sessionID,
+                    messageID: error.messageID,
+                    message: "Message not found",
+                  }),
+                ),
+              ),
+              Effect.catchTag("Session.MessageDecodeError", () =>
+                Effect.fail(new UnknownError({ message: "Unable to read session history" })),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.diff",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.diff({ ...ctx.params, ...ctx.query }).pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(new SessionNotFoundError({ sessionID: error.sessionID, message: "Session not found" })),
+              ),
+              Effect.catchTag("Session.MessageDecodeError", () =>
+                Effect.fail(new UnknownError({ message: "Unable to read session history" })),
+              ),
+              Effect.catchTag("Snapshot.Error", () =>
+                Effect.fail(new UnknownError({ message: "Unable to compare session snapshots" })),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
         "session.get",
         Effect.fn(function* (ctx) {
           return {

@@ -17,9 +17,9 @@ export function SecondBrainSidebar() {
       id: "overview",
       icon: "home",
       label: language.t("secondBrain.sidebar.overview"),
-      active: location.pathname === "/brain",
+      active: location.pathname === "/" || location.pathname === "/brain",
       disabled: false,
-      run: () => navigate("/brain"),
+      run: () => navigate("/"),
     },
     {
       id: "projects",

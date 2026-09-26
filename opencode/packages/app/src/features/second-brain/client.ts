@@ -140,7 +140,7 @@ async function request<T>(client: Client, path: string, init?: RequestInit): Pro
   return (await response.json()) as T
 }
 
-export const listNotes = (client: Client) => request<NoteSummary[]>(client, "/second-brain/notes")
+export const listNotes = (client: Client, search = "") => request<NoteSummary[]>(client, `/second-brain/notes?search=${encodeURIComponent(search)}`)
 
 export const readNote = (client: Client, path: string) =>
   request<NoteDocument>(client, `/second-brain/note?path=${encodeURIComponent(path)}`)
