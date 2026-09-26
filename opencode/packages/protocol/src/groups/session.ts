@@ -158,6 +158,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       ),
     )
     .add(
+      HttpApiEndpoint.post("session.fork", "/api/session/:sessionID/fork", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ messageID: SessionMessage.ID.pipe(Schema.optional) }),
+        success: Schema.Struct({ data: Session.Info }),
+        error: [SessionNotFoundError, MessageNotFoundError, UnknownError],
+      }).middleware(sessionLocationMiddleware),
+    )
+    .add(
+      HttpApiEndpoint.get("session.diff", "/api/session/:sessionID/diff", {
+        params: { sessionID: Session.ID },
+        query: Schema.Struct({ messageID: SessionMessage.ID.pipe(Schema.optional) }),
+        success: Schema.Struct({ data: Schema.Array(Revert.FileDiff) }),
+        error: [SessionNotFoundError, UnknownError],
+      }).middleware(sessionLocationMiddleware),
+    )
+    .add(
       HttpApiEndpoint.get("session.get", "/api/session/:sessionID", {
         params: { sessionID: Session.ID },
         success: Schema.Struct({ data: Session.Info }),

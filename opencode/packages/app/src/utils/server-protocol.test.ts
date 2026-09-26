@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { detectServerProtocol } from "./server-protocol"
+import { detectServerCapabilities, detectServerProtocol } from "./server-protocol"
 
 const server = { url: "http://localhost:4096" }
 const json = (value: unknown, status = 200) =>
@@ -35,7 +35,10 @@ describe("detectServerProtocol", () => {
       return Promise.resolve(json({ healthy: true }))
     })
 
-    expect(await detectServerProtocol(server, fetcher)).toBe("v2")
+    expect(await detectServerCapabilities(server, fetcher)).toEqual({
+      protocol: "v2",
+      legacyProjectsAndMcp: true,
+    })
   })
 
   test("recognizes the transitional V1 API health response", async () => {

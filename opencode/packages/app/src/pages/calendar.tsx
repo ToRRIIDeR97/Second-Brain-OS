@@ -4,7 +4,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { createEffect, createMemo, createResource, For, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -60,6 +60,7 @@ type CalendarState = {
   view: CalendarView
   projectFilter: string
   editing: boolean
+  selectedTask: string
   draft: CalendarDraft
   saving: boolean
   error: string
@@ -148,13 +149,20 @@ export default function CalendarPage() {
   const layout = useLayout()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
-  const [search] = useSearchParams<{ view?: string; project?: string; google?: string }>()
+  const [search] = useSearchParams<{
+    view?: string
+    project?: string
+    google?: string
+    event?: string
+    task?: string
+  }>()
   const [state, setState] = createStore<CalendarState>({
     directory: "",
     cursor: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 12),
     view: calendarView(search.view),
     projectFilter: search.project ?? "",
     editing: false,
+    selectedTask: search.task ?? "",
     draft: emptyDraft(),
     saving: false,
     error: "",
@@ -345,6 +353,23 @@ export default function CalendarPage() {
       googleWriteKey: "",
     })
 
+  let openedEvent: string | undefined
+  createEffect(
+    on(
+      () => [search.event, events()] as const,
+      ([id, snapshot]) => {
+        if (!id) openedEvent = undefined
+        const event = snapshot?.events.find((item) => item.id === id)
+        if (event && openedEvent !== id) {
+          openedEvent = id
+          openEvent(event)
+        }
+      },
+    ),
+  )
+
+  const openTask = (id: string) => setState({ view: "tasks", selectedTask: id, editing: false })
+
   const googleMessage = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     if (message.includes("secure_storage")) return language.t("secondBrain.calendar.google.error.secureStorage")
@@ -357,6 +382,10 @@ export default function CalendarPage() {
   const connectGoogle = async () => {
     const google = platform.googleCalendar
     if (!google) return
+    if (!state.googleClientId.trim() || !state.googleClientSecret.trim()) {
+      setState("googleError", language.t("secondBrain.calendar.google.error.credentials"))
+      return
+    }
     setState({ googleBusy: true, googleError: "" })
     let connected = false
     try {
@@ -701,7 +730,8 @@ export default function CalendarPage() {
               value={(project) => project.worktree}
               label={(project) => project.name ?? project.worktree.split(/[\\/]/).pop() ?? project.worktree}
               onSelect={(project) =>
-                project && setState({ directory: project.worktree, editing: false, draft: emptyDraft() })
+                project &&
+                setState({ directory: project.worktree, editing: false, selectedTask: "", draft: emptyDraft() })
               }
             />
           </label>
@@ -740,7 +770,15 @@ export default function CalendarPage() {
                 aria-current={navigationActive(state.view, view) ? "page" : undefined}
                 data-selected={navigationActive(state.view, view) ? "" : undefined}
                 class="h-8 shrink-0 rounded-[6px] px-3 text-[12px] text-v2-text-text-muted transition-colors duration-120 hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                onClick={() => setState({ view, editing: false, googlePanel: false })}
+                onClick={() =>
+                  setState({
+                    view,
+                    editing: false,
+                    googlePanel: false,
+                    selectedTask: "",
+                    ...(view === "today" ? { cursor: new Date() } : {}),
+                  })
+                }
               >
                 {language.t(`secondBrain.calendar.view.${view}`)}
               </button>
@@ -764,6 +802,7 @@ export default function CalendarPage() {
               projects={brainProjects() ?? []}
               onSave={persistTasks}
               filter={filter}
+              selectedId={state.selectedTask}
               googleCanWrite={googleConnection()?.connected && googleConnection()?.access === "write"}
               onFilterChange={(next) => setState("view", viewForTaskFilter(next))}
             />
@@ -777,13 +816,25 @@ export default function CalendarPage() {
                   <IconButton
                     icon="chevron-left"
                     variant="ghost"
-                    aria-label={language.t("secondBrain.calendar.previous")}
+                    aria-label={language.t(
+                      state.view === "week"
+                        ? "secondBrain.calendar.previousWeek"
+                        : state.view === "today"
+                          ? "secondBrain.calendar.previousDay"
+                          : "secondBrain.calendar.previous",
+                    )}
                     onClick={() => shiftCursor(-1)}
                   />
                   <IconButton
                     icon="chevron-right"
                     variant="ghost"
-                    aria-label={language.t("secondBrain.calendar.next")}
+                    aria-label={language.t(
+                      state.view === "week"
+                        ? "secondBrain.calendar.nextWeek"
+                        : state.view === "today"
+                          ? "secondBrain.calendar.nextDay"
+                          : "secondBrain.calendar.next",
+                    )}
                     onClick={() => shiftCursor(1)}
                   />
                 </Show>
@@ -841,7 +892,7 @@ export default function CalendarPage() {
                               item={item}
                               projects={brainProjects() ?? []}
                               onOpenEvent={openEvent}
-                              onOpenTask={() => setState("view", "tasks")}
+                              onOpenTask={() => openTask(item.kind === "task" ? item.task.id : "")}
                               eventSource={sourceLabel}
                               taskLabel={language.t("secondBrain.home.kind.task")}
                             />
@@ -904,7 +955,7 @@ export default function CalendarPage() {
                                   type="button"
                                   class="min-h-6 cursor-pointer truncate rounded-[4px] border border-v2-border-border-base px-1.5 text-left text-[11px] text-v2-text-text-muted transition-colors duration-150 hover:bg-v2-background-bg-layer-01 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
                                   title={task.title}
-                                  onClick={() => setState("view", "tasks")}
+                                  onClick={() => openTask(task.id)}
                                 >
                                   <Show when={task.start}>
                                     <span class="mr-1 text-v2-text-text-faint">{task.start}</span>

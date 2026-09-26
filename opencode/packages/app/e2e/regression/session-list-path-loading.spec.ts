@@ -32,7 +32,7 @@ test("shows loaded sessions before the directory path request resolves", async (
     )
   }, fixture.directory)
 
-  await page.goto("/")
+  await page.goto("/workspaces")
   try {
     await expectAppVisible(page.getByText(fixture.expected.sourceTitle).first())
   } finally {

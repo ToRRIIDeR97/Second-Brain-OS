@@ -25,8 +25,16 @@ export async function detectServerProtocol(
   server: ServerConnection.HttpBase,
   fetch: typeof globalThis.fetch,
 ): Promise<ServerProtocol> {
+  return (await detectServerCapabilities(server, fetch)).protocol
+}
+
+export async function detectServerCapabilities(
+  server: ServerConnection.HttpBase,
+  fetch: typeof globalThis.fetch,
+): Promise<{ protocol: ServerProtocol; legacyProjectsAndMcp: boolean }> {
   const current = await probe(server, fetch, "/api/health").catch(() => undefined)
-  if (current && "pid" in current && typeof current.pid === "number") return "v2"
+  if (current && "pid" in current && typeof current.pid === "number")
+    return { protocol: "v2", legacyProjectsAndMcp: false }
 
   const legacy = await probe(server, fetch, "/global/health").catch(() => undefined)
   if (
@@ -37,8 +45,8 @@ export async function detectServerProtocol(
     "healthy" in legacy &&
     legacy.healthy === true
   )
-    return "v2"
-  if (legacy && "healthy" in legacy && legacy.healthy === true) return "v1"
-  if (current && "healthy" in current && current.healthy === true) return "v1"
-  return "v2"
+    return { protocol: "v2", legacyProjectsAndMcp: true }
+  if (legacy && "healthy" in legacy && legacy.healthy === true) return { protocol: "v1", legacyProjectsAndMcp: true }
+  if (current && "healthy" in current && current.healthy === true) return { protocol: "v1", legacyProjectsAndMcp: true }
+  return { protocol: "v2", legacyProjectsAndMcp: false }
 }

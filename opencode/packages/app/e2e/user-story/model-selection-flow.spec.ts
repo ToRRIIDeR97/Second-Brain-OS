@@ -68,7 +68,7 @@ test("creates a session in a new project, connects OpenCode Go, and selects its 
     localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
   })
 
-  await page.goto("/")
+  await page.goto("/workspaces")
   const addProject = page.locator('[data-action="home-add-project-row"]')
   await expectAppVisible(addProject)
   await addProject.click()

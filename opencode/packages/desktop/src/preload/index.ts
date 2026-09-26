@@ -104,6 +104,7 @@ const api: ElectronAPI = {
   readPickedFile: (token, path) => ipcRenderer.invoke("read-picked-file", token, path),
   releasePickedFiles: (token) => ipcRenderer.invoke("release-picked-files", token),
   getPathForFile: (file) => webUtils.getPathForFile(file),
+  saveSessionExport: (input) => ipcRenderer.invoke("save-session-export", input),
   saveFilePicker: (opts) => ipcRenderer.invoke("save-file-picker", opts),
   openExternal: (url) => ipcRenderer.send("open-external", url),
   openLocalFile: (url) => ipcRenderer.send("open-local-file", url),

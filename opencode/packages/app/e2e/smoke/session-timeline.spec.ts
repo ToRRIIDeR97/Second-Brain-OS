@@ -711,7 +711,7 @@ function expectCompleteScroll(
 }
 
 async function selectHomeProject(page: Page, projectName: string) {
-  await page.goto("/")
+  await page.goto("/workspaces")
   const row = page
     .locator('[data-component="home-project-row"]')
     .filter({ hasText: new RegExp(projectName, "i") })
@@ -719,7 +719,7 @@ async function selectHomeProject(page: Page, projectName: string) {
   await expectAppVisible(row)
   await row.click()
   await expect(row).toHaveAttribute("data-selected", "", { timeout: APP_READY_TIMEOUT })
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(/\/workspaces$/)
 }
 
 async function navigateToSession(page: Page, directory: string, sessionId: string, expectedTitle: string) {

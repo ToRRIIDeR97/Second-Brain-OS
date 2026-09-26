@@ -1,3 +1,4 @@
+import { authTokenFromCredentials } from "@/utils/server"
 import { withAlpha } from "@opencode-ai/ui/theme/color"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
@@ -557,7 +558,7 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const connectToken = async () => {
-        if ((await sdk().protocol) === "v1") {
+        if ((await sdk().protocol) === "v1" || (await sdk().legacyProjectsAndMcp)) {
           const result = await sdk()
             .client.pty.connectToken(
               { ptyID: id, directory },
@@ -576,18 +577,31 @@ export const Terminal = (props: TerminalProps) => {
           if (result.response.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
           throw new Error(language.t("terminal.connectTicket.statusError", { status: result.response.status }))
         }
-        // return sdk()
-        //   .api.pty.connectToken({
-        //     ptyID: id,
-        //     location: { directory },
-        //     "x-opencode-ticket": "1",
-        //   })
-        //   .then((result) => result.data.ticket)
+        const endpoint = new URL(`${url.replace(/\/+$/, "")}/api/pty/${encodeURIComponent(id)}/connect-token`)
+        endpoint.searchParams.set("location[directory]", directory)
+        const response = await (platform.fetch ?? globalThis.fetch)(endpoint, {
+          method: "POST",
+          headers: {
+            "x-opencode-ticket": "1",
+            ...(password ? { Authorization: `Basic ${authTokenFromCredentials({ username, password })}` } : {}),
+          },
+        })
+        if (response.ok) {
+          const payload = await response.json()
+          if (typeof payload?.data?.ticket === "string") return payload.data.ticket as string
+        }
+        if (response.status === 404 || response.status === 405) return
+        if (response.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
+        throw new Error(language.t("terminal.connectTicket.statusError", { status: response.status }))
       }
 
       const retry = (err: unknown) => {
         if (disposed) return
         if (reconn !== undefined) return
+        if (tries >= 5) {
+          fail(err)
+          return
+        }
 
         const ms = Math.min(250 * 2 ** Math.min(tries, 4), 4_000)
         reconn = setTimeout(async () => {
@@ -612,8 +626,7 @@ export const Terminal = (props: TerminalProps) => {
           fail(err)
           return undefined
         })
-        const protocol = await sdk().protocol
-        // if (protocol === "v2" && !ticket) return
+        const protocol = (await sdk().legacyProjectsAndMcp) ? "v1" : await sdk().protocol
         if (once.value) return
         if (disposed) return
 

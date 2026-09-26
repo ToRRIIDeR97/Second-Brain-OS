@@ -99,8 +99,8 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
         ),
       )
 
-    const listNotes = Effect.fn("SecondBrain.listNotes")(function* () {
-      return yield* filesystem(KnowledgeNote.list()).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    const listNotes = Effect.fn("SecondBrain.listNotes")(function* (ctx: { query: { search?: string } }) {
+      return yield* filesystem(KnowledgeNote.list(ctx.query.search)).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
     const readNote = Effect.fn("SecondBrain.readNote")(function* (ctx: { query: { path: string } }) {

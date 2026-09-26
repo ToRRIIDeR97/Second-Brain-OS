@@ -105,24 +105,6 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
             </Show>
             <Show when={selected.serviceTiers.length > 0}>
               <PromptInputV2Select
-                title={language.t("harness.effort")}
-                options={[
-                  { id: "", label: language.t("harness.default") },
-                  ...selected.reasoningEfforts.map((effort) => ({ id: effort, label: effort })),
-                ]}
-                current={props.controller.model.current()?.reasoningEffort ?? ""}
-                control="harness-effort"
-                capitalize={false}
-                disabled={props.controller.disabled?.()}
-                onSelect={(reasoningEffort) => {
-                  const current = props.controller.model.current()
-                  if (!current) return
-                  props.controller.model.set({ ...current, reasoningEffort: reasoningEffort || undefined })
-                }}
-              />
-            </Show>
-            <Show when={selected.serviceTiers.length > 0}>
-              <PromptInputV2Select
                 title={language.t("harness.serviceTier")}
                 options={[
                   { id: "", label: language.t("harness.default") },

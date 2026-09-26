@@ -37,6 +37,11 @@ export function createV2SessionReducer() {
       result(source.some((item) => item.id === message.id) ? [...source] : [...source, message], [message.id])
 
     const eventType = event.type as string
+    if (eventType === "session.next.message.imported") {
+      const current = event as unknown as { data: { message: SessionMessageInfo } }
+      if (typeof current.data.message?.id !== "string") return
+      return append(current.data.message)
+    }
     if (eventType === "session.next.prompt.admitted" || eventType === "session.next.prompted") {
       const current = event as unknown as NextPromptEvent
       const created =

@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search"
 
 import { makeLocationNode } from "../effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Scope } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
@@ -26,26 +26,6 @@ export const ripgrepLayer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
-    const scope = yield* Scope.Scope
-    const state = {
-      files: [] as string[],
-      directories: [] as string[],
-    }
-    const directories = new Set<string>()
-    yield* ripgrep
-      .find({
-        cwd: location.directory,
-        pattern: "*",
-        limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
-        onEntry: (entry) =>
-          Effect.sync(() => {
-            state.files.push(entry.path)
-            const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
-            state.directories = Array.from(directories)
-          }),
-      })
-      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
     return Service.of({
       glob: (input) =>
         Effect.gen(function* () {
@@ -100,6 +80,17 @@ export const ripgrepLayer = Layer.effect(
         }),
       find: (input) =>
         Effect.gen(function* () {
+          // Scan at query time so newly created and removed files never leave a stale index.
+          const entries = yield* ripgrep
+            .find({ cwd: location.directory, pattern: "*", limit: 100_000 })
+            .pipe(Effect.orDie)
+          const files = entries.map((entry) => entry.path)
+          const directories = new Set<string>()
+          for (const file of files) {
+            const parts = file.replaceAll("\\", "/").split("/")
+            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+          }
+          const state = { files, directories: [...directories] }
           const items =
             input.type === "file"
               ? state.files

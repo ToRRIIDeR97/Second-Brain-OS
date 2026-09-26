@@ -1,3 +1,5 @@
+import type { ServerApi } from "./server"
+import { normalizeSessionMessages } from "./session-message"
 import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
 
 // Matches the exact `{ info, messages: [{ info, parts }] }` structure produced by `opencode export` CLI
@@ -19,10 +21,13 @@ export type SessionExportClient = {
 export async function fetchSessionExport(input: {
   sessionID: string
   client: SessionExportClient
+  messageApi?: Pick<ServerApi["message"], "list">
 }): Promise<SessionExportData> {
   const [sessionRes, messagesRes] = await Promise.all([
     input.client.session.get({ sessionID: input.sessionID }),
-    input.client.session.messages({ sessionID: input.sessionID }),
+    input.messageApi
+      ? fetchCurrentTranscript(input.sessionID, input.messageApi).then((data) => ({ data }))
+      : input.client.session.messages({ sessionID: input.sessionID }),
   ])
 
   if (!sessionRes?.data) {
@@ -44,7 +49,7 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
     .replace(/^-+|-+$/g, "")
-  return `${clean || session.id}.json`
+  return `${(clean || session.id).slice(0, 235)}.json`
 }
 
 export function downloadSessionExport(filename: string, data: unknown) {
@@ -58,4 +63,13 @@ export function downloadSessionExport(filename: string, data: unknown) {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+async function fetchCurrentTranscript(sessionID: string, api: Pick<ServerApi["message"], "list">) {
+  const pages = [await api.list({ sessionID, limit: 200, order: "desc" })]
+  while (pages.at(-1)?.cursor.next) {
+    pages.push(await api.list({ sessionID, limit: 200, cursor: pages.at(-1)!.cursor.next! }))
+  }
+  const normalized = normalizeSessionMessages(sessionID, pages.flatMap((page) => page.data).toReversed())
+  return normalized.messages.map((info) => ({ info, parts: normalized.parts.get(info.id) ?? [] }))
 }

@@ -1,3 +1,4 @@
+import { usePlatform } from "@/context/platform"
 import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -38,6 +39,7 @@ const withCategory = (category: string) => {
 }
 
 export const useSessionCommands = (actions: SessionCommandContext) => {
+  const platform = usePlatform()
   const command = useCommand()
   const dialog = useDialog()
   const file = useFile()
@@ -408,10 +410,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    await sdk().api.session.compact({
-      sessionID,
-      model: { providerID: model.provider.id, modelID: model.id },
-    })
+    try {
+      await sdk().api.session.compact({ sessionID, model: { providerID: model.provider.id, modelID: model.id } })
+    } catch (error) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+      })
+    }
   }
 
   const fork = () => {

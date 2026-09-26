@@ -3,12 +3,16 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
+import { Location } from "@opencode-ai/core/location"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(LayerNode.compile(Ripgrep.node))
+const it = testEffect(LayerNode.compile(LayerNode.group([Ripgrep.node, FSUtil.node])))
 
 const withTmp = <A, E, R>(f: (directory: AbsolutePath) => Effect.Effect<A, E, R>) =>
   Effect.acquireRelease(
@@ -42,3 +46,21 @@ describe("Ripgrep", () => {
     ),
   )
 })
+
+it.live("file search observes additions and deletions after initialization", () =>
+  withTmp((cwd) =>
+    Effect.gen(function* () {
+      const search = yield* FileSystemSearch.Service
+      expect(yield* search.find({ query: "fresh", type: "file" })).toEqual([])
+      yield* Effect.promise(() => fs.writeFile(path.join(cwd, "fresh.md"), "created after initialization"))
+      expect((yield* search.find({ query: "fresh", type: "file" })).map((entry) => entry.path)).toEqual([
+        RelativePath.make("fresh.md"),
+      ])
+      yield* Effect.promise(() => fs.unlink(path.join(cwd, "fresh.md")))
+      expect(yield* search.find({ query: "fresh", type: "file" })).toEqual([])
+    }).pipe(
+      Effect.provide(FileSystemSearch.ripgrepLayer),
+      Effect.provideService(Location.Service, { directory: cwd, project: { id: ProjectV2.ID.global, directory: cwd } }),
+    ),
+  ),
+)

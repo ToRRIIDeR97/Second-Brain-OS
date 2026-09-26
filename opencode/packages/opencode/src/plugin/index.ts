@@ -33,6 +33,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { logStartupTiming } from "@/util/startup-timing"
 
 type State = {
   hooks: Hooks[]
@@ -172,6 +173,7 @@ const layer = Layer.effect(
             try: () => plugin(input),
             catch: errorMessage,
           }).pipe(
+            logStartupTiming(`plugin.builtin.${plugin.name || "CodexAuthPlugin"}`),
             Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
             Effect.option,
           )
@@ -181,7 +183,7 @@ const layer = Layer.effect(
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
         if (flags.pure && cfg.plugin_origins?.length) {
         }
-        if (plugins.length) yield* config.waitForDependencies()
+        if (plugins.length) yield* config.waitForDependencies().pipe(logStartupTiming("plugin.dependencies"))
 
         const loaded = yield* Effect.promise(() =>
           PluginLoader.loadExternal({
@@ -215,8 +217,8 @@ const layer = Layer.effect(
               },
             },
           }),
-        )
-        for (const load of loaded) {
+        ).pipe(logStartupTiming("plugin.resolve"))
+        for (const [index, load] of loaded.entries()) {
           if (!load) continue
 
           // Keep plugin execution sequential so hook registration and execution
@@ -228,6 +230,7 @@ const layer = Layer.effect(
               return message
             },
           }).pipe(
+            logStartupTiming(`plugin.external.${index}`),
             Effect.tapError((error) => Effect.logError("failed to load plugin", { path: load.spec, error })),
             Effect.catch(() => {
               // TODO: make proper events for this

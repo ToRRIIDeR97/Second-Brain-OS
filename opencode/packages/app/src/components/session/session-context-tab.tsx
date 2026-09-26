@@ -16,6 +16,7 @@ import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { Harness } from "@opencode-ai/schema/harness"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
@@ -99,6 +100,7 @@ const emptyUserMessages: UserMessage[] = []
 export function SessionContextTab() {
   const sync = useSync()
   const language = useLanguage()
+  const platform = usePlatform()
   const sdk = useSDK()
   const providers = useProviders(() => sdk().directory)
   const { params, view } = useSessionLayout()
@@ -153,9 +155,7 @@ export function SessionContextTab() {
     return id
   }
   const harnessOptions = createMemo(() => harnesses().map((id) => ({ id, label: harnessLabel(id) })))
-  const ctx = createMemo(() =>
-    getSessionContext(messages(), [...providers.all().values()], selectedHarness()),
-  )
+  const ctx = createMemo(() => getSessionContext(messages(), [...providers.all().values()], selectedHarness()))
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const cost = createMemo(() => {
@@ -248,9 +248,14 @@ export function SessionContextTab() {
       const data = await fetchSessionExport({
         sessionID,
         client: sdk().client,
+        messageApi: (await sdk().protocol) === "v2" ? sdk().api.message : undefined,
       })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!platform.saveSessionExport) {
+        downloadSessionExport(filename, data)
+        return // Browsers cannot report whether the save dialog completed.
+      }
+      if (!(await platform.saveSessionExport({ filename, json: JSON.stringify(data, null, 2) }))) return
       showToast({
         variant: "success",
         icon: "circle-check",

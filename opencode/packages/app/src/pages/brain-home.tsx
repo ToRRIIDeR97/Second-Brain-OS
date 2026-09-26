@@ -156,7 +156,7 @@ export default function BrainHomePage() {
           </h1>
           <p class="truncate text-[12px] text-v2-text-text-faint">{language.t("secondBrain.home.description")}</p>
         </div>
-        <ButtonV2 size="small" variant="ghost" icon="workspace" onClick={() => navigate("/")}>
+        <ButtonV2 size="small" variant="ghost" icon="workspace" onClick={() => navigate("/workspaces")}>
           {language.t("secondBrain.home.openWorkspace")}
         </ButtonV2>
         <Show when={locations().length > 0}>
@@ -195,7 +195,7 @@ export default function BrainHomePage() {
               <p class="text-[13px] leading-5 text-v2-text-text-muted">
                 {language.t("secondBrain.home.empty.description")}
               </p>
-              <ButtonV2 variant="contrast" onClick={() => navigate("/")}>
+              <ButtonV2 variant="contrast" onClick={() => navigate("/workspaces")}>
                 {language.t("secondBrain.home.openWorkspace")}
               </ButtonV2>
             </div>
@@ -268,7 +268,7 @@ export default function BrainHomePage() {
                   <ButtonV2 variant="contrast" onClick={() => navigate("/projects")}>
                     {language.t("secondBrain.home.firstRun.project")}
                   </ButtonV2>
-                  <ButtonV2 variant="outline" onClick={() => navigate("/")}>
+                  <ButtonV2 variant="outline" onClick={() => navigate("/workspaces")}>
                     {language.t("secondBrain.home.firstRun.folder")}
                   </ButtonV2>
                   <Show when={platform.googleCalendar}>
@@ -304,7 +304,11 @@ export default function BrainHomePage() {
                             <button
                               type="button"
                               class="flex w-full items-center gap-3 rounded-[6px] px-2 py-2 text-left transition-colors duration-120 hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                              onClick={() => navigate(item.kind === "task" ? "/calendar?view=tasks" : "/calendar")}
+                              onClick={() =>
+                                navigate(
+                                  `/calendar?${item.kind === "task" ? "view=tasks&task" : "event"}=${encodeURIComponent(item.value.id)}`,
+                                )
+                              }
                             >
                               <span
                                 classList={{
@@ -350,7 +354,12 @@ export default function BrainHomePage() {
                   >
                     <ul class="flex flex-col gap-1">
                       <For each={activeProjects()}>
-                        {(project) => <ProjectRow project={project} onOpen={() => navigate("/projects")} />}
+                        {(project) => (
+                          <ProjectRow
+                            project={project}
+                            onOpen={() => navigate(`/projects?project=${encodeURIComponent(project.id)}`)}
+                          />
+                        )}
                       </For>
                     </ul>
                   </Show>

@@ -201,6 +201,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       return attachmentPaths.get(file) ?? window.api.getPathForFile(file)
     },
 
+    saveSessionExport: (input) => window.api.saveSessionExport(input),
     async saveFilePickerDialog(opts) {
       return window.api.saveFilePicker({
         title: opts?.title,

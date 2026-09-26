@@ -1,12 +1,14 @@
-import { useNavigate } from "@solidjs/router"
+import { projectGraph } from "@/features/second-brain/project-graph"
+import { useBeforeLeave, useNavigate, useSearchParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { createEffect, createMemo, createResource, For, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SetStoreFunction } from "solid-js/store"
+import { pathKey } from "@/utils/path-key"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -59,6 +61,7 @@ export default function ProjectsPage() {
   const server = useServer()
   const serverSDK = useServerSDK()
   const tabs = useTabs()
+  const [search] = useSearchParams<{ project?: string }>()
   const [state, setState] = createStore<PageState>({
     brainDirectory: "",
     filter: "active" as ProjectStatus,
@@ -76,9 +79,13 @@ export default function ProjectsPage() {
     error: "",
   })
   const locations = layout.projects.list
-  const linkableLocations = createMemo(() =>
-    locations().filter((location): location is typeof location & { id: string } => Boolean(location.id)),
-  )
+  const linkableLocations = createMemo(() => [
+    ...new Map(
+      locations()
+        .filter((location): location is typeof location & { id: string } => Boolean(location.id))
+        .map((location) => [pathKey(location.worktree), location]),
+    ).values(),
+  ])
   const client = (directory: string) => ({
     server: serverSDK().server,
     fetch: platform.fetch,
@@ -107,6 +114,21 @@ export default function ProjectsPage() {
     () => state.brainDirectory || undefined,
     (directory) => listNotes(client(directory)),
   )
+  let openedLink: string | undefined
+  createEffect(
+    on(
+      () => [search.project, projects()] as const,
+      ([id, items]) => {
+        if (!id) openedLink = undefined
+        const project = items?.find((item) => item.id === id)
+        if (project && openedLink !== id) {
+          openedLink = id
+          setState({ selectedId: project.id, filter: project.status })
+        }
+      },
+    ),
+  )
+
   const selected = createMemo(() => (projects() ?? []).find((project) => project.id === state.selectedId))
   const selectedLocation = createMemo(() => {
     const workspaceId = selected()?.location?.workspaceId
@@ -125,6 +147,12 @@ export default function ProjectsPage() {
       state.instructions !== project.instructions ||
       state.tags !== project.tags.join(", ")
     )
+  })
+
+  useBeforeLeave((event) => {
+    if (!overviewDirty()) return
+    event.preventDefault()
+    setState("error", language.t("secondBrain.projects.error.unsaved"))
   })
 
   createEffect(() => {
@@ -327,7 +355,7 @@ export default function ProjectsPage() {
               const openWorkspace = () => {
                 const location = selectedLocation()
                 if (location) layout.home.setSelection({ server: server.key, directory: location.worktree })
-                navigate("/")
+                navigate("/workspaces")
               }
               return (
                 <div class="flex min-h-0 flex-1 flex-col gap-2">
@@ -402,6 +430,9 @@ export default function ProjectsPage() {
                       loading={notes.loading}
                       openNotes={openNotes}
                       language={language}
+                      openNote={(path) =>
+                        navigate(`/notes?project=${encodeURIComponent(project.id)}&note=${encodeURIComponent(path)}`)
+                      }
                     />
                   </Show>
                 </div>
@@ -819,6 +850,7 @@ function ProjectMap(props: {
   project: ProjectRecord
   notes: ReadonlyArray<NoteSummary>
   loading: boolean
+  openNote: (path: string) => void
   openNotes: () => void
   language: ReturnType<typeof useLanguage>
 }) {
@@ -883,18 +915,24 @@ function ProjectMap(props: {
           <ul class="grid gap-2 sm:grid-cols-2">
             <For each={linked().slice(0, 100)}>
               {(note) => (
-                <li class="rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3">
-                  <strong class="block truncate text-[13px] text-v2-text-text-base [font-weight:530]">
-                    {note.title}
-                  </strong>
-                  <span class="mt-1 block text-[11px] text-v2-text-text-faint">
-                    {props.language.t("secondBrain.projects.map.links", { count: note.links.length })}
-                  </span>
-                  <Show when={note.links.length > 0}>
-                    <span class="mt-2 block truncate text-[11px] text-v2-text-text-muted">
-                      {note.links.slice(0, 3).join(" · ")}
+                <li>
+                  <button
+                    type="button"
+                    class="w-full rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3 text-left hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
+                    onClick={() => props.openNote(note.path)}
+                  >
+                    <strong class="block truncate text-[13px] text-v2-text-text-base [font-weight:530]">
+                      {note.title}
+                    </strong>
+                    <span class="mt-1 block text-[11px] text-v2-text-text-faint">
+                      {props.language.t("secondBrain.projects.map.links", { count: note.links.length })}
                     </span>
-                  </Show>
+                    <Show when={note.links.length > 0}>
+                      <span class="mt-2 block truncate text-[11px] text-v2-text-text-muted">
+                        {note.links.slice(0, 3).join(" Â· ")}
+                      </span>
+                    </Show>
+                  </button>
                 </li>
               )}
             </For>
@@ -905,60 +943,9 @@ function ProjectMap(props: {
   )
 }
 
-type ProjectGraphNode = { id: string; label: string; x: number; y: number; project: boolean }
-
-export function projectGraph(project: ProjectRecord, notes: ReadonlyArray<NoteSummary>) {
-  const root: ProjectGraphNode = { id: project.id, label: project.name, x: 400, y: 210, project: true }
-  const nodes = notes.map((note, index): ProjectGraphNode => {
-    const angle = (index / Math.max(notes.length, 1)) * Math.PI * 2 - Math.PI / 2
-    return {
-      id: note.path,
-      label: note.title,
-      x: 400 + Math.cos(angle) * 305,
-      y: 210 + Math.sin(angle) * 155,
-      project: false,
-    }
-  })
-  const byKey = new Map<string, ProjectGraphNode>()
-  for (const [index, note] of notes.entries()) {
-    const node = nodes[index]!
-    for (const key of [note.title, note.path, note.path.split(/[\\/]/).pop() ?? note.path]) {
-      byKey.set(normalizeGraphKey(key), node)
-    }
-  }
-  const edges: { from: ProjectGraphNode; to: ProjectGraphNode; project: boolean }[] = nodes.map((node) => ({
-    from: root,
-    to: node,
-    project: true,
-  }))
-  const seen = new Set<string>()
-  for (const [index, note] of notes.entries()) {
-    const from = nodes[index]!
-    for (const link of note.links) {
-      const to = byKey.get(normalizeGraphKey(link))
-      if (!to || to.id === from.id) continue
-      const key = [from.id, to.id].sort().join("\0")
-      if (seen.has(key)) continue
-      seen.add(key)
-      edges.push({ from, to, project: false })
-    }
-  }
-  return { nodes: [root, ...nodes], edges }
-}
-
-function normalizeGraphKey(value: string) {
-  return value
-    .split("#", 1)[0]!
-    .trim()
-    .replaceAll("\\", "/")
-    .replace(/^notes\//i, "")
-    .replace(/\.md$/i, "")
-    .toLowerCase()
-}
-
 function shortLabel(value: string) {
   const characters = [...value]
-  return characters.length > 20 ? `${characters.slice(0, 19).join("")}…` : value
+  return characters.length > 20 ? `${characters.slice(0, 19).join("")}â€¦` : value
 }
 
 function ProjectSurface(props: { title: string; children: import("solid-js").JSX.Element }) {
@@ -1117,15 +1104,19 @@ function ProjectOverview(props: {
           <ButtonV2
             variant="ghost"
             disabled={props.state.saving || props.dirty}
-            onClick={() => void props.setStatus(props.project.status === "paused" ? "active" : "paused")}
+            onClick={() => void props.setStatus(props.project.status === "active" ? "paused" : "active")}
           >
             {props.language.t(
-              props.project.status === "paused" ? "secondBrain.projects.resume" : "secondBrain.projects.pause",
+              props.project.status === "archived"
+                ? "secondBrain.projects.restore"
+                : props.project.status === "paused"
+                  ? "secondBrain.projects.resume"
+                  : "secondBrain.projects.pause",
             )}
           </ButtonV2>
           <ButtonV2
             variant="danger"
-            disabled={props.state.saving || props.dirty}
+            disabled={props.state.saving || props.dirty || props.project.status === "archived"}
             onClick={() => void props.setStatus("archived")}
           >
             {props.language.t("secondBrain.projects.archive")}

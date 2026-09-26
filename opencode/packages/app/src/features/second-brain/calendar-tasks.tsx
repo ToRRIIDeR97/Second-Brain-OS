@@ -2,7 +2,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { createEffect, createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { localDateKey } from "./calendar-domain"
@@ -56,6 +56,7 @@ export function CalendarTasks(props: {
   projects: ReadonlyArray<ProjectRecord>
   onSave: (tasks: ReadonlyArray<PlannerTask>) => Promise<void>
   filter?: CalendarTaskFilter
+  selectedId?: string
   onFilterChange?: (filter: CalendarTaskFilter) => void
   googleCanWrite?: boolean
 }) {
@@ -76,6 +77,7 @@ export function CalendarTasks(props: {
   const visible = createMemo(() =>
     props.tasks
       .filter((task) => {
+        if (task.id === props.selectedId) return true
         if (state.filter === "completed") return Boolean(task.completedAt)
         if (task.completedAt) return false
         if (state.filter === "today") {
@@ -124,6 +126,21 @@ export function CalendarTasks(props: {
         outboxKey: task.outboxKey ?? "",
       },
     })
+
+  let openedSelection: string | undefined
+  createEffect(
+    on(
+      () => [props.selectedId, props.tasks] as const,
+      ([id, tasks]) => {
+        if (!id) openedSelection = undefined
+        const task = tasks.find((item) => item.id === id)
+        if (task && openedSelection !== id) {
+          openedSelection = id
+          openTask(task)
+        }
+      },
+    ),
+  )
 
   const persist = async (tasks: ReadonlyArray<PlannerTask>) => {
     setState({ saving: true, error: "" })
@@ -272,7 +289,9 @@ export function CalendarTasks(props: {
                       {task.scheduledDate ?? task.dueDate ?? language.t("secondBrain.tasks.unscheduled")}
                       <Show when={task.start}> {task.start}</Show>
                       <Show when={task.projectId}>
-                        {(id) => ` · ${props.projects.find((project) => project.id === id())?.name ?? id()}`}
+                        {(id) =>
+                          ` · ${props.projects.find((project) => project.id === id())?.name ?? language.t("secondBrain.tasks.noProject")}`
+                        }
                       </Show>
                       <Show when={task.source === "google"}> · {task.taskListTitle}</Show>
                     </span>

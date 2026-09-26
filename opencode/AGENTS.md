@@ -1,14 +1,13 @@
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+- The default branch in this repository is `main`.
 
 ## Branch Names
 
-Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
+Use the `codex/` prefix for agent-created branches and a short descriptive suffix.
 
-Examples: `session-recovery`, `fix-scroll-state`, `regenerate-sdk`.
+Examples: `codex/session-recovery`, `codex/fix-scroll-state`, `codex/regenerate-sdk`.
 
 ## Commits and PR Titles
 

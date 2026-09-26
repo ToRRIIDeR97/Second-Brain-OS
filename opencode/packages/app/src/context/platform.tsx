@@ -141,6 +141,7 @@ type PlatformBase = {
   getPathForFile?(file: File): string
 
   /** Open a native save file picker dialog (desktop only) */
+  saveSessionExport?(input: { filename: string; json: string }): Promise<boolean>
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
 
   /** Storage mechanism, defaults to localStorage */

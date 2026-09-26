@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { NoteSummary, ProjectRecord } from "@/features/second-brain/client"
-import { projectGraph } from "./projects"
+import { projectGraph } from "@/features/second-brain/project-graph"
 
 test("builds a bounded Project-centered note graph", () => {
   const project = {

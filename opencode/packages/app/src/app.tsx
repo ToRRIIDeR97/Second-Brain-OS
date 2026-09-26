@@ -642,8 +642,9 @@ function Routes(props: { serverScoped?: JSX.Element }) {
         </Route>
       </Route>
       <Show when={settings.general.newLayoutDesigns()}>
-        <Route path="/" component={NewHome} />
-        <Route path="/brain" component={BrainHomePage} />
+        <Route path="/" component={BrainHomePage} />
+        <Route path="/brain" component={() => <Navigate href="/" />} />
+        <Route path="/workspaces" component={NewHome} />
         <Route path="/notes" component={NotesPage} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/projects" component={ProjectsPage} />

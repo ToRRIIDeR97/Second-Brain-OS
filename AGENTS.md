@@ -4,7 +4,8 @@
 
 - Treat `opencode/` as the product base. Preserve OpenCode's Electron host,
   Solid renderer, managed local server, and existing workflows.
-- Keep the former Tauri application in `app/` as donor code until migrated.
+- The former Tauri application is retired. Keep its schema references and
+  migration gaps documented in `docs/archive/tauri/README.md`.
 - Add Second Brain features inside OpenCode instead of recreating its shell.
 - Keep product code in the broad `workspace`, `knowledge`, `agents`, `planner`,
   `terminal`, and `platform` domains.
@@ -24,12 +25,14 @@
 - Add the smallest runnable check for non-trivial logic.
 - Run the relevant format, lint, test, and build commands before handoff.
 - Preserve unrelated changes in the working tree.
+- Update the owning architecture, security, or release document when changing
+  a boundary, data flow, public interface, or canonical command.
 
 ## Project map
 
-- `opencode/` is the active product. `app/` is the former Tauri donor.
+- `opencode/` is the active product; root Tauri/Cargo/pnpm tooling is retired.
 - Start the desktop app with `bun run dev` from the repository root. Run
   `bun run typecheck`, `bun run lint`, and `bun run test` for the active fork.
 - Read [architecture](docs/architecture/README.md) for component boundaries and
   [security](docs/security/threat-model.md) before changing a data or trust boundary.
-- `docs/release-operations.md` describes the former Tauri release workflow.
+- `docs/release-operations.md` describes the active Electron candidate workflow.

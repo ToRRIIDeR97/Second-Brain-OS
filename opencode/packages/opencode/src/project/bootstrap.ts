@@ -10,6 +10,7 @@ import { ShareNext } from "@/share/share-next"
 import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
 import { Service } from "./bootstrap-service"
+import { logStartupTiming } from "@/util/startup-timing"
 
 export { Service } from "./bootstrap-service"
 export type { Interface } from "./bootstrap-service"
@@ -33,16 +34,16 @@ const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
       // everything depends on config so eager load it for nice traces
-      yield* config.get()
+      yield* config.get().pipe(logStartupTiming("config"))
       // Plugin can mutate config so it has to be initialized before anything else.
-      yield* plugin.init()
+      yield* plugin.init().pipe(logStartupTiming("plugins"))
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
         [lsp, shareNext, format, vcs, snapshot, project],
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
-      ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+      ).pipe(Effect.withSpan("InstanceBootstrap.init"), logStartupTiming("services"))
     }).pipe(Effect.withSpan("InstanceBootstrap"))
 
     return Service.of({ run })

@@ -1,15 +1,17 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
+  "description": "Files, notes, projects, planning, and agent workflows",
   "version": "1.18.21",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://github.com/ToRRIIDeR97/Second-Brain-OS",
   "author": {
     "name": "OpenCode",
     "email": "hello@opencode.ai"
   },
   "scripts": {
+    "test": "bun test --only-failures && node --experimental-strip-types --test src/main/draft-store.node-test.ts",
     "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",
     "dev": "electron-vite dev",
@@ -34,7 +36,6 @@
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
-    "@actions/artifact": "4.0.0",
     "@lydell/node-pty": "catalog:",
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/ui": "workspace:*",

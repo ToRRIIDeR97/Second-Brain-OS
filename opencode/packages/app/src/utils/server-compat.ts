@@ -51,6 +51,7 @@ type LegacyPrompt = {
 type LegacyLocation = { directory?: string }
 type CompatibleInput = {
   protocol: Promise<ServerProtocol>
+  legacyProjectsAndMcp?: Promise<boolean>
   current: ServerApi
   createSession?: (input?: HarnessSessionCreateInput) => Promise<SessionInfo>
   promptSession?: (input: SessionPromptInput) => Promise<void>
@@ -116,7 +117,20 @@ export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
     },
   }
   return lazyApi(
-    input.protocol.then((protocol) => (protocol === "v1" ? v1 : current)),
+    input.protocol.then(async (protocol) => {
+      if (protocol === "v1") return v1
+      // The managed sidecar exposes session execution through V2 and these operations through legacy routes.
+      if (await input.legacyProjectsAndMcp)
+        return {
+          ...current,
+          session: { ...current.session, rename: v1.session.rename },
+          project: v1.project,
+          mcp: v1.mcp,
+          file: v1.file,
+          vcs: v1.vcs,
+        }
+      return current
+    }),
     current,
   )
 }
@@ -348,6 +362,37 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       async directories(value: Parameters<ServerApi["project"]["directories"]>[0]) {
         const result = await legacy(value.location).worktree.list()
         return (result.data ?? []).map((item) => ({ directory: item }))
+      },
+    },
+    mcp: {
+      ...input.current.mcp,
+      async list(value) {
+        const result = await legacy(value?.location).mcp.status()
+        return located(
+          Object.entries(result.data ?? {}).map(([name, status]) => ({ name, status })),
+          value?.location,
+        )
+      },
+      async connect(value) {
+        await legacy(value.location).mcp.connect({ name: value.server })
+      },
+      async disconnect(value) {
+        await legacy(value.location).mcp.disconnect({ name: value.server })
+      },
+      resource: {
+        async catalog(value) {
+          const result = await legacy(value?.location).experimental.resource.list()
+          return located(
+            {
+              resources: Object.values(result.data ?? {}).map(({ client, ...resource }) => ({
+                ...resource,
+                server: client,
+              })),
+              templates: [],
+            },
+            value?.location,
+          )
+        },
       },
     },
     // path: {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
+import { Harness } from "@opencode-ai/schema/harness"
 import { listAllSessions, normalizeSessionInfo } from "./session"
 
 describe("normalizeSessionInfo", () => {
@@ -30,7 +31,7 @@ describe("normalizeSessionInfo", () => {
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       title: "New session",
       agent: "build",
-      harnessInstanceID: "opencode",
+      harnessInstanceID: Harness.OpenCode,
       harnessModel: undefined,
       harnessRevision: undefined,
       model: { id: "gpt-5", providerID: "openai", variant: "high" },

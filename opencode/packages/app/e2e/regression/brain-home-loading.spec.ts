@@ -80,7 +80,7 @@ test("Home remains usable during loading and reuses fresh harness availability",
   const selector = page.getByRole("group", { name: "Harness", exact: true }).getByRole("button")
   const start = page.getByRole("button", { name: "Start", exact: true })
   try {
-    await page.goto("/brain")
+    await page.goto("/")
     await expect(home).toBeVisible()
     await prompt.fill("A draft while data loads")
     await expect(prompt).toHaveValue("A draft while data loads")

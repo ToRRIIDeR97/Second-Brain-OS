@@ -1,10 +1,10 @@
 [Desktop Entry]
-Name=OpenCode
-Exec=/opt/OpenCode/ai.opencode.desktop %U
+Name=Second Brain OS
+Exec="/opt/Second Brain OS/ai.opencode.desktop" %U
 Terminal=false
 Type=Application
 Icon=ai.opencode.desktop
 StartupWMClass=ai.opencode.desktop
 NoDisplay=true
-Comment=Open source AI coding agent
+Comment=Projects, knowledge, planning, and agent workflows
 Categories=Development;

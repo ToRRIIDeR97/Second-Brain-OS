@@ -11,12 +11,11 @@ import {
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
 const homeRow = '[data-component="home-session-row"]'
-const homeShell = '[data-component="home-session-search"]'
 
 benchmark.describe("performance: home and tab navigation", () => {
   benchmark("opens a home session and paints its titlebar tab", async ({ page, report }) => {
     await setup(page, [])
-    await page.goto("/")
+    await page.goto("/workspaces")
     const row = page.locator(homeRow).filter({ hasText: fixture.expected.targetTitle }).first()
     await expect(row).toBeVisible()
     const href = stressSessionHref(fixture.targetID)
@@ -39,7 +38,7 @@ benchmark.describe("performance: home and tab navigation", () => {
 
   benchmark("stages the review body after cold session content", async ({ page, report }) => {
     await setup(page, [])
-    await page.goto("/")
+    await page.goto("/workspaces")
     const row = page.locator(homeRow).filter({ hasText: fixture.expected.targetTitle }).first()
     await expect(row).toBeVisible()
     const result = await page.evaluate(
@@ -90,8 +89,7 @@ benchmark.describe("performance: home and tab navigation", () => {
     const result = await measureNavigationMilestones(page, {
       triggerSelector: '[data-slot="titlebar-tabs"] [data-component="icon-button-v2"]',
       milestones: {
-        home: { selector: homeShell },
-        row: { selector: homeRow },
+        home: { selector: "#brain-home-title" },
         tabRemoved: { selector: `[data-slot="titlebar-tabs"] a[href="${href}"]`, visible: false },
       },
       navigate: async () => {

@@ -14,6 +14,9 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { Snapshot } from "@opencode-ai/core/snapshot"
+import { RelativePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
@@ -488,3 +491,148 @@ describe("SessionV2.create", () => {
     }),
   )
 })
+
+describe("SessionV2.fork", () => {
+  it.effect("copies native history before the selected prompt without sharing message IDs or continuation", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const original = yield* sessions.create({ location, title: "Original", harnessInstanceID: Harness.Codex })
+      const first = yield* sessions.prompt({
+        sessionID: original.id,
+        prompt: Prompt.make({ text: "Keep this context" }),
+        resume: false,
+      })
+      yield* SessionInput.promoteSteers(db, events, original.id, Number.MAX_SAFE_INTEGER)
+      const last = yield* sessions.prompt({
+        sessionID: original.id,
+        prompt: Prompt.make({ text: "Restore this draft" }),
+        resume: false,
+      })
+      yield* SessionInput.promoteSteers(db, events, original.id, Number.MAX_SAFE_INTEGER)
+      yield* events.publish(SessionEvent.HarnessContinuationSet, {
+        sessionID: original.id,
+        timestamp: yield* DateTime.now,
+        instanceID: Harness.Codex,
+        continuation: "original-thread",
+      })
+      const fork = yield* sessions.fork({ sessionID: original.id, messageID: last.id })
+      expect(fork).toMatchObject({ parentID: original.id, title: "Original (fork)", harnessInstanceID: Harness.Codex })
+      const context = yield* sessions.context(fork.id)
+      expect(context).toHaveLength(1)
+      expect(context[0]).toMatchObject({ type: "user", text: "Keep this context" })
+      expect(context[0]!.id).not.toBe(first.id)
+      expect(yield* sessions.context(original.id)).toHaveLength(2)
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, fork.id)).get().pipe(Effect.orDie)
+      expect(row!.metadata).not.toHaveProperty("harnessContinuation")
+      expect((yield* sessions.history({ sessionID: fork.id, limit: 100 })).events).toMatchObject([
+        { type: "session.next.message.imported" },
+      ])
+    }),
+  )
+  it.effect("rejects a foreign fork boundary before creating a session", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionV2.Service
+      const original = yield* sessions.create({ location })
+      const failure = yield* sessions
+        .fork({ sessionID: original.id, messageID: SessionMessage.ID.create() })
+        .pipe(Effect.flip)
+      expect(failure._tag).toBe("Session.MessageNotFoundError")
+      expect(yield* sessions.list()).toHaveLength(1)
+    }),
+  )
+})
+
+const diffCalls: Snapshot.CompareInput[] = []
+const diffTest = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    [
+      [ProjectV2.node, projects],
+      [SessionExecution.node, SessionExecution.noopLayer],
+      [
+        Snapshot.node,
+        Layer.succeed(
+          Snapshot.Service,
+          Snapshot.Service.of({
+            capture: () => Effect.succeed(undefined),
+            files: () => Effect.succeed([]),
+            preview: () => Effect.succeed([]),
+            restore: () => Effect.void,
+            checkout: () => Effect.void,
+            diff: (input) => {
+              diffCalls.push(input)
+              return Effect.succeed([
+                {
+                  path: RelativePath.make("agent-output.md"),
+                  status: "added",
+                  patch: "+agent edit",
+                  additions: 1,
+                  deletions: 0,
+                },
+              ])
+            },
+          }),
+        ),
+      ],
+    ],
+  ),
+)
+diffTest.effect("Last turn diff uses the selected prompt's first and last snapshots, excluding the next turn", () =>
+  Effect.gen(function* () {
+    diffCalls.length = 0
+    const sessions = yield* SessionV2.Service
+    const events = yield* EventV2.Service
+    const tmp = yield* Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    )
+    const session = yield* sessions.create({ location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }) })
+    const timestamp = yield* DateTime.now
+    const model = ModelV2.Ref.make({ id: ModelV2.ID.make("test"), providerID: ProviderV2.ID.anthropic })
+    const prompt = SessionMessage.ID.create()
+    const messages: SessionMessage.Message[] = [
+      SessionMessage.User.make({ id: prompt, type: "user", text: "Write a file", time: { created: timestamp } }),
+      SessionMessage.Assistant.make({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: "build",
+        model,
+        content: [],
+        snapshot: { start: "before", end: "middle" },
+        time: { created: timestamp },
+      }),
+      SessionMessage.Assistant.make({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: "build",
+        model,
+        content: [],
+        snapshot: { start: "middle", end: "after" },
+        time: { created: timestamp },
+      }),
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Next turn",
+        time: { created: timestamp },
+      }),
+      SessionMessage.Assistant.make({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: "build",
+        model,
+        content: [],
+        snapshot: { start: "after", end: "future" },
+        time: { created: timestamp },
+      }),
+    ]
+    for (const message of messages)
+      yield* events.publish(SessionEvent.MessageImported, { sessionID: session.id, timestamp, message })
+    expect(yield* sessions.diff({ sessionID: session.id, messageID: prompt })).toMatchObject([
+      { path: "agent-output.md", status: "added" },
+    ])
+    expect(diffCalls).toEqual([{ from: Snapshot.ID.make("before"), to: Snapshot.ID.make("after") }])
+  }),
+)

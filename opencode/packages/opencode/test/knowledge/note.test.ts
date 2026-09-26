@@ -1,4 +1,14 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
+import { mkdir, writeFile } from "node:fs/promises"
+import path from "node:path"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { Location } from "@opencode-ai/core/location"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { tmpdir } from "../fixture/fixture"
 import { KnowledgeNote } from "../../src/knowledge/note"
 
 describe("KnowledgeNote", () => {
@@ -30,4 +40,21 @@ describe("KnowledgeNote", () => {
 
     expect(note.info.links).toEqual(["Project plan", "notes/meeting.md"])
   })
+})
+
+test("body-only searches return summaries within the selected workspace", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  await writeFile(path.join(tmp.path, "notes", "alpha.md"), "# Alpha\n\nUnique-body-needle")
+  await writeFile(path.join(tmp.path, "notes", "beta.md"), "# Beta\n\nOther content")
+  const directory = AbsolutePath.make(tmp.path)
+  const found = await Effect.runPromise(
+    KnowledgeNote.list("UNIQUE-BODY-NEEDLE").pipe(
+      Effect.provide(LocationMutation.locationLayer),
+      Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
+      Effect.provide(LayerNode.compile(FSUtil.node)),
+    ),
+  )
+  expect(found.map((note) => note.title)).toEqual(["Alpha"])
+  expect(found[0]).not.toHaveProperty("body")
 })

@@ -5,9 +5,9 @@ managed local OpenCode server remain the base application. New product domains
 are added inside the existing OpenCode application rather than replacing its
 shell or agent runtime.
 
-The previous React/Tauri and Rust implementation remains donor code during the
-migration. Code moves from it only when a Second Brain feature is added to the
-OpenCode base.
+The previous React/Tauri and Rust implementation is retired. Its database
+schemas and remaining migration gaps are recorded in
+[the donor archive](../archive/tauri/README.md).
 
 ## Active components
 
@@ -27,13 +27,33 @@ flowchart LR
 - The OpenCode server owns sessions, workspace routing, and Second Brain HTTP
   handlers. Notes and project records use workspace files through the location
   and file mutation services; calendar data is stored under `.second-brain/`.
-- `app/` contains the former React/Tauri implementation. Its Rust policy and
-  release documents do not describe the active desktop runtime.
+- Former Rust policy and release documents are historical requirements, not
+  evidence of controls in the active desktop runtime.
 
 The renderer must not gain direct Node or filesystem access. Keep new native
 operations behind the preload and main-process boundary, and resolve Second
 Brain files through the server's location services. See
 [`ADR-010`](../adr/ADR-010-opencode-electron-base.md) for the base-app decision.
+
+## Product entry points and persistence
+
+`opencode/packages/app/src/app.tsx` owns routing. The current layout exposes
+Home, Workspaces, Notes, Calendar, Projects, Activity, and agent sessions.
+Settings, model/provider selection, file panels, and terminals are shared
+dialogs or session panels rather than standalone routes.
+
+| Data                       | Owner and persistence                                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Notes                      | `packages/opencode/src/knowledge/note.ts`; workspace Markdown files                                                   |
+| Project records            | `packages/opencode/src/project/brain.ts`; workspace `projects/` Markdown cards and project folders                    |
+| Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
+| Sessions and runtime state | `packages/core/src/database/` and runtime session services; OpenCode SQLite profile database                          |
+| Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
+| Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
+
+Package paths in this table are relative to `opencode/`. Workspace files are
+the source of truth for notes, project records, and local planning. Do not
+assume the session or draft databases can be reconstructed from those files.
 
 ## Home navigation
 
@@ -42,3 +62,49 @@ metrics, and the harness selector have local loading boundaries. Harness
 availability uses the renderer query cache, keyed by server and workspace
 directory, with 30 seconds of freshness and background refresh on stale
 re-entry. Projects and calendar data still reload on each visit.
+
+## Startup and request flow
+
+1. Electron starts the bundled server in a utility process and gives the
+   renderer its loopback URL and generated credentials through preload IPC.
+2. The renderer detects server capabilities. The managed server combines
+   current session routes with legacy project and MCP routes; compatibility
+   lives in `packages/app/src/utils/server-protocol.ts` and `server-compat.ts`.
+3. Workspace bootstrap loads configuration, initializes plugins, and then
+   starts workspace services. Server readiness precedes this work. Startup
+   phase logs in `packages/opencode/src/project/bootstrap.ts` distinguish it
+   from initial server launch.
+4. Notes, projects, and local calendar requests resolve the selected location
+   before reading or mutating files. Google operations use the desktop bridge.
+
+The packaged desktop disables embedded web UI fallback. Missing `/api` routes
+return a local error rather than fetching the hosted OpenCode website. The
+optional upstream CLI is a separate runtime from the fork's bundled server;
+see [release operations](../release-operations.md).
+
+## Session compatibility and review
+
+The managed server uses native `/api/session` execution and history alongside
+legacy project, file, Git, rename, archive, and PTY connection routes. The
+renderer selects those supported routes through capability detection rather
+than assuming that every operation uses one API generation. PTY sockets use
+short-lived tickets from the legacy connection endpoint on managed servers
+and the native `/api/pty` endpoints on servers using only the current API.
+
+Native forks copy the selected history into a new session through durable
+`session.next.message.imported` events. Forks receive new message IDs and do
+not inherit provider continuation handles or filesystem snapshots. The
+native `POST /api/session/:sessionID/fork` endpoint preserves the selected
+harness and model.
+
+`GET /api/session/:sessionID/diff` compares the first and last assistant
+snapshots after the selected user prompt, stopping at the next user prompt.
+Snapshot capture discovers Git initialized after a workspace is already open.
+Renderer Last turn review uses this endpoint; working-tree and branch review
+use the managed server's legacy Git routes. File search refreshes the
+ripgrep fallback on each query so newly written files are discoverable.
+
+Desktop session export reads all native history pages, projects the existing
+CLI JSON format, and invokes the narrow preload save operation. Main owns the
+native destination picker and completes the file write before reporting
+success. Browser downloads cannot confirm saving and do not show that toast.

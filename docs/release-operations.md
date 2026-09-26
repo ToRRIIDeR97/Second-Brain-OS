@@ -1,118 +1,55 @@
-# Release operations for the former Tauri app
+# Electron release operations
 
-These commands and the current `.github/workflows/` files cover the legacy
-React/Tauri application in `app/`. Release procedures for the active
-OpenCode Electron fork have not been verified in this repository.
+The active application lives in `opencode/`. CI checks the Electron renderer,
+main process, core, server, and Second Brain domains. Root Tauri/Cargo/pnpm
+commands are retired; the former procedure is kept in
+[the archive](archive/tauri/release-operations.md).
 
-Checkpoint 36 provides an unsigned release-candidate pipeline and local smoke
-checks. It does not claim that signed/notarized packages, clean-machine
-installers, or update feeds were produced.
+## Local checks
 
-## Local release smoke
+Use Bun 1.3.14 and Node.js 24. Install with `bun install --frozen-lockfile`
+inside `opencode/`, then run these commands from the repository root:
 
 ```sh
-node scripts/release-smoke.mjs
-cargo test -p second-brain-os platform::release::tests
-pnpm desktop:build
+bun run typecheck
+bun run lint
+bun run test
+bun run test:engine
+bun run build
 ```
 
-The smoke script requires application versions and MCP protocol constants to
-match and verifies every configured icon exists. Tauri builds the current
-platform only. The sidecar is built separately until its target-triple
-packaging and signature verification are wired.
+The engine suites include operating-system and subprocess tests. Report their
+actual result for each platform; a successful renderer build is not equivalent
+to passing those tests. The inherited linter currently allows warnings.
 
-## Channels and feature flags
+## Unsigned Windows candidate
 
-| Channel   | Identifier                     | Logical feed     | Defaults                                                      |
-| --------- | ------------------------------ | ---------------- | ------------------------------------------------------------- |
-| Developer | `com.secondbrain.os.developer` | `developer.json` | All gated features except auto-update                         |
-| Alpha     | `com.secondbrain.os.alpha`     | `alpha.json`     | Semantic retrieval, managed Claude, Google writes, recurrence |
-| Beta      | `com.secondbrain.os.beta`      | `beta.json`      | Semantic retrieval and Google writes                          |
-| Stable    | `com.secondbrain.os`           | `stable.json`    | All risky features disabled                                   |
+Run the **Unsigned Electron release candidate** workflow manually. It builds
+the development channel, packages the Windows app, writes SHA-256 checksums,
+and retains the installer and checksum file as workflow artifacts for 14 days.
+It does not publish a GitHub release or configure an update feed.
 
-Raw HTML is developer-only. Auto-update is disabled in every channel until
-signed feeds and an interruption-tested rollback exist. Logical feed names are
-reserved identifiers, not deployed URLs. Automatic agent writes, background
-derived extraction, and large graph views are developer-only defaults.
+Locally on Windows, `bun run desktop:build` builds and packages the app with
+publishing disabled. Output is under `opencode/packages/desktop/dist/`.
+The build downloads the pinned upstream CLI for the optional development
+sidecar and bundles the fork's local server. These are separate runtimes.
 
-## Release candidate workflow
+The product display name is Second Brain OS. Existing `ai.opencode.desktop.*`
+application IDs and data paths are retained to preserve profile compatibility.
+The `opencode:` URL scheme is also retained for existing links.
 
-Run **Unsigned release candidate** manually for developer, alpha, or beta. It
-uses pinned Node, pnpm, and Rust versions; frozen/locked dependency resolution;
-the existing three-OS build matrix; and SHA-256 manifests. Uploaded artifacts
-are explicitly named `unsigned-*` and expire after 14 days.
+## Release limits
 
-Before a production release:
+Automatic updates are disabled. Before enabling them, configure the fork's
+own signed release feed and verify update and rollback behavior. Do not point
+this fork at OpenCode's desktop releases.
 
-1. Run full CI, security/advisory, license, accessibility, and migration gates.
-2. Build the sidecar for each target triple and configure it as a Tauri
-   external binary.
-3. Sign the app and sidecar in a trusted job that runs after all untrusted
-   build/test steps. Expose signing secrets only to that job.
-4. Verify macOS signing/notarization and applicable Windows signing on clean
-   machines.
-5. Install, launch, exercise MCP initialization, and record installer hashes.
+This workflow produces unsigned development candidates only. macOS and Linux
+packaging settings remain in the desktop package but have not been validated
+by this Windows candidate workflow. A successful build does not establish
+clean-machine installation, platform signing, or Google OAuth readiness.
 
-## Install and permissions
-
-Use only an installer produced for the target OS and verify its published
-SHA-256 value. The application needs access only to workspaces the user
-registers, its local application-data directory, explicitly connected provider
-accounts, and approved terminal/agent capabilities. OS security prompts must
-not be bypassed.
-
-Current source builds are developer artifacts. Cross-platform installers have
-not been smoke-tested on clean machines.
-
-## Upgrade
-
-1. Export diagnostics and create a verified online database backup.
-2. Close the app cleanly.
-3. Verify the new installer checksum and install in place.
-4. Launch and confirm database, index, provider, planner outbox, agent, and MCP
-   protocol health.
-5. Keep the rollback backup until canonical files and critical workflows are
-   verified.
-
-Newer database schemas and MCP protocol mismatches fail closed. Canonical
-workspace files are not migration targets and must not be overwritten.
-
-## Rollback and recovery
-
-Do not install an older binary over a newer database. Uninstall/reinstall the
-previous application binary, then restore the compatible verified database
-backup using the [recovery runbook](recovery.md). If no usable database backup
-exists, rebuild derived search and graph state from canonical workspace files,
-then reconnect providers and recreate MCP clients.
-
-Uninstall behavior for local application data is platform/installer-specific
-and has not been clean-machine tested. Back up before uninstalling; never
-assume uninstall preserves or deletes user data.
-
-## Privacy
-
-Canonical files stay in user-selected workspaces. Rebuildable state, audit
-metadata, logs, and backups live under the platform application-data directory.
-Provider credentials belong in the operating-system credential store.
-Diagnostics exports exclude note bodies, credentials, environment variables,
-provider payloads, local paths, and terminal scrollback.
-
-Semantic retrieval and provider writes are feature-gated. Raw HTML remains
-disabled outside developer builds. Release artifacts must never include local
-databases, logs, diagnostics, `.env` files, credentials, signing keys, or
-workspace fixtures containing private content.
-
-## Troubleshooting
-
-- **Protocol mismatch:** install matching app and sidecar versions; do not
-  bypass initialization.
-- **Database newer than app:** reinstall the newer app or restore a compatible
-  backup; do not force migration metadata.
-- **Provider disconnected:** reconnect through the provider flow; credentials
-  are machine-local.
-- **Index/search unhealthy:** preserve canonical files and rebuild derived
-  state.
-- **Installer rejected by the OS:** this unsigned pipeline is not a production
-  installer. Do not bypass OS security prompts.
-- **Support request:** export the redacted support bundle and include the
-  installer checksum, channel, app version, OS version, and reproduction steps.
+Never bundle workspace data, local databases, credentials, `.env` files, logs,
+or recovery archives. Preserve canonical files and existing application data
+when upgrading. Donor Tauri databases have no automatic import path; see
+[the donor record](archive/tauri/README.md).

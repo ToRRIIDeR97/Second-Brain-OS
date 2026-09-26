@@ -248,7 +248,11 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     mutationFn: async (value: string) => {
       const normalized = normalizeServerUrl(value)
       if (!normalized) {
-        resetAdd()
+        setStore("addServer", {
+          error: value.trim()
+            ? language.t("dialog.server.add.error")
+            : `${language.t("dialog.server.add.url")}: ${language.t("provider.custom.error.required")}`,
+        })
         return
       }
 
@@ -287,7 +291,11 @@ export function useServerManagementController(options: { onSelect?: () => void; 
       if (input.original.type !== "http") return
       const normalized = normalizeServerUrl(input.value)
       if (!normalized) {
-        resetEdit()
+        setStore("editServer", {
+          error: input.value.trim()
+            ? language.t("dialog.server.add.error")
+            : `${language.t("dialog.server.add.url")}: ${language.t("provider.custom.error.required")}`,
+        })
         return
       }
 

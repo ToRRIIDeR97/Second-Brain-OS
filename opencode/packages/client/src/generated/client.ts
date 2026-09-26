@@ -9,6 +9,10 @@ import type {
   SessionsCreateInput,
   SessionsCreateOutput,
   SessionsActiveOutput,
+  SessionsForkInput,
+  SessionsForkOutput,
+  SessionsDiffInput,
+  SessionsDiffOutput,
   SessionsGetInput,
   SessionsGetOutput,
   SessionsSwitchAgentInput,
@@ -334,6 +338,30 @@ export function make(options: ClientOptions) {
             path: `/api/session/active`,
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      fork: (input: SessionsForkInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsForkOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/fork`,
+            body: { messageID: input["messageID"] },
+            successStatus: 200,
+            declaredStatuses: [404, 500, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      diff: (input: SessionsDiffInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsDiffOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/diff`,
+            query: { messageID: input["messageID"] },
+            successStatus: 200,
+            declaredStatuses: [404, 500, 400, 401],
             empty: false,
           },
           requestOptions,
