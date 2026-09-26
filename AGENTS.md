@@ -24,3 +24,12 @@
 - Add the smallest runnable check for non-trivial logic.
 - Run the relevant format, lint, test, and build commands before handoff.
 - Preserve unrelated changes in the working tree.
+
+## Project map
+
+- `opencode/` is the active product. `app/` is the former Tauri donor.
+- Start the desktop app with `bun run dev` from the repository root. Run
+  `bun run typecheck`, `bun run lint`, and `bun run test` for the active fork.
+- Read [architecture](docs/architecture/README.md) for component boundaries and
+  [security](docs/security/threat-model.md) before changing a data or trust boundary.
+- `docs/release-operations.md` describes the former Tauri release workflow.

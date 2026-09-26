@@ -57,9 +57,10 @@ test("activity rail keeps the primary order and moves focus with arrow keys", ()
   const buttons = within(rail).getAllByRole("button");
   expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
     "Home",
-    "Files",
-    "Tasks",
-    "Agents",
+    "Projects",
+    "Calendar",
+    "Knowledge",
+    "Activity",
     "Settings",
   ]);
   expect(buttons.at(-1)?.parentElement).toHaveAttribute(
@@ -68,17 +69,17 @@ test("activity rail keeps the primary order and moves focus with arrow keys", ()
   );
 
   const homeButton = buttons[0];
-  const knowledgeButton = buttons[1];
-  const agentsButton = buttons[3];
-  if (!homeButton || !knowledgeButton || !agentsButton) {
+  const projectsButton = buttons[1];
+  const activityButton = buttons[4];
+  if (!homeButton || !projectsButton || !activityButton) {
     throw new Error("Activity rail did not render all expected buttons");
   }
   fireEvent.keyDown(homeButton, { key: "ArrowDown" });
-  expect(knowledgeButton).toHaveFocus();
-  fireEvent.click(knowledgeButton);
-  expect(onChange).toHaveBeenCalledWith("files");
-  fireEvent.click(agentsButton);
-  expect(onChange).toHaveBeenCalledWith("agents");
+  expect(projectsButton).toHaveFocus();
+  fireEvent.click(projectsButton);
+  expect(onChange).toHaveBeenCalledWith("projects");
+  fireEvent.click(activityButton);
+  expect(onChange).toHaveBeenCalledWith("activity");
 });
 
 test("resource tabs support roving keyboard focus and dirty close state", () => {
@@ -116,27 +117,34 @@ test("resource tabs support roving keyboard focus and dirty close state", () => 
   expect(onClose).toHaveBeenCalledWith("readme");
 });
 
-test("tab add opens Home by default and offers activity tabs", () => {
-  const onAdd = vi.fn();
-
+test("resource tabs do not offer primary-area tabs", () => {
   render(
     <Tabs
       tabs={[{ id: "home", title: "Home", activity: "home" }]}
       activeTabId="home"
       onActivate={vi.fn()}
       onClose={vi.fn()}
-      onAdd={onAdd}
     />,
   );
 
-  const addButton = screen.getByRole("button", {
-    name: "Open a new resource",
-  });
-  fireEvent.click(addButton);
-  fireEvent.mouseEnter(addButton);
-  fireEvent.click(screen.getByRole("button", { name: "Files" }));
-  expect(onAdd).toHaveBeenNthCalledWith(1, "home");
-  expect(onAdd).toHaveBeenNthCalledWith(2, "knowledge");
+  expect(
+    screen.queryByRole("button", { name: "Open a new resource" }),
+  ).not.toBeInTheDocument();
+});
+
+test("a single resource tab still has a close affordance", () => {
+  const onClose = vi.fn();
+  render(
+    <Tabs
+      tabs={[{ id: "note", title: "Note.md", activity: "knowledge" }]}
+      activeTabId="note"
+      onActivate={vi.fn()}
+      onClose={onClose}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Close Note.md" }));
+  expect(onClose).toHaveBeenCalledWith("note");
 });
 
 test("inspector tabs render the selected resource contract", () => {

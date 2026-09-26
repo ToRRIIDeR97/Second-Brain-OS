@@ -131,6 +131,10 @@ export type AgentCommandResult =
   | { ok: true }
   | { ok: false; error: AgentSourceError };
 
+export type AgentStartResult =
+  | { ok: true; session: AgentSession }
+  | { ok: false; error: AgentSourceError };
+
 export type AgentEventListener = (event: AgentEvent) => void;
 
 /**
@@ -143,7 +147,18 @@ export type AgentEventListener = (event: AgentEvent) => void;
  */
 export interface AgentSessionSource {
   availability: AgentAvailability;
+  probe: () => Promise<AgentAvailability>;
   list: (workspaceId: string) => Promise<AgentSession[]>;
+  start: (
+    workspaceId: string,
+    objective: string,
+    sandbox: "read_only" | "workspace_write",
+  ) => Promise<AgentStartResult>;
+  sendMessage: (
+    workspaceId: string,
+    sessionId: string,
+    message: string,
+  ) => Promise<AgentCommandResult>;
   subscribe: (workspaceId: string, listener: AgentEventListener) => () => void;
   cancel: (
     workspaceId: string,

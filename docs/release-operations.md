@@ -1,4 +1,8 @@
-# Release operations
+# Release operations for the former Tauri app
+
+These commands and the current `.github/workflows/` files cover the legacy
+React/Tauri application in `app/`. Release procedures for the active
+OpenCode Electron fork have not been verified in this repository.
 
 Checkpoint 36 provides an unsigned release-candidate pipeline and local smoke
 checks. It does not claim that signed/notarized packages, clean-machine

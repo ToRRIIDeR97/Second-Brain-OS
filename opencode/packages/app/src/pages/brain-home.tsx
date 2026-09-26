@@ -153,8 +153,7 @@ export default function BrainHomePage() {
             <SelectV2
               id="brain-home-location"
               aria-label={language.t("secondBrain.workspace")}
-              appearance="large"
-              class="!w-56 max-w-full"
+              class="!h-8 !w-auto max-w-56"
               options={locations()}
               current={locations().find((location) => location.worktree === state.directory)}
               value={(location) => location.worktree}
@@ -208,12 +207,13 @@ export default function BrainHomePage() {
                   <span>{language.t("harness.label")}</span>
                   <SelectV2
                     aria-label={language.t("harness.label")}
-                    class="!w-44"
+                    class="!h-7 !w-auto max-w-[220px]"
+                    appearance="inline"
                     options={[...(harnesses() ?? [])]}
                     current={harnesses()?.find((instance) => instance.id === state.harnessInstanceID)}
                     value={(instance) => instance.id}
                     label={(instance) =>
-                      `${instance.name}${instance.status === "unavailable" ? ` — ${language.t("harness.unavailable")}` : ""}`
+                      `${instance.name}${instance.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}`
                     }
                     optionDisabled={(instance) => instance.status === "unavailable"}
                     placeholder={language.t("harness.checking")}

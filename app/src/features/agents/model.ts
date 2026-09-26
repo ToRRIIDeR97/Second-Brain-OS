@@ -79,7 +79,8 @@ export function agentReducer(
 
 function applyEvent(session: AgentSession, event: AgentEvent): AgentSession {
   const events = [...(session.events ?? [])];
-  if (!events.some(({ id }) => id === event.id)) events.push(event);
+  if (events.some(({ id }) => id === event.id)) return session;
+  events.push(event);
   const next: AgentSession = {
     ...session,
     events,

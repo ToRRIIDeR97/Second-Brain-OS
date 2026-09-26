@@ -695,8 +695,7 @@ export default function CalendarPage() {
             <span>{language.t("secondBrain.workspace")}</span>
             <SelectV2
               aria-label={language.t("secondBrain.workspace")}
-              appearance="large"
-              class="!w-56 max-w-full"
+              class="!h-8 !w-auto max-w-56"
               options={projects()}
               current={projects().find((project) => project.worktree === state.directory)}
               value={(project) => project.worktree}
@@ -793,16 +792,15 @@ export default function CalendarPage() {
                 </h2>
                 <SelectV2
                   aria-label={language.t("secondBrain.calendar.filterProject")}
-                  appearance="large"
-                  class="!w-44"
-                  options={["", ...(brainProjects() ?? []).map((project) => project.id)]}
-                  current={state.projectFilter}
-                  label={(id) =>
-                    id
-                      ? (brainProjects()?.find((project) => project.id === id)?.name ?? id)
-                      : language.t("secondBrain.calendar.allProjects")
+                  class="!h-8 !w-auto max-w-44"
+                  options={["__all__", ...(brainProjects() ?? []).map((project) => project.id)]}
+                  current={state.projectFilter || "__all__"}
+                  label={(projectID) =>
+                    projectID === "__all__"
+                      ? language.t("secondBrain.calendar.allProjects")
+                      : (brainProjects()?.find((project) => project.id === projectID)?.name ?? projectID)
                   }
-                  onSelect={(id) => id !== null && setState("projectFilter", id)}
+                  onSelect={(projectID) => setState("projectFilter", projectID === "__all__" ? "" : (projectID ?? ""))}
                 />
                 <ButtonV2
                   size="small"
@@ -1000,9 +998,8 @@ export default function CalendarPage() {
                               <SelectV2
                                 id="google-access"
                                 aria-label={language.t("secondBrain.calendar.google.access")}
-                                appearance="large"
-                                class="!w-full"
-                                options={["read", "write"]}
+                                class="!h-8 !w-full"
+                                options={["read", "write"] as const}
                                 current={state.googleAccess}
                                 label={(access) => language.t(`secondBrain.calendar.google.access.${access}`)}
                                 onSelect={(access) =>
@@ -1145,16 +1142,13 @@ export default function CalendarPage() {
                         <SelectV2
                           id="calendar-event-source"
                           aria-label={language.t("secondBrain.calendar.google.destination")}
-                          appearance="large"
-                          class="!w-full"
-                          options={["local", "google"]}
-                          current={state.draft.source}
+                          class="!h-8 !w-full"
+                          options={["local", "google"] as const}
+                          current={state.draft.source === "google" ? "google" : "local"}
                           label={(source) =>
-                            language.t(
-                              source === "google"
-                                ? "secondBrain.calendar.google.title"
-                                : "secondBrain.calendar.sync.local",
-                            )
+                            source === "google"
+                              ? language.t("secondBrain.calendar.google.title")
+                              : language.t("secondBrain.calendar.sync.local")
                           }
                           onSelect={(source) =>
                             source &&
@@ -1175,16 +1169,17 @@ export default function CalendarPage() {
                       <SelectV2
                         id="calendar-event-project"
                         aria-label={language.t("secondBrain.calendar.project")}
-                        appearance="large"
-                        class="!w-full"
-                        options={["", ...(brainProjects() ?? []).map((project) => project.id)]}
-                        current={state.draft.projectId}
-                        label={(id) =>
-                          id
-                            ? (brainProjects()?.find((project) => project.id === id)?.name ?? id)
-                            : language.t("secondBrain.calendar.noProject")
+                        class="!h-8 !w-full"
+                        options={["__none__", ...(brainProjects() ?? []).map((project) => project.id)]}
+                        current={state.draft.projectId || "__none__"}
+                        label={(projectID) =>
+                          projectID === "__none__"
+                            ? language.t("secondBrain.calendar.noProject")
+                            : (brainProjects()?.find((project) => project.id === projectID)?.name ?? projectID)
                         }
-                        onSelect={(id) => id !== null && setState("draft", "projectId", id)}
+                        onSelect={(projectID) =>
+                          setState("draft", "projectId", projectID === "__none__" ? "" : (projectID ?? ""))
+                        }
                       />
                     </label>
                     <div class="grid grid-cols-2 gap-3">

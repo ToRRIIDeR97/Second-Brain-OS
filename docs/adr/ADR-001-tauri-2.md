@@ -1,6 +1,6 @@
 # ADR-001: Use Tauri 2 for the desktop shell
 
-- Status: accepted
+- Status: superseded by ADR-010
 - Date: 2026-07-27
 - Supersedes: none
 

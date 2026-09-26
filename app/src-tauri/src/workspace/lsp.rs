@@ -336,11 +336,17 @@ impl WorkspaceUriMapper {
         }
         let encoded = uri.strip_prefix("file://").ok_or(LspError::InvalidUri)?;
         let path = parse_file_uri_path(encoded)?;
-        if !path.is_absolute()
-            || path
-                .components()
-                .any(|component| component == Component::ParentDir)
+        if path
+            .components()
+            .any(|component| component == Component::ParentDir)
         {
+            return Err(LspError::InvalidUri);
+        }
+        if !path.is_absolute() {
+            #[cfg(windows)]
+            if encoded.starts_with('/') {
+                return Err(LspError::UriOutsideWorkspace);
+            }
             return Err(LspError::InvalidUri);
         }
         self.resolve_path(&path)
@@ -1055,6 +1061,11 @@ fn lsp_search_path(root: &Path) -> OsString {
 
 fn encode_file_uri(path: &Path) -> Result<String, LspError> {
     let text = path.to_str().ok_or(LspError::InvalidUri)?;
+    #[cfg(windows)]
+    let text = text
+        .strip_prefix(r"\\?\")
+        .unwrap_or(text)
+        .replace('\\', "/");
     let mut uri = String::from("file://");
     if !text.starts_with('/') {
         uri.push('/');
@@ -1073,6 +1084,8 @@ fn encode_file_uri(path: &Path) -> Result<String, LspError> {
 
 fn encode_virtual_uri(workspace_id: &str, relative: &Path) -> Result<String, LspError> {
     let relative = relative.to_str().ok_or(LspError::InvalidUri)?;
+    #[cfg(windows)]
+    let relative = relative.replace('\\', "/");
     if relative.is_empty() {
         return Ok(format!("second-brain://{workspace_id}/"));
     }
@@ -1099,6 +1112,11 @@ fn parse_file_uri_path(encoded: &str) -> Result<PathBuf, LspError> {
     }
     let decoded = percent_decode(encoded_path.as_bytes())?;
     let decoded = String::from_utf8(decoded).map_err(|_| LspError::InvalidUri)?;
+    #[cfg(windows)]
+    {
+        Ok(PathBuf::from(decoded.replace('/', r"\")))
+    }
+    #[cfg(not(windows))]
     Ok(PathBuf::from(format!("/{decoded}")))
 }
 

@@ -65,9 +65,9 @@ const appLocales = [
   "uz",
 ] as const
 const desktopLocales = appLocales
-// New Second Brain surfaces intentionally use the English base dictionary until translations are commissioned.
+// New Second Brain and harness surfaces intentionally use English until translations are commissioned.
 // The runtime merges that base into every locale before localized values, so these keys never render raw IDs.
-const englishFallbackPrefixes = ["secondBrain."]
+const englishFallbackPrefixes = ["secondBrain.", "harness."]
 const pluralCategories = new Map(
   appLocales.map(
     (locale) =>

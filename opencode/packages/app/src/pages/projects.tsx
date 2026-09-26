@@ -256,15 +256,13 @@ export default function ProjectsPage() {
             <span>{language.t("secondBrain.projects.brainLocation")}</span>
             <SelectV2
               aria-label={language.t("secondBrain.projects.brainLocation")}
-              class="!w-56 max-w-full"
+              class="!h-8 !w-auto max-w-56"
               options={locations()}
               current={locations().find((location) => location.worktree === state.brainDirectory)}
               value={(location) => location.worktree}
               label={(location) => location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree}
               disabled={overviewDirty() || state.saving}
-              onSelect={(location) =>
-                location && setState({ brainDirectory: location.worktree, selectedId: "" })
-              }
+              onSelect={(location) => location && setState({ brainDirectory: location.worktree, selectedId: "" })}
             />
           </label>
           <ButtonV2
@@ -543,18 +541,18 @@ function CreateProjectForm(props: {
           <SelectV2
             id="project-location"
             aria-label={props.language.t("secondBrain.projects.location")}
+            class="!h-9 !w-full"
             appearance="large"
-            class="!w-full"
-            options={["", ...props.locations.map((location) => location.id)]}
-            current={props.state.draft.locationId}
-            label={(id) =>
-              id
-                ? (props.locations.find((location) => location.id === id)?.name ??
-                  props.locations.find((location) => location.id === id)?.worktree ??
-                  id)
-                : props.language.t("secondBrain.projects.location.none")
+            options={["__none__", ...props.locations.map((location) => location.id)]}
+            current={props.state.draft.locationId || "__none__"}
+            label={(locationID) => {
+              if (locationID === "__none__") return props.language.t("secondBrain.projects.location.none")
+              const location = props.locations.find((item) => item.id === locationID)
+              return location?.name ?? location?.worktree ?? locationID
+            }}
+            onSelect={(locationID) =>
+              props.setState("draft", "locationId", locationID === "__none__" ? "" : (locationID ?? ""))
             }
-            onSelect={(id) => id !== null && props.setState("draft", "locationId", id)}
           />
         </label>
         <details class="rounded-[8px] border border-v2-border-border-weak px-4 py-3">
@@ -782,6 +780,10 @@ function ProjectFiles(props: {
   return (
     <ProjectSurface title={props.language.t("secondBrain.projects.files.title")}>
       <div class="mx-auto flex max-w-xl flex-col items-start gap-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-5">
+        <p class="text-[13px] leading-5 text-v2-text-text-muted">
+          {props.language.t("secondBrain.projects.files.managed")}
+        </p>
+        <code class="max-w-full truncate text-[11px] text-v2-text-text-faint">{props.project.folder}</code>
         <p class="text-[13px] leading-5 text-v2-text-text-muted">
           {props.canOpen
             ? props.language.t("secondBrain.projects.files.description")

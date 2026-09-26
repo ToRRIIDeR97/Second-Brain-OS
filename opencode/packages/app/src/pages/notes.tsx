@@ -207,7 +207,7 @@ export default function NotesPage() {
       setState("error", language.t("secondBrain.notes.error.title"))
       return
     }
-    const path = `notes/${slug}.md`
+    const path = state.filterProjectId ? `projects/${state.filterProjectId}/notes/${slug}.md` : `notes/${slug}.md`
     setState({ saving: true, error: "" })
     try {
       const document = await writeNote(client(state.directory), {
@@ -311,17 +311,18 @@ export default function NotesPage() {
                 />
               </label>
               <SelectV2
-                appearance="large"
-                class="!w-full"
+                class="!h-8 !w-full !bg-transparent !shadow-none hover:!bg-v2-background-bg-layer-01"
                 aria-label={language.t("secondBrain.notes.filterProject")}
-                options={["", ...(projects() ?? []).map((project) => project.id)]}
-                current={state.filterProjectId}
-                label={(id) =>
-                  id
-                    ? (projects()?.find((project) => project.id === id)?.name ?? id)
-                    : language.t("secondBrain.notes.allProjects")
+                options={["__all__", ...(projects() ?? []).map((project) => project.id)]}
+                current={state.filterProjectId || "__all__"}
+                label={(projectID) =>
+                  projectID === "__all__"
+                    ? language.t("secondBrain.notes.allProjects")
+                    : (projects()?.find((project) => project.id === projectID)?.name ?? projectID)
                 }
-                onSelect={(id) => id !== null && setState("filterProjectId", id)}
+                onSelect={(projectID) =>
+                  setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))
+                }
               />
             </div>
 
@@ -392,8 +393,7 @@ export default function NotesPage() {
                 <span class="sr-only">{language.t("secondBrain.workspace")}</span>
                 <SelectV2
                   aria-label={language.t("secondBrain.workspace")}
-                  appearance="large"
-                  class="!w-full"
+                  class="!h-8 !w-full !bg-transparent !shadow-none hover:!bg-v2-background-bg-layer-01"
                   options={workspaces()}
                   current={workspaces().find((project) => project.worktree === state.directory)}
                   value={(project) => project.worktree}

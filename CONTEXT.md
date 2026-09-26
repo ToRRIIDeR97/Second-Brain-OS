@@ -17,6 +17,12 @@ instructions, and Activity. A Project may have a local location, but it is not
 the same thing as a folder or repository.
 _Avoid_: Workspace, folder, repository
 
+**Project folder**:
+The app-managed directory containing one Project's card, notes, and
+calendar-derived timeline. It belongs to a Project but is not the Project
+itself or its optional linked Workspace.
+_Avoid_: Project, Workspace
+
 **Workspace**:
 A registered local root with its own identity, trust, and access policy. It is
 a security boundary and should not replace Project in ordinary product copy.

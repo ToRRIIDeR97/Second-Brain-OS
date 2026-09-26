@@ -26,7 +26,7 @@ export type TerminalRequest = {
   key: number;
   workspaceId: string;
   relativePath: string;
-  preset: NativeTerminalPreset;
+  preset?: NativeTerminalPreset;
 };
 
 function TerminalPane({
@@ -313,7 +313,7 @@ function NativeTerminalWorkspace({
     async (
       workspaceId?: string,
       relativePath?: string,
-      preset: NativeTerminalPreset = "zsh",
+      preset?: NativeTerminalPreset,
     ) => {
       let targetWorkspaceId = workspaceId;
       if (!targetWorkspaceId) {
@@ -477,11 +477,7 @@ function NativeTerminalWorkspace({
           title="New terminal"
           onClick={() => {
             const active = sessions.find(({ id }) => id === activeId);
-            void addSession(
-              active?.workspaceId,
-              active?.cwd.relativePath,
-              "zsh",
-            );
+            void addSession(active?.workspaceId, active?.cwd.relativePath);
           }}
         >
           <Plus size={16} aria-hidden="true" />

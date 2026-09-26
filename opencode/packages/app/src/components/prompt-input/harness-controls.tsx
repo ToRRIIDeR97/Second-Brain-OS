@@ -19,6 +19,9 @@ export type PromptInputHarnessController = {
   }
 }
 
+const SELECT_CLASS =
+  "prompt-input-responsive-select !h-7 !w-auto min-w-0 max-w-[220px] !bg-transparent !shadow-none hover:!bg-v2-overlay-simple-overlay-hover"
+
 export function PromptInputHarnessControls(props: { controller: PromptInputHarnessController }) {
   const language = useLanguage()
   const instance = createMemo(() =>
@@ -52,6 +55,8 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
         }
         current={props.controller.current()}
         control="harness"
+        currentIcon={<Icon name="status" />}
+        class={SELECT_CLASS}
         disabled={props.controller.loading() || props.controller.disabled?.() || !props.controller.instances()}
         onSelect={(id) => props.controller.select(Harness.InstanceID.make(id))}
       />
@@ -66,6 +71,8 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
               options={item.models.map((option) => ({ id: option.id, label: option.name }))}
               current={props.controller.model.current()?.id ?? item.models[0]?.id ?? ""}
               control="harness-model"
+              currentIcon={<Icon name="monitor" />}
+              class={SELECT_CLASS}
               capitalize={false}
               disabled={props.controller.disabled?.()}
               onSelect={selectModel}
@@ -77,6 +84,26 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
         {(selected) => (
           <>
             <Show when={selected.reasoningEfforts.length > 0}>
+              <PromptInputV2Select
+                title={language.t("harness.effort")}
+                options={[
+                  { id: "", label: language.t("harness.default") },
+                  ...selected.reasoningEfforts.map((effort) => ({ id: effort, label: effort })),
+                ]}
+                current={props.controller.model.current()?.reasoningEffort ?? ""}
+                control="harness-effort"
+                currentIcon={<Icon name="settings-gear" />}
+                class={SELECT_CLASS}
+                capitalize={false}
+                disabled={props.controller.disabled?.()}
+                onSelect={(reasoningEffort) => {
+                  const current = props.controller.model.current()
+                  if (!current) return
+                  props.controller.model.set({ ...current, reasoningEffort: reasoningEffort || undefined })
+                }}
+              />
+            </Show>
+            <Show when={selected.serviceTiers.length > 0}>
               <PromptInputV2Select
                 title={language.t("harness.effort")}
                 options={[
@@ -103,6 +130,8 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
                 ]}
                 current={props.controller.model.current()?.serviceTier ?? ""}
                 control="harness-service-tier"
+                currentIcon={<Icon name="outline-sliders" />}
+                class={SELECT_CLASS}
                 capitalize={false}
                 disabled={props.controller.disabled?.()}
                 onSelect={(serviceTier) => {

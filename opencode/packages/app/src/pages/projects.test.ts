@@ -5,6 +5,7 @@ import { projectGraph } from "./projects"
 test("builds a bounded Project-centered note graph", () => {
   const project = {
     id: "project_01K4B",
+    folder: "projects/project_01K4B",
     name: "Launch",
     outcome: "Ship",
     instructions: "",

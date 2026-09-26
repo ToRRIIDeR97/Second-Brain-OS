@@ -416,8 +416,10 @@ export function FocusedGraph({
           busy={loading}
           onClearSelection={clearSelection}
           onContextMenu={(node, x, y) => {
-            setContextMenu({ node, x, y });
-            runCommand("graph.show-actions", node);
+            if (onCommand) {
+              setContextMenu({ node, x, y });
+              runCommand("graph.show-actions", node);
+            }
           }}
         />
         {loading ? (
@@ -464,7 +466,7 @@ export function FocusedGraph({
             ) : null}
           </div>
         ) : null}
-        {contextMenu ? (
+        {contextMenu && onCommand ? (
           <div
             role="menu"
             aria-label={`Actions for ${contextMenu.node.label}`}
@@ -560,7 +562,7 @@ export function FocusedGraph({
                   {expandedIds.has(selected.id) ? "Expanded" : "Expand"}
                 </button>
               ) : null}
-              {selected.source ? (
+              {selected.source && onCommand ? (
                 <button
                   type="button"
                   style={buttonStyle}
@@ -571,23 +573,25 @@ export function FocusedGraph({
                   Open source
                 </button>
               ) : null}
-              {(
-                [
-                  ["graph.search-related", "Search related"],
-                  ["graph.add-to-context", "Add to context"],
-                ] as const
-              ).map(([command, label]) => (
-                <button
-                  key={command}
-                  type="button"
-                  style={buttonStyle}
-                  onClick={() => {
-                    runCommand(command, selected);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+              {onCommand
+                ? (
+                    [
+                      ["graph.search-related", "Search related"],
+                      ["graph.add-to-context", "Add to context"],
+                    ] as const
+                  ).map(([command, label]) => (
+                    <button
+                      key={command}
+                      type="button"
+                      style={buttonStyle}
+                      onClick={() => {
+                        runCommand(command, selected);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))
+                : null}
             </div>
             <h3 style={{ marginBottom: 8 }}>Relationships</h3>
             {relationships.length ? (

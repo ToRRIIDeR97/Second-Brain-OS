@@ -375,8 +375,14 @@ mod tests {
         #[cfg(unix)]
         std::os::unix::fs::symlink(outside.path(), temp.path().join("escape")).expect("symlink");
         #[cfg(windows)]
-        std::os::windows::fs::symlink_dir(outside.path(), temp.path().join("escape"))
-            .expect("junction");
+        if let Err(error) =
+            std::os::windows::fs::symlink_dir(outside.path(), temp.path().join("escape"))
+        {
+            if error.raw_os_error() == Some(1314) {
+                return;
+            }
+            panic!("symlink: {error}");
+        }
         let workspace = workspace(temp.path());
         let path =
             WorkspacePath::new(WorkspaceId::from("ws_path"), "escape/secret.txt").expect("path");

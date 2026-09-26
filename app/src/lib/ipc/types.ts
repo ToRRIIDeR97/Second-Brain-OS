@@ -164,9 +164,313 @@ export type WorkspaceSummary = {
 
 export type WorkspaceRegistration = {
   name: string;
+  /** Display only. Native access is granted by rootGrantId. */
   rootPath: string;
+  rootGrantId?: string;
   kind: WorkspaceKind;
   trustLevel: WorkspaceTrustLevel;
+};
+
+export type RootSelection = {
+  grantId: string;
+  displayPath: string;
+  suggestedName: string;
+};
+
+export type ProjectStatus = "active" | "paused" | "archived";
+
+export type ProjectLocation = {
+  workspaceId: string;
+  /** Display alias only. Runtime access always resolves workspaceId. */
+  displayPath: string;
+};
+
+export type ProjectRecord = {
+  id: string;
+  name: string;
+  outcome: string;
+  templateId?: string | null;
+  instructions: string;
+  status: ProjectStatus;
+  progressPercent: number;
+  nextMilestone?: string | null;
+  blocker?: string | null;
+  tags: string[];
+  location?: ProjectLocation | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectLocationInput =
+  | { mode: "none" }
+  | { mode: "existingWorkspace"; workspaceId: string }
+  | {
+      mode: "rootSelection";
+      grantId: string;
+      trustLevel: WorkspaceTrustLevel;
+    };
+
+export type ProjectCreateRequest = {
+  brainWorkspaceId: string;
+  name: string;
+  outcome: string;
+  templateId?: string | null;
+  instructions: string;
+  tags: string[];
+  location: ProjectLocationInput;
+};
+
+export type ProjectPatch = {
+  name?: string;
+  outcome?: string;
+  templateId?: string | null;
+  instructions?: string;
+  status?: ProjectStatus;
+  progressPercent?: number;
+  nextMilestone?: string | null;
+  blocker?: string | null;
+  tags?: string[];
+  location?: ProjectLocation | null;
+};
+
+export type ActivityCategory =
+  | "all"
+  | "attention"
+  | "runs"
+  | "changes"
+  | "history";
+
+export type ActivityListRequest = {
+  workspaceId?: string | null;
+  projectId?: string | null;
+  category?: ActivityCategory | null;
+  cursor?: string | null;
+  limit?: number | null;
+};
+
+export type ActivityItem = {
+  id: string;
+  eventType: string;
+  timestamp: string;
+  workspaceId?: string | null;
+  correlationId: string;
+  actorType: string;
+  category: Exclude<ActivityCategory, "all">;
+  payload: Record<string, unknown> | null;
+};
+
+export type ActivityPage = {
+  items: ActivityItem[];
+  nextCursor?: string | null;
+};
+
+export type PlannerScheduleRecord =
+  | { kind: "date_only"; date: string }
+  | { kind: "all_day"; date: string }
+  | {
+      kind: "exact";
+      startEpochSeconds: number;
+      endEpochSeconds?: number | null;
+      timezone: string;
+    };
+
+export type PlannerItemRecord = {
+  id: string;
+  kind: "task" | "milestone" | "focus_block" | "calendar";
+  title: string;
+  details?: string | null;
+  location?: string | null;
+  schedule?: PlannerScheduleRecord | null;
+  status: "open" | "in_progress" | "completed" | "archived";
+  projectId?: string | null;
+  source: "local" | "markdown" | "provider";
+  sourceLink?: WorkspacePath & {
+    startLine?: number | null;
+    endLine?: number | null;
+    explicitTaskId?: string | null;
+  };
+  providerLink?: { provider: string; objectId: string } | null;
+  recurrenceRule?: string | null;
+  syncStatus:
+    | "local_only"
+    | "pending"
+    | "synced"
+    | "offline"
+    | "stale"
+    | "conflict"
+    | "failed"
+    | "error";
+  conflictMessage?: string | null;
+  createdAtEpochSeconds: number;
+  updatedAtEpochSeconds: number;
+};
+
+export type PlannerListRequest = {
+  brainWorkspaceId: string;
+  projectId?: string | null;
+  range?: {
+    startDate: string;
+    endDate: string;
+    startEpochSeconds: number;
+    endEpochSeconds: number;
+  };
+};
+
+export type PlannerItemDraftRecord = {
+  kind?: PlannerItemRecord["kind"];
+  title: string;
+  details?: string | null;
+  location?: string | null;
+  schedule?: PlannerScheduleRecord | null;
+  projectId?: string | null;
+};
+
+export type PlannerItemPatchRecord = {
+  title?: string;
+  details?: string;
+  clearDetails?: boolean;
+  location?: string;
+  clearLocation?: boolean;
+  schedule?: PlannerScheduleRecord;
+  clearSchedule?: boolean;
+  status?: PlannerItemRecord["status"];
+  projectId?: string;
+  clearProject?: boolean;
+};
+
+export type PlannerCreateRequest = {
+  brainWorkspaceId: string;
+  draft: PlannerItemDraftRecord;
+  syncTarget?: "local" | "google";
+};
+
+export type PlannerUpdateRequest = {
+  brainWorkspaceId: string;
+  itemId: string;
+  patch: PlannerItemPatchRecord;
+};
+
+export type PlannerDeleteRequest = {
+  brainWorkspaceId: string;
+  itemId: string;
+};
+
+export type AgentProviderProbeRecord = {
+  provider: "codex";
+  status: "available" | "unavailable";
+  version?: string | null;
+  reason?: string | null;
+};
+
+export type ManagedAgentSandbox = "read_only" | "workspace_write";
+
+export type GoogleConsentMode = "read_only" | "read_write";
+
+export type IntegrationSettings = {
+  version: 1;
+  google: {
+    oauthClientId: string | null;
+    consentMode: GoogleConsentMode;
+    calendarEnabled: boolean;
+    tasksEnabled: boolean;
+  };
+  codex: {
+    defaultSandbox: ManagedAgentSandbox;
+  };
+};
+
+export type IntegrationSettingsUpdate = {
+  google: IntegrationSettings["google"] & {
+    oauthClientSecret?: string | null;
+  };
+  codex: IntegrationSettings["codex"];
+};
+
+export type GoogleConnectionStatus = {
+  state:
+    | "not_configured"
+    | "disconnected"
+    | "connecting"
+    | "connected"
+    | "error";
+  connected: boolean;
+  clientSecretConfigured: boolean;
+  consentMode: GoogleConsentMode;
+  calendarEnabled: boolean;
+  tasksEnabled: boolean;
+  lastSyncedAt?: string | null;
+  message: string;
+};
+
+export type GoogleSyncSummary = {
+  calendarItems: number;
+  taskItems: number;
+  taskLists: number;
+  lastSyncedAt: string;
+};
+
+export type ManagedAgentStartRequest = {
+  workspaceId: string;
+  objective: string;
+  sandbox: ManagedAgentSandbox;
+};
+
+export type ManagedAgentSessionRequest = {
+  workspaceId: string;
+  sessionId: string;
+};
+
+export type ManagedAgentMessageRequest = ManagedAgentSessionRequest & {
+  message: string;
+};
+
+export type ManagedAgentApprovalRequest = ManagedAgentSessionRequest & {
+  approvalId: string;
+  decision: "approved" | "denied";
+};
+
+/** The backend payload is structurally validated by the feature model. */
+export type ManagedAgentSessionRecord = {
+  id: string;
+  workspaceId: string;
+  provider: "codex";
+  mode: "managed";
+  profileId: string;
+  packetId: string;
+  objective: string;
+  roots: {
+    readable: { projectId: string; relativePath: string }[];
+    writable: { projectId: string; relativePath: string }[];
+    writableProjectId: string;
+  };
+  state:
+    | "created"
+    | "starting"
+    | "running"
+    | "waiting"
+    | "canceling"
+    | "completed"
+    | "failed"
+    | "recoverable";
+  assistantText: string;
+  pendingApprovals: {
+    approvalId: string;
+    riskClass: string;
+    summary: string;
+    target: string;
+    decision: "pending" | "approved" | "denied" | "expired" | "canceled";
+  }[];
+  fileChanges: { path: string; beforeHash?: string; afterHash?: string }[];
+  validations: {
+    validationId: string;
+    commandId: string;
+    passed: boolean;
+    summary: string;
+  }[];
+  events: unknown[];
+  lastActivityAt?: string | null;
+  currentAction?: string | null;
+  error?: { code: string; message: string; retryable: boolean } | null;
 };
 
 export type WorkspaceDirectoryEntry = {

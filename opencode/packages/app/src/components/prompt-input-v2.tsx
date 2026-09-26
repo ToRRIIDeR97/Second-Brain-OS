@@ -501,17 +501,19 @@ function PromptInputV2ModelControl(props: {
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? props.loading)
   const content = () => (
     <>
-      <Show when={props.providerID}>
-        {(providerID) => (
-          <ProviderIcon
-            id={providerID()}
-            class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-            style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-          />
-        )}
-      </Show>
-      <span class="truncate leading-4">{props.modelName}</span>
-      <span class="-ml-0.5 -mr-1 flex shrink-0">
+      <span class="prompt-input-control-icon flex shrink-0">
+        <Show when={props.providerID} fallback={<Icon name="monitor" />}>
+          {(providerID) => (
+            <ProviderIcon
+              id={providerID()}
+              class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+              style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+            />
+          )}
+        </Show>
+      </span>
+      <span class="prompt-input-control-label truncate leading-4">{props.modelName}</span>
+      <span class="prompt-input-control-chevron -ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
       </span>
     </>
@@ -523,7 +525,7 @@ function PromptInputV2ModelControl(props: {
         gutter={4}
         value={
           <>
-            {props.title}
+            {props.title}: {props.modelName}
             <KeybindV2 keys={props.keybind} variant="neutral" />
           </>
         }
@@ -536,7 +538,7 @@ function PromptInputV2ModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+              class="prompt-input-responsive-select min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
@@ -553,7 +555,7 @@ function PromptInputV2ModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                class="prompt-input-responsive-select min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="prompt-model"
                 data-control-type="popover"

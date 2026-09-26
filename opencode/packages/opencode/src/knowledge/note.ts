@@ -62,7 +62,7 @@ type Card = Document & {
 export const list = Effect.fn("KnowledgeNote.list")(function* () {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
-  const paths = yield* fs.glob(`${directory}/**/*.md`, {
+  const paths = yield* fs.glob(`{${directory}/**/*.md,projects/*/notes/**/*.md}`, {
     cwd: location.directory,
     absolute: false,
     include: "file",
@@ -144,7 +144,9 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
 
 const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {
   const path = input.replaceAll("\\", "/").replace(/^\.\//, "")
-  if (!path.startsWith(`${directory}/`) || !path.toLowerCase().endsWith(".md") || path.split("/").includes("..")) {
+  const global = path.startsWith(`${directory}/`)
+  const managed = /^projects\/project_[0-9A-Z]+\/notes\/.+\.md$/i.test(path)
+  if ((!global && !managed) || !path.toLowerCase().endsWith(".md") || path.split("/").includes("..")) {
     return yield* new InvalidError({ reason: "invalid_path" })
   }
   return path

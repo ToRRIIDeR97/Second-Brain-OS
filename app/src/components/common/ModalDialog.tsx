@@ -104,6 +104,7 @@ export function ConfirmDialog({
   message,
   confirmLabel,
   dangerous = false,
+  busy = false,
   onConfirm,
   onClose,
 }: {
@@ -112,6 +113,7 @@ export function ConfirmDialog({
   message: string;
   confirmLabel: string;
   dangerous?: boolean;
+  busy?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -124,15 +126,21 @@ export function ConfirmDialog({
     >
       <p>{message}</p>
       <footer className="modal-dialog-actions">
-        <button type="button" className="button" onClick={onClose}>
+        <button
+          type="button"
+          className="button"
+          disabled={busy}
+          onClick={onClose}
+        >
           Cancel
         </button>
         <button
           type="button"
           className={`button ${dangerous ? "button-danger" : "button-primary"}`}
+          disabled={busy}
           onClick={onConfirm}
         >
-          {confirmLabel}
+          {busy ? `${confirmLabel}…` : confirmLabel}
         </button>
       </footer>
     </ModalDialog>

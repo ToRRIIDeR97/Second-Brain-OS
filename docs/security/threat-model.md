@@ -1,30 +1,36 @@
-# Threat model v1
+# Threat model for the active desktop app
 
-The security boundary is the Rust application policy layer. Renderer input,
-workspace files, provider payloads, terminals, and MCP arguments are untrusted
-until validated by that layer.
+This document covers the OpenCode Electron fork in `opencode/`. The former
+React/Tauri application in `app/` is donor code, so its Rust policy and MCP
+sidecar design are not current desktop controls.
 
-| Surface | Threat | Required control and evidence |
-|---|---|---|
-| Renderer/Tauri IPC | Absolute path, shell, SQL, or provider access | Typed commands accept workspace IDs and validated relative paths only; capability config has no unrestricted fs/shell. |
-| Workspace files | `..` traversal, symlink escape, malicious instructions | Canonicalize and re-check roots; apply hard denies; classify file text as data; path/symlink fixtures fail closed. |
-| Untrusted workspace | Project config auto-executes code or tools | No auto terminal presets, raw HTML, MCP writes, or external launches; explicit trust upgrade. |
-| Markdown preview | Script, event-handler, or remote-resource execution | Sanitize HTML, disable scripts and handlers, restrict resources, and disable raw HTML in agent context. |
-| MCP sidecar | Forged/replayed arguments or sidecar replacement | Authenticated short-lived capability token, bound to session/workspace/tools/expiry; version negotiation; no direct DB/filesystem. |
-| Terminal/PTY | Escape sequences, wrong cwd, recursive deletion | Workspace-scoped PTY, filtered links/environment metadata, process protection, approval for destructive actions. |
-| Agents/provider content | Prompt injection, hidden reasoning or secret leakage | Separate instructions from data, typed tool authorization, bounded packets, redacted normalized events. |
-| Google/provider APIs | Token theft, duplicate/replayed writes, invite spam | OS credential store, provider adapter boundary, outbox/idempotency, participant-facing approval. |
-| Database/migrations | Corruption or derived state becoming authority | Transactions, migration version checks, rollback/backup, rebuild from canonical files. |
+## Assets and boundaries
 
-Trust levels are `untrusted`, `trusted_read_only`, `trusted`, and `restricted`.
-The default capability matrix is:
+| Boundary | Current control and location |
+| --- | --- |
+| Renderer to native process | The main window uses `contextIsolation`, `sandbox`, and disabled `nodeIntegration`. `opencode/packages/desktop/src/preload/index.ts` exposes specific IPC methods implemented in `opencode/packages/desktop/src/main/ipc.ts`. |
+| Renderer to managed server | Electron starts the OpenCode server on `127.0.0.1` with a generated password. Server authorization checks credentials for protected routes. See `opencode/packages/desktop/src/main/index.ts` and `opencode/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts`. |
+| Server to workspace files | Second Brain handlers run in an instance location context. Note and project code resolves targets through `LocationMutation` before reading or writing files. See `opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `opencode/packages/opencode/src/knowledge/note.ts`, and `opencode/packages/opencode/src/project/brain.ts`. |
+| Desktop to Google | Calendar and Tasks integration uses OAuth in the Electron main process. The service encrypts its client secret and refresh token with Electron `safeStorage` and disables connection when secure storage is unavailable. See `opencode/packages/desktop/src/main/google-calendar.ts`. |
 
-| Level | Readable roots | Writable roots | Processes | MCP | HTML |
-|---|---|---|---|---|---|
-| `untrusted` | registered root, deny patterns | none | blocked unless approved | read-only, no writes | disabled |
-| `trusted_read_only` | policy-allowed roots | none | blocked unless approved | bounded reads | sanitized preview |
-| `trusted` | policy-allowed roots | policy-allowed roots | allowed only by profile | negotiated reads/writes with approval | sanitized; expert mode separately approved |
-| `restricted` | explicitly listed safe roots | explicitly listed safe roots | blocked by default | no MCP writes; reads require policy | disabled |
+Workspace notes, projects, calendar files, session data, provider tokens, and
+agent tool permissions are sensitive. Treat note contents, provider responses,
+workspace files, URL input, and IPC arguments as untrusted. Keep file access
+within the selected workspace and use the existing mutation services. Never
+log credentials or full private content.
 
-Hard application denies override every row; missing policy is deny-by-default.
-Security-boundary changes are auditable and require explicit approval.
+## Checks
+
+From the repository root, `bun run typecheck` and `bun run test` check the
+desktop package; `bun run lint` checks `opencode/`. These commands are defined
+in the root `package.json`.
+Relevant focused tests include
+`opencode/packages/desktop/src/main/google-calendar-domain.test.ts`,
+`opencode/packages/opencode/test/project/brain.test.ts`, and the note tests
+under `opencode/packages/opencode/test/knowledge/`. Run server tests from
+`opencode/packages/opencode` with Bun when changing those paths. The existing
+`.github/workflows/ci.yml` and `docs/release-operations.md` still target the
+former Tauri app; do not read their green status as verification of this fork.
+
+This is a source-level map of the controls found during setup, not a security
+audit. Recheck the implementation and its tests before changing a boundary.

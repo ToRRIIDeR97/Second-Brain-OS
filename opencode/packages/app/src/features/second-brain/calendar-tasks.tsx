@@ -346,16 +346,13 @@ export function CalendarTasks(props: {
                 <SelectV2
                   id="task-source"
                   aria-label={language.t("secondBrain.tasks.google.destination")}
-                  appearance="large"
-                  class="!w-full"
-                  options={["local", "google"]}
-                  current={state.draft.source}
+                  class="!h-8 !w-full"
+                  options={["local", "google"] as const}
+                  current={state.draft.source === "google" ? "google" : "local"}
                   label={(source) =>
-                    language.t(
-                      source === "google"
-                        ? "secondBrain.tasks.google.defaultList"
-                        : "secondBrain.calendar.sync.local",
-                    )
+                    source === "google"
+                      ? language.t("secondBrain.tasks.google.defaultList")
+                      : language.t("secondBrain.calendar.sync.local")
                   }
                   onSelect={(source) =>
                     source &&
@@ -373,16 +370,17 @@ export function CalendarTasks(props: {
               <SelectV2
                 id="task-project"
                 aria-label={language.t("secondBrain.calendar.project")}
-                appearance="large"
-                class="!w-full"
-                options={["", ...props.projects.map((project) => project.id)]}
-                current={state.draft.projectId}
-                label={(id) =>
-                  id
-                    ? (props.projects.find((project) => project.id === id)?.name ?? id)
-                    : language.t("secondBrain.calendar.noProject")
+                class="!h-8 !w-full"
+                options={["__none__", ...props.projects.map((project) => project.id)]}
+                current={state.draft.projectId || "__none__"}
+                label={(projectID) =>
+                  projectID === "__none__"
+                    ? language.t("secondBrain.calendar.noProject")
+                    : (props.projects.find((project) => project.id === projectID)?.name ?? projectID)
                 }
-                onSelect={(id) => id !== null && setState("draft", "projectId", id)}
+                onSelect={(projectID) =>
+                  setState("draft", "projectId", projectID === "__none__" ? "" : (projectID ?? ""))
+                }
               />
             </label>
             <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="task-due">

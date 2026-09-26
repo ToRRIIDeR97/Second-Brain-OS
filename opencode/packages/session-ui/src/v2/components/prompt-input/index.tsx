@@ -23,6 +23,7 @@ import type {
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
 import "./attachments.css"
+import "./responsive-controls.css"
 
 export type {
   PromptInputV2Attachment,
@@ -163,7 +164,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             spellcheck={state.mode === "normal"}
             // @ts-expect-error
             autocomplete="off"
-            class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+            class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
             onInput={(event) => {
               const cursor = promptInputV2Cursor(event.currentTarget)
@@ -201,6 +202,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
         <div class="flex h-11 items-center px-2">
           <div
             class="flex min-w-0 flex-1 items-center gap-1"
+            data-slot="prompt-input-controls"
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
             style={buttons()}
@@ -226,6 +228,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                   title={i18n.t("ui.promptInput.chooseAgent")}
                   keybind={["Mod", "."]}
                   control={control}
+                  icon={<IconV2 name="status-active" />}
                 />
               )}
             </Show>
@@ -240,6 +243,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                         keybind={["Mod", "M"]}
                         control={control}
                         model
+                        icon={<IconV2 name="monitor" />}
                       />
                     )}
                   </Show>
@@ -255,6 +259,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                     title={i18n.t("ui.promptInput.chooseVariant")}
                     keybind={["Shift", "Mod", "D"]}
                     control={control}
+                    icon={<IconV2 name="outline-sliders" />}
                   />
                 </Show>
               )}
@@ -535,6 +540,7 @@ function PromptInputV2ConfiguredSelect(props: {
   keybind?: string[]
   control: PromptInputV2SelectControl
   model?: boolean
+  icon: JSX.Element
 }) {
   const current = () => props.control.current()
   const providerID = () => props.control.options().find((option) => option.id === current())?.providerID
@@ -545,7 +551,7 @@ function PromptInputV2ConfiguredSelect(props: {
       options={props.control.options()}
       current={current()}
       currentIcon={
-        <Show when={props.model && providerID()}>
+        <Show when={props.model && providerID()} fallback={props.icon}>
           <ProviderIcon id={providerID()!} class="size-4 shrink-0 opacity-60" />
         </Show>
       }
@@ -567,12 +573,13 @@ export function PromptInputV2Select(props: {
   onOpenChange?: (open: boolean) => void
   onSelect: (id: string) => void
 }) {
+  const currentLabel = () => props.options.find((option) => option.id === props.current)?.label ?? props.current
   return (
     <TooltipV2
       placement="top"
       value={
         <>
-          {props.title}
+          {props.title}: {currentLabel()}
           <KeybindV2 keys={props.keybind ?? []} variant="neutral" />
         </>
       }
@@ -582,16 +589,16 @@ export function PromptInputV2Select(props: {
           as={ButtonV2}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`prompt-input-responsive-select max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
           data-control={props.control}
           disabled={props.disabled}
           aria-label={props.title}
         >
-          {props.currentIcon}
-          <span class="truncate leading-5" classList={{ capitalize: props.capitalize ?? true }}>
-            {props.options.find((option) => option.id === props.current)?.label ?? props.current}
+          <span class="prompt-input-control-icon flex shrink-0">{props.currentIcon}</span>
+          <span class="prompt-input-control-label truncate leading-5" classList={{ capitalize: props.capitalize ?? true }}>
+            {currentLabel()}
           </span>
-          <span class="-ms-0.5 -me-1 flex shrink-0">
+          <span class="prompt-input-control-chevron -ms-0.5 -me-1 flex shrink-0">
             <IconV2 name="chevron-down" />
           </span>
         </MenuV2.Trigger>

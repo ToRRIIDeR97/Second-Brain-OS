@@ -146,6 +146,50 @@ test("history back and forward activate resource tabs", () => {
   expect(forward.history.index).toBe(1);
 });
 
+test("history restores control-center views as one location", () => {
+  const home = shellReducer(defaultShellState, {
+    type: "history/push",
+    entry: {
+      id: "home",
+      activity: "home",
+      projectView: "overview",
+      plannerView: "today",
+      projectId: null,
+    },
+  });
+  const project = shellReducer(home, {
+    type: "history/push",
+    entry: {
+      id: "project-map",
+      activity: "projects",
+      projectView: "map",
+      plannerView: "tasks",
+      projectId: "project_alpha",
+    },
+  });
+  const current = {
+    ...project,
+    activity: "projects" as const,
+    projectView: "map" as const,
+    plannerView: "tasks" as const,
+  };
+
+  const back = shellReducer(current, { type: "history/back" });
+  expect(back).toMatchObject({
+    activity: "home",
+    projectView: "overview",
+    plannerView: "today",
+  });
+  expect(back.history.entries[1]?.projectId).toBe("project_alpha");
+
+  const forward = shellReducer(back, { type: "history/forward" });
+  expect(forward).toMatchObject({
+    activity: "projects",
+    projectView: "map",
+    plannerView: "tasks",
+  });
+});
+
 test("v1 layout payloads migrate to the canonical v2 shape", () => {
   const migrated = migrateShellLayout({
     version: 1,

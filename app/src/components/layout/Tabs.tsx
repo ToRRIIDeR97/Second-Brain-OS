@@ -141,7 +141,7 @@ export function Tabs({
         return;
       case "Delete":
       case "Backspace":
-        if (tabs.length > 1 && tab.closable !== false && !tab.pinned) {
+        if (tab.closable !== false && !tab.pinned) {
           event.preventDefault();
           onClose(tab.id);
         }
@@ -163,8 +163,7 @@ export function Tabs({
       {tabs.map((tab, index) => {
         const active = tab.id === activeTabId;
         const kind = getKind(tab);
-        const closable =
-          tabs.length > 1 && tab.closable !== false && !tab.pinned;
+        const closable = tab.closable !== false && !tab.pinned;
         const accessibleLabel = `${tab.title}${tab.dirty ? ", unsaved changes" : ""}`;
         return (
           <div
@@ -229,50 +228,51 @@ export function Tabs({
           </div>
         );
       })}
-      <div
-        className="tab-add-group"
-        onMouseEnter={() => {
-          setAddMenuOpen(true);
-        }}
-        onMouseLeave={() => {
-          setAddMenuOpen(false);
-        }}
-        onFocusCapture={() => {
-          setAddMenuOpen(true);
-        }}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget))
+      {onAdd ? (
+        <div
+          className="tab-add-group"
+          onMouseEnter={() => {
+            setAddMenuOpen(true);
+          }}
+          onMouseLeave={() => {
             setAddMenuOpen(false);
-        }}
-      >
-        <button
-          type="button"
-          className="tab-add"
-          aria-label="Open a new resource"
-          title={onAdd ? "Open Home tab" : "No resource action available"}
-          disabled={!onAdd}
-          onClick={() => {
-            onAdd?.("home");
+          }}
+          onFocusCapture={() => {
+            setAddMenuOpen(true);
+          }}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              setAddMenuOpen(false);
           }}
         >
-          <Plus size={16} aria-hidden="true" />
-        </button>
-        {onAdd && addMenuOpen ? (
-          <div className="tab-add-menu" aria-label="Choose a tab to open">
-            {activityTabChoices.map(({ activity, label }) => (
-              <button
-                key={activity}
-                type="button"
-                onClick={() => {
-                  onAdd(activity);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
+          <button
+            type="button"
+            className="tab-add"
+            aria-label="Open a new resource"
+            title="Open Home tab"
+            onClick={() => {
+              onAdd("home");
+            }}
+          >
+            <Plus size={16} aria-hidden="true" />
+          </button>
+          {addMenuOpen ? (
+            <div className="tab-add-menu" aria-label="Choose a tab to open">
+              {activityTabChoices.map(({ activity, label }) => (
+                <button
+                  key={activity}
+                  type="button"
+                  onClick={() => {
+                    onAdd(activity);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

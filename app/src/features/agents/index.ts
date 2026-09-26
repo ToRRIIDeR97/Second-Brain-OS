@@ -1,4 +1,5 @@
 export { AgentWorkspace, type AgentWorkspaceProps } from "./AgentWorkspace";
+export { AgentComposer, type AgentComposerProps } from "./AgentComposer";
 export {
   agentReducer,
   approvalSummary,
@@ -8,7 +9,9 @@ export {
 } from "./model";
 export {
   createUnavailableAgentSessionSource,
+  createIpcAgentSessionSource,
   defaultAgentSessionSource,
+  ipcAgentSessionSource,
   unavailableAgentSessionSource,
 } from "./source";
 export * from "./types";

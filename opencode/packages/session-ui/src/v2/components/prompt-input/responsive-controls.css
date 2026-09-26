@@ -1,0 +1,31 @@
+[data-slot="prompt-input-controls"] {
+  container-name: prompt-input-controls;
+  container-type: inline-size;
+}
+
+[data-slot="select-v2-trigger-icon"] {
+  display: none;
+  flex: none;
+}
+
+@container prompt-input-controls (max-width: 520px) {
+  .prompt-input-responsive-select[data-component="button-v2"],
+  .prompt-input-responsive-select[data-component="select-v2"] {
+    width: 28px !important;
+    min-width: 28px;
+    padding-inline: 6px !important;
+    justify-content: center;
+  }
+
+  .prompt-input-control-label,
+  .prompt-input-control-chevron,
+  .prompt-input-responsive-select [data-slot="select-v2-value"],
+  .prompt-input-responsive-select [data-slot="select-v2-chevron"] {
+    display: none;
+  }
+
+  .prompt-input-control-icon,
+  .prompt-input-responsive-select [data-slot="select-v2-trigger-icon"] {
+    display: flex;
+  }
+}

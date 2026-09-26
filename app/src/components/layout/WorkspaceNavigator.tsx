@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { File, FileText, Folder, FolderOpen } from "lucide-react";
 import type { IpcClient, WorkspaceDirectoryEntry } from "../../lib/ipc";
 import type { Activity } from "../../state/shell";
+import type { PlannerView, ProjectView } from "../../state/shell";
+import { useProjects } from "../../state/projects";
 import { useWorkspace } from "../../state/workspace";
 import {
   Navigator,
@@ -27,15 +29,24 @@ export function WorkspaceNavigator({
   ipc,
   onOpenPath,
   onOpenDailyNote,
+  projectView,
+  onProjectViewChange,
+  plannerView,
+  onPlannerViewChange,
   onClose,
 }: {
   activity: Activity;
   ipc: IpcClient;
   onOpenPath: (relativePath: string) => void;
   onOpenDailyNote: () => void;
+  projectView?: ProjectView;
+  onProjectViewChange?: (view: ProjectView) => void;
+  plannerView?: PlannerView;
+  onPlannerViewChange?: (view: PlannerView) => void;
   onClose?: () => void;
 }) {
   const { activeWorkspace, workspaces, selectWorkspace } = useWorkspace();
+  const { activeProject, projects, selectProject } = useProjects();
   const [childrenByPath, setChildrenByPath] = useState<
     Record<string, WorkspaceDirectoryEntry[]>
   >({});
@@ -110,6 +121,107 @@ export function WorkspaceNavigator({
         });
     return build("");
   }, [activity, childrenByPath, expandedIds]);
+
+  if (activity === "projects") {
+    const projectViews: Array<{ id: ProjectView; label: string }> = [
+      { id: "overview", label: "Overview" },
+      { id: "plan", label: "Plan" },
+      { id: "work", label: "Work" },
+      { id: "files", label: "Files" },
+      { id: "activity", label: "Activity" },
+      { id: "map", label: "Map" },
+    ];
+    return (
+      <Navigator
+        activity={activity}
+        selectedItemId={
+          activeProject ? (projectView ?? "overview") : "all-projects"
+        }
+        sections={[
+          {
+            id: "project-views",
+            label: activeProject?.name ?? "Projects",
+            entries: activeProject
+              ? [
+                  {
+                    id: "all-projects",
+                    label: "All Projects",
+                    kind: "project-list",
+                  },
+                  ...projectViews.map(({ id, label }) => ({
+                    id,
+                    label,
+                    kind: "project-view",
+                  })),
+                ]
+              : [
+                  {
+                    id: "all-projects",
+                    label: "All Projects",
+                    kind: "project-list",
+                  },
+                ],
+          },
+          ...(projects.length
+            ? [
+                {
+                  id: "project-list",
+                  label: "Projects",
+                  entries: projects
+                    .filter(({ status }) => status !== "archived")
+                    .map(({ id, name, status }) => ({
+                      id,
+                      label: name,
+                      secondary: status,
+                      kind: "project",
+                    })),
+                },
+              ]
+            : []),
+        ]}
+        onItemSelect={(entry) => {
+          if (entry.kind === "project-list") selectProject(undefined);
+          else if (entry.kind === "project") selectProject(entry.id);
+          else if (entry.kind === "project-view")
+            onProjectViewChange?.(entry.id as ProjectView);
+        }}
+        {...(onClose ? { onClose } : {})}
+      />
+    );
+  }
+
+  if (activity === "calendar") {
+    const plannerViews: Array<{ id: PlannerView; label: string }> = [
+      { id: "today", label: "Today" },
+      { id: "week", label: "Week" },
+      { id: "month", label: "Month" },
+      { id: "agenda", label: "Agenda" },
+      { id: "tasks", label: "Tasks" },
+      { id: "unscheduled", label: "Unscheduled" },
+      { id: "completed", label: "Completed" },
+    ];
+    return (
+      <Navigator
+        activity={activity}
+        selectedItemId={plannerView ?? "today"}
+        sections={[
+          {
+            id: "planner-views",
+            label: "Calendar",
+            entries: plannerViews.map(({ id, label }) => ({
+              id,
+              label,
+              kind: "planner-view",
+            })),
+          },
+        ]}
+        onItemSelect={(entry) => {
+          onPlannerViewChange?.(entry.id as PlannerView);
+        }}
+        {...(onClose ? { onClose } : {})}
+      />
+    );
+  }
 
   if (activity !== "knowledge" && activity !== "files") {
     return <Navigator activity={activity} {...(onClose ? { onClose } : {})} />;

@@ -67,6 +67,7 @@ export type CalendarSnapshot = {
 export type ProjectStatus = "active" | "paused" | "archived"
 export type ProjectRecord = {
   id: string
+  folder: string
   name: string
   outcome: string
   templateId?: string | null
