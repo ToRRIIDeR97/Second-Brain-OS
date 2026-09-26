@@ -3,7 +3,8 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { createEffect, createMemo, createResource, For, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, Show, Suspense } from "solid-js"
+import { useQuery } from "@tanstack/solid-query"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -67,14 +68,20 @@ export default function BrainHomePage() {
     () => state.directory || undefined,
     (directory) => readCalendar(client(directory)),
   )
-  const [harnesses] = createResource(
-    () => state.directory || undefined,
-    (directory) =>
-      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory).catch(
+  const harnessQuery = useQuery(() => ({
+    queryKey: ["home", "harnesses", server.key, state.directory],
+    enabled: !!state.directory,
+    queryFn: () =>
+      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, state.directory).catch(
         fallbackHarnesses,
       ),
-  )
+    staleTime: 30_000,
+    refetchOnMount: true,
+    retry: false,
+  }))
+  const harnesses = () => harnessQuery.data
   createEffect(() => {
+    if (harnessQuery.isPending) return
     const available = harnesses()
     if (!available) return
     const current = available.find((instance) => instance.id === state.harnessInstanceID)
@@ -84,13 +91,16 @@ export default function BrainHomePage() {
   })
   const today = localDateKey(new Date())
   const activeProjects = createMemo(() =>
-    (projects() ?? [])
+    (projects.loading ? [] : (projects() ?? []))
       .filter((project) => project.status === "active")
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, 5),
   )
-  const projectNames = createMemo(() => new Map((projects() ?? []).map((project) => [project.id, project.name])))
+  const projectNames = createMemo(
+    () => new Map((projects.loading ? [] : (projects() ?? [])).map((project) => [project.id, project.name])),
+  )
   const todayItems = createMemo<TodayItem[]>(() => {
+    if (calendar.loading) return []
     const events = (calendar()?.events ?? [])
       .filter((event) => event.date === today)
       .map((value): TodayItem => ({ kind: "event", value }))
@@ -109,7 +119,9 @@ export default function BrainHomePage() {
       })
       .slice(0, 8)
   })
-  const outstandingTasks = createMemo(() => (calendar()?.tasks ?? []).filter((task) => !task.completedAt).length)
+  const outstandingTasks = createMemo(() =>
+    calendar.loading ? 0 : (calendar()?.tasks ?? []).filter((task) => !task.completedAt).length,
+  )
   const recentSessions = createMemo(() => openCodeSessions.data.records().slice(0, 4))
   const runningSessions = createMemo(() => {
     const data = openCodeHome.server.focusedSync().session.data
@@ -121,7 +133,7 @@ export default function BrainHomePage() {
 
   const startSession = async () => {
     const prompt = state.prompt.trim()
-    if (!prompt || !state.directory || state.starting) return
+    if (!prompt || !state.directory || state.starting || harnessQuery.isPending) return
     setState("starting", true)
     try {
       await tabs.newDraft(
@@ -205,21 +217,23 @@ export default function BrainHomePage() {
                 </label>
                 <label class="flex items-center gap-2 text-[12px] text-v2-text-text-faint">
                   <span>{language.t("harness.label")}</span>
-                  <SelectV2
-                    aria-label={language.t("harness.label")}
-                    class="!h-7 !w-auto max-w-[220px]"
-                    appearance="inline"
-                    options={[...(harnesses() ?? [])]}
-                    current={harnesses()?.find((instance) => instance.id === state.harnessInstanceID)}
-                    value={(instance) => instance.id}
-                    label={(instance) =>
-                      `${instance.name}${instance.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}`
-                    }
-                    optionDisabled={(instance) => instance.status === "unavailable"}
-                    placeholder={language.t("harness.checking")}
-                    disabled={harnesses.loading || !harnesses()}
-                    onSelect={(instance) => instance && setState("harnessInstanceID", instance.id)}
-                  />
+                  <Suspense fallback={<span class="flex h-7 items-center">{language.t("harness.checking")}</span>}>
+                    <SelectV2
+                      aria-label={language.t("harness.label")}
+                      class="!h-7 !w-auto max-w-[220px]"
+                      appearance="inline"
+                      options={[...(harnesses() ?? [])]}
+                      current={harnesses()?.find((instance) => instance.id === state.harnessInstanceID)}
+                      value={(instance) => instance.id}
+                      label={(instance) =>
+                        `${instance.name}${instance.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}`
+                      }
+                      optionDisabled={(instance) => instance.status === "unavailable"}
+                      placeholder={language.t("harness.checking")}
+                      disabled={harnessQuery.isPending}
+                      onSelect={(instance) => instance && setState("harnessInstanceID", instance.id)}
+                    />
+                  </Suspense>
                 </label>
               </div>
               <div class="flex gap-2">
@@ -231,7 +245,11 @@ export default function BrainHomePage() {
                   placeholder={language.t("secondBrain.home.askPlaceholder")}
                   onInput={(event) => setState("prompt", event.currentTarget.value)}
                 />
-                <ButtonV2 type="submit" variant="contrast" disabled={!state.prompt.trim() || state.starting}>
+                <ButtonV2
+                  type="submit"
+                  variant="contrast"
+                  disabled={!state.prompt.trim() || state.starting || harnessQuery.isPending}
+                >
                   {language.t("secondBrain.home.start")}
                 </ButtonV2>
               </div>
@@ -339,8 +357,16 @@ export default function BrainHomePage() {
                 </HomePanel>
 
                 <div class="grid grid-cols-3 gap-2">
-                  <Metric value={activeProjects().length} label={language.t("secondBrain.home.metric.projects")} />
-                  <Metric value={outstandingTasks()} label={language.t("secondBrain.home.metric.tasks")} />
+                  <Metric
+                    loading={projects.loading}
+                    value={activeProjects().length}
+                    label={language.t("secondBrain.home.metric.projects")}
+                  />
+                  <Metric
+                    loading={calendar.loading}
+                    value={outstandingTasks()}
+                    label={language.t("secondBrain.home.metric.tasks")}
+                  />
                   <Metric value={calendar()?.events.length ?? 0} label={language.t("secondBrain.home.metric.events")} />
                 </div>
               </div>
@@ -411,6 +437,7 @@ function HomePanel(props: {
   onAction: () => void
   children: import("solid-js").JSX.Element
 }) {
+  const language = useLanguage()
   return (
     <section class="min-w-0 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3">
       <header class="mb-2 flex h-7 items-center justify-between gap-3 px-1">
@@ -423,7 +450,9 @@ function HomePanel(props: {
           {props.action}
         </button>
       </header>
-      {props.children}
+      <Suspense fallback={<p class="px-1 py-5 text-[13px] text-v2-text-text-faint">{language.t("common.loading")}</p>}>
+        {props.children}
+      </Suspense>
     </section>
   )
 }
@@ -458,10 +487,16 @@ function ProjectRow(props: { project: ProjectRecord; onOpen: () => void }) {
   )
 }
 
-function Metric(props: { value: number; label: string }) {
+function Metric(props: { value: number; label: string; loading?: boolean }) {
   return (
     <div class="rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-3 py-3">
-      <div class="text-[17px] tabular-nums text-v2-text-text-strong [font-weight:560]">{props.value}</div>
+      <div class="text-[17px] tabular-nums text-v2-text-text-strong [font-weight:560]">
+        <Suspense fallback="…">
+          <Show when={!props.loading} fallback="…">
+            {props.value}
+          </Show>
+        </Suspense>
+      </div>
       <div class="mt-0.5 truncate text-[11px] text-v2-text-text-faint">{props.label}</div>
     </div>
   )
