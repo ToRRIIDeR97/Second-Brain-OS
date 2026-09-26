@@ -34,3 +34,11 @@ The renderer must not gain direct Node or filesystem access. Keep new native
 operations behind the preload and main-process boundary, and resolve Second
 Brain files through the server's location services. See
 [`ADR-010`](../adr/ADR-010-opencode-electron-base.md) for the base-app decision.
+
+## Home navigation
+
+Home renders its shell independently of dashboard requests. Panel content,
+metrics, and the harness selector have local loading boundaries. Harness
+availability uses the renderer query cache, keyed by server and workspace
+directory, with 30 seconds of freshness and background refresh on stale
+re-entry. Projects and calendar data still reload on each visit.
