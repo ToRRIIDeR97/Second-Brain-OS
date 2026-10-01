@@ -1,8 +1,8 @@
 # Second Brain OS v1 implementation plan
 
 - Status: proposed delivery plan
-- Product brief: [`PRODUCT-BRIEF-V1.md`](./PRODUCT-BRIEF-V1.md)
-- Navigation map: [`NAVIGATION-MAP-V1.md`](./NAVIGATION-MAP-V1.md)
+- Product brief: [`PRODUCT-BRIEF-V1.md`](../../product/PRODUCT-BRIEF-V1.md)
+- Navigation map: [`NAVIGATION-MAP-V1.md`](../../product/NAVIGATION-MAP-V1.md)
 - Updated: 2026-08-22
 
 This plan turns the v1 product direction into incremental engineering work. It
@@ -320,7 +320,7 @@ basic interaction model.
 
 - [`LocalPlanner.tsx`](../../app/src/features/planner/LocalPlanner.tsx)
 - [`ReferenceCalendar.tsx`](../../app/src/features/planner/ReferenceCalendar.tsx)
-- [`google-planner.md`](../security/google-planner.md)
+- [`google-planner.md`](../../security/google-planner.md)
 
 ### Work
 
@@ -408,7 +408,7 @@ work.
 
 - [`FocusedGraph.tsx`](../../app/src/features/graph/FocusedGraph.tsx)
 - [`GraphViewport3D.tsx`](../../app/src/features/graph/GraphViewport3D.tsx)
-- [`ADR-007`](../adr/ADR-007-focused-graph.md)
+- [`ADR-007`](../../adr/ADR-007-focused-graph.md)
 
 ### Work
 

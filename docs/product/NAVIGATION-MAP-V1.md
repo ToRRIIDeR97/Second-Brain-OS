@@ -2,7 +2,7 @@
 
 - Status: proposed v1 information architecture
 - Companion: [`PRODUCT-BRIEF-V1.md`](./PRODUCT-BRIEF-V1.md)
-- Implementation plan: [`IMPLEMENTATION-PLAN-V1.md`](./IMPLEMENTATION-PLAN-V1.md)
+- Implementation plan: [`IMPLEMENTATION-PLAN-V1.md`](../archive/tauri/implementation-plan-v1.md)
 - Updated: 2026-08-22
 
 ## Navigation model

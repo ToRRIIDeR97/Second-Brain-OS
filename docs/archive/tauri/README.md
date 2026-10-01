@@ -28,7 +28,24 @@ that revision, not application data, credentials, or uncommitted work.
 - The donor MCP executable used an unavailable gateway; the active runtime's
   MCP support is separate and remains in the OpenCode packages.
 
-Keep `fixtures/`, `docs/contracts/`, product briefs, implementation records,
-and handovers as requirements and historical evidence. Old Rust/Tauri commands
-in those records are not current setup or verification instructions. Use the
-root README and `docs/release-operations.md` for the active application.
+## Contents
+
+This folder keeps the donor's requirements and history. Old Rust/Tauri commands
+in these records are not current setup or verification instructions. Use the
+root README and [release operations](../../release-operations.md) for the
+active application.
+
+| Path | Contents |
+| --- | --- |
+| `master-implementation-plan-v0.2.md` | Original Agent Operating System master plan |
+| `implementation-plan-v1.md` | V1 reset plan for the Tauri shell |
+| `product-designer-handoff.md` | Detailed inventory of donor UI behavior and states |
+| `checkpoints/` | Implementation checkpoints 01–37 |
+| `handovers/` | Handovers from the donor build, 2026-07-27 to 2026-08-04 |
+| `contracts/`, `errors/`, `formats/`, `compatibility/` | Version-one IPC, MCP, event, Markdown, and project-card contracts |
+| `database.md`, `recovery.md`, `release-operations.md` | Donor database, backup, and release procedures |
+| `records/` | Beta gate, hardening checkpoint, and design QA evidence |
+| `migrations/` | Reference copies of donor SQL schemas |
+
+Donor test fixtures were removed on 2026-10-01. They remain in Git at `92c2ac5`
+under `fixtures/`.

@@ -7,7 +7,7 @@
 ## Decision
 
 Store canonical notes as ordinary Markdown files plus the versioned extensions
-in [Markdown v1](../contracts/markdown-v1.md). Rich editor state is transient
+in [Markdown v1](../archive/tauri/contracts/markdown-v1.md). Rich editor state is transient
 and must serialize through a single codec contract.
 
 ## Consequences
