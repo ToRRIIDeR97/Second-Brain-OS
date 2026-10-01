@@ -2,7 +2,6 @@ node_modules/
 .pnpm-store/
 dist/
 target/
-app/src-tauri/gen/
 .DS_Store
 *.log
 *.tsbuildinfo
@@ -15,3 +14,4 @@ app/src-tauri/gen/
 /notes/test.md
 /handover files/2026-08-23-second-brain-os-v1-gap-fixes-handover.md
 /handover files/2026-09-26-second-brain-main-merge-handover.md
+.commandcode/

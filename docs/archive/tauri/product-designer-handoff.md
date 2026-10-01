@@ -1,8 +1,8 @@
 # Second Brain OS — Product Designer Handoff
 
 > **Direction update, 2026-08-22:** The v1 product definition and navigation
-> have been reset. Use [`PRODUCT-BRIEF-V1.md`](./product/PRODUCT-BRIEF-V1.md)
-> and [`NAVIGATION-MAP-V1.md`](./product/NAVIGATION-MAP-V1.md) for current
+> have been reset. Use [`PRODUCT-BRIEF-V1.md`](../../product/PRODUCT-BRIEF-V1.md)
+> and [`NAVIGATION-MAP-V1.md`](../../product/NAVIGATION-MAP-V1.md) for current
 > product direction. This document remains the detailed inventory of existing
 > behavior and states.
 

@@ -1,6 +1,6 @@
 # Implementation Checkpoints
 
-This folder turns the master [Agent Operating System implementation plan](../agent-operating-system-implementation-plan.md) into small, implementation-ready units. These documents define work; they do not implement the product.
+This folder turns the master [Agent Operating System implementation plan](../master-implementation-plan-v0.2.md) into small, implementation-ready units. These documents define work; they do not implement the product.
 
 ## How to use this folder
 

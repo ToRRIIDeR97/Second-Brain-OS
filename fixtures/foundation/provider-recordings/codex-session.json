@@ -1,6 +1,0 @@
-{"type":"session.started","event_id":"codex-1","sequence":1}
-{"type":"reasoning.delta","event_id":"codex-private","sequence":2,"text":"not persisted"}
-{"type":"assistant.delta","event_id":"codex-2","sequence":3,"text":"I found one change."}
-{"type":"approval.requested","event_id":"codex-3","sequence":4,"approval_id":"approval-1","risk_class":"local_reversible_write","summary":"Update the index","target":"src/index.rs"}
-{"type":"file.changed","event_id":"codex-4","sequence":5,"path":"src/index.rs","after_hash":"blake3:fixture"}
-{"type":"session.completed","event_id":"codex-5","sequence":6}

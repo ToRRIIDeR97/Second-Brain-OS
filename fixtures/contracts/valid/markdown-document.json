@@ -1,9 +1,0 @@
-{
-  "contract": "markdown_document",
-  "version": 1,
-  "extension_version": 1,
-  "content": "# Note\n\n:::future-directive\nPreserve me.\n:::\n",
-  "unknown_syntax": [
-    { "raw": ":::future-directive\nPreserve me.\n:::", "start_line": 3, "end_line": 5 }
-  ]
-}

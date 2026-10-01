@@ -2,12 +2,12 @@
 
 - Status: product direction for the v1 reset
 - Audience: product, design, and engineering
-- Implementation plan: [`IMPLEMENTATION-PLAN-V1.md`](./IMPLEMENTATION-PLAN-V1.md)
+- Implementation plan: [`IMPLEMENTATION-PLAN-V1.md`](../archive/tauri/implementation-plan-v1.md)
 - Updated: 2026-08-22
 
 This document defines what Second Brain OS should become. It supersedes the
 product positioning and information architecture in
-[`product-designer-handoff.md`](../product-designer-handoff.md). That document
+[`product-designer-handoff.md`](../archive/tauri/product-designer-handoff.md). That document
 remains useful as an inventory of existing behavior, states, and unfinished
 surfaces.
 

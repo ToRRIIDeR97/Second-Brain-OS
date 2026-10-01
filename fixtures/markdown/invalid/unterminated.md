@@ -1,3 +1,0 @@
-```markdown
-unterminated fence
-```
