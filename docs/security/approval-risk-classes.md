@@ -1,5 +1,9 @@
 # Approval risk classes v1
 
+> Status: Tauri-era policy. The active app uses OpenCode's permission system;
+> the approval IDs, expiry, and audit events described here are not
+> implemented. See the [threat model](threat-model.md).
+
 Every action is classified before execution by actor, workspace, target,
 reversibility, external side effect, destructive flag, and participant-facing
 impact. The app, not the model or sidecar, makes the final decision.

@@ -85,3 +85,20 @@ middleware and authenticated HTTP boundary. Forks receive new message IDs;
 opaque provider continuations and assistant filesystem snapshots are excluded
 from the copied history. Review snapshots remain scoped to the session's
 location and canonical Git worktree.
+
+## Known gaps
+
+Found during the 2026-10-02 scope audit and not yet fixed. Paths are relative
+to `opencode/packages/desktop/src/main/`.
+
+- `open-path` (`ipc.ts`) opens any renderer-supplied path, optionally with a
+  renderer-supplied application through `execFile`. `reveal-path` accepts any
+  path. Neither uses a workspace ID or validated relative path.
+- `store-*` handlers pass a renderer-chosen store name to `getStore`
+  (`store.ts`), which creates an `electron-store` file under `userData`
+  without validating the name.
+- IPC handlers other than `set-native-translations` do not check
+  `event.senderFrame`.
+- Server authorization also accepts an `auth_token` query parameter, so the
+  credential can appear in URLs. `windows.ts` logs full blocked URLs.
+- `drafts.sqlite` stores unsent draft content unencrypted in the profile.

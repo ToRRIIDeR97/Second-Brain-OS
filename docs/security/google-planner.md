@@ -1,5 +1,11 @@
 # Google planner security boundary
 
+> Status: Tauri-era requirements. The active integration in
+> `opencode/packages/desktop/src/main/google-calendar.ts` encrypts its client
+> secret and refresh token with Electron `safeStorage` in the profile, not the
+> OS credential store, and keeps sync state in JSON/Electron stores rather than
+> SQLite. The [threat model](threat-model.md) describes the current control.
+
 Google integration is an adapter behind the provider-neutral planner domain.
 Read and write consent are separate. The desktop OAuth flow must use the system
 browser, PKCE, a loopback redirect, and state bound to the initiating app
