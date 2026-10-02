@@ -14,7 +14,10 @@ export class ProtocolError extends Error {
   readonly code?: number
   readonly data?: unknown
 
-  constructor(message: string, options?: { readonly code?: number; readonly data?: unknown; readonly cause?: unknown }) {
+  constructor(
+    message: string,
+    options?: { readonly code?: number; readonly data?: unknown; readonly cause?: unknown },
+  ) {
     super(message, options?.cause === undefined ? undefined : { cause: options.cause })
     this.name = "CodexProtocolError"
     this.code = options?.code
@@ -44,7 +47,13 @@ const encoder = new TextEncoder()
 export const make = Effect.fn("CodexAppServer.make")(function* (input: {
   readonly connection: Connection
   readonly handleRequest?: (request: ServerRequest) => Effect.Effect<unknown, ProtocolError>
+  // Peers such as ACP agents require the JSON-RPC 2.0 envelope; Codex app-server omits it.
+  readonly jsonrpc?: boolean
+  readonly label?: string
+  // Receives notifications in wire order before any later response resolves. Replaces `notifications`.
+  readonly onNotification?: (notification: Notification) => Effect.Effect<void>
 }) {
+  const label = input.label ?? "Codex app-server"
   const outgoing = yield* Queue.unbounded<string, Cause.Done<void>>()
   const notifications = yield* Queue.unbounded<Notification, ProtocolError>()
   const pending = yield* Ref.make(new Map<string, Pending>())
@@ -61,13 +70,19 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
 
   const send = (message: Record<string, unknown>) =>
     Effect.try({
-      try: () => `${JSON.stringify(message)}\n`,
-      catch: (cause) => new ProtocolError("Failed to encode a Codex app-server message.", { cause }),
-    }).pipe(Effect.flatMap((line) => Queue.offer(outgoing, line)), Effect.asVoid)
+      try: () => `${JSON.stringify(input.jsonrpc ? { jsonrpc: "2.0", ...message } : message)}\n`,
+      catch: (cause) => new ProtocolError(`Failed to encode a ${label} message.`, { cause }),
+    }).pipe(
+      Effect.flatMap((line) => Queue.offer(outgoing, line)),
+      Effect.asVoid,
+    )
 
   const respond = (id: string | number, result: unknown) => send({ id, result })
   const respondError = (id: string | number, error: ProtocolError) =>
-    send({ id, error: { code: error.code ?? -32603, message: error.message, ...(error.data ? { data: error.data } : {}) } })
+    send({
+      id,
+      error: { code: error.code ?? -32603, message: error.message, ...(error.data ? { data: error.data } : {}) },
+    })
 
   const removePending = (id: string) =>
     Ref.update(pending, (current) => {
@@ -79,32 +94,29 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
 
   const route = (value: unknown) =>
     Effect.gen(function* () {
-      if (!isRecord(value))
-        return yield* Effect.fail(new ProtocolError("Codex app-server emitted an invalid message."))
+      if (!isRecord(value)) return yield* Effect.fail(new ProtocolError(`${label} emitted an invalid message.`))
       const id = stringOrNumber(value.id)
       const method = typeof value.method === "string" ? value.method : undefined
       if (method && id !== undefined) {
         const request = { id, method, ...(value.params === undefined ? {} : { params: value.params }) }
-        yield* (input.handleRequest
-          ? input.handleRequest(request).pipe(
-              Effect.matchEffect({
-                onFailure: (error) => respondError(id, error),
-                onSuccess: (result) => respond(id, result),
-              }),
-            )
-          : respondError(id, new ProtocolError(`Unsupported Codex app-server request: ${method}`, { code: -32601 })))
-          .pipe(Effect.forkScoped)
+        yield* (
+          input.handleRequest
+            ? input.handleRequest(request).pipe(
+                Effect.matchEffect({
+                  onFailure: (error) => respondError(id, error),
+                  onSuccess: (result) => respond(id, result),
+                }),
+              )
+            : respondError(id, new ProtocolError(`Unsupported ${label} request: ${method}`, { code: -32601 }))
+        ).pipe(Effect.forkScoped)
         return
       }
       if (method) {
-        yield* Queue.offer(notifications, {
-          method,
-          ...(value.params === undefined ? {} : { params: value.params }),
-        })
+        const notification = { method, ...(value.params === undefined ? {} : { params: value.params }) }
+        yield* input.onNotification ? input.onNotification(notification) : Queue.offer(notifications, notification)
         return
       }
-      if (id === undefined)
-        return yield* Effect.fail(new ProtocolError("Codex app-server emitted an unroutable message."))
+      if (id === undefined) return yield* Effect.fail(new ProtocolError(`${label} emitted an unroutable message.`))
       const key = String(id)
       const item = yield* Ref.modify(pending, (current) => {
         const item = current.get(key)
@@ -117,10 +129,13 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
       if (isRecord(value.error)) {
         yield* Deferred.fail(
           item.deferred,
-          new ProtocolError(typeof value.error.message === "string" ? value.error.message : "Codex request failed.", {
-            code: typeof value.error.code === "number" ? value.error.code : undefined,
-            data: value.error.data,
-          }),
+          new ProtocolError(
+            typeof value.error.message === "string" ? value.error.message : `${label} request failed.`,
+            {
+              code: typeof value.error.code === "number" ? value.error.code : undefined,
+              data: value.error.data,
+            },
+          ),
         )
         return
       }
@@ -130,15 +145,13 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
   const handleLine = (line: string) => {
     if (!line.trim()) return Effect.void
     const value = Option.getOrUndefined(decode(line))
-    return value === undefined
-      ? Effect.fail(new ProtocolError("Codex app-server emitted invalid JSON."))
-      : route(value)
+    return value === undefined ? Effect.fail(new ProtocolError(`${label} emitted invalid JSON.`)) : route(value)
   }
 
   yield* Stream.fromQueue(outgoing).pipe(
     Stream.map((line) => encoder.encode(line)),
     Stream.run(input.connection.stdin),
-    Effect.mapError((cause) => new ProtocolError("Failed to write to Codex app-server.", { cause })),
+    Effect.mapError((cause) => new ProtocolError(`Failed to write to ${label}.`, { cause })),
     Effect.catch(fail),
     Effect.forkScoped,
   )
@@ -148,22 +161,17 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
     Stream.splitLines,
     Stream.runForEach(handleLine),
     Effect.mapError((cause) =>
-      cause instanceof ProtocolError
-        ? cause
-        : new ProtocolError("Failed to read from Codex app-server.", { cause }),
+      cause instanceof ProtocolError ? cause : new ProtocolError(`Failed to read from ${label}.`, { cause }),
     ),
     Effect.matchEffect({
       onFailure: fail,
-      onSuccess: () => fail(new ProtocolError("Codex app-server exited.")),
+      onSuccess: () => fail(new ProtocolError(`${label} exited.`)),
     }),
     Effect.forkScoped,
   )
 
   yield* Effect.addFinalizer(() =>
-    Queue.end(outgoing).pipe(
-      Effect.andThen(fail(new ProtocolError("Codex app-server client closed."))),
-      Effect.ignore,
-    ),
+    Queue.end(outgoing).pipe(Effect.andThen(fail(new ProtocolError(`${label} client closed.`))), Effect.ignore),
   )
 
   const request = (method: string, params?: unknown) =>

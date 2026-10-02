@@ -15,3 +15,6 @@ target/
 /handover files/2026-08-23-second-brain-os-v1-gap-fixes-handover.md
 /handover files/2026-09-26-second-brain-main-merge-handover.md
 .commandcode/
+
+# Local test-resolution links created by Implementations/*/implementation.md setup
+Implementations/*/node_modules
