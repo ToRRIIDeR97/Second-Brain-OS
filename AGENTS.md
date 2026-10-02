@@ -70,5 +70,5 @@ navigation or routing.
 - If `git branch -d` refuses because the PR was squash- or rebase-merged,
   confirm the PR is merged, then use `git branch -D <branch>`. Never delete a
   branch whose PR is unmerged or still open.
-- "Automatically delete head branches" is off for this GitHub repository;
-  enabling it is recommended but needs the user's approval.
+- GitHub deletes the remote head branch automatically after a merge; still
+  delete the local branch and prune.

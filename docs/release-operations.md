@@ -1,7 +1,8 @@
 # Electron release operations
 
-The active application lives in `opencode/`. CI checks the Electron renderer,
-main process, core, server, and Second Brain domains. Root Tauri/Cargo/pnpm
+The active application lives in `opencode/`. Required checks run locally (see
+`AGENTS.md`); the GitHub Actions workflows in `.github/workflows/` are disabled
+in the repository settings to avoid Actions charges. Root Tauri/Cargo/pnpm
 commands are retired; the former procedure is kept in
 [the archive](archive/tauri/release-operations.md).
 
@@ -24,7 +25,8 @@ to passing those tests. The inherited linter currently allows warnings.
 
 ## Unsigned Windows candidate
 
-Run the **Unsigned Electron release candidate** workflow manually. It builds
+The **Unsigned Electron release candidate** workflow is disabled. Re-enable it
+in the repository's Actions settings before running it manually. It builds
 the development channel, packages the Windows app, writes SHA-256 checksums,
 and retains the installer and checksum file as workflow artifacts for 14 days.
 It does not publish a GitHub release or configure an update feed.
