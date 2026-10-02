@@ -24,12 +24,15 @@ import { Database } from "./database/database"
 import { makeLocationNode } from "./effect/app-node"
 import { llmClient } from "./effect/app-node-platform"
 import { EventV2 } from "./event"
+import { Global } from "./global"
+import { AcpHarness } from "./harness/acp"
 import {
   make as makeCodexClient,
   ProtocolError,
   type Client as CodexClient,
   type ServerRequest,
 } from "./harness/codex-app-server"
+import { HarnessRegistry } from "./harness/registry"
 import { Location } from "./location"
 import { PermissionV2 } from "./permission"
 import { AppProcess } from "./process"
@@ -59,11 +62,15 @@ export interface Interface {
   readonly stream: (
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
   ) => Stream.Stream<LLMEvent, LLMError>
+  readonly register: (
+    input: unknown,
+    request: Pick<PermissionV2.AssertInput, "sessionID" | "agent" | "source">,
+  ) => Effect.Effect<HarnessRegistry.Registered, HarnessRegistry.RegisterError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/HarnessRuntime") {}
 
-interface InstanceConfig {
+export interface InstanceConfig {
   readonly id: Harness.InstanceID
   readonly driver: Harness.DriverKind
   readonly name: string
@@ -78,6 +85,12 @@ interface CodexRuntime {
   needsHandoff: boolean
 }
 
+interface AcpRuntime {
+  readonly session: AcpHarness.Session
+  readonly scope: Scope.Closeable
+  needsHandoff: boolean
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -89,18 +102,51 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const permissions = yield* PermissionV2.Service
     const questions = yield* QuestionV2.Service
-    const instances = configuredInstances(yield* config.entries())
+    const global = yield* Global.Service
+    const entries = yield* config.entries()
+    // Registry entries can be added while the location is open, so instances are re-read per call.
+    let latest = configuredInstances(entries, yield* HarnessRegistry.read(global.config))
+    const instances = HarnessRegistry.read(global.config).pipe(
+      Effect.map((registry) => {
+        latest = configuredInstances(entries, registry)
+        return latest
+      }),
+    )
     const runtimes = new Map<string, CodexRuntime>()
+    const acpRuntimes = new Map<string, AcpRuntime>()
 
     yield* Effect.addFinalizer(() =>
-      Effect.forEach(runtimes.values(), (runtime) => Scope.close(runtime.scope, Exit.void), { discard: true }).pipe(
+      Effect.forEach([...runtimes.values(), ...acpRuntimes.values()], (runtime) => Scope.close(runtime.scope, Exit.void), {
+        discard: true,
+      }).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             runtimes.clear()
+            acpRuntimes.clear()
           }),
         ),
       ),
     )
+
+    const register = (input: unknown, request: Pick<PermissionV2.AssertInput, "sessionID" | "agent" | "source">) =>
+      instances.pipe(
+        Effect.flatMap((current) =>
+          HarnessRegistry.register(input, {
+            configDir: global.config,
+            directory: location.directory,
+            existing: new Set(current.map((instance) => String(instance.id))),
+            process,
+            approve: (approval) =>
+              approve(permissions, {
+                ...request,
+                action: "harness_register",
+                resources: [approval.id],
+                save: [],
+                metadata: { id: approval.id, name: approval.name, command: approval.command, args: approval.args },
+              }),
+          }),
+        ),
+      )
 
     const makeRuntime = Effect.fn("HarnessRuntime.makeCodexRuntime")(function* (
       instance: InstanceConfig,
@@ -111,7 +157,9 @@ const layer = Layer.effect(
       const close = Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)
       const runtime = yield* Effect.gen(function* () {
         const opened = yield* openCodex(process, settings, input.directory, (request) =>
-          handleCodexRequest(request, input.sessionID, input.directory, permissions, questions),
+          handleCodexRequest(request, input.sessionID, input.directory, permissions, questions, (args) =>
+            register(args, { sessionID: input.sessionID }).pipe(Effect.map(HarnessRegistry.summary)),
+          ),
         )
         const revision = input.revision ?? 0
         const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
@@ -137,12 +185,15 @@ const layer = Layer.effect(
                 Effect.catch((error) =>
                   recoverableResume(error)
                     ? opened.client
-                        .request("thread/start", params)
+                        .request("thread/start", { ...params, dynamicTools: codexDynamicTools })
                         .pipe(Effect.map((response) => ({ response, resumed: false })))
                     : Effect.fail(error),
                 ),
               )
-          : { response: yield* opened.client.request("thread/start", params), resumed: false }
+          : {
+              response: yield* opened.client.request("thread/start", { ...params, dynamicTools: codexDynamicTools }),
+              resumed: false,
+            }
         const threadID = responseThreadID(thread.response)
         if (!threadID) return yield* Effect.fail(new ProtocolError("Codex did not return a thread ID."))
         if (threadID !== continuation) {
@@ -191,79 +242,187 @@ const layer = Layer.effect(
         if (runtimes.get(key) === runtime) runtimes.delete(key)
       }).pipe(Effect.andThen(Scope.close(runtime.scope, Exit.void)), Effect.ignore)
 
-    const drivers = new Map<Harness.InstanceID, Driver>()
-    for (const instance of instances) {
-      if (instance.driver === Harness.OpenCodeDriver) {
-        drivers.set(instance.id, {
+    const makeAcpRuntime = Effect.fn("HarnessRuntime.makeAcpRuntime")(function* (
+      instance: InstanceConfig,
+      settings: AcpHarness.Settings,
+      input: StreamInput,
+    ) {
+      const runtimeScope = yield* Scope.make()
+      const revision = input.revision ?? 0
+      const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
+      const session = yield* AcpHarness.open(process, {
+        settings,
+        directory: input.directory,
+        continuation,
+        approve: (request) =>
+          approve(permissions, {
+            sessionID: input.sessionID,
+            action: request.action,
+            resources: [...request.resources],
+            save: [...request.resources],
+            metadata: { harness: instance.id, title: request.title, ...(request.kind ? { kind: request.kind } : {}) },
+          }),
+      }).pipe(
+        Effect.provideService(Scope.Scope, runtimeScope),
+        Effect.onError(() => Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)),
+      )
+      if (session.sessionId !== continuation) {
+        yield* events.publish(SessionEvent.HarnessContinuationSet, {
+          sessionID: input.sessionID,
+          timestamp: yield* DateTime.now,
           instanceID: instance.id,
-          kind: instance.driver,
-          snapshot: Effect.succeed(
-            Harness.Instance.make({
-              id: instance.id,
-              driver: instance.driver,
-              name: instance.name,
-              status: instance.enabled ? "available" : "unavailable",
-              error: instance.enabled ? undefined : "Disabled in configuration.",
-              models: [],
-            }),
-          ),
-          stream: (input) =>
-            instance.enabled
-              ? withProviderIdleTimeout(llm.stream(input.request))
-              : Stream.fail(llmError("HarnessRuntime", "stream", `${instance.name} is disabled.`)),
+          continuation: session.sessionId,
+          revision,
         })
-        continue
       }
-      if (instance.driver === Harness.CodexDriver) {
-        const settings = decodeCodexSettings(instance.config)
-        drivers.set(instance.id, {
+      const history = input.request.messages.filter((message) => message.role !== "system").length > 1
+      return { session, scope: runtimeScope, needsHandoff: !session.resumed && history } satisfies AcpRuntime
+    })
+
+    const getAcpRuntime = Effect.fn("HarnessRuntime.getAcpRuntime")(function* (
+      instance: InstanceConfig,
+      settings: AcpHarness.Settings,
+      input: StreamInput,
+    ) {
+      const key = `${instance.id}:${input.sessionID}:${input.revision ?? 0}`
+      const current = acpRuntimes.get(key)
+      if (current) return current
+      const prefix = `${instance.id}:${input.sessionID}:`
+      for (const [candidate, runtime] of acpRuntimes) {
+        if (!candidate.startsWith(prefix)) continue
+        acpRuntimes.delete(candidate)
+        yield* Scope.close(runtime.scope, Exit.void).pipe(Effect.ignore)
+      }
+      const runtime = yield* makeAcpRuntime(instance, settings, input)
+      acpRuntimes.set(key, runtime)
+      return runtime
+    })
+
+    const discardAcpRuntime = (instance: InstanceConfig, input: StreamInput, runtime: AcpRuntime) =>
+      Effect.sync(() => {
+        const key = `${instance.id}:${input.sessionID}:${input.revision ?? 0}`
+        if (acpRuntimes.get(key) === runtime) acpRuntimes.delete(key)
+      }).pipe(Effect.andThen(Scope.close(runtime.scope, Exit.void)), Effect.ignore)
+
+    const acpStream = (instance: InstanceConfig, settings: AcpHarness.Settings, input: StreamInput) =>
+      Stream.unwrap(
+        getAcpRuntime(instance, settings, input).pipe(
+          Effect.map((runtime) => {
+            const text = renderCodexPrompt(input.request, runtime.needsHandoff)
+            runtime.needsHandoff = false
+            return runtime.session
+              .turn({ text, model: input.model?.id })
+              .pipe(
+                Stream.catch((error) =>
+                  Stream.unwrap(discardAcpRuntime(instance, input, runtime).pipe(Effect.as(Stream.fail(error)))),
+                ),
+              )
+          }),
+          Effect.mapError((error) => llmError("AcpHarness", "stream", errorMessage(error))),
+        ),
+      )
+
+    const unavailable = (instance: InstanceConfig, error: string, models: ReadonlyArray<Harness.Model> = []) =>
+      Effect.succeed(
+        Harness.Instance.make({
+          id: instance.id,
+          driver: instance.driver,
+          name: instance.name,
+          status: "unavailable",
+          error,
+          models,
+        }),
+      )
+
+    const driverFor = (instance: InstanceConfig): Driver => {
+      if (instance.driver === Harness.OpenCodeDriver) {
+        return {
           instanceID: instance.id,
           kind: instance.driver,
           snapshot: instance.enabled
-            ? probeCodex(process, instance, settings, location.directory)
-            : Effect.succeed(
+            ? Effect.succeed(
                 Harness.Instance.make({
                   id: instance.id,
                   driver: instance.driver,
                   name: instance.name,
-                  status: "unavailable",
-                  error: "Disabled in configuration.",
-                  models: customModels(settings.customModels),
+                  status: "available",
+                  models: [],
                 }),
-              ),
+              )
+            : unavailable(instance, "Disabled in configuration."),
+          stream: (input) =>
+            instance.enabled
+              ? withProviderIdleTimeout(llm.stream(input.request))
+              : Stream.fail(llmError("HarnessRuntime", "stream", `${instance.name} is disabled.`)),
+        }
+      }
+      if (instance.driver === Harness.CodexDriver) {
+        const settings = decodeCodexSettings(instance.config)
+        return {
+          instanceID: instance.id,
+          kind: instance.driver,
+          snapshot: instance.enabled
+            ? probeCodex(process, instance, settings, location.directory)
+            : unavailable(instance, "Disabled in configuration.", customModels(settings.customModels)),
           stream: (input) =>
             instance.enabled
               ? codexStream(getRuntime(instance, input), input, (runtime) => discardRuntime(instance, input, runtime))
               : Stream.fail(llmError("CodexHarness", "stream", `${instance.name} is disabled.`)),
-        })
-        continue
+        }
       }
-      drivers.set(instance.id, {
+      if (instance.driver === Harness.AcpDriver) {
+        const settings = AcpHarness.decodeSettings(instance.config)
+        if (!settings)
+          return {
+            instanceID: instance.id,
+            kind: instance.driver,
+            snapshot: unavailable(instance, "ACP harness configuration needs a command."),
+            stream: () => Stream.fail(llmError("AcpHarness", "stream", `${instance.name} has no command.`)),
+          }
+        return {
+          instanceID: instance.id,
+          kind: instance.driver,
+          snapshot: instance.enabled
+            ? AcpHarness.probe(process, instance, settings, location.directory)
+            : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
+          stream: (input) =>
+            instance.enabled
+              ? acpStream(instance, settings, input)
+              : Stream.fail(llmError("AcpHarness", "stream", `${instance.name} is disabled.`)),
+        }
+      }
+      return {
         instanceID: instance.id,
         kind: instance.driver,
-        snapshot: Effect.succeed(
-          Harness.Instance.make({
-            id: instance.id,
-            driver: instance.driver,
-            name: instance.name,
-            status: "unavailable",
-            error: `Driver '${instance.driver}' is not installed.`,
-            models: [],
-          }),
-        ),
+        snapshot: unavailable(instance, `Driver '${instance.driver}' is not installed.`),
         stream: () => Stream.fail(llmError("HarnessRuntime", "stream", `Unknown harness driver: ${instance.driver}`)),
-      })
+      }
     }
 
     return Service.of({
-      list: () => Effect.forEach(drivers.values(), (driver) => driver.snapshot, { concurrency: "unbounded" }),
-      driver: (instanceID) => drivers.get(instanceID)?.kind,
+      list: () =>
+        instances.pipe(
+          Effect.flatMap((current) =>
+            Effect.forEach(current, (instance) => driverFor(instance).snapshot, { concurrency: "unbounded" }),
+          ),
+        ),
+      driver: (instanceID) => latest.find((instance) => instance.id === instanceID)?.driver,
       stream(input) {
-        const driver = drivers.get(input.instanceID)
-        return driver
-          ? driver.stream(input)
-          : Stream.fail(llmError("HarnessRuntime", "stream", `Unknown harness instance: ${input.instanceID}`))
+        // Known instances stream without touching the registry; only a newly registered ID needs a re-read.
+        const known = latest.find((item) => item.id === input.instanceID)
+        if (known) return driverFor(known).stream(input)
+        return Stream.unwrap(
+          instances.pipe(
+            Effect.map((current) => {
+              const instance = current.find((item) => item.id === input.instanceID)
+              return instance
+                ? driverFor(instance).stream(input)
+                : Stream.fail(llmError("HarnessRuntime", "stream", `Unknown harness instance: ${input.instanceID}`))
+            }),
+          ),
+        )
       },
+      register,
     })
   }),
 )
@@ -280,10 +439,14 @@ export const node = makeLocationNode({
     EventV2.node,
     PermissionV2.node,
     QuestionV2.node,
+    Global.node,
   ],
 })
 
-function configuredInstances(entries: ReadonlyArray<Config.Entry>) {
+export function configuredInstances(
+  entries: ReadonlyArray<Config.Entry>,
+  registry: Readonly<Record<string, ConfigHarness.Instance>> = {},
+) {
   const instances = new Map<Harness.InstanceID, InstanceConfig>([
     [
       Harness.OpenCode,
@@ -292,6 +455,17 @@ function configuredInstances(entries: ReadonlyArray<Config.Entry>) {
     [Harness.Codex, { id: Harness.Codex, driver: Harness.CodexDriver, name: "Codex", enabled: true, config: {} }],
   ])
   const decodeID = Schema.decodeUnknownOption(Harness.InstanceID)
+  for (const [rawID, value] of Object.entries(registry)) {
+    const id = Option.getOrUndefined(decodeID(rawID))
+    if (!id || HarnessRegistry.reserved.has(id)) continue
+    instances.set(id, {
+      id,
+      driver: value.driver,
+      name: value.name?.trim() || rawID,
+      enabled: value.enabled !== false,
+      config: value.config ?? {},
+    })
+  }
   for (const entry of entries) {
     if (entry.type !== "document" || !entry.info.harnesses) continue
     for (const [rawID, value] of Object.entries(entry.info.harnesses)) {
@@ -654,8 +828,10 @@ function handleCodexRequest(
   directory: string,
   permissions: PermissionV2.Interface,
   questions: QuestionV2.Interface,
+  register: (args: unknown) => Effect.Effect<string, { readonly message: string }>,
 ) {
   const params = isRecord(request.params) ? request.params : {}
+  if (request.method === "item/tool/call") return handleCodexToolCall(params, register)
   if (request.method === "item/commandExecution/requestApproval") {
     const command = string(params.command) ?? "command"
     return approve(permissions, {
@@ -743,6 +919,29 @@ function handleCodexRequest(
     )
   }
   return Effect.fail(new ProtocolError(`Unsupported Codex app-server request: ${request.method}`, { code: -32601 }))
+}
+
+export const codexDynamicTools = [
+  {
+    type: "function",
+    name: "harness_register",
+    description: HarnessRegistry.description,
+    inputSchema: HarnessRegistry.inputJsonSchema,
+  },
+] as const
+
+export function handleCodexToolCall(
+  params: unknown,
+  register: (args: unknown) => Effect.Effect<string, { readonly message: string }>,
+) {
+  const call = isRecord(params) ? params : {}
+  const reply = (success: boolean, text: string) => ({ success, contentItems: [{ type: "inputText" as const, text }] })
+  if (call.tool !== "harness_register" || (call.namespace ?? null) !== null)
+    return Effect.succeed(reply(false, `Unknown tool: ${String(call.tool)}`))
+  return register(call.arguments).pipe(
+    Effect.map((text) => reply(true, text)),
+    Effect.catch((error) => Effect.succeed(reply(false, error.message))),
+  )
 }
 
 function approve(permissions: PermissionV2.Interface, input: PermissionV2.AssertInput) {

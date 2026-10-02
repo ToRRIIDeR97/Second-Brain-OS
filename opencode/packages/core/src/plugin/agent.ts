@@ -115,6 +115,8 @@ export const Plugin = define({
       { action: "read", resource: "*.env", effect: "ask" },
       { action: "read", resource: "*.env.*", effect: "ask" },
       { action: "read", resource: "*.env.example", effect: "allow" },
+      // Registering a harness lets the app run a new command later; always confirm it.
+      { action: "harness_register", resource: "*", effect: "ask" },
     ]
 
     yield* ctx.agent.transform((draft) => {

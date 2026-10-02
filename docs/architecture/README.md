@@ -82,6 +82,30 @@ return a local error rather than fetching the hosted OpenCode website. The
 optional upstream CLI is a separate runtime from the fork's bundled server;
 see [release operations](../release-operations.md).
 
+## Harness drivers and registration
+
+`packages/core/src/harness.ts` runs each Run turn through a Harness instance.
+Three drivers execute: `opencode` (in-process provider calls), `codex`
+(Codex app-server JSON-RPC), and `acp` (any agent that speaks the Agent Client
+Protocol over stdio, in `packages/core/src/harness/acp.ts`). Instances come
+from built-ins, then the app-owned `harnesses.json` registry in the global
+config directory, then `harnesses` entries in config files. Later sources win,
+except that the registry can't replace `opencode` or `codex`. The registry is
+re-read on each list and stream call, so new entries appear without a restart.
+
+ACP sessions are created with `session/new`, or reopened with `session/load`
+when the agent supports it. The ACP session ID is stored as the Run's harness
+continuation. The client advertises no file-system or terminal capability;
+the agent uses its own tools and asks permission through
+`session/request_permission`, which maps to Second Brain approvals. ACP agents
+receive no Second Brain system prompt.
+
+Agents register harnesses with `harness_register`. OpenCode-harness sessions
+get it as a built-in tool. Codex threads get it as a dynamic tool answered
+through `item/tool/call`. Registration is implemented in
+`packages/core/src/harness/registry.ts`, and only ACP commands can be
+registered this way.
+
 ## Session compatibility and review
 
 The managed server uses native `/api/session` execution and history alongside

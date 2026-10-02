@@ -38,6 +38,24 @@ Keep the existing permission checks on tool execution; a user opening a note
 does not authorize instructions embedded inside it. Destructive recovery must
 preserve both canonical workspace files and session/draft profile state.
 
+## Harness registration
+
+A registered harness is a command that the app later runs as the user, with
+the workspace as its working directory. `harness_register` validates the ID
+and resolves the command to an absolute executable. Before running the
+command at all, it asks for approval. The approval request shows the ID, name,
+command, and arguments, and stores no "always allow" rule. The default agent
+has an explicit `harness_register` ask rule. Only after approval does the app
+run the ACP `initialize` handshake. It writes `harnesses.json` (mode `0600`,
+atomic rename) only when the handshake succeeds.
+
+The registry stores commands, arguments, and model IDs only. Agents can't
+store environment variables or secrets in it, and it can't replace the
+built-in `opencode` and `codex` instances. ACP agents get no client
+file-system or terminal capability. Their own tool approvals arrive as
+`session/request_permission` and use Second Brain permissions. Treat output
+from an ACP agent as untrusted model output.
+
 ## Checks
 
 From the repository root, `bun run typecheck` checks desktop, renderer, core,
