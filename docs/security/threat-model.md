@@ -67,8 +67,8 @@ Relevant focused tests include
 `opencode/packages/desktop/src/main/google-calendar-domain.test.ts`,
 `opencode/packages/opencode/test/project/brain.test.ts`, and the note tests
 under `opencode/packages/opencode/test/knowledge/`. Run server tests from
-`opencode/packages/opencode` with Bun when changing those paths. CI and
-release operations now target Electron; local test results do not establish
+`opencode/packages/opencode` with Bun when changing those paths. These checks
+run locally; GitHub Actions workflows are disabled. Local test results do not establish
 cross-platform installer or signed-update safety.
 
 Focused commands from `opencode/packages/opencode`:
