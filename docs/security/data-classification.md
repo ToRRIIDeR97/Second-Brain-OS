@@ -1,5 +1,9 @@
 # Data-classification policy v1
 
+> Status: Tauri-era policy. The active Electron app does not implement
+> class-based redaction or context packets; treat this as target policy, not
+> a current control. See the [threat model](threat-model.md).
+
 The app applies the least-permissive classification when fields are combined.
 Classification is metadata for policy and redaction, not a claim that content
 is trustworthy.
