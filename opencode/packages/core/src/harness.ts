@@ -116,9 +116,13 @@ const layer = Layer.effect(
     const acpRuntimes = new Map<string, AcpRuntime>()
 
     yield* Effect.addFinalizer(() =>
-      Effect.forEach([...runtimes.values(), ...acpRuntimes.values()], (runtime) => Scope.close(runtime.scope, Exit.void), {
-        discard: true,
-      }).pipe(
+      Effect.forEach(
+        [...runtimes.values(), ...acpRuntimes.values()],
+        (runtime) => Scope.close(runtime.scope, Exit.void),
+        {
+          discard: true,
+        },
+      ).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             runtimes.clear()

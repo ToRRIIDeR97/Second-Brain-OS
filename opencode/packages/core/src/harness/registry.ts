@@ -27,7 +27,7 @@ export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Executable name on PATH or absolute path" }),
   args: Schema.Array(Schema.String)
     .pipe(Schema.optional)
-    .annotate({ description: "Arguments that start ACP mode, e.g. [\"--experimental-acp\"]" }),
+    .annotate({ description: 'Arguments that start ACP mode, e.g. ["--experimental-acp"]' }),
   models: Schema.Array(Schema.String).pipe(Schema.optional).annotate({ description: "Optional model IDs to offer" }),
 })
 export type Input = typeof Input.Type
@@ -81,6 +81,7 @@ export interface Dependencies {
 
 const decodeInput = Schema.decodeUnknownOption(Input)
 const decodeInstance = Schema.decodeUnknownOption(ConfigHarness.Instance)
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
 export const read = (configDir: string): Effect.Effect<Readonly<Record<string, ConfigHarness.Instance>>> =>
   readRaw(configDir).pipe(
@@ -100,7 +101,10 @@ export const register = Effect.fn("HarnessRegistry.register")(function* (input: 
   if (!decoded) return yield* fail("invalid-input", "Provide at least an id and a command.")
   const id = decoded.id.trim()
   if (!slug.test(id))
-    return yield* fail("invalid-id", `"${id}" is not a valid harness ID. Use a letter, then letters, digits, '-' or '_'.`)
+    return yield* fail(
+      "invalid-id",
+      `"${id}" is not a valid harness ID. Use a letter, then letters, digits, '-' or '_'.`,
+    )
   if (reserved.has(id)) return yield* fail("reserved", `"${id}" is a built-in harness and can't be replaced.`)
   if (deps.existing.has(id) || (yield* read(deps.configDir))[id])
     return yield* fail("exists", `A harness with ID "${id}" already exists.`)
@@ -142,28 +146,27 @@ export function summary(result: Registered) {
 }
 
 function readRaw(configDir: string) {
+  const file = Bun.file(path.join(configDir, fileName))
   return Effect.tryPromise({
-    try: async () => {
-      const text = await fs.readFile(path.join(configDir, fileName), "utf8").catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return undefined
-        throw error
-      })
-      if (text === undefined) return undefined
-      const value: unknown = JSON.parse(text)
-      if (!isRecord(value)) throw new Error("Not an object")
-      return value
-    },
+    try: async () => ((await file.exists()) ? file.text() : undefined),
     catch: (cause) => cause,
-  })
+  }).pipe(
+    Effect.flatMap((text) => {
+      if (text === undefined) return Effect.succeed(undefined)
+      const value = Option.getOrUndefined(decodeJson(text))
+      return isRecord(value) ? Effect.succeed(value) : Effect.fail(new Error(`${fileName} is not a JSON object.`))
+    }),
+  )
 }
 
 function resolveCommand(command: string) {
   return Effect.promise(async () => {
     if (!command) return undefined
     const expanded = command === "~" || command.startsWith("~/") ? path.join(os.homedir(), command.slice(1)) : command
-    const candidate = expanded.includes("/") || expanded.includes("\\")
-      ? path.resolve(expanded)
-      : (Bun.which(expanded, { PATH: process.env.PATH ?? "" }) ?? undefined)
+    const candidate =
+      expanded.includes("/") || expanded.includes("\\")
+        ? path.resolve(expanded)
+        : (Bun.which(expanded, { PATH: process.env.PATH ?? "" }) ?? undefined)
     if (!candidate) return undefined
     const stat = await fs.stat(candidate).catch(() => undefined)
     if (!stat?.isFile()) return undefined

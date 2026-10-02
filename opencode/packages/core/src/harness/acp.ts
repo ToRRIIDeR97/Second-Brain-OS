@@ -8,7 +8,13 @@ import os from "os"
 import path from "path"
 import { ConfigHarness } from "../config/harness"
 import type { AppProcess } from "../process"
-import { make as makeClient, ProtocolError, type Client, type Notification, type ServerRequest } from "./codex-app-server"
+import {
+  make as makeClient,
+  ProtocolError,
+  type Client,
+  type Notification,
+  type ServerRequest,
+} from "./codex-app-server"
 
 export const protocolVersion = 1
 
@@ -123,7 +129,12 @@ export function probe(
   settings: Settings,
   directory: string,
 ): Effect.Effect<Harness.Instance> {
-  const base = { id: instance.id, driver: instance.driver, name: instance.name, models: configuredModels(settings.models) }
+  const base = {
+    id: instance.id,
+    driver: instance.driver,
+    name: instance.name,
+    models: configuredModels(settings.models),
+  }
   return handshake(process, settings, directory).pipe(
     Effect.map((agent) => Harness.Instance.make({ ...base, status: "available", version: agent.version })),
     Effect.catch((error) =>
@@ -383,7 +394,8 @@ function toolOutput(update: Record<string, unknown>) {
     if (item.type === "terminal") return [`Terminal ${string(item.terminalId) ?? ""}`.trim()]
     return []
   })
-  const output = parts.length > 0 ? parts.join("\n") : update.rawOutput === undefined ? "Completed" : json(update.rawOutput)
+  const output =
+    parts.length > 0 ? parts.join("\n") : update.rawOutput === undefined ? "Completed" : json(update.rawOutput)
   return output.length > 32_000 ? `${output.slice(0, 32_000)}\n[Output truncated]` : output
 }
 
