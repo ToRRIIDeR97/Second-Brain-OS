@@ -1,9 +1,8 @@
 # Scope audit, 2026-10-02
 
 The active Electron app was compared against
-[the product brief](../product/PRODUCT-BRIEF-V1.md),
-[the navigation map](../product/NAVIGATION-MAP-V1.md), and
-[the agent orchestration request](../product/FEATURE-REQUEST-agent-work-orchestration.md).
+[the product brief](../product/PRODUCT-BRIEF-V1.md)
+and [the navigation map](../product/NAVIGATION-MAP-V1.md).
 The audit read the source and did not run the app. Paths are relative to
 `opencode/packages/`.
 
@@ -21,9 +20,10 @@ The audit read the source and did not run the app. Paths are relative to
 | Activity | Partial | Built around sessions. It has no records of planner, note, or sync mutations, no Project filter, and no recovery items. |
 | Settings | Diverges | Settings keep OpenCode's General, Shortcuts, Providers, and Models tabs. Connections, Permissions, Project locations, Data and recovery, and Diagnostics are missing. Google setup lives on the Calendar page. |
 | Agent layer | Partial | Harness instances, OpenCode/Codex selection, handoff, and permissions work. There is no Run model, global Ask panel, context preview, product-action tools, app-owned MCP server, or audit record. |
-| Agent orchestration slices 1–7 | Not started | Only the plan exists in `implementations/agent-work-orchestration/`. |
 
-None of the brief's "Outside v1" items were found in Second Brain code.
+The agent work orchestration request was withdrawn after this audit and its
+plans were removed. None of the brief's "Outside v1" items were found in
+Second Brain code.
 
 ## Highest-impact gaps
 
