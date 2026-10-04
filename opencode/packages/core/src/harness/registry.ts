@@ -7,6 +7,7 @@ import fs from "fs/promises"
 import path from "path"
 import { ConfigHarness } from "../config/harness"
 import type { AppProcess } from "../process"
+import { which } from "../util/which"
 import { AcpHarness } from "./acp"
 
 // The app-owned list of harnesses added after setup. It lives beside the global config and holds
@@ -148,10 +149,14 @@ export function summary(result: Registered) {
   return `Registered harness "${result.id}" (${result.name})${agent ? `, ACP agent ${agent}` : ""}. It is now available in the harness picker.`
 }
 
+// The desktop app runs core under Node, so file and PATH lookups here must not use Bun globals.
 function readRaw(configDir: string) {
-  const file = Bun.file(path.join(configDir, fileName))
   return Effect.tryPromise({
-    try: async () => ((await file.exists()) ? file.text() : undefined),
+    try: () =>
+      fs.readFile(path.join(configDir, fileName), "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return undefined
+        throw error
+      }),
     catch: (cause) => cause,
   }).pipe(
     Effect.flatMap((text) => {
@@ -167,9 +172,7 @@ function resolveCommand(command: string) {
     if (!command) return undefined
     const expanded = AcpHarness.expandHome(command)
     const candidate =
-      expanded.includes("/") || expanded.includes("\\")
-        ? path.resolve(expanded)
-        : (Bun.which(expanded, { PATH: process.env.PATH ?? "" }) ?? undefined)
+      expanded.includes("/") || expanded.includes("\\") ? path.resolve(expanded) : (which(expanded) ?? undefined)
     if (!candidate) return undefined
     const stat = await fs.stat(candidate).catch(() => undefined)
     if (!stat?.isFile()) return undefined
