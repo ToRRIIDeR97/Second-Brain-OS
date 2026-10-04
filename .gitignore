@@ -16,5 +16,5 @@ target/
 /handover files/2026-09-26-second-brain-main-merge-handover.md
 .commandcode/
 
-# Local test-resolution links created by Implementations/*/implementation.md setup
-Implementations/*/node_modules
+# Local test-resolution links created by implementations/*/implementation.md setup
+implementations/*/node_modules

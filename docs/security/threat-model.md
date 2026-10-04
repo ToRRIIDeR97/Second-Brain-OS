@@ -44,10 +44,12 @@ A registered harness is a command that the app later runs as the user, with
 the workspace as its working directory. `harness_register` validates the ID
 and resolves the command to an absolute executable. Before running the
 command at all, it asks for approval. The approval request shows the ID, name,
-command, and arguments, and stores no "always allow" rule. The default agent
-has an explicit `harness_register` ask rule. Only after approval does the app
-run the ACP `initialize` handshake. It writes `harnesses.json` (mode `0600`,
-atomic rename) only when the handshake succeeds.
+command, and arguments, and stores no "always allow" rule. The request uses
+`alwaysAsk`, so configured or saved allow rules never skip the prompt; only a
+deny rule changes the outcome. Plan mode denies `harness_register`. Only after
+approval does the app run the ACP `initialize` handshake. It writes
+`harnesses.json` (mode `0600`, atomic rename, serialized within the process)
+only when the handshake succeeds.
 
 The registry stores commands, arguments, and model IDs only. Agents can't
 store environment variables or secrets in it, and it can't replace the
@@ -55,6 +57,17 @@ built-in `opencode` and `codex` instances. ACP agents get no client
 file-system or terminal capability. Their own tool approvals arrive as
 `session/request_permission` and use Second Brain permissions. Treat output
 from an ACP agent as untrusted model output.
+
+Known gap: ACP and Codex harness processes inherit the app's full environment
+(`extendEnv: true`), plus any `env` set in user configuration. Any API key or
+token in Second Brain's environment is therefore visible to every registered
+harness. Agent CLIs often need their own credentials from the environment, so
+the app doesn't filter it yet. Register only agents you'd trust with your shell
+environment.
+
+Availability probes start each enabled harness command for an `initialize`
+handshake. Results are cached per instance configuration for 30 seconds so
+picker refreshes don't relaunch every agent.
 
 ## Checks
 

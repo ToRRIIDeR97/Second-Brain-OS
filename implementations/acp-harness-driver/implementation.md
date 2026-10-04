@@ -173,7 +173,7 @@ Invariants:
 Setup, once per checkout, from the repository root. The link is git-ignored:
 
 ```sh
-ln -s ../../opencode/packages/core/node_modules Implementations/acp-harness-driver/node_modules
+ln -s ../../opencode/packages/core/node_modules implementations/acp-harness-driver/node_modules
 ```
 
 The fake ACP agent at `fixtures/fake-acp-agent.ts` is a deterministic
@@ -184,8 +184,8 @@ executable. They make no network calls and use no live providers.
 Run from `opencode/packages/core`:
 
 ```sh
-bun test ../../../Implementations/acp-harness-driver/acceptance
-bun test ../../../Implementations/acp-harness-driver/verification
+bun test ../../../implementations/acp-harness-driver/acceptance
+bun test ../../../implementations/acp-harness-driver/verification
 bun test test/codex-app-server.test.ts test/harness.test.ts
 ```
 
