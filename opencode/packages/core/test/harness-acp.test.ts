@@ -3,6 +3,8 @@ import { Effect, Exit, Schema } from "effect"
 import { configuredInstances, handleCodexToolCall } from "@opencode-ai/core/harness"
 import { ConfigHarness } from "@opencode-ai/core/config/harness"
 import { AcpHarness } from "@opencode-ai/core/harness/acp"
+import os from "os"
+import path from "path"
 
 const update = (value: Record<string, unknown>) => ({
   method: "session/update",
@@ -70,5 +72,12 @@ describe("ACP harness", () => {
     const unknown = await Effect.runPromise(handleCodexToolCall({ tool: "other" }, () => Effect.succeed("never")))
     expect(ok).toEqual({ success: true, contentItems: [{ type: "inputText", text: "done" }] })
     expect(unknown.success).toBe(false)
+  })
+
+  test("expands both home-directory separators", () => {
+    expect(AcpHarness.expandHome("~")).toBe(os.homedir())
+    expect(AcpHarness.expandHome("~/bin/agent")).toBe(path.join(os.homedir(), "bin", "agent"))
+    expect(AcpHarness.expandHome("~\\bin\\agent")).toBe(path.join(os.homedir(), "bin\\agent"))
+    expect(AcpHarness.expandHome("agent")).toBe("agent")
   })
 })

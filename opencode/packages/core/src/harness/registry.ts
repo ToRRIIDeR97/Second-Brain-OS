@@ -1,10 +1,9 @@
 export * as HarnessRegistry from "./registry"
 
 import { Harness } from "@opencode-ai/schema/harness"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema, Semaphore } from "effect"
 import { constants } from "fs"
 import fs from "fs/promises"
-import os from "os"
 import path from "path"
 import { ConfigHarness } from "../config/harness"
 import type { AppProcess } from "../process"
@@ -16,6 +15,8 @@ export const fileName = "harnesses.json"
 export const reserved: ReadonlySet<string> = new Set([Harness.OpenCode, Harness.Codex])
 
 const slug = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/
+// Serializes the read-modify-write of harnesses.json so concurrent registrations can't drop an entry.
+const writeLock = Semaphore.makeUnsafe(1)
 
 export const description = `Register an installed command-line agent as a Second Brain harness so the user can choose it for a Run.
 Only use this when the user explicitly asks to add or install a harness. The command must speak the Agent Client Protocol (ACP) over stdio, for example \`gemini --experimental-acp\` or \`opencode acp\`. Install the program first with your normal tools if it is missing.
@@ -121,22 +122,24 @@ export const register = Effect.fn("HarnessRegistry.register")(function* (input: 
     ),
   )
 
-  const raw = yield* readRaw(deps.configDir).pipe(
-    Effect.mapError(() => registerError("write-failed", `${fileName} is not valid JSON; fix or remove it first.`)),
-  )
-  if (raw?.[id]) return yield* fail("exists", `A harness with ID "${id}" already exists.`)
-  const next = {
-    ...raw,
-    [id]: {
-      driver: Harness.AcpDriver,
-      name: approval.name,
-      config: { command, args: approval.args, ...(settings.models.length ? { models: settings.models } : {}) },
-    },
-  }
-  yield* Effect.tryPromise({
-    try: () => writeAtomic(path.join(deps.configDir, fileName), `${JSON.stringify(next, null, 2)}\n`),
-    catch: (cause) => registerError("write-failed", `Could not save ${fileName}: ${String(cause)}`),
-  })
+  yield* Effect.gen(function* () {
+    const raw = yield* readRaw(deps.configDir).pipe(
+      Effect.mapError(() => registerError("write-failed", `${fileName} is not valid JSON; fix or remove it first.`)),
+    )
+    if (raw?.[id]) return yield* fail("exists", `A harness with ID "${id}" already exists.`)
+    const next = {
+      ...raw,
+      [id]: {
+        driver: Harness.AcpDriver,
+        name: approval.name,
+        config: { command, args: approval.args, ...(settings.models.length ? { models: settings.models } : {}) },
+      },
+    }
+    yield* Effect.tryPromise({
+      try: () => writeAtomic(path.join(deps.configDir, fileName), `${JSON.stringify(next, null, 2)}\n`),
+      catch: (cause) => registerError("write-failed", `Could not save ${fileName}: ${String(cause)}`),
+    })
+  }).pipe(writeLock.withPermits(1))
   return { ...approval, agentName: agent.name, version: agent.version } satisfies Registered
 })
 
@@ -162,7 +165,7 @@ function readRaw(configDir: string) {
 function resolveCommand(command: string) {
   return Effect.promise(async () => {
     if (!command) return undefined
-    const expanded = command === "~" || command.startsWith("~/") ? path.join(os.homedir(), command.slice(1)) : command
+    const expanded = AcpHarness.expandHome(command)
     const candidate =
       expanded.includes("/") || expanded.includes("\\")
         ? path.resolve(expanded)

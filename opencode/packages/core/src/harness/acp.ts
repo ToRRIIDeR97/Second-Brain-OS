@@ -464,7 +464,7 @@ function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : "The ACP agent is unavailable."
 }
 
-function expandHome(input: string) {
+export function expandHome(input: string) {
   if (input === "~") return os.homedir()
   if (input.startsWith("~/") || input.startsWith("~\\")) return path.join(os.homedir(), input.slice(2))
   return input

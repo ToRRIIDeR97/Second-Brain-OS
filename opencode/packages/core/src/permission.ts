@@ -55,6 +55,11 @@ export const AskResult = Schema.Struct({
 }).annotate({ identifier: "PermissionV2.AskResult" })
 export type AskResult = typeof AskResult.Type
 
+export interface AssertOptions {
+  // Prompt even when configured or saved rules allow the request. Deny rules still block it.
+  readonly alwaysAsk?: boolean
+}
+
 export const Event = Permission.Event
 
 export class DeclinedError extends Schema.TaggedErrorClass<DeclinedError>()("PermissionV2.DeclinedError", {}) {}
@@ -91,7 +96,10 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
 
 export interface Interface {
   readonly ask: (input: AssertInput) => EffectRuntime.Effect<AskResult, SessionV2.NotFoundError>
-  readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error | SessionV2.NotFoundError>
+  readonly assert: (
+    input: AssertInput,
+    options?: AssertOptions,
+  ) => EffectRuntime.Effect<void, Error | SessionV2.NotFoundError>
   readonly reply: (input: ReplyInput) => EffectRuntime.Effect<void, NotFoundError>
   readonly get: (id: ID) => EffectRuntime.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionV2.ID) => EffectRuntime.Effect<ReadonlyArray<Request>>
@@ -103,6 +111,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 interface Pending {
   readonly request: Request
   readonly agent?: AgentV2.ID
+  readonly alwaysAsk?: boolean
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
@@ -173,11 +182,11 @@ const layer = Layer.effect(
       }
     }
 
-    const create = (request: Request, agent?: AgentV2.ID) =>
+    const create = (request: Request, agent?: AgentV2.ID, alwaysAsk?: boolean) =>
       EffectRuntime.uninterruptible(
         EffectRuntime.gen(function* () {
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
-          const item = { request, agent, deferred }
+          const item = { request, agent, alwaysAsk, deferred }
           if (pending.has(request.id)) return yield* EffectRuntime.die(`Duplicate pending permission ID: ${request.id}`)
           pending.set(request.id, item)
           yield* events
@@ -194,7 +203,7 @@ const layer = Layer.effect(
       return { id: value.id, effect: result.effect }
     })
 
-    const assert = EffectRuntime.fn("PermissionV2.assert")((input: AssertInput) =>
+    const assert = EffectRuntime.fn("PermissionV2.assert")((input: AssertInput, options?: AssertOptions) =>
       EffectRuntime.uninterruptibleMask((restore) =>
         EffectRuntime.gen(function* () {
           const result = yield* evaluateInput(input)
@@ -203,8 +212,8 @@ const layer = Layer.effect(
               rules: relevant(input, result.rules),
             })
           }
-          if (result.effect === "allow") return
-          const item = yield* create(request(input), input.agent)
+          if (result.effect === "allow" && !options?.alwaysAsk) return
+          const item = yield* create(request(input), input.agent, options?.alwaysAsk)
           return yield* restore(Deferred.await(item.deferred)).pipe(
             EffectRuntime.catchTag("PermissionV2.DeclinedError", (error) => EffectRuntime.die(error)),
             EffectRuntime.ensuring(
@@ -260,6 +269,7 @@ const layer = Layer.effect(
 
           const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
+            if (item.alwaysAsk) continue
             const input = { ...item.request }
             const rules = yield* configured(item.request.sessionID, item.agent).pipe(
               EffectRuntime.catchTag("Session.NotFoundError", () => EffectRuntime.succeed(undefined)),

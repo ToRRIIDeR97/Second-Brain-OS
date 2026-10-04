@@ -91,6 +91,8 @@ interface AcpRuntime {
   needsHandoff: boolean
 }
 
+const probeTTL = 30_000
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -114,6 +116,22 @@ const layer = Layer.effect(
     )
     const runtimes = new Map<string, CodexRuntime>()
     const acpRuntimes = new Map<string, AcpRuntime>()
+    // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
+    const probes = new Map<string, { readonly expires: number; readonly instance: Harness.Instance }>()
+    const cachedProbe = (instance: InstanceConfig, probe: Effect.Effect<Harness.Instance>) => {
+      const key = `${instance.id}:${JSON.stringify([instance.name, instance.config])}`
+      return Effect.suspend(() => {
+        const cached = probes.get(key)
+        if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
+        return probe.pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              probes.set(key, { expires: Date.now() + probeTTL, instance: result })
+            }),
+          ),
+        )
+      })
+    }
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
@@ -140,14 +158,19 @@ const layer = Layer.effect(
             directory: location.directory,
             existing: new Set(current.map((instance) => String(instance.id))),
             process,
+            // Registering lets the app run a new command later, so allow rules never skip this prompt.
             approve: (approval) =>
-              approve(permissions, {
-                ...request,
-                action: "harness_register",
-                resources: [approval.id],
-                save: [],
-                metadata: { id: approval.id, name: approval.name, command: approval.command, args: approval.args },
-              }),
+              approve(
+                permissions,
+                {
+                  ...request,
+                  action: "harness_register",
+                  resources: [approval.id],
+                  save: [],
+                  metadata: { id: approval.id, name: approval.name, command: approval.command, args: approval.args },
+                },
+                { alwaysAsk: true },
+              ),
           }),
         ),
       )
@@ -366,7 +389,7 @@ const layer = Layer.effect(
           instanceID: instance.id,
           kind: instance.driver,
           snapshot: instance.enabled
-            ? probeCodex(process, instance, settings, location.directory)
+            ? cachedProbe(instance, probeCodex(process, instance, settings, location.directory))
             : unavailable(instance, "Disabled in configuration.", customModels(settings.customModels)),
           stream: (input) =>
             instance.enabled
@@ -387,7 +410,7 @@ const layer = Layer.effect(
           instanceID: instance.id,
           kind: instance.driver,
           snapshot: instance.enabled
-            ? AcpHarness.probe(process, instance, settings, location.directory)
+            ? cachedProbe(instance, AcpHarness.probe(process, instance, settings, location.directory))
             : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
           stream: (input) =>
             instance.enabled
@@ -948,8 +971,12 @@ export function handleCodexToolCall(
   )
 }
 
-function approve(permissions: PermissionV2.Interface, input: PermissionV2.AssertInput) {
-  return Effect.exit(permissions.assert(input)).pipe(Effect.map(Exit.isSuccess))
+function approve(
+  permissions: PermissionV2.Interface,
+  input: PermissionV2.AssertInput,
+  options?: PermissionV2.AssertOptions,
+) {
+  return Effect.exit(permissions.assert(input, options)).pipe(Effect.map(Exit.isSuccess))
 }
 
 function readContinuation(
