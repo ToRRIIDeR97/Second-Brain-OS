@@ -64,11 +64,9 @@ navigation or routing.
   explicitly approves. Don't wait on or re-run GitHub Actions; if branch
   protection requires CI status checks that block the merge, report it instead
   of bypassing it.
-- After the merge is verified in `main`, delete the branch:
-  `git push origin --delete <branch>` (skip if already deleted), then
+- GitHub deletes the remote head branch automatically after a merge. After the
+  merge is verified in `main`, delete the local branch:
   `git switch main && git pull && git branch -d <branch>`, then `git fetch --prune`.
 - If `git branch -d` refuses because the PR was squash- or rebase-merged,
   confirm the PR is merged, then use `git branch -D <branch>`. Never delete a
   branch whose PR is unmerged or still open.
-- "Automatically delete head branches" is off for this GitHub repository;
-  enabling it is recommended but needs the user's approval.
