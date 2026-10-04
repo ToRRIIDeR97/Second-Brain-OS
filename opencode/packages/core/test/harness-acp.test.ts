@@ -80,4 +80,14 @@ describe("ACP harness", () => {
     expect(AcpHarness.expandHome("~\\bin\\agent")).toBe(path.join(os.homedir(), "bin\\agent"))
     expect(AcpHarness.expandHome("agent")).toBe("agent")
   })
+
+  // The desktop app runs core under Node, where Bun globals throw at startup. Tests run under Bun and can't see that.
+  test("harness sources don't use Bun globals", async () => {
+    const dir = path.join(import.meta.dir, "../src")
+    const files = ["harness.ts", "harness/acp.ts", "harness/registry.ts", "harness/codex-app-server.ts"]
+    const offenders = await Promise.all(
+      files.map(async (file) => ((await Bun.file(path.join(dir, file)).text()).match(/\bBun\./) ? file : undefined)),
+    )
+    expect(offenders.filter(Boolean)).toEqual([])
+  })
 })
