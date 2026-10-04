@@ -781,39 +781,43 @@ describe("tool.shell permissions", () => {
     }),
   )
 
-  if (process.platform === "win32") {
+  // Pinned to cmd: in Git Bash a drive-less "/Users/..." path resolves under the Git install root, not the current drive.
+  if (process.platform === "win32" && cmdShell) {
     it.live("normalizes external_directory workdir variants on Windows", () =>
-      Effect.gen(function* () {
-        const err = new Error("stop after permission")
-        const outerTmp = yield* tmpdirScoped()
-        const tmp = yield* tmpdirScoped()
-        yield* runIn(
-          tmp,
-          Effect.gen(function* () {
-            const want = Filesystem.normalizePathPattern(path.join(outerTmp, "*"))
+      withShell(
+        cmdShell,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const outerTmp = yield* tmpdirScoped()
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const want = Filesystem.normalizePathPattern(path.join(outerTmp, "*"))
 
-            for (const dir of forms(outerTmp)) {
-              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-              expect(
-                yield* fail(
-                  {
-                    command: "echo ok",
-                    workdir: dir,
-                  },
-                  capture(requests, err),
-                ),
-              ).toMatchObject({ message: err.message })
+              for (const dir of forms(outerTmp)) {
+                const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+                expect(
+                  yield* fail(
+                    {
+                      command: "echo ok",
+                      workdir: dir,
+                    },
+                    capture(requests, err),
+                  ),
+                ).toMatchObject({ message: err.message })
 
-              const extDirReq = requests.find((r) => r.permission === "external_directory")
-              expect({ dir, patterns: extDirReq?.patterns, always: extDirReq?.always }).toEqual({
-                dir,
-                patterns: [want],
-                always: [want],
-              })
-            }
-          }),
-        )
-      }),
+                const extDirReq = requests.find((r) => r.permission === "external_directory")
+                expect({ dir, patterns: extDirReq?.patterns, always: extDirReq?.always }).toEqual({
+                  dir,
+                  patterns: [want],
+                  always: [want],
+                })
+              }
+            }),
+          )
+        }),
+      ),
     )
 
     if (bash) {

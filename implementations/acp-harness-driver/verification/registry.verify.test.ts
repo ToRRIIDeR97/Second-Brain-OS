@@ -67,8 +67,12 @@ describe("Harness registry verification", () => {
 
   test("AC-7 resolves a bare command name through PATH to an absolute executable", async () => {
     const bin = await fs.mkdtemp(path.join(os.tmpdir(), "acp-bin-"))
-    const script = path.join(bin, "fake-acp-on-path")
-    await fs.writeFile(script, `#!/bin/sh\nexec "${process.execPath}" "${fixture}" basic\n`, { mode: 0o755 })
+    // Windows finds commands through PATHEXT, so the shim there is a .cmd file instead of a shebang script.
+    await (process.platform === "win32"
+      ? fs.writeFile(path.join(bin, "fake-acp-on-path.cmd"), `@"${process.execPath}" "${fixture}" basic %*\r\n`)
+      : fs.writeFile(path.join(bin, "fake-acp-on-path"), `#!/bin/sh\nexec "${process.execPath}" "${fixture}" basic\n`, {
+          mode: 0o755,
+        }))
     const previous = process.env.PATH
     process.env.PATH = `${bin}${path.delimiter}${previous ?? ""}`
     try {
@@ -91,7 +95,8 @@ describe("Harness registry verification", () => {
     expect(Exit.isSuccess(result.exit)).toBe(true)
     const entries = await Effect.runPromise(HarnessRegistry.read(configDir))
     expect(Object.keys(entries).sort()).toEqual(["added", "keep"])
-    expect((await fs.stat(result.file)).mode & 0o777).toBe(0o600)
+    // Windows doesn't store POSIX permission bits.
+    if (process.platform !== "win32") expect((await fs.stat(result.file)).mode & 0o777).toBe(0o600)
     expect((await fs.readdir(configDir)).filter((name) => name !== HarnessRegistry.fileName)).toEqual([])
   })
 

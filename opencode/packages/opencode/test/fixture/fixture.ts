@@ -1,5 +1,6 @@
 import { $ } from "bun"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { mkdtempSync, rmSync, symlinkSync } from "fs"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -19,6 +20,20 @@ import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+// Windows only creates symlinks with Developer Mode or elevation, so symlink tests skip without it.
+export const canSymlink = (() => {
+  if (process.platform !== "win32") return true
+  const dir = mkdtempSync(path.join(os.tmpdir(), "opencode-symlink-"))
+  try {
+    symlinkSync(path.join(dir, "target"), path.join(dir, "link"))
+    return true
+  } catch {
+    return false
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})()
+
 export const testInstanceStoreLayer = LayerNode.compile(InstanceStore.node, [
   [InstanceStore.bootstrapNode, noopBootstrap],
 ])
