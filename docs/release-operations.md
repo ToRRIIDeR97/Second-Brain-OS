@@ -6,6 +6,8 @@ in the repository settings to avoid Actions charges. Root Tauri/Cargo/pnpm
 commands are retired; the former procedure is kept in
 [the archive](archive/tauri/release-operations.md).
 
+![Deployment view: Electron main, renderer and utility-process server on the user machine, optional harness processes and CLI daemon, profile and workspace stores, external services and the build host](diagrams/deployment.svg)
+
 ## Local checks
 
 Use Bun 1.3.14 and Node.js 24. Install with `bun install --frozen-lockfile`

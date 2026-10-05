@@ -6,6 +6,8 @@ Start with the root [README](../README.md) for setup and commands, and
 | Path | Contents |
 | --- | --- |
 | [architecture/](architecture/README.md) | Active Electron/OpenCode components and boundaries |
+| [architecture/uml.md](architecture/uml.md) | Master UML views: component, deployment, class, activity, state machine, sequence, coverage index |
+| [diagrams/](diagrams/) | Shared SVG diagrams and the scripts that generate them |
 | [security/](security/threat-model.md) | Threat model, data classification, approval risk classes, Google planner |
 | [product/](product/PRODUCT-BRIEF-V1.md) | Product brief, navigation map, and active feature plans |
 | [adr/](adr/) | Architecture decision records; ADR-010 sets the OpenCode Electron base |

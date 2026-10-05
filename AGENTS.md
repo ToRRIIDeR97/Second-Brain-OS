@@ -26,7 +26,9 @@
 - Run the relevant format, lint, test, and build commands before handoff.
 - Preserve unrelated changes in the working tree.
 - Update the owning architecture, security, or release document when changing
-  a boundary, data flow, public interface, or canonical command.
+  a boundary, data flow, public interface, or canonical command. Update the
+  affected diagrams in `docs/diagrams/` and views in
+  `docs/architecture/uml.md` in the same change.
 
 ## Project map
 
@@ -38,6 +40,8 @@
   [navigation map](docs/product/NAVIGATION-MAP-V1.md), glossary in `CONTEXT.md`.
 - Read [architecture](docs/architecture/README.md) for component boundaries and
   [security](docs/security/threat-model.md) before changing a data or trust boundary.
+  [UML views](docs/architecture/uml.md) hold the detailed diagrams and a
+  coverage index of subsystems, stores, and workflows.
 - `docs/release-operations.md` describes the active Electron candidate workflow.
 
 ## Required checks
@@ -56,6 +60,8 @@ Also run `bun run test:engine` when changing `opencode/packages/core` or
 navigation or routing.
 
 ## Merging
+
+![Development workflow: feature branch, change with docs, local checks, pull request, user approval, merge and branch cleanup](docs/diagrams/dev-workflow.svg)
 
 - Target `main`. Work on a feature branch and merge through a pull request;
   never push directly to or force-push `main`.

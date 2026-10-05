@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 640" width="1060" height="640" role="img" aria-labelledby="title desc">
+<title id="title">State machines: permissions, sidecar, Google outbox and project status</title>
+<desc id="desc">UML state machines for permission requests, the desktop sidecar process, Google write outbox operations and project status.</desc>
+
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .h{font-size:16px;font-weight:600}
+  .lbl{font-size:11px;fill:#424a53}
+  .lblbg{fill:#ffffff;opacity:.92}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .sub{fill:#ffffff;stroke:#8c959f;stroke-width:1}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .ext{fill:#ddf4ff;stroke:#0969da;stroke-width:1.2}
+  .proc{fill:#fbefff;stroke:#8250df;stroke-width:1.2}
+  .zone{fill:none;stroke:#8c959f;stroke-width:1.2;stroke-dasharray:7 5}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+  .gapz{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .d{stroke-dasharray:5 4}
+  .r{stroke:#cf222e}
+  .sens{stroke:#bc4c00;stroke-width:2}
+  .ah{fill:#57606a}
+  .ahr{fill:#cf222e}
+  .ahs{fill:#bc4c00}
+  .life{stroke:#8c959f;stroke-width:1;stroke-dasharray:4 4}
+  .act{fill:#eaeef2;stroke:#57606a;stroke-width:1}
+  .frag{fill:none;stroke:#8c959f;stroke-width:1}
+  .fragt{fill:#eaeef2;stroke:#8c959f;stroke-width:1}
+  .dot{fill:#1f2328}
+  .ring{fill:none;stroke:#1f2328;stroke-width:1.5}
+  .dia{fill:#ffffff;stroke:#57606a;stroke-width:1.2}
+  .bar{fill:#1f2328}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s{fill:#9198a1} .lbl{fill:#c9d1d9} .lblbg{fill:#0d1117}
+    .box{fill:#161b22;stroke:#8b949e} .sub{fill:#0d1117;stroke:#6e7681}
+    .store{fill:#2b2111;stroke:#d29922} .ext{fill:#0c2d4a;stroke:#4493f8}
+    .proc{fill:#271a3d;stroke:#ab7df8}
+    .zone{stroke:#6e7681} .zonet{fill:#9198a1}
+    .gapz{fill:#3a1517;stroke:#f85149}
+    .e{stroke:#9198a1} .r{stroke:#f85149} .sens{stroke:#f0883e}
+    .ah{fill:#9198a1} .ahr{fill:#f85149} .ahs{fill:#f0883e}
+    .life{stroke:#6e7681} .act{fill:#21262d;stroke:#8b949e}
+    .frag{stroke:#6e7681} .fragt{fill:#21262d;stroke:#6e7681}
+    .dot{fill:#e6edf3} .ring{stroke:#e6edf3} .dia{fill:#0d1117;stroke:#8b949e} .bar{fill:#e6edf3}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahr" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahs" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="e" d="M0,0 L10,5 L0,10"/></marker>
+  <marker id="dm" viewBox="0 0 12 12" refX="1" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path class="bar" d="M1,6 L6,1 L11,6 L6,11 z"/></marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="1060" height="640"/>
+<text x="20" y="28" text-anchor="start" class="h">State machines: permissions and platform</text>
+<text x="20" y="46" text-anchor="start" class="s">UML 2.5.1 state machine diagrams · lifecycles are implicit unless an enum is named</text>
+<rect class="zone" x="20" y="60" width="500" height="280" rx="10"/>
+<text x="30" y="76" text-anchor="start" class="zonet">Permission request · core/src/permission.ts (in memory)</text>
+<circle class="dot" cx="45" cy="160" r="8"/>
+<path class="dia" d="M100,146 L114,160 L100,174 L86,160 z"/>
+<rect class="box" x="50" y="240" width="100" height="34" rx="14"/>
+<text x="100.0" y="261.0" text-anchor="middle">Blocked</text>
+<rect class="box" x="250" y="82" width="110" height="34" rx="14"/>
+<text x="305.0" y="103.0" text-anchor="middle">Allowed</text>
+<rect class="box" x="180" y="165" width="130" height="44" rx="14"/>
+<text x="245.0" y="185.0" text-anchor="middle" class="t">Pending</text>
+<text x="245.0" y="200.0" text-anchor="middle" class="s">permission.v2.asked</text>
+<rect class="box" x="380" y="120" width="120" height="34" rx="14"/>
+<text x="440.0" y="141.0" text-anchor="middle">Granted</text>
+<rect class="box" x="380" y="220" width="120" height="44" rx="14"/>
+<text x="440.0" y="240.0" text-anchor="middle" class="t">Declined</text>
+<text x="440.0" y="255.0" text-anchor="middle" class="s">or Corrected</text>
+<path class="e " d="M53,160 L86,160" marker-end="url(#a)"/>
+<path class="e " d="M100,174 L100,240" marker-end="url(#a)"/>
+<path class="e " d="M100,146 L100,99 L250,99" marker-end="url(#a)"/>
+<path class="e " d="M114,160 L150,160 L150,187 L180,187" marker-end="url(#a)"/>
+<path class="e " d="M310,180 L340,180 L340,137 L380,137" marker-end="url(#a)"/>
+<path class="e " d="M310,200 L340,200 L340,245 L380,245" marker-end="url(#a)"/>
+<text x="40" y="310" text-anchor="start" class="s">always: saves save[] as allow rules and grants other pending requests that now allow</text>
+<text x="40" y="326" text-anchor="start" class="s">reject: declines other pending requests in the session; alwaysAsk ignores allow rules</text>
+<rect class="zone" x="540" y="60" width="500" height="280" rx="10"/>
+<text x="550" y="76" text-anchor="start" class="zonet">Server sidecar (v1) · desktop/src/main/server.ts (implicit)</text>
+<circle class="dot" cx="565" cy="125" r="8"/>
+<rect class="box" x="590" y="108" width="110" height="34" rx="14"/>
+<text x="645.0" y="129.0" text-anchor="middle">Starting</text>
+<rect class="box" x="755" y="108" width="100" height="34" rx="14"/>
+<text x="805.0" y="129.0" text-anchor="middle">Ready</text>
+<rect class="box" x="905" y="108" width="115" height="34" rx="14"/>
+<text x="962.5" y="129.0" text-anchor="middle">Healthy</text>
+<rect class="box" x="590" y="230" width="110" height="34" rx="14"/>
+<text x="645.0" y="251.0" text-anchor="middle">Failed</text>
+<rect class="box" x="790" y="230" width="110" height="34" rx="14"/>
+<text x="845.0" y="251.0" text-anchor="middle">Stopping</text>
+<circle class="ring" cx="980" cy="247" r="10"/><circle class="dot" cx="980" cy="247" r="6"/>
+<path class="e " d="M573,125 L590,125" marker-end="url(#a)"/>
+<path class="e " d="M700,125 L755,125" marker-end="url(#a)"/>
+<path class="e " d="M855,125 L905,125" marker-end="url(#a)"/>
+<path class="e " d="M645,142 L645,230" marker-end="url(#a)"/>
+<path class="e " d="M805,142 L805,230" marker-end="url(#a)"/>
+<path class="e " d="M962,142 L962,190 L870,190 L870,230" marker-end="url(#a)"/>
+<path class="e " d="M900,247 L968,247" marker-end="url(#a)"/>
+<text x="560" y="305" text-anchor="start" class="s">Failed: renderer shows the local-server error; no automatic retry.</text>
+<text x="560" y="321" text-anchor="start" class="s">Health timeout (30 s) after Ready is only logged.</text>
+<rect class="zone" x="20" y="360" width="500" height="260" rx="10"/>
+<text x="30" y="376" text-anchor="start" class="zonet">Google write outbox operation · google-calendar.ts</text>
+<circle class="dot" cx="45" cy="458" r="8"/>
+<rect class="box" x="70" y="440" width="100" height="34" rx="14"/>
+<text x="120.0" y="461.0" text-anchor="middle">pending</text>
+<rect class="box" x="300" y="395" width="120" height="34" rx="14"/>
+<text x="360.0" y="416.0" text-anchor="middle">succeeded</text>
+<rect class="box" x="300" y="440" width="120" height="34" rx="14"/>
+<text x="360.0" y="461.0" text-anchor="middle">conflict</text>
+<rect class="box" x="300" y="485" width="120" height="34" rx="14"/>
+<text x="360.0" y="506.0" text-anchor="middle">failed</text>
+<rect class="box" x="300" y="530" width="120" height="34" rx="14"/>
+<text x="360.0" y="551.0" text-anchor="middle">offline</text>
+<path class="e " d="M53,458 L70,458" marker-end="url(#a)"/>
+<path class="e " d="M170,450 L210,450 L210,412 L300,412" marker-end="url(#a)"/>
+<path class="e " d="M170,457 L300,457" marker-end="url(#a)"/>
+<path class="e " d="M170,464 L210,464 L210,502 L300,502" marker-end="url(#a)"/>
+<path class="e " d="M210,502 L210,547 L300,547" marker-end="url(#a)"/>
+<path class="e " d="M360,564 L360,585 L120,585 L120,474" marker-end="url(#a)"/>
+<text x="40" y="610" text-anchor="start" class="s">dispatch increments attempts · idempotencyKey dedupes · last 100 kept</text>
+<rect class="zone" x="540" y="360" width="500" height="260" rx="10"/>
+<text x="550" y="376" text-anchor="start" class="zonet">Project status · opencode/src/project/brain.ts</text>
+<circle class="dot" cx="565" cy="437" r="8"/>
+<rect class="box" x="590" y="420" width="110" height="34" rx="14"/>
+<text x="645.0" y="441.0" text-anchor="middle">active</text>
+<rect class="box" x="750" y="420" width="110" height="34" rx="14"/>
+<text x="805.0" y="441.0" text-anchor="middle">paused</text>
+<rect class="box" x="910" y="420" width="110" height="34" rx="14"/>
+<text x="965.0" y="441.0" text-anchor="middle">archived</text>
+<path class="e " d="M573,437 L590,437" marker-end="url(#a)"/>
+<path class="e " d="M700,430 L750,430" marker-end="url(#a)"/>
+<path class="e " d="M750,445 L700,445" marker-end="url(#a)"/>
+<path class="e " d="M860,430 L910,430" marker-end="url(#a)"/>
+<path class="e " d="M910,445 L860,445" marker-end="url(#a)"/>
+<path class="e " d="M645,454 L645,485 L965,485 L965,454" marker-end="url(#a)" marker-start="url(#a)"/>
+<text x="560" y="530" text-anchor="start" class="s">Calendar syncState: local | pending | synced | offline | stale | conflict | failed</text>
+<text x="560" y="546" text-anchor="start" class="s">has invariants only (source=local ⇔ local; synced has no outboxKey);</text>
+<text x="560" y="562" text-anchor="start" class="s">no transition function. Task is open until completedAt is set.</text>
+<rect class="lblbg" x="96.5" y="200.0" width="70.9" height="13" rx="2"/>
+<text class="lbl" x="132" y="210" text-anchor="middle">[deny rule]</text>
+<rect class="lblbg" x="103.0" y="83.0" width="135.8" height="13" rx="2"/>
+<text class="lbl" x="106" y="93" text-anchor="start">[allow, not alwaysAsk]</text>
+<rect class="lblbg" x="129.3" y="144.0" width="41.4" height="13" rx="2"/>
+<text class="lbl" x="150" y="154" text-anchor="middle">[else]</text>
+<rect class="lblbg" x="380.9" y="102.0" width="118.1" height="13" rx="2"/>
+<text class="lbl" x="440" y="112" text-anchor="middle">reply once | always</text>
+<rect class="lblbg" x="324.1" y="270.0" width="141.7" height="13" rx="2"/>
+<text class="lbl" x="395" y="280" text-anchor="middle">reject · layer finalize</text>
+<rect class="lblbg" x="563.2" y="90.0" width="29.6" height="13" rx="2"/>
+<text class="lbl" x="578" y="100" text-anchor="middle">fork</text>
+<rect class="lblbg" x="709.2" y="109.0" width="35.5" height="13" rx="2"/>
+<text class="lbl" x="727" y="119" text-anchor="middle">ready</text>
+<rect class="lblbg" x="850.5" y="109.0" width="59.1" height="13" rx="2"/>
+<text class="lbl" x="880" y="119" text-anchor="middle">health ok</text>
+<rect class="lblbg" x="586.0" y="185.0" width="118.1" height="13" rx="2"/>
+<text class="lbl" x="645" y="195" text-anchor="middle">error · exit · 60 s</text>
+<rect class="lblbg" x="807.2" y="180.0" width="29.6" height="13" rx="2"/>
+<text class="lbl" x="822" y="190" text-anchor="middle">stop</text>
+<rect class="lblbg" x="886.8" y="231.0" width="94.5" height="13" rx="2"/>
+<text class="lbl" x="934" y="241" text-anchor="middle">exit | kill 6 s</text>
+<rect class="lblbg" x="243.2" y="396.0" width="23.7" height="13" rx="2"/>
+<text class="lbl" x="255" y="406" text-anchor="middle">2xx</text>
+<rect class="lblbg" x="243.2" y="441.0" width="23.7" height="13" rx="2"/>
+<text class="lbl" x="255" y="451" text-anchor="middle">412</text>
+<rect class="lblbg" x="222.5" y="486.0" width="65.0" height="13" rx="2"/>
+<text class="lbl" x="255" y="496" text-anchor="middle">HTTP error</text>
+<rect class="lblbg" x="219.6" y="531.0" width="70.9" height="13" rx="2"/>
+<text class="lbl" x="255" y="541" text-anchor="middle">other error</text>
+<rect class="lblbg" x="142.6" y="570.0" width="194.8" height="13" rx="2"/>
+<text class="lbl" x="240" y="580" text-anchor="middle">sync() retries pending | offline</text>
+<rect class="lblbg" x="681.0" y="470.0" width="247.9" height="13" rx="2"/>
+<text class="lbl" x="805" y="480" text-anchor="middle">update(status) — unguarded, any direction</text>
+</svg>
