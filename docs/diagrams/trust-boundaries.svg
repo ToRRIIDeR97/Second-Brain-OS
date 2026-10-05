@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 706" width="1000" height="706" role="img" aria-labelledby="title desc">
+<title id="title">Trust boundaries and sensitive-data flow</title>
+<desc id="desc">Trust zones of the desktop app: sandboxed renderer, privileged Electron main, loopback server, workspace files, harness child processes and external services, with the control at each crossing and known gaps in red.</desc>
+
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .h{font-size:16px;font-weight:600}
+  .lbl{font-size:11px;fill:#424a53}
+  .lblbg{fill:#ffffff;opacity:.92}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .sub{fill:#ffffff;stroke:#8c959f;stroke-width:1}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .ext{fill:#ddf4ff;stroke:#0969da;stroke-width:1.2}
+  .proc{fill:#fbefff;stroke:#8250df;stroke-width:1.2}
+  .zone{fill:none;stroke:#8c959f;stroke-width:1.2;stroke-dasharray:7 5}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+  .gapz{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .d{stroke-dasharray:5 4}
+  .r{stroke:#cf222e}
+  .sens{stroke:#bc4c00;stroke-width:2}
+  .ah{fill:#57606a}
+  .ahr{fill:#cf222e}
+  .ahs{fill:#bc4c00}
+  .life{stroke:#8c959f;stroke-width:1;stroke-dasharray:4 4}
+  .act{fill:#eaeef2;stroke:#57606a;stroke-width:1}
+  .frag{fill:none;stroke:#8c959f;stroke-width:1}
+  .fragt{fill:#eaeef2;stroke:#8c959f;stroke-width:1}
+  .dot{fill:#1f2328}
+  .ring{fill:none;stroke:#1f2328;stroke-width:1.5}
+  .dia{fill:#ffffff;stroke:#57606a;stroke-width:1.2}
+  .bar{fill:#1f2328}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s{fill:#9198a1} .lbl{fill:#c9d1d9} .lblbg{fill:#0d1117}
+    .box{fill:#161b22;stroke:#8b949e} .sub{fill:#0d1117;stroke:#6e7681}
+    .store{fill:#2b2111;stroke:#d29922} .ext{fill:#0c2d4a;stroke:#4493f8}
+    .proc{fill:#271a3d;stroke:#ab7df8}
+    .zone{stroke:#6e7681} .zonet{fill:#9198a1}
+    .gapz{fill:#3a1517;stroke:#f85149}
+    .e{stroke:#9198a1} .r{stroke:#f85149} .sens{stroke:#f0883e}
+    .ah{fill:#9198a1} .ahr{fill:#f85149} .ahs{fill:#f0883e}
+    .life{stroke:#6e7681} .act{fill:#21262d;stroke:#8b949e}
+    .frag{stroke:#6e7681} .fragt{fill:#21262d;stroke:#6e7681}
+    .dot{fill:#e6edf3} .ring{stroke:#e6edf3} .dia{fill:#0d1117;stroke:#8b949e} .bar{fill:#e6edf3}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahr" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahs" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="e" d="M0,0 L10,5 L0,10"/></marker>
+  <marker id="dm" viewBox="0 0 12 12" refX="1" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path class="bar" d="M1,6 L6,1 L11,6 L6,11 z"/></marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="1000" height="706"/>
+<text x="20" y="28" text-anchor="start" class="h">Trust boundaries and sensitive data</text>
+<text x="20" y="46" text-anchor="start" class="s">dashed = trust zone · orange = sensitive data · red = known gap (see threat model)</text>
+<rect class="zone" x="20" y="70" width="230" height="230" rx="10"/>
+<text x="30" y="86" text-anchor="start" class="zonet">Renderer sandbox (untrusted input)</text>
+<rect class="sub" x="40" y="100" width="190" height="74" rx="6"/>
+<text x="50" y="118" text-anchor="start" class="t">Solid renderer</text>
+<text x="50" y="134" text-anchor="start" class="s">contextIsolation, sandbox,</text>
+<text x="50" y="150" text-anchor="start" class="s">no nodeIntegration</text>
+<rect class="sub" x="40" y="190" width="190" height="90" rx="6"/>
+<text x="50" y="208" text-anchor="start" class="t">Untrusted inputs</text>
+<text x="50" y="224" text-anchor="start" class="s">note bodies, URLs, IPC args,</text>
+<text x="50" y="240" text-anchor="start" class="s">provider + agent output,</text>
+<text x="50" y="256" text-anchor="start" class="s">workspace content</text>
+<rect class="zone" x="20" y="330" width="230" height="290" rx="10"/>
+<text x="30" y="346" text-anchor="start" class="zonet">Electron main (privileged)</text>
+<rect class="sub" x="40" y="360" width="190" height="84" rx="6"/>
+<text x="50" y="378" text-anchor="start" class="t">IPC handlers</text>
+<text x="50" y="394" text-anchor="start" class="s">allowlisted channels</text>
+<text x="50" y="410" text-anchor="start" class="s">session export: basename,</text>
+<text x="50" y="426" text-anchor="start" class="s">≤32 MiB, native dialog</text>
+<rect class="sub" x="40" y="456" width="190" height="66" rx="6"/>
+<text x="50" y="474" text-anchor="start" class="t">Google service</text>
+<text x="50" y="490" text-anchor="start" class="s">PKCE loopback OAuth</text>
+<text x="50" y="506" text-anchor="start" class="s">safeStorage-encrypted secrets</text>
+<rect class="store" x="40" y="534" width="190" height="70" rx="6"/>
+<text x="50" y="552" text-anchor="start" class="t">Profile data</text>
+<text x="50" y="568" text-anchor="start" class="s">drafts.sqlite (plaintext)</text>
+<text x="50" y="584" text-anchor="start" class="s">electron-store files</text>
+<rect class="zone" x="300" y="70" width="330" height="380" rx="10"/>
+<text x="310" y="86" text-anchor="start" class="zonet">Loopback server process</text>
+<rect class="sub" x="320" y="100" width="290" height="74" rx="6"/>
+<text x="330" y="118" text-anchor="start" class="t">Authorization</text>
+<text x="330" y="134" text-anchor="start" class="s">Basic auth opencode:&lt;uuid&gt;</text>
+<text x="330" y="150" text-anchor="start" class="s">header or auth_token query</text>
+<rect class="sub" x="320" y="186" width="290" height="70" rx="6"/>
+<text x="330" y="204" text-anchor="start" class="t">Workspace routing</text>
+<text x="330" y="220" text-anchor="start" class="s">directory → instance</text>
+<text x="330" y="236" text-anchor="start" class="s">LocationMutation containment</text>
+<rect class="sub" x="320" y="268" width="290" height="84" rx="6"/>
+<text x="330" y="286" text-anchor="start" class="t">PermissionV2</text>
+<text x="330" y="302" text-anchor="start" class="s">rules: allow / ask / deny</text>
+<text x="330" y="318" text-anchor="start" class="s">harness_register: alwaysAsk</text>
+<text x="330" y="334" text-anchor="start" class="s">plan agent denies edits</text>
+<rect class="store" x="320" y="364" width="220" height="70" rx="6"/>
+<text x="330" y="382" text-anchor="start" class="t">Secrets at rest</text>
+<text x="330" y="398" text-anchor="start" class="s">auth.json (XDG data)</text>
+<text x="330" y="414" text-anchor="start" class="s">SQLite profile, harnesses.json</text>
+<rect class="zone" x="680" y="70" width="300" height="150" rx="10"/>
+<text x="690" y="86" text-anchor="start" class="zonet">Workspace filesystem</text>
+<rect class="store" x="700" y="100" width="260" height="100" rx="6"/>
+<text x="710" y="118" text-anchor="start" class="t">Canonical files</text>
+<text x="710" y="134" text-anchor="start" class="s">notes/, projects/</text>
+<text x="710" y="150" text-anchor="start" class="s">.second-brain/calendar-v1.json</text>
+<text x="710" y="166" text-anchor="start" class="s">source of truth</text>
+<rect class="zone" x="680" y="250" width="300" height="180" rx="10"/>
+<text x="690" y="266" text-anchor="start" class="zonet">Harness child processes (run as user)</text>
+<rect class="proc" x="700" y="280" width="260" height="64" rx="6"/>
+<text x="710" y="298" text-anchor="start" class="t">Codex / ACP agents</text>
+<text x="710" y="314" text-anchor="start" class="s">own tools; ask via request_permission</text>
+<rect class="gapz" x="700" y="354" width="260" height="60" rx="6"/>
+<text x="710" y="372" text-anchor="start" class="t">Inherited environment</text>
+<text x="710" y="388" text-anchor="start" class="s">extendEnv: full app env</text>
+<rect class="zone" x="300" y="480" width="680" height="140" rx="10"/>
+<text x="310" y="496" text-anchor="start" class="zonet">External network</text>
+<rect class="ext" x="320" y="512" width="200" height="84" rx="6"/>
+<text x="330" y="530" text-anchor="start" class="t">Google APIs</text>
+<text x="330" y="546" text-anchor="start" class="s">oauth2, Calendar, Tasks</text>
+<text x="330" y="562" text-anchor="start" class="s">via net.fetch</text>
+<rect class="ext" x="540" y="512" width="200" height="84" rx="6"/>
+<text x="550" y="530" text-anchor="start" class="t">LLM providers</text>
+<text x="550" y="546" text-anchor="start" class="s">prompts include</text>
+<text x="550" y="562" text-anchor="start" class="s">workspace content</text>
+<rect class="ext" x="760" y="512" width="200" height="84" rx="6"/>
+<text x="770" y="530" text-anchor="start" class="t">System browser</text>
+<text x="770" y="546" text-anchor="start" class="s">http/https/mailto only</text>
+<text x="770" y="562" text-anchor="start" class="s">via shell.openExternal</text>
+<path class="e " d="M230,137 L260,137 L260,400 L230,400" marker-end="url(#a)"/>
+<path class="e sens" d="M230,120 L320,120" marker-end="url(#as)"/>
+<path class="e sens" d="M610,221 L700,160" marker-end="url(#as)"/>
+<path class="e " d="M610,310 L700,310" marker-end="url(#a)"/>
+<path class="e " d="M700,330 L630,330" marker-end="url(#a)"/>
+<path class="e sens" d="M230,489 L300,540 L320,540" marker-end="url(#as)"/>
+<path class="e sens" d="M575,352 L575,500 L640,500 L640,512" marker-end="url(#as)"/>
+<path class="e " d="M230,425 L282,425 L282,608 L860,608 L860,596" marker-end="url(#a)"/>
+<rect class="gapz" x="20" y="636" width="960" height="56" rx="6"/>
+<text x="30" y="654" text-anchor="start" class="t">Known gaps (threat model)</text>
+<text x="30" y="670" text-anchor="start" class="s">auth_token accepted in URLs · open-path/reveal-path take raw paths · store names unvalidated · senderFrame unchecked · drafts unencrypted · harness env inherited</text>
+<rect class="lblbg" x="256.4" y="250.0" width="47.3" height="13" rx="2"/>
+<text class="lbl" x="280" y="260" text-anchor="middle">preload</text>
+<rect class="lblbg" x="268.1" y="263.0" width="23.7" height="13" rx="2"/>
+<text class="lbl" x="280" y="273" text-anchor="middle">IPC</text>
+<rect class="lblbg" x="230.7" y="103.0" width="88.6" height="13" rx="2"/>
+<text class="lbl" x="275" y="113" text-anchor="middle">HTTP 127.0.0.1</text>
+<rect class="lblbg" x="625.5" y="172.0" width="59.1" height="13" rx="2"/>
+<text class="lbl" x="655" y="182" text-anchor="middle">validated</text>
+<rect class="lblbg" x="610.7" y="185.0" width="88.6" height="13" rx="2"/>
+<text class="lbl" x="655" y="195" text-anchor="middle">relative paths</text>
+<rect class="lblbg" x="613.6" y="293.0" width="82.7" height="13" rx="2"/>
+<text class="lbl" x="655" y="303" text-anchor="middle">spawn + stdio</text>
+<rect class="lblbg" x="261.3" y="520.0" width="41.4" height="13" rx="2"/>
+<text class="lbl" x="282" y="530" text-anchor="middle">tokens</text>
+<rect class="lblbg" x="561.9" y="460.0" width="106.3" height="13" rx="2"/>
+<text class="lbl" x="615" y="470" text-anchor="middle">prompts + context</text>
+<rect class="lblbg" x="518.6" y="602.0" width="82.7" height="13" rx="2"/>
+<text class="lbl" x="560" y="612" text-anchor="middle">open-external</text>
+</svg>

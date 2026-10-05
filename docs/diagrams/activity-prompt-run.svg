@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 930" width="1000" height="930" role="img" aria-labelledby="title desc">
+<title id="title">Activity: prompt run</title>
+<desc id="desc">UML activity for one prompt: admit input, wake the coordinator, promote inputs, stream from the selected harness, settle local tools through permissions, and finish or fail the step.</desc>
+
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .h{font-size:16px;font-weight:600}
+  .lbl{font-size:11px;fill:#424a53}
+  .lblbg{fill:#ffffff;opacity:.92}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .sub{fill:#ffffff;stroke:#8c959f;stroke-width:1}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .ext{fill:#ddf4ff;stroke:#0969da;stroke-width:1.2}
+  .proc{fill:#fbefff;stroke:#8250df;stroke-width:1.2}
+  .zone{fill:none;stroke:#8c959f;stroke-width:1.2;stroke-dasharray:7 5}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+  .gapz{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .d{stroke-dasharray:5 4}
+  .r{stroke:#cf222e}
+  .sens{stroke:#bc4c00;stroke-width:2}
+  .ah{fill:#57606a}
+  .ahr{fill:#cf222e}
+  .ahs{fill:#bc4c00}
+  .life{stroke:#8c959f;stroke-width:1;stroke-dasharray:4 4}
+  .act{fill:#eaeef2;stroke:#57606a;stroke-width:1}
+  .frag{fill:none;stroke:#8c959f;stroke-width:1}
+  .fragt{fill:#eaeef2;stroke:#8c959f;stroke-width:1}
+  .dot{fill:#1f2328}
+  .ring{fill:none;stroke:#1f2328;stroke-width:1.5}
+  .dia{fill:#ffffff;stroke:#57606a;stroke-width:1.2}
+  .bar{fill:#1f2328}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s{fill:#9198a1} .lbl{fill:#c9d1d9} .lblbg{fill:#0d1117}
+    .box{fill:#161b22;stroke:#8b949e} .sub{fill:#0d1117;stroke:#6e7681}
+    .store{fill:#2b2111;stroke:#d29922} .ext{fill:#0c2d4a;stroke:#4493f8}
+    .proc{fill:#271a3d;stroke:#ab7df8}
+    .zone{stroke:#6e7681} .zonet{fill:#9198a1}
+    .gapz{fill:#3a1517;stroke:#f85149}
+    .e{stroke:#9198a1} .r{stroke:#f85149} .sens{stroke:#f0883e}
+    .ah{fill:#9198a1} .ahr{fill:#f85149} .ahs{fill:#f0883e}
+    .life{stroke:#6e7681} .act{fill:#21262d;stroke:#8b949e}
+    .frag{stroke:#6e7681} .fragt{fill:#21262d;stroke:#6e7681}
+    .dot{fill:#e6edf3} .ring{stroke:#e6edf3} .dia{fill:#0d1117;stroke:#8b949e} .bar{fill:#e6edf3}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahr" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahs" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="e" d="M0,0 L10,5 L0,10"/></marker>
+  <marker id="dm" viewBox="0 0 12 12" refX="1" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path class="bar" d="M1,6 L6,1 L11,6 L6,11 z"/></marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="1000" height="930"/>
+<text x="20" y="28" text-anchor="start" class="h">Activity: prompt run</text>
+<text x="20" y="46" text-anchor="start" class="s">core/src/session: SessionV2.prompt → SessionInput → run-coordinator → runner/llm.ts</text>
+<circle class="dot" cx="500" cy="70" r="8"/>
+<rect class="act" x="380" y="92" width="240" height="34" rx="14"/>
+<text x="500.0" y="113.0" text-anchor="middle">POST /api/session/:id/prompt</text>
+<rect class="act" x="380" y="144" width="240" height="44" rx="14"/>
+<text x="500.0" y="164.0" text-anchor="middle" class="t">SessionInput.admit</text>
+<text x="500.0" y="179.0" text-anchor="middle" class="s">publish prompt.admitted</text>
+<path class="dia" d="M500,206 L514,220 L500,234 L486,220 z"/>
+<rect class="act" x="380" y="254" width="240" height="34" rx="14"/>
+<text x="500.0" y="275.0" text-anchor="middle">coordinator.wake(sessionID)</text>
+<path class="dia" d="M500,304 L514,318 L500,332 L486,318 z"/>
+<rect class="act" x="380" y="352" width="240" height="44" rx="14"/>
+<text x="500.0" y="372.0" text-anchor="middle" class="t">SessionRunner.run (drain)</text>
+<text x="500.0" y="387.0" text-anchor="middle" class="s">fail interrupted tools</text>
+<rect class="act" x="380" y="414" width="240" height="44" rx="14"/>
+<text x="500.0" y="434.0" text-anchor="middle" class="t">promote steer / queue input</text>
+<text x="500.0" y="449.0" text-anchor="middle" class="s">publish session.next.prompted</text>
+<rect class="act" x="380" y="476" width="240" height="44" rx="14"/>
+<text x="500.0" y="496.0" text-anchor="middle" class="t">build LLM request</text>
+<text x="500.0" y="511.0" text-anchor="middle" class="s">capture start snapshot</text>
+<rect class="act" x="380" y="538" width="240" height="44" rx="14"/>
+<text x="500.0" y="558.0" text-anchor="middle" class="t">HarnessRuntime.stream</text>
+<text x="500.0" y="573.0" text-anchor="middle" class="s">opencode | codex | acp driver</text>
+<rect class="act" x="380" y="600" width="240" height="44" rx="14"/>
+<text x="500.0" y="620.0" text-anchor="middle" class="t">publish LLM events</text>
+<text x="500.0" y="635.0" text-anchor="middle" class="s">text, reasoning, tool parts</text>
+<path class="dia" d="M500,666 L514,680 L500,694 L486,680 z"/>
+<rect class="act" x="380" y="716" width="240" height="44" rx="14"/>
+<text x="500.0" y="736.0" text-anchor="middle" class="t">capture end snapshot</text>
+<text x="500.0" y="751.0" text-anchor="middle" class="s">publish step.ended</text>
+<path class="dia" d="M500,778 L514,792 L500,806 L486,792 z"/>
+<circle class="ring" cx="500" cy="860" r="10"/><circle class="dot" cx="500" cy="860" r="6"/>
+<rect class="sub" x="680" y="203" width="200" height="34" rx="14"/>
+<text x="780.0" y="224.0" text-anchor="middle">409 PromptConflictError</text>
+<rect class="sub" x="680" y="301" width="200" height="34" rx="14"/>
+<text x="780.0" y="322.0" text-anchor="middle">set pendingWake; return</text>
+<rect class="act" x="60" y="663" width="220" height="44" rx="14"/>
+<text x="170.0" y="683.0" text-anchor="middle" class="t">ToolRegistry.settle</text>
+<text x="170.0" y="698.0" text-anchor="middle" class="s">PermissionV2.assert</text>
+<path class="dia" d="M170,746 L184,760 L170,774 L156,760 z"/>
+<rect class="act" x="40" y="806" width="260" height="44" rx="14"/>
+<text x="170.0" y="826.0" text-anchor="middle" class="t">fail tools; interrupt drain</text>
+<text x="170.0" y="841.0" text-anchor="middle" class="s">user declined</text>
+<rect class="act" x="700" y="663" width="200" height="44" rx="14"/>
+<text x="800.0" y="683.0" text-anchor="middle" class="t">fail unsettled tools</text>
+<text x="800.0" y="698.0" text-anchor="middle" class="s">publish step.failed</text>
+<rect class="sub" x="690" y="440" width="270" height="70" rx="14"/>
+<text x="825.0" y="473.0" text-anchor="middle" class="t">Interrupt (any time)</text>
+<text x="825.0" y="488.0" text-anchor="middle" class="s">turn/interrupt or session/cancel</text>
+<text x="825" y="503" text-anchor="middle" class="s">→ unsettled tools fail, step.failed</text>
+<circle class="ring" cx="800" cy="780" r="10"/><circle class="dot" cx="800" cy="780" r="6"/>
+<path class="e " d="M800,707 L800,768" marker-end="url(#a)"/>
+<circle class="ring" cx="170" cy="895" r="10"/><circle class="dot" cx="170" cy="895" r="6"/>
+<path class="e " d="M170,850 L170,883" marker-end="url(#a)"/>
+<path class="e " d="M500,78 L500,92" marker-end="url(#a)"/>
+<path class="e " d="M500,126 L500,144" marker-end="url(#a)"/>
+<path class="e " d="M500,188 L500,206" marker-end="url(#a)"/>
+<path class="e " d="M500,234 L500,254" marker-end="url(#a)"/>
+<path class="e " d="M514,220 L680,220" marker-end="url(#a)"/>
+<path class="e " d="M500,288 L500,304" marker-end="url(#a)"/>
+<path class="e " d="M514,318 L680,318" marker-end="url(#a)"/>
+<path class="e " d="M500,332 L500,352" marker-end="url(#a)"/>
+<path class="e " d="M500,396 L500,414" marker-end="url(#a)"/>
+<path class="e " d="M500,458 L500,476" marker-end="url(#a)"/>
+<path class="e " d="M500,520 L500,538" marker-end="url(#a)"/>
+<path class="e " d="M500,582 L500,600" marker-end="url(#a)"/>
+<path class="e " d="M500,644 L500,666" marker-end="url(#a)"/>
+<path class="e " d="M486,680 L280,685" marker-end="url(#a)"/>
+<path class="e " d="M514,680 L700,685" marker-end="url(#a)"/>
+<path class="e " d="M500,694 L500,716" marker-end="url(#a)"/>
+<path class="e " d="M500,760 L500,778" marker-end="url(#a)"/>
+<path class="e " d="M500,806 L500,850" marker-end="url(#a)"/>
+<path class="e " d="M170,707 L170,746" marker-end="url(#a)"/>
+<path class="e " d="M170,774 L170,806" marker-end="url(#a)"/>
+<path class="e " d="M156,760 L20,760 L20,436 L380,436" marker-end="url(#a)"/>
+<path class="e " d="M486,792 L330,792 L330,456 L380,450" marker-end="url(#a)"/>
+<rect class="lblbg" x="507.5" y="237.0" width="65.0" height="13" rx="2"/>
+<text class="lbl" x="540" y="247" text-anchor="middle">[admitted]</text>
+<rect class="lblbg" x="511.4" y="203.0" width="171.2" height="13" rx="2"/>
+<text class="lbl" x="597" y="213" text-anchor="middle">[id reused, payload differs]</text>
+<rect class="lblbg" x="552.7" y="301.0" width="88.6" height="13" rx="2"/>
+<text class="lbl" x="597" y="311" text-anchor="middle">[drain active]</text>
+<rect class="lblbg" x="505.3" y="335.0" width="41.4" height="13" rx="2"/>
+<text class="lbl" x="526" y="345" text-anchor="middle">[idle]</text>
+<rect class="lblbg" x="276.9" y="662.0" width="106.3" height="13" rx="2"/>
+<text class="lbl" x="330" y="672" text-anchor="middle">[local tool call]</text>
+<rect class="lblbg" x="549.8" y="662.0" width="100.4" height="13" rx="2"/>
+<text class="lbl" x="600" y="672" text-anchor="middle">[provider error]</text>
+<rect class="lblbg" x="503.4" y="698.0" width="53.2" height="13" rx="2"/>
+<text class="lbl" x="530" y="708" text-anchor="middle">[finish]</text>
+<rect class="lblbg" x="503.9" y="820.0" width="112.2" height="13" rx="2"/>
+<text class="lbl" x="560" y="830" text-anchor="middle">[no pending input]</text>
+<rect class="lblbg" x="177.8" y="783.0" width="94.5" height="13" rx="2"/>
+<text class="lbl" x="225" y="793" text-anchor="middle">[deny / reject]</text>
+<rect class="lblbg" x="37.3" y="420.0" width="165.3" height="13" rx="2"/>
+<text class="lbl" x="120" y="430" text-anchor="middle">[allowed] needsContinuation</text>
+<rect class="lblbg" x="320.5" y="776.0" width="183.0" height="13" rx="2"/>
+<text class="lbl" x="412" y="786" text-anchor="middle">[steer pending / continuation]</text>
+</svg>

@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1010" width="1100" height="1010" role="img" aria-labelledby="title desc">
+<title id="title">Sequence: ACP harness turn with permission</title>
+<desc id="desc">UML sequence for one Run turn through an ACP harness: prompt admission, drain, runtime open with session load or new, streaming updates, a permission request answered in the renderer, completion and interrupt.</desc>
+
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .h{font-size:16px;font-weight:600}
+  .lbl{font-size:11px;fill:#424a53}
+  .lblbg{fill:#ffffff;opacity:.92}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .sub{fill:#ffffff;stroke:#8c959f;stroke-width:1}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .ext{fill:#ddf4ff;stroke:#0969da;stroke-width:1.2}
+  .proc{fill:#fbefff;stroke:#8250df;stroke-width:1.2}
+  .zone{fill:none;stroke:#8c959f;stroke-width:1.2;stroke-dasharray:7 5}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+  .gapz{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .d{stroke-dasharray:5 4}
+  .r{stroke:#cf222e}
+  .sens{stroke:#bc4c00;stroke-width:2}
+  .ah{fill:#57606a}
+  .ahr{fill:#cf222e}
+  .ahs{fill:#bc4c00}
+  .life{stroke:#8c959f;stroke-width:1;stroke-dasharray:4 4}
+  .act{fill:#eaeef2;stroke:#57606a;stroke-width:1}
+  .frag{fill:none;stroke:#8c959f;stroke-width:1}
+  .fragt{fill:#eaeef2;stroke:#8c959f;stroke-width:1}
+  .dot{fill:#1f2328}
+  .ring{fill:none;stroke:#1f2328;stroke-width:1.5}
+  .dia{fill:#ffffff;stroke:#57606a;stroke-width:1.2}
+  .bar{fill:#1f2328}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s{fill:#9198a1} .lbl{fill:#c9d1d9} .lblbg{fill:#0d1117}
+    .box{fill:#161b22;stroke:#8b949e} .sub{fill:#0d1117;stroke:#6e7681}
+    .store{fill:#2b2111;stroke:#d29922} .ext{fill:#0c2d4a;stroke:#4493f8}
+    .proc{fill:#271a3d;stroke:#ab7df8}
+    .zone{stroke:#6e7681} .zonet{fill:#9198a1}
+    .gapz{fill:#3a1517;stroke:#f85149}
+    .e{stroke:#9198a1} .r{stroke:#f85149} .sens{stroke:#f0883e}
+    .ah{fill:#9198a1} .ahr{fill:#f85149} .ahs{fill:#f0883e}
+    .life{stroke:#6e7681} .act{fill:#21262d;stroke:#8b949e}
+    .frag{stroke:#6e7681} .fragt{fill:#21262d;stroke:#6e7681}
+    .dot{fill:#e6edf3} .ring{stroke:#e6edf3} .dia{fill:#0d1117;stroke:#8b949e} .bar{fill:#e6edf3}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahr" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahs" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="e" d="M0,0 L10,5 L0,10"/></marker>
+  <marker id="dm" viewBox="0 0 12 12" refX="1" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path class="bar" d="M1,6 L6,1 L11,6 L6,11 z"/></marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="1100" height="1010"/>
+<text x="20" y="28" text-anchor="start" class="h">Sequence: ACP harness turn with permission</text>
+<text x="20" y="46" text-anchor="start" class="s">core/src/session.ts · runner/llm.ts · harness.ts · harness/acp.ts · permission.ts</text>
+<rect class="box" x="10.0" y="64" width="140" height="30" rx="6"/>
+<text x="80.0" y="82" text-anchor="middle" class="t">Renderer</text>
+<line class="life" x1="80" y1="94" x2="80" y2="990"/>
+<rect class="box" x="165.0" y="64" width="140" height="30" rx="6"/>
+<text x="235.0" y="82" text-anchor="middle" class="t">SessionV2</text>
+<line class="life" x1="235" y1="94" x2="235" y2="990"/>
+<rect class="box" x="320.0" y="64" width="140" height="30" rx="6"/>
+<text x="390.0" y="82" text-anchor="middle" class="t">SessionRunner</text>
+<line class="life" x1="390" y1="94" x2="390" y2="990"/>
+<rect class="box" x="475.0" y="64" width="140" height="30" rx="6"/>
+<text x="545.0" y="82" text-anchor="middle" class="t">HarnessRuntime</text>
+<line class="life" x1="545" y1="94" x2="545" y2="990"/>
+<rect class="box" x="630.0" y="64" width="140" height="30" rx="6"/>
+<text x="700.0" y="82" text-anchor="middle" class="t">AcpHarness</text>
+<line class="life" x1="700" y1="94" x2="700" y2="990"/>
+<rect class="box" x="790.0" y="64" width="140" height="44" rx="6"/>
+<text x="860.0" y="82" text-anchor="middle" class="t">ACP agent</text>
+<text x="860.0" y="98" text-anchor="middle" class="s">child process</text>
+<line class="life" x1="860" y1="108" x2="860" y2="990"/>
+<rect class="box" x="945.0" y="64" width="140" height="30" rx="6"/>
+<text x="1015.0" y="82" text-anchor="middle" class="t">PermissionV2</text>
+<line class="life" x1="1015" y1="94" x2="1015" y2="990"/>
+<path class="e " d="M80,124 L235,124" marker-end="url(#a)"/>
+<path class="e " d="M235,140 L275,140 L275,156 L237,156" marker-end="url(#a)"/>
+<path class="e " d="M235,190 L390,190" marker-end="url(#a)"/>
+<path class="e " d="M390,206 L430,206 L430,222 L392,222" marker-end="url(#a)"/>
+<path class="e " d="M390,256 L545,256" marker-end="url(#a)"/>
+<rect class="frag" x="470" y="274" width="520" height="140"/>
+<path class="fragt" d="M470,274 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="476" y="288" text-anchor="start" class="t">opt</text>
+<text x="516.5" y="289" text-anchor="start" class="s">[no cached runtime]</text>
+<path class="e " d="M545,318 L700,318" marker-end="url(#a)"/>
+<path class="e " d="M700,346 L860,346" marker-end="url(#a)"/>
+<path class="e " d="M700,374 L860,374" marker-end="url(#a)"/>
+<path class="e " d="M545,386 L585,386 L585,402 L547,402" marker-end="url(#a)"/>
+<path class="e " d="M700,446 L860,446" marker-end="url(#a)"/>
+<path class="e d " d="M860,478 L700,478" marker-end="url(#o)"/>
+<path class="e d " d="M700,508 L390,508" marker-end="url(#o)"/>
+<path class="e d " d="M390,538 L80,538" marker-end="url(#o)"/>
+<path class="e " d="M860,578 L700,578" marker-end="url(#a)"/>
+<path class="e " d="M700,608 L1015,608" marker-end="url(#a)"/>
+<rect class="frag" x="40" y="626" width="1030" height="94"/>
+<path class="fragt" d="M40,626 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="46" y="640" text-anchor="start" class="t">alt</text>
+<text x="86.5" y="641" text-anchor="start" class="s">[rule = ask]</text>
+<path class="e d " d="M1015,660 L80,660" marker-end="url(#o)"/>
+<path class="e " d="M80,694 L1015,694" marker-end="url(#a)"/>
+<path class="e d " d="M1015,746 L700,746" marker-end="url(#o)"/>
+<path class="e " d="M700,776 L860,776" marker-end="url(#a)"/>
+<path class="e d " d="M860,808 L700,808" marker-end="url(#o)"/>
+<path class="e d " d="M700,838 L390,838" marker-end="url(#o)"/>
+<path class="e " d="M390,852 L430,852 L430,868 L392,868" marker-end="url(#a)"/>
+<rect class="frag" x="40" y="892" width="1030" height="86"/>
+<path class="fragt" d="M40,892 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="46" y="906" text-anchor="start" class="t">opt</text>
+<text x="86.5" y="907" text-anchor="start" class="s">[user interrupts]</text>
+<path class="e " d="M80,930 L235,930" marker-end="url(#a)"/>
+<path class="e " d="M235,946 L390,946" marker-end="url(#a)"/>
+<path class="e " d="M700,962 L860,962" marker-end="url(#a)"/>
+<rect class="lblbg" x="71.9" y="109.0" width="171.2" height="13" rx="2"/>
+<text class="lbl" x="157.5" y="119" text-anchor="middle">POST /api/session/:id/prompt</text>
+<rect class="lblbg" x="278.0" y="141.0" width="141.7" height="13" rx="2"/>
+<text class="lbl" x="281" y="151" text-anchor="start">admit → prompt.admitted</text>
+<rect class="lblbg" x="238.7" y="175.0" width="147.6" height="13" rx="2"/>
+<text class="lbl" x="312.5" y="185" text-anchor="middle">coordinator.wake → drain</text>
+<rect class="lblbg" x="433.0" y="207.0" width="183.0" height="13" rx="2"/>
+<text class="lbl" x="436" y="217" text-anchor="start">promote input · start snapshot</text>
+<rect class="lblbg" x="381.9" y="241.0" width="171.2" height="13" rx="2"/>
+<text class="lbl" x="467.5" y="251" text-anchor="middle">stream(instanceID, revision)</text>
+<rect class="lblbg" x="539.9" y="303.0" width="165.3" height="13" rx="2"/>
+<text class="lbl" x="622.5" y="313" text-anchor="middle">open(command, continuation)</text>
+<rect class="lblbg" x="673.8" y="331.0" width="212.5" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="341" text-anchor="middle">spawn · initialize (no fs/terminal)</text>
+<rect class="lblbg" x="647.2" y="359.0" width="265.6" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="369" text-anchor="middle">session/load [continuation] else session/new</text>
+<rect class="lblbg" x="588.0" y="387.0" width="147.6" height="13" rx="2"/>
+<text class="lbl" x="591" y="397" text-anchor="start">harness.continuation.set</text>
+<rect class="lblbg" x="653.1" y="431.0" width="253.8" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="441" text-anchor="middle">session/prompt (handoff transcript if new)</text>
+<rect class="lblbg" x="715.0" y="463.0" width="129.9" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="473" text-anchor="middle">session/update chunks</text>
+<rect class="lblbg" x="485.9" y="493.0" width="118.1" height="13" rx="2"/>
+<text class="lbl" x="545.0" y="503" text-anchor="middle">LLM events (stream)</text>
+<rect class="lblbg" x="131.7" y="523.0" width="206.6" height="13" rx="2"/>
+<text class="lbl" x="235.0" y="533" text-anchor="middle">durable events → SSE /global/event</text>
+<rect class="lblbg" x="700.3" y="563.0" width="159.4" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="573" text-anchor="middle">session/request_permission</text>
+<rect class="lblbg" x="751.2" y="593.0" width="212.5" height="13" rx="2"/>
+<text class="lbl" x="857.5" y="603" text-anchor="middle">approve → assert(action, resources)</text>
+<rect class="lblbg" x="470.8" y="645.0" width="153.5" height="13" rx="2"/>
+<text class="lbl" x="547.5" y="655" text-anchor="middle">permission.v2.asked (SSE)</text>
+<rect class="lblbg" x="376.4" y="679.0" width="342.3" height="13" rx="2"/>
+<text class="lbl" x="547.5" y="689" text-anchor="middle">POST …/permission/:requestID/reply once | always | reject</text>
+<rect class="lblbg" x="807.3" y="731.0" width="100.4" height="13" rx="2"/>
+<text class="lbl" x="857.5" y="741" text-anchor="middle">allowed | denied</text>
+<rect class="lblbg" x="700.3" y="761.0" width="159.4" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="771" text-anchor="middle">outcome: selected optionId</text>
+<rect class="lblbg" x="700.3" y="793.0" width="159.4" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="803" text-anchor="middle">prompt result (stopReason)</text>
+<rect class="lblbg" x="483.0" y="823.0" width="124.0" height="13" rx="2"/>
+<text class="lbl" x="545.0" y="833" text-anchor="middle">step-finish · finish</text>
+<rect class="lblbg" x="433.0" y="853.0" width="153.5" height="13" rx="2"/>
+<text class="lbl" x="436" y="863" text-anchor="start">end snapshot · step.ended</text>
+<rect class="lblbg" x="107.3" y="915.0" width="100.4" height="13" rx="2"/>
+<text class="lbl" x="157.5" y="925" text-anchor="middle">POST …/interrupt</text>
+<rect class="lblbg" x="247.6" y="931.0" width="129.9" height="13" rx="2"/>
+<text class="lbl" x="312.5" y="941" text-anchor="middle">coordinator.interrupt</text>
+<rect class="lblbg" x="667.9" y="947.0" width="224.3" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="957" text-anchor="middle">session/cancel (runtime stays cached)</text>
+</svg>

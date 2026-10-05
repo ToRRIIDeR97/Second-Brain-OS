@@ -4,6 +4,11 @@ This document covers the OpenCode Electron fork in `opencode/`. The former
 React/Tauri application is retired, so its Rust policy and MCP
 sidecar design are not current desktop controls.
 
+![Trust zones (renderer sandbox, Electron main, loopback server, workspace files, harness child processes, external network) with the control at each crossing, sensitive-data flows, and known gaps](../diagrams/trust-boundaries.svg)
+
+Detailed permission and request flows are in
+[the UML architecture views](../architecture/uml.md).
+
 ## Assets and boundaries
 
 | Boundary                   | Current control and location                                                                                                                                                                                                                                                                                                                                           |
@@ -22,9 +27,12 @@ log credentials or full private content.
 ## Credentials, extensions, and recovery
 
 Google token encryption is specific to the desktop integration. It does not
-establish encryption for every provider credential store. The runtime also
-uses profile data such as `auth.json` and SQLite databases; treat the whole
-profile as sensitive and exclude it from source control and release artifacts.
+establish encryption for every provider credential store. Provider
+credentials (`auth.json`, `mcp-auth.json`) and the session database
+(`opencode.db`) live in the XDG data directory (by default
+`~/.local/share/opencode/`), outside Electron `userData`. `userData` holds
+drafts, electron-store files, logs, and server state. Treat both locations as
+sensitive and exclude them from source control and release artifacts.
 
 Configured plugins execute code in the local runtime. Dependency installation
 and plugin initialization can therefore affect both access and startup time.

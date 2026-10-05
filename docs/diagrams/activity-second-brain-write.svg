@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 930" width="960" height="930" role="img" aria-labelledby="title desc">
+<title id="title">Activity: Second Brain write</title>
+<desc id="desc">UML activity for PUT /second-brain/note and PUT /second-brain/calendar: authorization, workspace routing, decode, path containment, compare-and-swap write and best-effort timeline sync, with HTTP error exits.</desc>
+
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .h{font-size:16px;font-weight:600}
+  .lbl{font-size:11px;fill:#424a53}
+  .lblbg{fill:#ffffff;opacity:.92}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .sub{fill:#ffffff;stroke:#8c959f;stroke-width:1}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .ext{fill:#ddf4ff;stroke:#0969da;stroke-width:1.2}
+  .proc{fill:#fbefff;stroke:#8250df;stroke-width:1.2}
+  .zone{fill:none;stroke:#8c959f;stroke-width:1.2;stroke-dasharray:7 5}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+  .gapz{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .d{stroke-dasharray:5 4}
+  .r{stroke:#cf222e}
+  .sens{stroke:#bc4c00;stroke-width:2}
+  .ah{fill:#57606a}
+  .ahr{fill:#cf222e}
+  .ahs{fill:#bc4c00}
+  .life{stroke:#8c959f;stroke-width:1;stroke-dasharray:4 4}
+  .act{fill:#eaeef2;stroke:#57606a;stroke-width:1}
+  .frag{fill:none;stroke:#8c959f;stroke-width:1}
+  .fragt{fill:#eaeef2;stroke:#8c959f;stroke-width:1}
+  .dot{fill:#1f2328}
+  .ring{fill:none;stroke:#1f2328;stroke-width:1.5}
+  .dia{fill:#ffffff;stroke:#57606a;stroke-width:1.2}
+  .bar{fill:#1f2328}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s{fill:#9198a1} .lbl{fill:#c9d1d9} .lblbg{fill:#0d1117}
+    .box{fill:#161b22;stroke:#8b949e} .sub{fill:#0d1117;stroke:#6e7681}
+    .store{fill:#2b2111;stroke:#d29922} .ext{fill:#0c2d4a;stroke:#4493f8}
+    .proc{fill:#271a3d;stroke:#ab7df8}
+    .zone{stroke:#6e7681} .zonet{fill:#9198a1}
+    .gapz{fill:#3a1517;stroke:#f85149}
+    .e{stroke:#9198a1} .r{stroke:#f85149} .sens{stroke:#f0883e}
+    .ah{fill:#9198a1} .ahr{fill:#f85149} .ahs{fill:#f0883e}
+    .life{stroke:#6e7681} .act{fill:#21262d;stroke:#8b949e}
+    .frag{stroke:#6e7681} .fragt{fill:#21262d;stroke:#6e7681}
+    .dot{fill:#e6edf3} .ring{stroke:#e6edf3} .dia{fill:#0d1117;stroke:#8b949e} .bar{fill:#e6edf3}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahr" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahs" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="e" d="M0,0 L10,5 L0,10"/></marker>
+  <marker id="dm" viewBox="0 0 12 12" refX="1" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path class="bar" d="M1,6 L6,1 L11,6 L6,11 z"/></marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="960" height="930"/>
+<text x="20" y="28" text-anchor="start" class="h">Activity: Second Brain write (note or calendar)</text>
+<text x="20" y="46" text-anchor="start" class="s">opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts · core/src/file-mutation.ts</text>
+<circle class="dot" cx="440" cy="70" r="8"/>
+<path class="e " d="M440,78 L440,92" marker-end="url(#a)"/>
+<rect class="act" x="290" y="92" width="300" height="44" rx="14"/>
+<text x="440.0" y="112.0" text-anchor="middle" class="t">Authorization</text>
+<text x="440.0" y="127.0" text-anchor="middle" class="s">Basic auth (header or auth_token)</text>
+<path class="e " d="M440,136 L440,136.01"/>
+<path class="dia" d="M440,136 L454,150 L440,164 L426,150 z"/>
+<path class="e " d="M454,150 L680,150" marker-end="url(#a)"/>
+<rect class="sub" x="680" y="135" width="260" height="30" rx="14"/>
+<text x="810.0" y="154.0" text-anchor="middle">401</text>
+<path class="e " d="M440,164 L440,182" marker-end="url(#a)"/>
+<rect class="act" x="290" y="182" width="300" height="44" rx="14"/>
+<text x="440.0" y="202.0" text-anchor="middle" class="t">WorkspaceRouting + InstanceContext</text>
+<text x="440.0" y="217.0" text-anchor="middle" class="s">directory → InstanceStore.load</text>
+<path class="e " d="M440,226 L440,226.01"/>
+<path class="dia" d="M440,226 L454,240 L440,254 L426,240 z"/>
+<path class="e " d="M454,240 L680,240" marker-end="url(#a)"/>
+<rect class="sub" x="680" y="225" width="260" height="30" rx="14"/>
+<text x="810.0" y="244.0" text-anchor="middle">400 / 500</text>
+<path class="e " d="M440,254 L440,272" marker-end="url(#a)"/>
+<rect class="act" x="290" y="272" width="300" height="44" rx="14"/>
+<text x="440.0" y="292.0" text-anchor="middle" class="t">decode query + payload</text>
+<text x="440.0" y="307.0" text-anchor="middle" class="s">schema layer</text>
+<path class="e " d="M440,316 L440,316.01"/>
+<path class="dia" d="M440,316 L454,330 L440,344 L426,330 z"/>
+<path class="e " d="M454,330 L680,330" marker-end="url(#a)"/>
+<rect class="sub" x="680" y="315" width="260" height="30" rx="14"/>
+<text x="810.0" y="334.0" text-anchor="middle">400</text>
+<path class="e " d="M440,344 L440,362" marker-end="url(#a)"/>
+<rect class="act" x="290" y="362" width="300" height="44" rx="14"/>
+<text x="440.0" y="382.0" text-anchor="middle" class="t">resolve target path</text>
+<text x="440.0" y="397.0" text-anchor="middle" class="s">notePath rules · LocationMutation.resolve</text>
+<path class="e " d="M440,406 L440,406.01"/>
+<path class="dia" d="M440,406 L454,420 L440,434 L426,420 z"/>
+<path class="e " d="M454,420 L680,420" marker-end="url(#a)"/>
+<rect class="sub" x="680" y="405" width="260" height="30" rx="14"/>
+<text x="810.0" y="424.0" text-anchor="middle">400</text>
+<path class="e " d="M440,434 L440,452" marker-end="url(#a)"/>
+<path class="dia" d="M440,452 L454,466 L440,480 L426,466 z"/>
+<path class="e " d="M440,480 L440,500" marker-end="url(#a)"/>
+<rect class="act" x="290" y="500" width="300" height="44" rx="14"/>
+<text x="440.0" y="520.0" text-anchor="middle" class="t">read current file</text>
+<text x="440.0" y="535.0" text-anchor="middle" class="s">compare expectedRevision</text>
+<path class="dia" d="M440,558 L454,572 L440,586 L426,572 z"/>
+<path class="e " d="M440,544 L440,558" marker-end="url(#a)"/>
+<path class="e " d="M454,572 L680,572" marker-end="url(#a)"/>
+<rect class="sub" x="680" y="557" width="260" height="30" rx="14"/>
+<text x="810.0" y="576.0" text-anchor="middle">409 stale</text>
+<path class="e " d="M440,586 L440,604" marker-end="url(#a)"/>
+<rect class="act" x="290" y="604" width="300" height="44" rx="14"/>
+<text x="440.0" y="624.0" text-anchor="middle" class="t">validate + encode</text>
+<text x="440.0" y="639.0" text-anchor="middle" class="s">frontmatter / ULID revision</text>
+<path class="e " d="M440,648 L440,664" marker-end="url(#a)"/>
+<rect class="act" x="290" y="664" width="300" height="44" rx="14"/>
+<text x="440.0" y="684.0" text-anchor="middle" class="t">FileMutation.writeIfUnchanged</text>
+<text x="440.0" y="699.0" text-anchor="middle" class="s">per-path mutex, compare bytes</text>
+<path class="dia" d="M440,722 L454,736 L440,750 L426,736 z"/>
+<path class="e " d="M440,708 L440,722" marker-end="url(#a)"/>
+<path class="e " d="M454,736 L680,736" marker-end="url(#a)"/>
+<rect class="sub" x="680" y="721" width="260" height="30" rx="14"/>
+<text x="810.0" y="740.0" text-anchor="middle">409 stale</text>
+<path class="e " d="M426,466 L150,466 L150,560" marker-end="url(#a)"/>
+<rect class="act" x="20" y="560" width="250" height="44" rx="14"/>
+<text x="145.0" y="580.0" text-anchor="middle" class="t">FileMutation.create (flag wx)</text>
+<text x="145.0" y="595.0" text-anchor="middle" class="s">validate + encode first</text>
+<path class="dia" d="M150,626 L164,640 L150,654 L136,640 z"/>
+<path class="e " d="M150,604 L150,626" marker-end="url(#a)"/>
+<path class="e " d="M136,640 L70,640 L70,690" marker-end="url(#a)"/>
+<rect class="sub" x="10" y="690" width="150" height="30" rx="14"/>
+<text x="85.0" y="709.0" text-anchor="middle">409 exists</text>
+<path class="e " d="M164,640 L275,640 L275,790 L426,790" marker-end="url(#a)"/>
+<path class="dia" d="M440,776 L454,790 L440,804 L426,790 z"/>
+<path class="e " d="M440,750 L440,776" marker-end="url(#a)"/>
+<path class="e " d="M440,804 L440,822" marker-end="url(#a)"/>
+<rect class="act" x="290" y="822" width="300" height="44" rx="14"/>
+<text x="440.0" y="842.0" text-anchor="middle" class="t">[calendar] BrainProject.syncTimelines</text>
+<text x="440.0" y="857.0" text-anchor="middle" class="s">best effort; errors swallowed</text>
+<path class="e " d="M440,866 L440,880" marker-end="url(#a)"/>
+<circle class="ring" cx="440" cy="892" r="10"/><circle class="dot" cx="440" cy="892" r="6"/>
+<text x="460" y="897" text-anchor="start" class="s">200 Document / Snapshot</text>
+<rect class="gapz" x="680" y="800" width="270" height="96" rx="6"/>
+<text x="690" y="818" text-anchor="start" class="t">Unverified at runtime</text>
+<text x="690" y="834" text-anchor="start" class="s">note/project validate() throws inside</text>
+<text x="690" y="850" text-anchor="start" class="s">Effect.fn; handlers catch typed errors</text>
+<text x="690" y="866" text-anchor="start" class="s">only, so these may surface as 500.</text>
+<text x="690" y="882" text-anchor="start" class="s">CAS lock is process-local; no rename.</text>
+<rect class="lblbg" x="526.9" y="134.0" width="106.3" height="13" rx="2"/>
+<text class="lbl" x="580" y="144" text-anchor="middle">[bad credentials]</text>
+<rect class="lblbg" x="491.4" y="224.0" width="177.1" height="13" rx="2"/>
+<text class="lbl" x="580" y="234" text-anchor="middle">[invalid / unknown workspace]</text>
+<rect class="lblbg" x="535.7" y="314.0" width="88.6" height="13" rx="2"/>
+<text class="lbl" x="580" y="324" text-anchor="middle">[schema error]</text>
+<rect class="lblbg" x="491.4" y="404.0" width="177.1" height="13" rx="2"/>
+<text class="lbl" x="580" y="414" text-anchor="middle">[escape · bad path · &gt; 5 MiB]</text>
+<rect class="lblbg" x="447.4" y="484.0" width="53.2" height="13" rx="2"/>
+<text class="lbl" x="474" y="494" text-anchor="middle">[update]</text>
+<rect class="lblbg" x="523.9" y="556.0" width="112.2" height="13" rx="2"/>
+<text class="lbl" x="580" y="566" text-anchor="middle">[revision differs]</text>
+<rect class="lblbg" x="532.8" y="720.0" width="94.5" height="13" rx="2"/>
+<text class="lbl" x="580" y="730" text-anchor="middle">[bytes changed]</text>
+<rect class="lblbg" x="172.6" y="449.0" width="194.8" height="13" rx="2"/>
+<text class="lbl" x="270" y="459" text-anchor="middle">[create flag / no calendar file]</text>
+<rect class="lblbg" x="73.4" y="624.0" width="53.2" height="13" rx="2"/>
+<text class="lbl" x="100" y="634" text-anchor="middle">[exists]</text>
+<rect class="lblbg" x="280.4" y="774.0" width="59.1" height="13" rx="2"/>
+<text class="lbl" x="310" y="784" text-anchor="middle">[created]</text>
+<rect class="lblbg" x="446.4" y="758.0" width="59.1" height="13" rx="2"/>
+<text class="lbl" x="476" y="768" text-anchor="middle">[written]</text>
+</svg>

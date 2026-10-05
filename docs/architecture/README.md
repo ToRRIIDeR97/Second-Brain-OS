@@ -11,21 +11,20 @@ schemas and remaining migration gaps are recorded in
 
 ## Active components
 
-```mermaid
-flowchart LR
-  UI[Solid renderer<br/>opencode/packages/app] -->|preload API| Main[Electron main<br/>opencode/packages/desktop]
-  UI -->|authenticated local HTTP| Server[OpenCode server<br/>opencode/packages/opencode]
-  Main -->|starts and stops| Server
-  Server -->|validated file operations| Files[Workspace files]
-  Main -->|OAuth and provider requests| Google[Google Calendar and Tasks]
-```
+![Component view: renderer, preload, Electron main, the bundled OpenCode server (HTTP API, Second Brain domains, location services, agent runtime), stores and external services](../diagrams/component-overview.svg)
+
+Detailed UML views (deployment, class, activity, state machine and sequence)
+and a coverage index are in [the UML architecture views](uml.md).
 
 - The Electron main process creates windows, exposes the limited preload API,
-  and starts the managed server on loopback with a generated password.
+  and starts the managed server in a utility process on loopback with a
+  generated password.
 - The Solid renderer owns the desktop UI, including Brain, notes, projects,
   and calendar pages in `opencode/packages/app/src/pages/`.
 - The OpenCode server owns sessions, workspace routing, and Second Brain HTTP
-  handlers. Notes and project records use workspace files through the location
+  handlers. `packages/opencode` mounts the native `/api` routes from
+  `packages/server` (contracts in `packages/protocol`) next to its legacy
+  instance routes; the session and harness runtime lives in `packages/core`. Notes and project records use workspace files through the location
   and file mutation services; calendar data is stored under `.second-brain/`.
 - Former Rust policy and release documents are historical requirements, not
   evidence of controls in the active desktop runtime.
@@ -47,7 +46,7 @@ dialogs or session panels rather than standalone routes.
 | Notes                      | `packages/opencode/src/knowledge/note.ts`; workspace Markdown files                                                   |
 | Project records            | `packages/opencode/src/project/brain.ts`; workspace `projects/` Markdown cards and project folders                    |
 | Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
-| Sessions and runtime state | `packages/core/src/database/` and runtime session services; OpenCode SQLite profile database                          |
+| Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in the XDG data directory                   |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
 | Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
 

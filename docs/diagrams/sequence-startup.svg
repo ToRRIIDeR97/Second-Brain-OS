@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 800" width="900" height="800" role="img" aria-labelledby="title desc">
+<title id="title">Sequence: desktop startup</title>
+<desc id="desc">UML sequence for desktop startup: Electron main launches the bundled server in a utility process, waits for ready, hands credentials to the renderer through preload IPC, with the startup failure path and shutdown.</desc>
+
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .h{font-size:16px;font-weight:600}
+  .lbl{font-size:11px;fill:#424a53}
+  .lblbg{fill:#ffffff;opacity:.92}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .sub{fill:#ffffff;stroke:#8c959f;stroke-width:1}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .ext{fill:#ddf4ff;stroke:#0969da;stroke-width:1.2}
+  .proc{fill:#fbefff;stroke:#8250df;stroke-width:1.2}
+  .zone{fill:none;stroke:#8c959f;stroke-width:1.2;stroke-dasharray:7 5}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+  .gapz{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .d{stroke-dasharray:5 4}
+  .r{stroke:#cf222e}
+  .sens{stroke:#bc4c00;stroke-width:2}
+  .ah{fill:#57606a}
+  .ahr{fill:#cf222e}
+  .ahs{fill:#bc4c00}
+  .life{stroke:#8c959f;stroke-width:1;stroke-dasharray:4 4}
+  .act{fill:#eaeef2;stroke:#57606a;stroke-width:1}
+  .frag{fill:none;stroke:#8c959f;stroke-width:1}
+  .fragt{fill:#eaeef2;stroke:#8c959f;stroke-width:1}
+  .dot{fill:#1f2328}
+  .ring{fill:none;stroke:#1f2328;stroke-width:1.5}
+  .dia{fill:#ffffff;stroke:#57606a;stroke-width:1.2}
+  .bar{fill:#1f2328}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s{fill:#9198a1} .lbl{fill:#c9d1d9} .lblbg{fill:#0d1117}
+    .box{fill:#161b22;stroke:#8b949e} .sub{fill:#0d1117;stroke:#6e7681}
+    .store{fill:#2b2111;stroke:#d29922} .ext{fill:#0c2d4a;stroke:#4493f8}
+    .proc{fill:#271a3d;stroke:#ab7df8}
+    .zone{stroke:#6e7681} .zonet{fill:#9198a1}
+    .gapz{fill:#3a1517;stroke:#f85149}
+    .e{stroke:#9198a1} .r{stroke:#f85149} .sens{stroke:#f0883e}
+    .ah{fill:#9198a1} .ahr{fill:#f85149} .ahs{fill:#f0883e}
+    .life{stroke:#6e7681} .act{fill:#21262d;stroke:#8b949e}
+    .frag{stroke:#6e7681} .fragt{fill:#21262d;stroke:#6e7681}
+    .dot{fill:#e6edf3} .ring{stroke:#e6edf3} .dia{fill:#0d1117;stroke:#8b949e} .bar{fill:#e6edf3}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahr" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ahs" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="e" d="M0,0 L10,5 L0,10"/></marker>
+  <marker id="dm" viewBox="0 0 12 12" refX="1" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path class="bar" d="M1,6 L6,1 L11,6 L6,11 z"/></marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="900" height="800"/>
+<text x="20" y="28" text-anchor="start" class="h">Sequence: desktop startup and shutdown</text>
+<text x="20" y="46" text-anchor="start" class="s">desktop/src/main/index.ts · server.ts · sidecar.ts · renderer/index.tsx</text>
+<rect class="box" x="25.0" y="64" width="170" height="44" rx="6"/>
+<text x="110.0" y="82" text-anchor="middle" class="t">Electron main</text>
+<text x="110.0" y="98" text-anchor="middle" class="s">index.ts</text>
+<line class="life" x1="110" y1="108" x2="110" y2="780"/>
+<rect class="box" x="235.0" y="64" width="170" height="44" rx="6"/>
+<text x="320.0" y="82" text-anchor="middle" class="t">Server launcher</text>
+<text x="320.0" y="98" text-anchor="middle" class="s">server.ts</text>
+<line class="life" x1="320" y1="108" x2="320" y2="780"/>
+<rect class="box" x="445.0" y="64" width="170" height="44" rx="6"/>
+<text x="530.0" y="82" text-anchor="middle" class="t">OpenCode server</text>
+<text x="530.0" y="98" text-anchor="middle" class="s">utility process</text>
+<line class="life" x1="530" y1="108" x2="530" y2="780"/>
+<rect class="box" x="675.0" y="64" width="170" height="44" rx="6"/>
+<text x="760.0" y="82" text-anchor="middle" class="t">Renderer</text>
+<text x="760.0" y="98" text-anchor="middle" class="s">preload + app</text>
+<line class="life" x1="760" y1="108" x2="760" y2="780"/>
+<path class="e " d="M110,124 L150,124 L150,140 L112,140" marker-end="url(#a)"/>
+<path class="e " d="M110,160 L150,160 L150,176 L112,176" marker-end="url(#a)"/>
+<path class="e " d="M110,210 L320,210" marker-end="url(#a)"/>
+<path class="e " d="M320,245 L530,245" marker-end="url(#a)"/>
+<path class="e " d="M530,270 L570,270 L570,286 L532,286" marker-end="url(#a)"/>
+<path class="e d " d="M530,316 L320,316" marker-end="url(#o)"/>
+<path class="e d " d="M320,346 L110,346" marker-end="url(#o)"/>
+<rect class="frag" x="40" y="366" width="820" height="92"/>
+<path class="fragt" d="M40,366 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="46" y="380" text-anchor="start" class="t">alt</text>
+<text x="86.5" y="381" text-anchor="start" class="s">[error · exit before ready · 60 s stall]</text>
+<path class="e " d="M320,405 L530,405" marker-end="url(#a)"/>
+<path class="e d " d="M320,440 L110,440" marker-end="url(#o)"/>
+<path class="e " d="M320,488 L530,488" marker-end="url(#a)"/>
+<path class="e " d="M110,528 L760,528" marker-end="url(#a)"/>
+<path class="e " d="M760,566 L110,566" marker-end="url(#a)"/>
+<path class="e d " d="M110,600 L760,600" marker-end="url(#o)"/>
+<path class="e " d="M760,640 L530,640" marker-end="url(#a)"/>
+<path class="e " d="M760,674 L530,674" marker-end="url(#a)"/>
+<rect class="frag" x="40" y="694" width="820" height="76"/>
+<path class="fragt" d="M40,694 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="46" y="708" text-anchor="start" class="t">opt</text>
+<text x="86.5" y="709" text-anchor="start" class="s">[before-quit · will-quit · SIGTERM]</text>
+<path class="e " d="M110,735 L530,735" marker-end="url(#a)"/>
+<rect class="lblbg" x="153.0" y="125.0" width="212.5" height="13" rx="2"/>
+<text class="lbl" x="156" y="135" text-anchor="start">single-instance lock · preferAppEnv</text>
+<rect class="lblbg" x="153.0" y="161.0" width="236.1" height="13" rx="2"/>
+<text class="lbl" x="156" y="171" text-anchor="start">whenReady: migrate, IPC, Google service</text>
+<rect class="lblbg" x="96.9" y="195.0" width="236.1" height="13" rx="2"/>
+<text class="lbl" x="215.0" y="205" text-anchor="middle">spawnLocalServer(127.0.0.1, port, uuid)</text>
+<rect class="lblbg" x="318.8" y="230.0" width="212.5" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="240" text-anchor="middle">utilityProcess.fork · {type: start}</text>
+<rect class="lblbg" x="573.0" y="271.0" width="194.8" height="13" rx="2"/>
+<text class="lbl" x="576" y="281" text-anchor="start">Server.listen (Basic auth, CORS)</text>
+<rect class="lblbg" x="407.2" y="301.0" width="35.5" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="311" text-anchor="middle">ready</text>
+<rect class="lblbg" x="96.9" y="331.0" width="236.1" height="13" rx="2"/>
+<text class="lbl" x="215.0" y="341" text-anchor="middle">serverReady ← {url, username, password}</text>
+<rect class="lblbg" x="392.5" y="390.0" width="65.0" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="400" text-anchor="middle">kill child</text>
+<rect class="lblbg" x="129.4" y="425.0" width="171.2" height="13" rx="2"/>
+<text class="lbl" x="215.0" y="435" text-anchor="middle">serverReady fails (no retry)</text>
+<rect class="lblbg" x="236.1" y="473.0" width="377.7" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="483" text-anchor="middle">poll GET /api/health every 100 ms, ≤ 30 s (failure only logged)</text>
+<rect class="lblbg" x="331.7" y="513.0" width="206.6" height="13" rx="2"/>
+<text class="lbl" x="435.0" y="523" text-anchor="middle">restoreMainWindows → oc://renderer</text>
+<rect class="lblbg" x="352.4" y="551.0" width="165.3" height="13" rx="2"/>
+<text class="lbl" x="435.0" y="561" text-anchor="middle">invoke await-initialization</text>
+<rect class="lblbg" x="284.5" y="585.0" width="301.0" height="13" rx="2"/>
+<text class="lbl" x="435.0" y="595" text-anchor="middle">{url, username, password} | rejection → error page</text>
+<rect class="lblbg" x="506.3" y="625.0" width="277.4" height="13" rx="2"/>
+<text class="lbl" x="645.0" y="635" text-anchor="middle">GET /api/health, /global/health (capabilities)</text>
+<rect class="lblbg" x="532.9" y="659.0" width="224.3" height="13" rx="2"/>
+<text class="lbl" x="645.0" y="669" text-anchor="middle">SSE /global/event · bootstrap queries</text>
+<rect class="lblbg" x="169.5" y="720.0" width="301.0" height="13" rx="2"/>
+<text class="lbl" x="320.0" y="730" text-anchor="middle">{type: stop} · kill after 6 s · drafts flush/close</text>
+</svg>
