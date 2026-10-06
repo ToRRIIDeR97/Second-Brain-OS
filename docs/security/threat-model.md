@@ -66,12 +66,13 @@ file-system or terminal capability. Their own tool approvals arrive as
 `session/request_permission` and use Second Brain permissions. Treat output
 from an ACP agent as untrusted model output.
 
-Known gap: ACP and Codex harness processes inherit the app's full environment
-(`extendEnv: true`), plus any `env` set in user configuration. Any API key or
-token in Second Brain's environment is therefore visible to every registered
-harness. Agent CLIs often need their own credentials from the environment, so
-the app doesn't filter it yet. Register only agents you'd trust with your shell
-environment.
+Known gap (partially closed): ACP and Codex harness processes no longer inherit
+the app's full environment; they get a small launch allowlist (`PATH`, `HOME`,
+locale, temp and terminal variables, `XDG_*`, Windows system variables) plus the
+`env` set in user configuration for that harness. However, any API key or token
+the user puts in that per-harness `env` is still visible to that harness, and
+agent CLIs often need their own credentials that way. Register only agents
+you'd trust with the credentials you configure for them.
 
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
