@@ -497,7 +497,9 @@ export function configuredInstances(
     if (entry.type !== "document" || !entry.info.harnesses) continue
     for (const [rawID, value] of Object.entries(entry.info.harnesses)) {
       const id = Option.getOrUndefined(decodeID(rawID))
-      if (!id) continue
+      // Reserved IDs must not be replaced from config files either; only the
+      // built-in definitions own the opencode and codex instances (issue #40).
+      if (!id || HarnessRegistry.reserved.has(id)) continue
       instances.set(id, {
         id,
         driver: value.driver,
