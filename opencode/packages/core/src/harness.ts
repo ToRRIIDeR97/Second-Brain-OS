@@ -33,6 +33,7 @@ import {
   type ServerRequest,
 } from "./harness/codex-app-server"
 import { HarnessRegistry } from "./harness/registry"
+import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
 import { PermissionV2 } from "./permission"
 import { AppProcess } from "./process"
@@ -497,7 +498,9 @@ export function configuredInstances(
     if (entry.type !== "document" || !entry.info.harnesses) continue
     for (const [rawID, value] of Object.entries(entry.info.harnesses)) {
       const id = Option.getOrUndefined(decodeID(rawID))
-      if (!id) continue
+      // Reserved IDs must not be replaced from config files either; only the
+      // built-in definitions own the opencode and codex instances (issue #40).
+      if (!id || HarnessRegistry.reserved.has(id)) continue
       instances.set(id, {
         id,
         driver: value.driver,
@@ -531,8 +534,11 @@ function openCodex(
     const handle = yield* process.spawn(
       ChildProcess.make(settings.binaryPath?.trim() || "codex", ["app-server", ...(settings.launchArgs ?? [])], {
         cwd: directory,
-        env: settings.homePath ? { CODEX_HOME: expandHome(settings.homePath) } : undefined,
-        extendEnv: true,
+        env: harnessEnvironment({
+          CODEX_HOME: settings.homePath ? expandHome(settings.homePath) : undefined,
+          ...settings.env,
+        }),
+        extendEnv: false,
         forceKillAfter: "2 seconds",
         stdin: { stream: "pipe", endOnDone: false },
       }),

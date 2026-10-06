@@ -15,6 +15,7 @@ export class Codex extends Schema.Class<Codex>("Config.Harness.Codex")({
   homePath: Schema.String.pipe(Schema.optional),
   launchArgs: Schema.Array(Schema.String).pipe(Schema.optional),
   customModels: Schema.Array(Schema.String).pipe(Schema.optional),
+  env: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
 }) {}
 
 export class Acp extends Schema.Class<Acp>("Config.Harness.Acp")({

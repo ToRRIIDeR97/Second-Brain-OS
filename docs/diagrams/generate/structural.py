@@ -79,7 +79,7 @@ def trust():
     s.box(700, 100, 260, 100, "Canonical files", ["notes/, projects/", ".second-brain/calendar-v1.json", "source of truth"], cls="store")
     s.zone(680, 250, 300, 180, "Harness child processes (run as user)")
     s.box(700, 280, 260, 64, "Codex / ACP agents", ["own tools; ask via request_permission"], cls="proc")
-    s.box(700, 354, 260, 60, "Inherited environment", ["extendEnv: full app env"], cls="gapz")
+    s.box(700, 354, 260, 60, "Filtered environment", ["allowlist + per-harness env"], cls="proc")
     s.zone(300, 480, 680, 140, "External network")
     s.box(320, 512, 200, 84, "Google APIs", ["oauth2, Calendar, Tasks", "via net.fetch"], cls="ext")
     s.box(540, 512, 200, 84, "LLM providers", ["prompts include", "workspace content"], cls="ext")
@@ -92,7 +92,7 @@ def trust():
     s.edge([(230, 489), (300, 540), (320, 540)], "tokens", at=(282, 530), cls="sens", head="as")
     s.edge([(575, 352), (575, 500), (640, 500), (640, 512)], "prompts + context", at=(615, 470), cls="sens", head="as")
     s.edge([(230, 425), (282, 425), (282, 608), (860, 608), (860, 596)], "open-external", at=(560, 612))
-    s.box(20, 636, 960, 56, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take raw paths · store names unvalidated · senderFrame unchecked · drafts unencrypted · harness env inherited"], cls="gapz")
+    s.box(20, 636, 960, 56, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted · per-harness env visible to that harness"], cls="gapz")
     s.save(f"{OUT}/trust-boundaries.svg")
 
 

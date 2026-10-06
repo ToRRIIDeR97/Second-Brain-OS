@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
-import { basename, join } from "node:path"
+import { basename, isAbsolute, join } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
@@ -8,10 +8,12 @@ import type { GoogleCalendarPlatform } from "@opencode-ai/app"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
+import { resolveAppPath } from "./apps"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
+import { assertStoreName } from "./store-name"
 import {
   getPinchZoomEnabled,
   getWindowID,
@@ -26,6 +28,36 @@ import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { saveSessionExport } from "./session-export"
 import { nativeT } from "./native-translations"
+
+// Renderer-supplied IPC is only trusted from the main frame of an app window:
+// any other frame or webContents that reaches ipcRenderer must not reach the
+// privileged handlers below (issue #25).
+const assertTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || win.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) {
+    throw new Error("Untrusted IPC sender")
+  }
+}
+
+const trustedHandle = <A extends unknown[]>(
+  channel: string,
+  listener: (event: IpcMainInvokeEvent, ...args: A) => unknown,
+) => {
+  ipcMain.handle(channel, (event, ...args: A) => {
+    assertTrustedSender(event)
+    return listener(event, ...args)
+  })
+}
+
+const trustedOn = <A extends unknown[]>(
+  channel: string,
+  listener: (event: IpcMainEvent, ...args: A) => unknown,
+) => {
+  ipcMain.on(channel, (event, ...args: A) => {
+    assertTrustedSender(event)
+    listener(event, ...args)
+  })
+}
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -66,25 +98,25 @@ export function registerIpcHandlers(deps: Deps) {
   app.once("will-quit", () => drafts.close())
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
-  ipcMain.handle("kill-sidecar", () => deps.killSidecar())
-  ipcMain.handle("await-initialization", () => deps.awaitInitialization())
-  ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
-  ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
-  ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
+  trustedHandle("kill-sidecar", () => deps.killSidecar())
+  trustedHandle("await-initialization", () => deps.awaitInitialization())
+  trustedHandle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
+  trustedHandle("get-default-server-url", () => deps.getDefaultServerUrl())
+  trustedHandle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
     deps.setDefaultServerUrl(url),
   )
-  ipcMain.handle("is-first-launch-onboarding-pending", () => deps.isFirstLaunchOnboardingPending())
-  ipcMain.handle("finish-first-launch-onboarding", (_event: IpcMainInvokeEvent, createDefaultProject: boolean) =>
+  trustedHandle("is-first-launch-onboarding-pending", () => deps.isFirstLaunchOnboardingPending())
+  trustedHandle("finish-first-launch-onboarding", (_event: IpcMainInvokeEvent, createDefaultProject: boolean) =>
     deps.finishFirstLaunchOnboarding(createDefaultProject),
   )
-  ipcMain.handle("is-old-layout-eligible", () => deps.isOldLayoutEligible())
-  ipcMain.handle("get-display-backend", () => deps.getDisplayBackend())
-  ipcMain.handle("set-display-backend", (_event: IpcMainInvokeEvent, backend: string | null) =>
+  trustedHandle("is-old-layout-eligible", () => deps.isOldLayoutEligible())
+  trustedHandle("get-display-backend", () => deps.getDisplayBackend())
+  trustedHandle("set-display-backend", (_event: IpcMainInvokeEvent, backend: string | null) =>
     deps.setDisplayBackend(backend),
   )
-  ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
-  ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
-  ipcMain.handle("updater-subscribe", (event) => {
+  trustedHandle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
+  trustedHandle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
+  trustedHandle("updater-subscribe", (event) => {
     const id = event.sender.id
     updaterSubscriptions.set(
       id,
@@ -98,35 +130,38 @@ export function registerIpcHandlers(deps: Deps) {
       event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
     }
   })
-  ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
-  ipcMain.handle("updater-check", () => deps.updater.check())
-  ipcMain.handle("updater-install", () => deps.updater.install())
-  ipcMain.handle("google-calendar-status", () => deps.googleCalendar.status())
-  ipcMain.handle("google-calendar-connect", (event, input) =>
-    deps.googleCalendar.connect({ ...input, windowId: event.sender.id }),
+  trustedHandle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
+  trustedHandle("updater-check", () => deps.updater.check())
+  trustedHandle("updater-install", () => deps.updater.install())
+  trustedHandle("google-calendar-status", () => deps.googleCalendar.status())
+  trustedHandle(
+    "google-calendar-connect",
+    (event, input: Parameters<GoogleCalendarPlatform["connect"]>[0]) =>
+      deps.googleCalendar.connect({ ...input, windowId: event.sender.id }),
   )
-  ipcMain.handle("google-calendar-sync", () => deps.googleCalendar.sync())
-  ipcMain.handle("google-calendar-write", (_event, input) => deps.googleCalendar.write(input))
-  ipcMain.handle("google-task-write", (_event, input) => deps.googleCalendar.writeTask(input))
-  ipcMain.handle("google-calendar-disconnect", () => deps.googleCalendar.disconnect())
-  ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
-  ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
-  ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>
+  trustedHandle("google-calendar-sync", () => deps.googleCalendar.sync())
+  trustedHandle("google-calendar-write", (_event, input: Parameters<GoogleCalendarPlatform["write"]>[0]) =>
+    deps.googleCalendar.write(input),
+  )
+  trustedHandle("google-task-write", (_event, input: Parameters<GoogleCalendarPlatform["writeTask"]>[0]) =>
+    deps.googleCalendar.writeTask(input),
+  )
+  trustedHandle("google-calendar-disconnect", () => deps.googleCalendar.disconnect())
+  trustedHandle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
+  trustedHandle("export-debug-logs", () => deps.exportDebugLogs())
+  trustedHandle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>
     setForceFocus(event.sender, enabled),
   )
-  ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
+  trustedHandle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
-  ipcMain.handle("set-native-translations", (event: IpcMainInvokeEvent, value: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win || win.isDestroyed() || win.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) {
-      throw new Error("Invalid native translation sender")
-    }
+  trustedHandle("set-native-translations", (_event: IpcMainInvokeEvent, value: unknown) => {
     const bundle = parseDesktopNativeBundle(value)
     if (!bundle) throw new Error("Invalid native translation bundle")
     deps.setNativeTranslations(bundle)
   })
-  ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
+  trustedHandle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
+    assertStoreName(name)
     try {
       const store = getStore(name)
       const value = store.get(key)
@@ -136,35 +171,40 @@ export function registerIpcHandlers(deps: Deps) {
       return null
     }
   })
-  ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
+  trustedHandle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
+    assertStoreName(name)
     getStore(name).set(key, value)
   })
-  ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
+  trustedHandle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
+    assertStoreName(name)
     getStore(name).delete(key)
     void removeStoreFileIfEmpty(name)
   })
-  ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
+  trustedHandle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
+    assertStoreName(name)
     getStore(name).clear()
     void removeStoreFileIfEmpty(name)
   })
-  ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
+  trustedHandle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
+    assertStoreName(name)
     const store = getStore(name)
     return Object.keys(store.store)
   })
-  ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
+  trustedHandle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
+    assertStoreName(name)
     const store = getStore(name)
     return Object.keys(store.store).length
   })
-  ipcMain.handle("draft-get", (_event, key: string) => drafts.get(key))
-  ipcMain.handle("draft-set", (_event, key: string, value: string) => drafts.set(key, value))
-  ipcMain.handle("draft-delete", (_event, key: string) => drafts.set(key, null))
-  ipcMain.handle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
-  ipcMain.handle("draft-blob-get", (_event, id: string) => {
+  trustedHandle("draft-get", (_event, key: string) => drafts.get(key))
+  trustedHandle("draft-set", (_event, key: string, value: string) => drafts.set(key, value))
+  trustedHandle("draft-delete", (_event, key: string) => drafts.set(key, null))
+  trustedHandle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
+  trustedHandle("draft-blob-get", (_event, id: string) => {
     const data = drafts.getBlob(id)
     return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
   })
 
-  ipcMain.handle(
+  trustedHandle(
     "open-directory-picker",
     async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
       const result = await dialog.showOpenDialog({
@@ -177,7 +217,7 @@ export function registerIpcHandlers(deps: Deps) {
     },
   )
 
-  ipcMain.handle(
+  trustedHandle(
     "open-file-picker",
     async (
       event: IpcMainInvokeEvent,
@@ -203,15 +243,15 @@ export function registerIpcHandlers(deps: Deps) {
     },
   )
 
-  ipcMain.handle("read-picked-file", async (event: IpcMainInvokeEvent, token: string, filePath: string) => {
+  trustedHandle("read-picked-file", async (event: IpcMainInvokeEvent, token: string, filePath: string) => {
     return pickedFiles.read(event.sender.id, token, filePath)
   })
 
-  ipcMain.handle("release-picked-files", (event: IpcMainInvokeEvent, token: string) => {
+  trustedHandle("release-picked-files", (event: IpcMainInvokeEvent, token: string) => {
     pickedFiles.release(event.sender.id, token)
   })
 
-  ipcMain.handle(
+  trustedHandle(
     "save-file-picker",
     async (_event: IpcMainInvokeEvent, opts?: { title?: string; defaultPath?: string }) => {
       const result = await dialog.showSaveDialog({
@@ -223,7 +263,7 @@ export function registerIpcHandlers(deps: Deps) {
     },
   )
 
-  ipcMain.handle("save-session-export", (event: IpcMainInvokeEvent, input: { filename: string; json: string }) =>
+  trustedHandle("save-session-export", (event: IpcMainInvokeEvent, input: { filename: string; json: string }) =>
     saveSessionExport(input, async (filename) => {
       const options = {
         title: nativeT("desktop.dialog.saveFile"),
@@ -236,24 +276,35 @@ export function registerIpcHandlers(deps: Deps) {
     }),
   )
 
-  ipcMain.on("open-external", (_event: IpcMainEvent, url: string) => {
+  trustedOn("open-external", (_event: IpcMainEvent, url: string) => {
     openExternalURL(url)
   })
 
-  ipcMain.on("open-local-file", (_event: IpcMainEvent, url: string) => {
+  trustedOn("open-local-file", (_event: IpcMainEvent, url: string) => {
     openLocalFileURL(url)
   })
 
-  ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
+  // The renderer may only name an application, never hand over a path to
+  // execute: main resolves the name through the registered-application lookup
+  // so a compromised renderer cannot run an arbitrary binary (issue #23).
+  trustedHandle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
+    if (!isAbsolute(path)) throw new Error("open-path requires an absolute path")
     if (!app) return shell.openPath(path)
+    if (!/^[\w][\w .()-]*$/.test(app)) throw new Error("Invalid application name")
+    if (process.platform === "darwin") {
+      return await new Promise<void>((resolve, reject) => {
+        execFile("open", ["-a", app, path], (err) => (err ? reject(err) : resolve()))
+      })
+    }
+    const resolved = await resolveAppPath(app)
+    if (!resolved || !isAbsolute(resolved)) throw new Error("Unknown application")
     await new Promise<void>((resolve, reject) => {
-      const [cmd, args] =
-        process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
-      execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
+      execFile(resolved, [path], (err) => (err ? reject(err) : resolve()))
     })
   })
 
-  ipcMain.handle("reveal-path", async (_event: IpcMainInvokeEvent, path: string) => {
+  trustedHandle("reveal-path", async (_event: IpcMainInvokeEvent, path: string) => {
+    if (!isAbsolute(path)) return false
     const exists = await stat(path).then(
       () => true,
       () => false,
@@ -263,7 +314,7 @@ export function registerIpcHandlers(deps: Deps) {
     return true
   })
 
-  ipcMain.handle("read-clipboard-image", () => {
+  trustedHandle("read-clipboard-image", () => {
     const image = clipboard.readImage()
     if (image.isEmpty()) return null
     const buffer = image.toPNG().buffer
@@ -271,7 +322,7 @@ export function registerIpcHandlers(deps: Deps) {
     return { buffer, width: size.width, height: size.height }
   })
 
-  ipcMain.handle("get-window-id", (event: IpcMainInvokeEvent) => {
+  trustedHandle("get-window-id", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) throw new Error("Window not found")
     const id = getWindowID(win)
@@ -279,47 +330,47 @@ export function registerIpcHandlers(deps: Deps) {
     return id
   })
 
-  ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {
+  trustedHandle("get-window-focused", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFocused() ?? false
   })
 
-  ipcMain.handle("get-window-fullscreen", (event: IpcMainInvokeEvent) => {
+  trustedHandle("get-window-fullscreen", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFullScreen() ?? false
   })
 
-  ipcMain.handle("set-window-focus", (event: IpcMainInvokeEvent) => {
+  trustedHandle("set-window-focus", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     win?.focus()
   })
 
-  ipcMain.handle("show-window", (event: IpcMainInvokeEvent) => {
+  trustedHandle("show-window", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     win?.show()
   })
 
-  ipcMain.on("relaunch", () => {
+  trustedOn("relaunch", () => {
     deps.relaunch()
   })
 
-  ipcMain.handle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
-  ipcMain.handle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => {
+  trustedHandle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
+  trustedHandle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => {
     event.sender.setZoomFactor(factor)
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     updateTitlebar(win)
   })
-  ipcMain.handle("get-pinch-zoom-enabled", () => getPinchZoomEnabled())
-  ipcMain.handle("set-pinch-zoom-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
+  trustedHandle("get-pinch-zoom-enabled", () => getPinchZoomEnabled())
+  trustedHandle("set-pinch-zoom-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
     setPinchZoomEnabled(enabled)
   })
-  ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
+  trustedHandle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     setTitlebar(win, theme)
   })
-  ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
+  trustedHandle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
     runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action, {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
