@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Location } from "@opencode-ai/core/location"
@@ -57,4 +58,38 @@ test("body-only searches return summaries within the selected workspace", async 
   )
   expect(found.map((note) => note.title)).toEqual(["Alpha"])
   expect(found[0]).not.toHaveProperty("body")
+})
+
+test("note writes reject invalid titles with a typed failure instead of a defect", async () => {
+  await using tmp = await tmpdir()
+  const directory = AbsolutePath.make(tmp.path)
+  const outcome = await Effect.runPromise(
+    KnowledgeNote.write("notes/bad.md", { body: "hello", create: true, title: "x".repeat(201) }).pipe(
+      Effect.provide(LocationMutation.locationLayer),
+      Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
+      Effect.provide(LayerNode.compile(FSUtil.node)),
+      Effect.provide(LayerNode.compile(FileMutation.node)),
+      Effect.catch((error) =>
+        error instanceof KnowledgeNote.InvalidError ? Effect.succeed("typed") : Effect.succeed("defect"),
+      ),
+    ),
+  )
+  expect(outcome).toBe("typed")
+})
+
+test("note writes reject invalid project ids with a typed failure instead of a defect", async () => {
+  await using tmp = await tmpdir()
+  const directory = AbsolutePath.make(tmp.path)
+  const outcome = await Effect.runPromise(
+    KnowledgeNote.write("notes/bad.md", { body: "hello", create: true, projectIds: ["not_a_project"] }).pipe(
+      Effect.provide(LocationMutation.locationLayer),
+      Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
+      Effect.provide(LayerNode.compile(FSUtil.node)),
+      Effect.provide(LayerNode.compile(FileMutation.node)),
+      Effect.catch((error) =>
+        error instanceof KnowledgeNote.InvalidError ? Effect.succeed("typed") : Effect.succeed("defect"),
+      ),
+    ),
+  )
+  expect(outcome).toBe("typed")
 })

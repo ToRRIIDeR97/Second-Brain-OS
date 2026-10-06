@@ -109,38 +109,57 @@ export const create = Effect.fn("BrainProject.create")(function* (input: CreateI
   const projects = yield* list()
   const now = new Date().toISOString()
   const id = `project_${ulid()}`
-  const info = validate({
-    id,
-    folder: managedFolder(id),
-    name: input.name.trim(),
-    outcome: input.outcome.trim(),
-    templateId: optional(input.templateId),
-    instructions: input.instructions?.trim() ?? "",
-    status: "active",
-    progressPercent: 0,
-    nextMilestone: undefined,
-    blocker: undefined,
-    tags: normalizeTags(input.tags ?? []),
-    location: normalizeLocation(input.location),
-    createdAt: now,
-    updatedAt: now,
+  const info = yield* Effect.try({
+    try: () =>
+      validate({
+        id,
+        folder: managedFolder(id),
+        name: input.name.trim(),
+        outcome: input.outcome.trim(),
+        templateId: optional(input.templateId),
+        instructions: input.instructions?.trim() ?? "",
+        status: "active",
+        progressPercent: 0,
+        nextMilestone: undefined,
+        blocker: undefined,
+        tags: normalizeTags(input.tags ?? []),
+        location: normalizeLocation(input.location),
+        createdAt: now,
+        updatedAt: now,
+      }),
+    catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_card" })),
   })
   if (projects.some((project) => project.name.toLowerCase() === info.name.toLowerCase())) {
     return yield* new ConflictError({ reason: "duplicate_name" })
   }
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
-  const notesTarget = yield* mutation.resolve({ path: `${info.folder}/notes/.gitkeep`, kind: "file" })
-  const timelineTarget = yield* mutation.resolve({ path: `${info.folder}/timeline/calendar.json`, kind: "file" })
-  yield* files.write({ target: notesTarget, content: "" })
-  yield* files.write({
-    target: timelineTarget,
-    content: timelineSource({ version: 2, revision: "", events: [], tasks: [] }),
-  })
   const target = yield* mutation.resolve({ path: managedProjectPath(info.id), kind: "file" })
   yield* files
     .create({ target, content: encode(info, {}, `# ${info.name}\n\n${info.outcome}\n`) })
     .pipe(Effect.catchTag("FileMutation.TargetExistsError", () => Effect.fail(new ConflictError({ reason: "exists" }))))
+  // The card exists now, so concurrent creates cannot duplicate it. Derived files
+  // come after; if any of them fails, remove what this create wrote.
+  yield* Effect.gen(function* () {
+    const notesTarget = yield* mutation.resolve({ path: `${info.folder}/notes/.gitkeep`, kind: "file" })
+    yield* files.write({ target: notesTarget, content: "" })
+    const timelineTarget = yield* mutation.resolve({ path: `${info.folder}/timeline/calendar.json`, kind: "file" })
+    yield* files.write({
+      target: timelineTarget,
+      content: timelineSource({ version: 2, revision: "", events: [], tasks: [] }),
+    })
+  }).pipe(
+    Effect.onError(() =>
+      Effect.gen(function* () {
+        const card = yield* mutation.resolve({ path: managedProjectPath(info.id), kind: "file" })
+        yield* files.remove({ target: card })
+        const notes = yield* mutation.resolve({ path: `${info.folder}/notes/.gitkeep`, kind: "file" })
+        yield* files.remove({ target: notes })
+        const timeline = yield* mutation.resolve({ path: `${info.folder}/timeline/calendar.json`, kind: "file" })
+        yield* files.remove({ target: timeline })
+      }).pipe(Effect.ignore),
+    ),
+  )
   return info
 })
 
@@ -151,19 +170,23 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
     return yield* new ConflictError({ reason: "stale" })
   }
   const projects = yield* list()
-  const info = validate({
-    ...card.info,
-    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-    ...(input.outcome !== undefined ? { outcome: input.outcome.trim() } : {}),
-    ...(input.templateId !== undefined ? { templateId: optional(input.templateId) } : {}),
-    ...(input.instructions !== undefined ? { instructions: input.instructions.trim() } : {}),
-    ...(input.status !== undefined ? { status: input.status } : {}),
-    ...(input.progressPercent !== undefined ? { progressPercent: input.progressPercent } : {}),
-    ...(input.nextMilestone !== undefined ? { nextMilestone: optional(input.nextMilestone) } : {}),
-    ...(input.blocker !== undefined ? { blocker: optional(input.blocker) } : {}),
-    ...(input.tags !== undefined ? { tags: normalizeTags(input.tags) } : {}),
-    ...(input.location !== undefined ? { location: normalizeLocation(input.location) } : {}),
-    updatedAt: new Date().toISOString(),
+  const info = yield* Effect.try({
+    try: () =>
+      validate({
+        ...card.info,
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.outcome !== undefined ? { outcome: input.outcome.trim() } : {}),
+        ...(input.templateId !== undefined ? { templateId: optional(input.templateId) } : {}),
+        ...(input.instructions !== undefined ? { instructions: input.instructions.trim() } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.progressPercent !== undefined ? { progressPercent: input.progressPercent } : {}),
+        ...(input.nextMilestone !== undefined ? { nextMilestone: optional(input.nextMilestone) } : {}),
+        ...(input.blocker !== undefined ? { blocker: optional(input.blocker) } : {}),
+        ...(input.tags !== undefined ? { tags: normalizeTags(input.tags) } : {}),
+        ...(input.location !== undefined ? { location: normalizeLocation(input.location) } : {}),
+        updatedAt: new Date().toISOString(),
+      }),
+    catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_card" })),
   })
   if (
     projects.some(

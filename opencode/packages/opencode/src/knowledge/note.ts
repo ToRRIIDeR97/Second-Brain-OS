@@ -95,13 +95,17 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
 
   if (input.create) {
     const now = new Date().toISOString()
-    const info = validate({
-      path: normalizedPath,
-      title: input.title?.trim() || titleFromBody(input.body) || basename(normalizedPath, ".md"),
-      projectIds: normalizeProjects(input.projectIds ?? []),
-      tags: normalizeTags(input.tags ?? []),
-      links: extractLinks(input.body),
-      updatedAt: now,
+    const info = yield* Effect.try({
+      try: () =>
+        validate({
+          path: normalizedPath,
+          title: input.title?.trim() || titleFromBody(input.body) || basename(normalizedPath, ".md"),
+          projectIds: normalizeProjects(input.projectIds ?? []),
+          tags: normalizeTags(input.tags ?? []),
+          links: extractLinks(input.body),
+          updatedAt: now,
+        }),
+      catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_note" })),
     })
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
@@ -119,13 +123,17 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
   if (input.expectedRevision !== undefined && input.expectedRevision !== card.revision) {
     return yield* new ConflictError({ reason: "stale" })
   }
-  const info = validate({
-    ...card.info,
-    title: input.title?.trim() || card.info.title,
-    projectIds: input.projectIds ? normalizeProjects(input.projectIds) : card.info.projectIds,
-    tags: input.tags ? normalizeTags(input.tags) : card.info.tags,
-    links: extractLinks(input.body),
-    updatedAt: new Date().toISOString(),
+  const info = yield* Effect.try({
+    try: () =>
+      validate({
+        ...card.info,
+        title: input.title?.trim() || card.info.title,
+        projectIds: input.projectIds ? normalizeProjects(input.projectIds) : card.info.projectIds,
+        tags: input.tags ? normalizeTags(input.tags) : card.info.tags,
+        links: extractLinks(input.body),
+        updatedAt: new Date().toISOString(),
+      }),
+    catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_note" })),
   })
   const source = encode(info, card.data, input.body, card.bom)
   const mutation = yield* LocationMutation.Service
@@ -147,7 +155,10 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   const target = yield* mutation.resolve({ path, kind: "file" })
   const source = yield* fs.readFileStringSafe(target.canonical)
   if (source === undefined) return yield* new NotFoundError({ path })
-  return decode(path, source)
+  return yield* Effect.try({
+    try: () => decode(path, source),
+    catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_card" })),
+  })
 })
 
 const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {

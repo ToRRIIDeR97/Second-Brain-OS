@@ -181,7 +181,11 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
         Effect.catchTag("FileSystemError", () => Effect.fail(new HttpApiError.BadRequest({}))),
       )
       const snapshot = { version: next.version, revision: next.revision, events: next.events, tasks: next.tasks }
-      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(Effect.catch(() => Effect.void))
+      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(
+        Effect.catch(() =>
+          Effect.logWarning("Second Brain project timeline sync failed; project timelines may be stale"),
+        ),
+      )
       return snapshot
     })
 
@@ -194,7 +198,11 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
     }) {
       const project = yield* projectConflict(filesystem(BrainProject.create(ctx.payload)))
       const snapshot = (yield* calendarFile()).snapshot
-      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(Effect.catch(() => Effect.void))
+      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(
+        Effect.catch(() =>
+          Effect.logWarning("Second Brain project timeline sync failed; project timelines may be stale"),
+        ),
+      )
       return project
     })
 
