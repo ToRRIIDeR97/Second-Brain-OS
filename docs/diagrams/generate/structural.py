@@ -92,7 +92,7 @@ def trust():
     s.edge([(230, 489), (300, 540), (320, 540)], "tokens", at=(282, 530), cls="sens", head="as")
     s.edge([(575, 352), (575, 500), (640, 500), (640, 512)], "prompts + context", at=(615, 470), cls="sens", head="as")
     s.edge([(230, 425), (282, 425), (282, 608), (860, 608), (860, 596)], "open-external", at=(560, 612))
-    s.box(20, 636, 960, 56, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take raw paths · store names unvalidated · senderFrame unchecked · drafts unencrypted · per-harness env visible to that harness"], cls="gapz")
+    s.box(20, 636, 960, 56, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted · per-harness env visible to that harness"], cls="gapz")
     s.save(f"{OUT}/trust-boundaries.svg")
 
 
