@@ -117,9 +117,9 @@
 <rect class="proc" x="700" y="280" width="260" height="64" rx="6"/>
 <text x="710" y="298" text-anchor="start" class="t">Codex / ACP agents</text>
 <text x="710" y="314" text-anchor="start" class="s">own tools; ask via request_permission</text>
-<rect class="gapz" x="700" y="354" width="260" height="60" rx="6"/>
-<text x="710" y="372" text-anchor="start" class="t">Inherited environment</text>
-<text x="710" y="388" text-anchor="start" class="s">extendEnv: full app env</text>
+<rect class="proc" x="700" y="354" width="260" height="60" rx="6"/>
+<text x="710" y="372" text-anchor="start" class="t">Filtered environment</text>
+<text x="710" y="388" text-anchor="start" class="s">allowlist + per-harness env</text>
 <rect class="zone" x="300" y="480" width="680" height="140" rx="10"/>
 <text x="310" y="496" text-anchor="start" class="zonet">External network</text>
 <rect class="ext" x="320" y="512" width="200" height="84" rx="6"/>
@@ -144,7 +144,7 @@
 <path class="e " d="M230,425 L282,425 L282,608 L860,608 L860,596" marker-end="url(#a)"/>
 <rect class="gapz" x="20" y="636" width="960" height="56" rx="6"/>
 <text x="30" y="654" text-anchor="start" class="t">Known gaps (threat model)</text>
-<text x="30" y="670" text-anchor="start" class="s">auth_token accepted in URLs · open-path/reveal-path take raw paths · store names unvalidated · senderFrame unchecked · drafts unencrypted · harness env inherited</text>
+<text x="30" y="670" text-anchor="start" class="s">auth_token accepted in URLs · open-path/reveal-path take raw paths · store names unvalidated · senderFrame unchecked · drafts unencrypted · per-harness env visible to that harness</text>
 <rect class="lblbg" x="256.4" y="250.0" width="47.3" height="13" rx="2"/>
 <text class="lbl" x="280" y="260" text-anchor="middle">preload</text>
 <rect class="lblbg" x="268.1" y="263.0" width="23.7" height="13" rx="2"/>

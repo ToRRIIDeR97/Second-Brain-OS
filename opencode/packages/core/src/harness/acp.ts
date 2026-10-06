@@ -8,6 +8,7 @@ import os from "os"
 import path from "path"
 import { ConfigHarness } from "../config/harness"
 import type { AppProcess } from "../process"
+import { harnessEnvironment } from "./env"
 import {
   make as makeClient,
   ProtocolError,
@@ -80,8 +81,8 @@ function connect(
       .spawn(
         ChildProcess.make(settings.command, [...settings.args], {
           cwd: directory,
-          env: { ...settings.env },
-          extendEnv: true,
+          env: harnessEnvironment(settings.env),
+          extendEnv: false,
           forceKillAfter: "2 seconds",
           stdin: { stream: "pipe", endOnDone: false },
         }),

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Schema } from "effect"
 import { configuredInstances, handleCodexToolCall } from "@opencode-ai/core/harness"
+import { Config } from "@opencode-ai/core/config"
 import { ConfigHarness } from "@opencode-ai/core/config/harness"
 import { AcpHarness } from "@opencode-ai/core/harness/acp"
 import os from "os"
@@ -56,6 +57,25 @@ describe("ACP harness", () => {
       codex: entry({ driver: "acp", config: { command: "/tmp/other" } }),
       gemini: entry({ driver: "acp", name: "Gemini", config: { command: "gemini" } }),
     })
+    expect(instances.map((instance) => `${instance.id}:${instance.driver}`)).toEqual([
+      "opencode:opencode",
+      "codex:codex",
+      "gemini:acp",
+    ])
+  })
+
+  test("keeps built-in harnesses out of config-file harness entries", () => {
+    const entry = Schema.decodeUnknownSync(ConfigHarness.Instance)
+    const document = {
+      type: "document",
+      info: {
+        harnesses: {
+          opencode: entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
+          gemini: entry({ driver: "acp", name: "Gemini", config: { command: "gemini" } }),
+        },
+      },
+    } as unknown as Config.Entry
+    const instances = configuredInstances([document], {})
     expect(instances.map((instance) => `${instance.id}:${instance.driver}`)).toEqual([
       "opencode:opencode",
       "codex:codex",
