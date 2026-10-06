@@ -213,9 +213,20 @@ export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
   return new Intl.PluralRules(DESKTOP_NATIVE_LOCALE_TAGS[locale]).resolvedOptions().pluralCategories
 }
 
+const SCRIPT_ALIASES: Record<string, string> = {
+  // ICU maximizes "pa-PK" to "pa-Aran-PK": CLDR's "Aran" is the Nastaliq Arabic
+  // variant of "Arab", so without this alias Punjabi never matches the
+  // "pa-Arab-PK" bundle (issue #48).
+  Aran: "Arab",
+}
+
 function locale(value: string) {
   try {
-    return new Intl.Locale(value).maximize()
+    const resolved = new Intl.Locale(value).maximize()
+    return {
+      language: resolved.language,
+      script: resolved.script ? (SCRIPT_ALIASES[resolved.script] ?? resolved.script) : undefined,
+    }
   } catch {
     return undefined
   }
