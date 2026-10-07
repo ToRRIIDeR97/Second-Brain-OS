@@ -56,11 +56,15 @@ export function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
   return error instanceof Error && error.message === sessionNotFoundMessage(sessionID)
 }
 
+// The promise client throws declared error bodies as plain objects, and Solid's
+// ErrorBoundary wraps non-Error values as `new Error("Unknown error", { cause })`.
 export function isSessionNotFoundError(error: unknown, sessionID: string) {
-  const unwrapped = unwrapNamedError(error)
-  if (typeof unwrapped !== "object" || unwrapped === null) return false
-  const value = unwrapped as Record<string, unknown>
-  return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+  const candidates = [unwrapNamedError(error), error instanceof Error ? error.cause : undefined]
+  return candidates.some((candidate) => {
+    if (typeof candidate !== "object" || candidate === null) return false
+    const value = candidate as Record<string, unknown>
+    return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+  })
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {

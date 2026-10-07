@@ -155,6 +155,17 @@ describe("isSessionNotFoundError", () => {
     expect(isSessionNotFoundError(new Error(body.message, { cause: { body, status: 404 } }), body.sessionID)).toBe(true)
   })
 
+  test("matches a raw client error body and Solid's castError wrapper around it", () => {
+    const body = {
+      _tag: "SessionNotFoundError",
+      sessionID: "ses_missing",
+      message: "Session not found",
+    } satisfies SessionNotFoundError
+
+    expect(isSessionNotFoundError(body, body.sessionID)).toBe(true)
+    expect(isSessionNotFoundError(new Error("Unknown error", { cause: body }), body.sessionID)).toBe(true)
+  })
+
   test("rejects errors for other sessions and other 404 responses", () => {
     const body = {
       _tag: "SessionNotFoundError",
