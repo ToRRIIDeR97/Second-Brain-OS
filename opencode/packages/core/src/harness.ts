@@ -63,10 +63,14 @@ export interface Interface {
   readonly stream: (
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
   ) => Stream.Stream<LLMEvent, LLMError>
-  readonly register: (
-    input: unknown,
-    request: Pick<PermissionV2.AssertInput, "sessionID" | "agent" | "source">,
-  ) => Effect.Effect<HarnessRegistry.Registered, HarnessRegistry.RegisterError>
+  readonly settings: () => Effect.Effect<ReadonlyArray<Harness.SettingsEntry>>
+  readonly add: (input: unknown) => Effect.Effect<Harness.SettingsEntry, HarnessRegistry.RegisterError>
+  readonly setEnabled: (
+    id: string,
+    enabled: boolean,
+  ) => Effect.Effect<Harness.SettingsEntry, HarnessRegistry.RegisterError>
+  readonly remove: (id: string) => Effect.Effect<void, HarnessRegistry.RegisterError>
+  readonly discover: (input: unknown) => Effect.Effect<Harness.Discovery, HarnessRegistry.RegisterError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/HarnessRuntime") {}
@@ -151,29 +155,35 @@ const layer = Layer.effect(
       ),
     )
 
-    const register = (input: unknown, request: Pick<PermissionV2.AssertInput, "sessionID" | "agent" | "source">) =>
+    const settings = () =>
+      HarnessRegistry.read(global.config).pipe(Effect.map((registry) => settingsEntries(entries, registry)))
+    // Only harnesses.json entries are editable; config-file entries shadow them and stay read-only.
+    const editable = (id: string) =>
+      settings().pipe(
+        Effect.flatMap((current) => {
+          const entry = current.find((item) => item.id === id)
+          if (entry?.source === "config")
+            return Effect.fail(
+              new HarnessRegistry.RegisterError({
+                reason: "read-only",
+                message: `"${id}" is defined in a config file and can't be changed in Settings.`,
+              }),
+            )
+          return Effect.void
+        }),
+      )
+    // Mutations refresh `latest`, which stream() and driver() read without touching the registry.
+    const entryAfterChange = (id: string) =>
       instances.pipe(
-        Effect.flatMap((current) =>
-          HarnessRegistry.register(input, {
-            configDir: global.config,
-            directory: location.directory,
-            existing: new Set(current.map((instance) => String(instance.id))),
-            process,
-            // Registering lets the app run a new command later, so allow rules never skip this prompt.
-            approve: (approval) =>
-              approve(
-                permissions,
-                {
-                  ...request,
-                  action: "harness_register",
-                  resources: [approval.id],
-                  save: [],
-                  metadata: { id: approval.id, name: approval.name, command: approval.command, args: approval.args },
-                },
-                { alwaysAsk: true },
-              ),
-          }),
-        ),
+        Effect.andThen(settings()),
+        Effect.flatMap((current) => {
+          const entry = current.find((item) => item.id === id)
+          return entry
+            ? Effect.succeed(entry)
+            : Effect.fail(
+                new HarnessRegistry.RegisterError({ reason: "not-found", message: `No harness has ID "${id}".` }),
+              )
+        }),
       )
 
     const makeRuntime = Effect.fn("HarnessRuntime.makeCodexRuntime")(function* (
@@ -185,9 +195,7 @@ const layer = Layer.effect(
       const close = Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)
       const runtime = yield* Effect.gen(function* () {
         const opened = yield* openCodex(process, settings, input.directory, (request) =>
-          handleCodexRequest(request, input.sessionID, input.directory, permissions, questions, (args) =>
-            register(args, { sessionID: input.sessionID }).pipe(Effect.map(HarnessRegistry.summary)),
-          ),
+          handleCodexRequest(request, input.sessionID, input.directory, permissions, questions),
         )
         const revision = input.revision ?? 0
         const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
@@ -213,13 +221,13 @@ const layer = Layer.effect(
                 Effect.catch((error) =>
                   recoverableResume(error)
                     ? opened.client
-                        .request("thread/start", { ...params, dynamicTools: codexDynamicTools })
+                        .request("thread/start", params)
                         .pipe(Effect.map((response) => ({ response, resumed: false })))
                     : Effect.fail(error),
                 ),
               )
           : {
-              response: yield* opened.client.request("thread/start", { ...params, dynamicTools: codexDynamicTools }),
+              response: yield* opened.client.request("thread/start", params),
               resumed: false,
             }
         const threadID = responseThreadID(thread.response)
@@ -450,7 +458,36 @@ const layer = Layer.effect(
           ),
         )
       },
-      register,
+      settings,
+      add: (input) =>
+        instances.pipe(
+          Effect.flatMap((current) =>
+            HarnessRegistry.register(input, {
+              configDir: global.config,
+              directory: location.directory,
+              existing: new Set(current.map((instance) => String(instance.id))),
+              process,
+            }),
+          ),
+          Effect.flatMap((registered) => entryAfterChange(registered.id)),
+        ),
+      setEnabled: (id, enabled) =>
+        editable(id).pipe(
+          Effect.andThen(HarnessRegistry.setEnabled(global.config, id, enabled)),
+          Effect.andThen(entryAfterChange(id)),
+        ),
+      remove: (id) =>
+        editable(id).pipe(
+          Effect.andThen(HarnessRegistry.remove(global.config, id)),
+          Effect.andThen(instances),
+          Effect.asVoid,
+        ),
+      discover: (input) =>
+        HarnessRegistry.discover(input, { directory: location.directory, process }).pipe(
+          Effect.map((result) =>
+            Harness.Discovery.make({ ...result, args: [...result.args], models: [...result.models] }),
+          ),
+        ),
     })
   }),
 )
@@ -470,6 +507,35 @@ export const node = makeLocationNode({
     Global.node,
   ],
 })
+
+/** Harnesses as Settings lists them, in picker order, labeled by where each one is defined. */
+export function settingsEntries(
+  entries: ReadonlyArray<Config.Entry>,
+  registry: Readonly<Record<string, ConfigHarness.Instance>> = {},
+): ReadonlyArray<Harness.SettingsEntry> {
+  const fromConfig = new Set(
+    entries.flatMap((entry) => (entry.type === "document" ? Object.keys(entry.info.harnesses ?? {}) : [])),
+  )
+  return configuredInstances(entries, registry).map((instance) => {
+    const source = HarnessRegistry.reserved.has(instance.id)
+      ? "built-in"
+      : fromConfig.has(instance.id)
+        ? "config"
+        : "registry"
+    const acp = instance.driver === Harness.AcpDriver ? AcpHarness.decodeSettings(instance.config) : undefined
+    return Harness.SettingsEntry.make({
+      id: instance.id,
+      driver: instance.driver,
+      name: instance.name,
+      enabled: instance.enabled,
+      source,
+      editable: source === "registry",
+      command: acp?.command,
+      args: acp ? [...acp.args] : undefined,
+      models: acp ? [...acp.models] : undefined,
+    })
+  })
+}
 
 export function configuredInstances(
   entries: ReadonlyArray<Config.Entry>,
@@ -861,10 +927,8 @@ function handleCodexRequest(
   directory: string,
   permissions: PermissionV2.Interface,
   questions: QuestionV2.Interface,
-  register: (args: unknown) => Effect.Effect<string, { readonly message: string }>,
 ) {
   const params = isRecord(request.params) ? request.params : {}
-  if (request.method === "item/tool/call") return handleCodexToolCall(params, register)
   if (request.method === "item/commandExecution/requestApproval") {
     const command = string(params.command) ?? "command"
     return approve(permissions, {
@@ -952,29 +1016,6 @@ function handleCodexRequest(
     )
   }
   return Effect.fail(new ProtocolError(`Unsupported Codex app-server request: ${request.method}`, { code: -32601 }))
-}
-
-export const codexDynamicTools = [
-  {
-    type: "function",
-    name: "harness_register",
-    description: HarnessRegistry.description,
-    inputSchema: HarnessRegistry.inputJsonSchema,
-  },
-] as const
-
-export function handleCodexToolCall(
-  params: unknown,
-  register: (args: unknown) => Effect.Effect<string, { readonly message: string }>,
-) {
-  const call = isRecord(params) ? params : {}
-  const reply = (success: boolean, text: string) => ({ success, contentItems: [{ type: "inputText" as const, text }] })
-  if (call.tool !== "harness_register" || (call.namespace ?? null) !== null)
-    return Effect.succeed(reply(false, `Unknown tool: ${String(call.tool)}`))
-  return register(call.arguments).pipe(
-    Effect.map((text) => reply(true, text)),
-    Effect.catch((error) => Effect.succeed(reply(false, error.message))),
-  )
 }
 
 function approve(

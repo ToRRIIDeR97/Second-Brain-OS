@@ -59,6 +59,45 @@ export const Instance = Schema.Struct({
 }).annotate({ identifier: "Harness.Instance" })
 export interface Instance extends Schema.Schema.Type<typeof Instance> {}
 
+// A harness as Settings shows it. Only `registry` entries (harnesses.json) can be
+// changed there; built-ins and config-file entries are read-only.
+export const SettingsEntry = Schema.Struct({
+  id: InstanceID,
+  driver: DriverKind,
+  name: Schema.String,
+  enabled: Schema.Boolean,
+  source: Schema.Literals(["built-in", "registry", "config"]),
+  editable: Schema.Boolean,
+  command: Schema.String.pipe(optional),
+  args: Schema.Array(Schema.String).pipe(optional),
+  models: Schema.Array(Schema.String).pipe(optional),
+}).annotate({ identifier: "Harness.SettingsEntry" })
+export interface SettingsEntry extends Schema.Schema.Type<typeof SettingsEntry> {}
+
+export const Discovery = Schema.Struct({
+  command: Schema.String,
+  args: Schema.Array(Schema.String),
+  agentName: Schema.String.pipe(optional),
+  version: Schema.String.pipe(optional),
+  models: Schema.Array(Model),
+}).annotate({ identifier: "Harness.Discovery" })
+export interface Discovery extends Schema.Schema.Type<typeof Discovery> {}
+
+export const SettingsInput = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String.pipe(optional),
+  command: Schema.String,
+  args: Schema.Array(Schema.String).pipe(optional),
+  models: Schema.Array(Schema.String).pipe(optional),
+}).annotate({ identifier: "Harness.SettingsInput" })
+export interface SettingsInput extends Schema.Schema.Type<typeof SettingsInput> {}
+
+export const DiscoverInput = Schema.Struct({
+  command: Schema.String,
+  args: Schema.Array(Schema.String).pipe(optional),
+}).annotate({ identifier: "Harness.DiscoverInput" })
+export interface DiscoverInput extends Schema.Schema.Type<typeof DiscoverInput> {}
+
 export const OpenCode = InstanceID.make("opencode")
 export const Codex = InstanceID.make("codex")
 export const OpenCodeDriver = DriverKind.make("opencode")

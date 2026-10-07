@@ -19,10 +19,6 @@ const slug = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/
 // Serializes the read-modify-write of harnesses.json so concurrent registrations can't drop an entry.
 const writeLock = Semaphore.makeUnsafe(1)
 
-export const description = `Register an installed command-line agent as a Second Brain harness so the user can choose it for a Run.
-Only use this when the user explicitly asks to add or install a harness. The command must speak the Agent Client Protocol (ACP) over stdio, for example \`gemini --experimental-acp\` or \`opencode acp\`. Install the program first with your normal tools if it is missing.
-The user approves the exact command before Second Brain runs it. Second Brain then checks the ACP handshake and saves the harness. It appears in the harness picker without a restart.`
-
 export const Input = Schema.Struct({
   id: Schema.String.annotate({ description: "Short unique ID: a letter, then letters, digits, '-' or '_'" }),
   name: Schema.String.pipe(Schema.optional).annotate({ description: "Display name" }),
@@ -34,19 +30,6 @@ export const Input = Schema.Struct({
 })
 export type Input = typeof Input.Type
 
-export const inputJsonSchema = {
-  type: "object",
-  properties: {
-    id: { type: "string", description: "Short unique ID: a letter, then letters, digits, '-' or '_'" },
-    name: { type: "string", description: "Display name" },
-    command: { type: "string", description: "Executable name on PATH or absolute path" },
-    args: { type: "array", items: { type: "string" }, description: "Arguments that start ACP mode" },
-    models: { type: "array", items: { type: "string" }, description: "Optional model IDs to offer" },
-  },
-  required: ["id", "command"],
-  additionalProperties: false,
-} as const
-
 export class RegisterError extends Schema.TaggedErrorClass<RegisterError>()("HarnessRegistry.RegisterError", {
   reason: Schema.Literals([
     "invalid-input",
@@ -54,23 +37,29 @@ export class RegisterError extends Schema.TaggedErrorClass<RegisterError>()("Har
     "reserved",
     "exists",
     "command-not-found",
-    "denied",
     "probe-failed",
+    "not-found",
+    "read-only",
     "write-failed",
   ]),
   message: Schema.String,
 }) {}
 
-export interface Approval {
+export interface Registered {
   readonly id: string
   readonly name: string
   readonly command: string
   readonly args: ReadonlyArray<string>
-}
-
-export interface Registered extends Approval {
   readonly agentName?: string
   readonly version?: string
+}
+
+export interface Discovery {
+  readonly command: string
+  readonly args: ReadonlyArray<string>
+  readonly agentName?: string
+  readonly version?: string
+  readonly models: ReadonlyArray<Harness.Model>
 }
 
 export interface Dependencies {
@@ -78,10 +67,10 @@ export interface Dependencies {
   readonly directory: string
   readonly existing: ReadonlySet<string>
   readonly process: Pick<AppProcess.Interface, "spawn">
-  readonly approve: (approval: Approval) => Effect.Effect<boolean>
 }
 
 const decodeInput = Schema.decodeUnknownOption(Input)
+const decodeDiscoverInput = Schema.decodeUnknownOption(Harness.DiscoverInput)
 const decodeInstance = Schema.decodeUnknownOption(ConfigHarness.Instance)
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
@@ -113,10 +102,9 @@ export const register = Effect.fn("HarnessRegistry.register")(function* (input: 
   const command = yield* resolveCommand(decoded.command.trim())
   if (!command) return yield* fail("command-not-found", `"${decoded.command}" is not an executable on PATH.`)
 
-  const approval = { id, name: decoded.name?.trim() || id, command, args: decoded.args ?? [] }
-  if (!(yield* deps.approve(approval))) return yield* fail("denied", "The user declined registering this harness.")
-
-  const settings = { command, args: approval.args, env: {}, models: decoded.models ?? [] }
+  // Registration is a user action in Settings, so there is no separate approval step.
+  const entry = { id, name: decoded.name?.trim() || id, command, args: decoded.args ?? [] }
+  const settings = { command, args: entry.args, env: {}, models: decoded.models ?? [] }
   const agent = yield* AcpHarness.handshake(deps.process, settings, deps.directory).pipe(
     Effect.mapError((error) =>
       registerError("probe-failed", `${command} did not complete an ACP handshake: ${error.message}`),
@@ -132,8 +120,8 @@ export const register = Effect.fn("HarnessRegistry.register")(function* (input: 
       ...raw,
       [id]: {
         driver: Harness.AcpDriver,
-        name: approval.name,
-        config: { command, args: approval.args, ...(settings.models.length ? { models: settings.models } : {}) },
+        name: entry.name,
+        config: { command, args: entry.args, ...(settings.models.length ? { models: settings.models } : {}) },
       },
     }
     yield* Effect.tryPromise({
@@ -141,12 +129,58 @@ export const register = Effect.fn("HarnessRegistry.register")(function* (input: 
       catch: (cause) => registerError("write-failed", `Could not save ${fileName}: ${String(cause)}`),
     })
   }).pipe(writeLock.withPermits(1))
-  return { ...approval, agentName: agent.name, version: agent.version } satisfies Registered
+  return { ...entry, agentName: agent.name, version: agent.version } satisfies Registered
 })
 
-export function summary(result: Registered) {
-  const agent = [result.agentName, result.version].filter(Boolean).join(" ")
-  return `Registered harness "${result.id}" (${result.name})${agent ? `, ACP agent ${agent}` : ""}. It is now available in the harness picker.`
+export const setEnabled = (configDir: string, id: string, enabled: boolean) =>
+  update(configDir, id, (entry) => ({
+    ...Object.fromEntries(Object.entries(entry).filter(([key]) => key !== "enabled")),
+    ...(enabled ? {} : { enabled: false }),
+  }))
+
+export const remove = (configDir: string, id: string) => update(configDir, id, () => undefined)
+
+/** Runs the ACP handshake and opens a session to list models. Nothing is written. */
+export const discover = Effect.fn("HarnessRegistry.discover")(function* (
+  input: unknown,
+  deps: Pick<Dependencies, "directory" | "process">,
+) {
+  const decoded = Option.getOrUndefined(decodeDiscoverInput(input))
+  if (!decoded?.command.trim()) return yield* fail("invalid-input", "Provide a command.")
+  const command = yield* resolveCommand(decoded.command.trim())
+  if (!command) return yield* fail("command-not-found", `"${decoded.command}" is not an executable on PATH.`)
+  const args = decoded.args ?? []
+  const agent = yield* AcpHarness.discover(deps.process, { command, args, env: {}, models: [] }, deps.directory).pipe(
+    Effect.mapError((error) =>
+      registerError("probe-failed", `${command} did not complete an ACP handshake: ${error.message}`),
+    ),
+  )
+  return { command, args, agentName: agent.name, version: agent.version, models: agent.models } satisfies Discovery
+})
+
+// Read-modify-write of one existing entry under the shared lock. `change` returns the new entry,
+// or undefined to delete it. A malformed file is reported and never overwritten.
+function update(
+  configDir: string,
+  id: string,
+  change: (entry: Record<string, unknown>) => Record<string, unknown> | undefined,
+) {
+  return Effect.gen(function* () {
+    if (reserved.has(id)) return yield* fail("reserved", `"${id}" is a built-in harness and can't be changed.`)
+    const raw = yield* readRaw(configDir).pipe(
+      Effect.mapError(() => registerError("write-failed", `${fileName} is not valid JSON; fix or remove it first.`)),
+    )
+    const current = raw?.[id]
+    if (!raw || !isRecord(current)) return yield* fail("not-found", `No registered harness has ID "${id}".`)
+    const next = change(current)
+    const entries = Object.fromEntries(
+      Object.entries(raw).flatMap(([key, value]) => (key !== id ? [[key, value]] : next ? [[key, next]] : [])),
+    )
+    yield* Effect.tryPromise({
+      try: () => writeAtomic(path.join(configDir, fileName), `${JSON.stringify(entries, null, 2)}\n`),
+      catch: (cause) => registerError("write-failed", `Could not save ${fileName}: ${String(cause)}`),
+    })
+  }).pipe(writeLock.withPermits(1))
 }
 
 // The desktop app runs core under Node, so file and PATH lookups here must not use Bun globals.

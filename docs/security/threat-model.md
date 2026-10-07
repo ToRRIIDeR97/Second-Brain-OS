@@ -49,15 +49,28 @@ preserve both canonical workspace files and session/draft profile state.
 ## Harness registration
 
 A registered harness is a command that the app later runs as the user, with
-the workspace as its working directory. `harness_register` validates the ID
-and resolves the command to an absolute executable. Before running the
-command at all, it asks for approval. The approval request shows the ID, name,
-command, and arguments, and stores no "always allow" rule. The request uses
-`alwaysAsk`, so configured or saved allow rules never skip the prompt; only a
-deny rule changes the outcome. Plan mode denies `harness_register`. Only after
-approval does the app run the ACP `initialize` handshake. It writes
-`harnesses.json` (mode `0600`, atomic rename, serialized within the process)
-only when the handshake succeeds.
+the workspace as its working directory. Harnesses are registered only by the
+user in Settings → Harnesses, through the authenticated local HTTP API
+(`/api/harness/discover` and `/api/harness/registry`). Agents have no
+registration tool, so workspace content or model output can't add a harness.
+
+Test and Save run the typed command. The local API already lets authenticated
+clients start processes through its PTY routes, so this adds no new kind of
+capability. The following limits still apply:
+
+- The ID is validated, and the command must resolve to an absolute executable
+  file.
+- Arguments are passed as an array with no shell.
+- The process gets the filtered harness environment described below.
+- The handshake times out and the process is stopped afterwards.
+
+Test also calls `session/new` to list models, so some agents record an empty
+session in their own history. Save runs the ACP `initialize` handshake again.
+It writes `harnesses.json` (mode `0600`, atomic rename, serialized within the
+process) only when the handshake succeeds. Enable/disable and remove change
+only `harnesses.json` entries under the same lock. A malformed file is
+reported and never overwritten, and built-in or config-file harnesses are
+refused.
 
 The registry stores commands, arguments, and model IDs only. Agents can't
 store environment variables or secrets in it, and it can't replace the

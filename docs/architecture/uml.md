@@ -130,12 +130,12 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 | Second Brain notes, projects, calendar | Subsystem | Component, Class, Activity: write, State: project status | `opencode/src/knowledge/`, `opencode/src/project/brain.ts`, `opencode/src/planner/calendar.ts` |
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
-| Harness drivers and registry | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts`, `core/src/harness/registry.ts` |
+| Harness drivers and registry | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `server/src/handlers/harness.ts` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |
 | Workspace files | Shared store | Component, Deployment, Activity: write | `notes/`, `projects/`, `.second-brain/calendar-v1.json` |
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |
 | Snapshot repository | Shared store | Component, Class, Activity: prompt run | `core/src/snapshot.ts` |
-| `harnesses.json` | Shared store | Component, Deployment | `core/src/harness/registry.ts` |
+| `harnesses.json` | Shared store | Component, Deployment | `core/src/harness/registry.ts` (written only from Settings → Harnesses through `/api/harness/registry`) |
 | `drafts.sqlite`, electron-store files | Shared store | Component, Deployment | `desktop/src/main/draft-store.ts`, `desktop/src/main/store.ts` |
 | Google Calendar and Tasks | External integration | Component, Deployment, State: outbox | `desktop/src/main/google-calendar.ts` |
 | LLM providers | External integration | Component, Deployment | `core/src/harness.ts` (`opencode` driver) |
@@ -143,6 +143,7 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
 | Desktop startup | Critical workflow | Sequence: startup | `desktop/src/main/index.ts` |
+| Harness settings (add, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
 
 ## Unverified relationships and assumptions
 

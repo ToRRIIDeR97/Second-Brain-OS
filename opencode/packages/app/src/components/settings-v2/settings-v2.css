@@ -301,6 +301,13 @@
   opacity: 1;
 }
 
+.settings-v2-harness-detail {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--v2-text-text-muted);
+  overflow-wrap: anywhere;
+}
+
 .settings-v2-providers-view-all {
   margin-top: 20px;
   padding: 0;

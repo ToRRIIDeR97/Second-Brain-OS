@@ -115,8 +115,6 @@ export const Plugin = define({
       { action: "read", resource: "*.env", effect: "ask" },
       { action: "read", resource: "*.env.*", effect: "ask" },
       { action: "read", resource: "*.env.example", effect: "allow" },
-      // Registering a harness lets the app run a new command later; always confirm it.
-      { action: "harness_register", resource: "*", effect: "ask" },
     ]
 
     yield* ctx.agent.transform((draft) => {
@@ -139,7 +137,6 @@ export const Plugin = define({
           ...PermissionV2.merge(defaults, [
             { action: "question", resource: "*", effect: "allow" },
             { action: "plan_exit", resource: "*", effect: "allow" },
-            { action: "harness_register", resource: "*", effect: "deny" },
             { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
             { action: "edit", resource: "*", effect: "deny" },
             { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },

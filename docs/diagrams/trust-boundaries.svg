@@ -99,7 +99,7 @@
 <rect class="sub" x="320" y="268" width="290" height="84" rx="6"/>
 <text x="330" y="286" text-anchor="start" class="t">PermissionV2</text>
 <text x="330" y="302" text-anchor="start" class="s">rules: allow / ask / deny</text>
-<text x="330" y="318" text-anchor="start" class="s">harness_register: alwaysAsk</text>
+<text x="330" y="318" text-anchor="start" class="s">harness add: Settings only, no tool</text>
 <text x="330" y="334" text-anchor="start" class="s">plan agent denies edits</text>
 <rect class="store" x="320" y="364" width="220" height="70" rx="6"/>
 <text x="330" y="382" text-anchor="start" class="t">Secrets at rest</text>

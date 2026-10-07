@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit, Schema } from "effect"
-import { configuredInstances, handleCodexToolCall } from "@opencode-ai/core/harness"
+import { Exit, Schema } from "effect"
+import { configuredInstances } from "@opencode-ai/core/harness"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigHarness } from "@opencode-ai/core/config/harness"
 import { AcpHarness } from "@opencode-ai/core/harness/acp"
@@ -81,17 +81,6 @@ describe("ACP harness", () => {
       "codex:codex",
       "gemini:acp",
     ])
-  })
-
-  test("answers Codex dynamic tool calls", async () => {
-    const ok = await Effect.runPromise(
-      handleCodexToolCall({ tool: "harness_register", namespace: null, arguments: { id: "g" } }, () =>
-        Effect.succeed("done"),
-      ),
-    )
-    const unknown = await Effect.runPromise(handleCodexToolCall({ tool: "other" }, () => Effect.succeed("never")))
-    expect(ok).toEqual({ success: true, contentItems: [{ type: "inputText", text: "done" }] })
-    expect(unknown.success).toBe(false)
   })
 
   test("expands both home-directory separators", () => {

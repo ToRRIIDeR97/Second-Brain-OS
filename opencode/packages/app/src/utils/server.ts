@@ -131,6 +131,65 @@ export async function listHarnessesForServer(
   return decodeHarnessResponse(await response.json()).data
 }
 
+const decodeSettingsList = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.SettingsEntry)))
+const decodeSettingsEntry = Schema.decodeUnknownSync(Location.response(HarnessSchema.SettingsEntry))
+const decodeDiscovery = Schema.decodeUnknownSync(Location.response(HarnessSchema.Discovery))
+
+type HarnessServer = {
+  server: ServerConnection.HttpBase
+  fetch?: typeof globalThis.fetch
+}
+
+// Settings routes return `{ reason, message }` on failure; the message is written for people.
+async function harnessSettingsRequest(input: HarnessServer, directory: string, route: string, init?: RequestInit) {
+  const url = new URL(`${input.server.url.replace(/\/+$/, "")}/api/harness${route}`)
+  url.searchParams.set("location[directory]", directory)
+  const headers = new Headers(init?.headers)
+  if (init?.body !== undefined) headers.set("content-type", "application/json")
+  if (input.server.password)
+    headers.set(
+      "Authorization",
+      `Basic ${authTokenFromCredentials({ username: input.server.username, password: input.server.password })}`,
+    )
+  const response = await (input.fetch ?? globalThis.fetch)(url, { ...init, headers })
+  const body: unknown = await response.json().catch(() => undefined)
+  if (response.ok) return body
+  const message =
+    typeof body === "object" && body !== null && "message" in body && typeof body.message === "string"
+      ? body.message
+      : `Harness request failed (${response.status}).`
+  throw new Error(message)
+}
+
+export async function listHarnessSettings(input: HarnessServer, directory: string) {
+  return decodeSettingsList(await harnessSettingsRequest(input, directory, "/settings")).data
+}
+
+export async function discoverHarness(input: HarnessServer, directory: string, value: HarnessSchema.DiscoverInput) {
+  return decodeDiscovery(
+    await harnessSettingsRequest(input, directory, "/discover", { method: "POST", body: JSON.stringify(value) }),
+  ).data
+}
+
+export async function addHarness(input: HarnessServer, directory: string, value: HarnessSchema.SettingsInput) {
+  return decodeSettingsEntry(
+    await harnessSettingsRequest(input, directory, "/registry", { method: "POST", body: JSON.stringify(value) }),
+  ).data
+}
+
+export async function setHarnessEnabled(input: HarnessServer, directory: string, id: string, enabled: boolean) {
+  return decodeSettingsEntry(
+    await harnessSettingsRequest(input, directory, `/registry/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+  ).data
+}
+
+export async function removeHarness(input: HarnessServer, directory: string, id: string) {
+  await harnessSettingsRequest(input, directory, `/registry/${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
 export async function createSessionForServer(
   input: {
     server: ServerConnection.HttpBase

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal } from "solid-js"
 import { Harness } from "@opencode-ai/schema/harness"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
@@ -26,13 +26,17 @@ const defaultModel = (instance: Harness.Instance) => {
     : undefined
 }
 
+// Bumped by Settings after a harness is added, toggled, or removed, so open prompts refetch the list.
+const [settingsVersion, setSettingsVersion] = createSignal(0)
+export const harnessSettingsChanged = () => setSettingsVersion((value) => value + 1)
+
 export function createPromptHarnessController(selection: HarnessSelection) {
   const sdk = useSDK()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
   const [instances, { refetch }] = createResource(
-    () => sdk().directory,
-    (directory) =>
+    () => ({ directory: sdk().directory, version: settingsVersion() }),
+    ({ directory }) =>
       listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory).catch(
         fallbackHarnesses,
       ),

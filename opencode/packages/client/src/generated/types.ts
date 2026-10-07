@@ -74,6 +74,38 @@ export type ProviderNotFoundError = {
 export const isProviderNotFoundError = (value: unknown): value is ProviderNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderNotFoundError"
 
+export type HarnessSettingsInvalidError = {
+  readonly _tag: "HarnessSettingsInvalidError"
+  readonly reason: string
+  readonly message: string
+}
+export const isHarnessSettingsInvalidError = (value: unknown): value is HarnessSettingsInvalidError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "HarnessSettingsInvalidError"
+
+export type HarnessSettingsNotFoundError = {
+  readonly _tag: "HarnessSettingsNotFoundError"
+  readonly reason: string
+  readonly message: string
+}
+export const isHarnessSettingsNotFoundError = (value: unknown): value is HarnessSettingsNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "HarnessSettingsNotFoundError"
+
+export type HarnessSettingsExistsError = {
+  readonly _tag: "HarnessSettingsExistsError"
+  readonly reason: string
+  readonly message: string
+}
+export const isHarnessSettingsExistsError = (value: unknown): value is HarnessSettingsExistsError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "HarnessSettingsExistsError"
+
+export type HarnessSettingsWriteError = {
+  readonly _tag: "HarnessSettingsWriteError"
+  readonly reason: string
+  readonly message: string
+}
+export const isHarnessSettingsWriteError = (value: unknown): value is HarnessSettingsWriteError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "HarnessSettingsWriteError"
+
 export type PermissionNotFoundError = {
   readonly _tag: "PermissionNotFoundError"
   readonly requestID: string
@@ -2670,6 +2702,170 @@ export type HarnessesListOutput = {
       readonly isDefault: boolean
     }>
   }>
+}
+
+export type HarnessesSettingsInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesSettingsOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly driver: string
+    readonly name: string
+    readonly enabled: boolean
+    readonly source: "built-in" | "registry" | "config"
+    readonly editable: boolean
+    readonly command?: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }>
+}
+
+export type HarnessesDiscoverInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly command: { readonly command: string; readonly args?: ReadonlyArray<string> }["command"]
+  readonly args?: { readonly command: string; readonly args?: ReadonlyArray<string> }["args"]
+}
+
+export type HarnessesDiscoverOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly command: string
+    readonly args: ReadonlyArray<string>
+    readonly agentName?: string
+    readonly version?: string
+    readonly models: ReadonlyArray<{
+      readonly id: string
+      readonly name: string
+      readonly description?: string
+      readonly reasoningEfforts: ReadonlyArray<string>
+      readonly serviceTiers: ReadonlyArray<{
+        readonly id: string
+        readonly name: string
+        readonly description?: string
+      }>
+      readonly defaultReasoningEffort?: string
+      readonly defaultServiceTier?: string
+      readonly isDefault: boolean
+    }>
+  }
+}
+
+export type HarnessesAddInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly id: {
+    readonly id: string
+    readonly name?: string
+    readonly command: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }["id"]
+  readonly name?: {
+    readonly id: string
+    readonly name?: string
+    readonly command: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }["name"]
+  readonly command: {
+    readonly id: string
+    readonly name?: string
+    readonly command: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }["command"]
+  readonly args?: {
+    readonly id: string
+    readonly name?: string
+    readonly command: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }["args"]
+  readonly models?: {
+    readonly id: string
+    readonly name?: string
+    readonly command: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }["models"]
+}
+
+export type HarnessesAddOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly driver: string
+    readonly name: string
+    readonly enabled: boolean
+    readonly source: "built-in" | "registry" | "config"
+    readonly editable: boolean
+    readonly command?: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }
+}
+
+export type HarnessesUpdateInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly enabled: { readonly enabled: boolean }["enabled"]
+}
+
+export type HarnessesUpdateOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly driver: string
+    readonly name: string
+    readonly enabled: boolean
+    readonly source: "built-in" | "registry" | "config"
+    readonly editable: boolean
+    readonly command?: string
+    readonly args?: ReadonlyArray<string>
+    readonly models?: ReadonlyArray<string>
+  }
+}
+
+export type HarnessesRemoveInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesRemoveOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: { readonly id: string }
 }
 
 export type IntegrationsListInput = {

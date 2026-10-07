@@ -73,7 +73,7 @@ def trust():
     s.zone(300, 70, 330, 380, "Loopback server process")
     s.box(320, 100, 290, 74, "Authorization", ["Basic auth opencode:<uuid>", "header or auth_token query"], cls="sub")
     s.box(320, 186, 290, 70, "Workspace routing", ["directory → instance", "LocationMutation containment"], cls="sub")
-    s.box(320, 268, 290, 84, "PermissionV2", ["rules: allow / ask / deny", "harness_register: alwaysAsk", "plan agent denies edits"], cls="sub")
+    s.box(320, 268, 290, 84, "PermissionV2", ["rules: allow / ask / deny", "harness add: Settings only, no tool", "plan agent denies edits"], cls="sub")
     s.box(320, 364, 220, 70, "Secrets at rest", ["auth.json (XDG data)", "SQLite profile, harnesses.json"], cls="store")
     s.zone(680, 70, 300, 150, "Workspace filesystem")
     s.box(700, 100, 260, 100, "Canonical files", ["notes/, projects/", ".second-brain/calendar-v1.json", "source of truth"], cls="store")

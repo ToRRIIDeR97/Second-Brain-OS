@@ -387,7 +387,40 @@ files only):
 
 ## Completion evidence
 
-Not started. This package contains the plan, the fixture, and both test sets,
-all written by the same agent. If that agent also implements the change, the
-verification set is a separately designed check of the contract, not an
-independently authored one.
+The same agent wrote the plan, both test sets, and the implementation, on
+2026-10-07, branch `feat/harness-settings-page`. The verification set is a
+separately designed check of the contract, not an independently authored one.
+
+| Check | Result |
+|---|---|
+| `acceptance/registry-settings.test.ts` and `verification/registry-settings.verify.test.ts` (core) | 20 pass, 0 fail |
+| `acceptance/routes.test.ts` and `verification/routes.verify.test.ts` (server) | 12 pass, 0 fail |
+| `bun run typecheck`, `bun run lint`, `bun run test`, `bun run build` | pass; lint has 0 errors, and the one new warning (an unused import) was fixed |
+| `bun run test:engine` | core 1115 pass, 0 fail. Server 3328 pass, 1 fail: `httpapi-v2-pty.test.ts` timed out in the full run, as it also did on 2026-10-06. Run on its own, all 4 tests in that file pass. The change doesn't touch PTY code. |
+| `bun run test:httpapi` (not a required check) | fails on `main` already with 13 routes missing scenarios; this change adds 5 more (the new harness routes) |
+| AC-10 manual check | driven through the running dev app over its DevTools port. Steps: open Settings → Harnesses, Test `opencode acp` (OpenCode 1.17.13, 429 models), Save (toast, returns to the tab), disable, remove. The user's `harnesses.json` was restored afterwards. |
+| AC-11 | `harness_register` no longer appears in `docs/` or `opencode/packages/*/src` |
+
+Deviations from the proposal:
+
+- Save also stores the model IDs that Test discovered. The picker builds a
+  harness's model list from its saved entry (the probe runs no `session/new`),
+  so without this an agent that reports models only through `configOptions`
+  would show no models.
+- The settings page falls back through the current tab's directory, the home
+  selection, the first project, and the home directory to find a location
+  for the routes. It shows a message when none is available. Settings can
+  open while the current tab points at a session that no longer exists.
+- The add dialog replaces Settings in the single dialog stack, so the page
+  takes an `onBack` that reopens Settings on the Harnesses tab, as the
+  Providers page does.
+- Open prompt pickers refetch through a shared version signal that Settings
+  bumps, rather than refetching whenever the menu opens. Refetching on open
+  would disable the select while it is open.
+
+Remaining limitations:
+
+- `PermissionV2`'s `alwaysAsk` option no longer has a caller. It is left in
+  place as a generic option.
+- New routes have no `httpapi-exercise` scenarios.
+- Quoted arguments containing spaces aren't supported in the arguments field.
