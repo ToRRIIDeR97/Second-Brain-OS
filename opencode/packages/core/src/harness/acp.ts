@@ -124,6 +124,21 @@ export const handshake = (process: Process, settings: Settings, directory: strin
     Effect.map(({ initialize }) => agentInfo(initialize)),
   )
 
+/** Handshake plus `session/new`, so Settings can show the agent's models before saving. */
+export const discover = (process: Process, settings: Settings, directory: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { client, initialize } = yield* connect(process, settings, directory)
+      const session = yield* createSession(client, { cwd: directory, mcpServers: [] })
+      return { ...agentInfo(initialize), models: sessionModels(session.response).models }
+    }),
+  ).pipe(
+    Effect.timeoutOrElse({
+      duration: "15 seconds",
+      orElse: () => Effect.fail(new ProtocolError("The ACP agent did not start a session within 15 seconds.")),
+    }),
+  )
+
 export function probe(
   process: Process,
   instance: { readonly id: Harness.InstanceID; readonly driver: Harness.DriverKind; readonly name: string },
@@ -167,12 +182,20 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   // A load replays history as updates before it responds; none of it belongs to the next turn.
   yield* Queue.clear(items)
   const session = loaded ?? (yield* createSession(client, params))
-  const state = { currentModel: currentModel(session.response) }
+  const selector = sessionModels(session.response)
+  const state = { currentModel: selector.current }
 
   const setModel = (model: string | undefined) =>
     !model || model === state.currentModel
       ? Effect.void
-      : client.request("session/set_model", { sessionId: session.sessionId, modelId: model }).pipe(
+      : (selector.configId
+          ? client.request("session/set_config_option", {
+              sessionId: session.sessionId,
+              configId: selector.configId,
+              value: model,
+            })
+          : client.request("session/set_model", { sessionId: session.sessionId, modelId: model })
+        ).pipe(
           Effect.tap(() =>
             Effect.sync(() => {
               state.currentModel = model
@@ -219,7 +242,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   return {
     sessionId: session.sessionId,
     resumed: loaded !== undefined,
-    models: parseModels(session.response),
+    models: selector.models,
     turn,
   } satisfies Session
 })
@@ -422,29 +445,50 @@ function normalizeUsage(value: Record<string, unknown> | undefined) {
   }
 }
 
-function currentModel(response: unknown) {
-  const models = isRecord(response) && isRecord(response.models) ? response.models : undefined
-  return string(models?.currentModelId)
+/**
+ * Agents report models either in the legacy `models` field or, in newer ACP
+ * versions, as a `configOptions` select of category `model`. The source decides
+ * how a model switch is sent.
+ */
+export function sessionModels(response: unknown): {
+  readonly models: ReadonlyArray<Harness.Model>
+  readonly current?: string
+  readonly configId?: string
+} {
+  const value = isRecord(response) ? response : {}
+  if (isRecord(value.models)) {
+    const current = string(value.models.currentModelId)
+    const available = Array.isArray(value.models.availableModels) ? value.models.availableModels.filter(isRecord) : []
+    return {
+      current,
+      models: available.flatMap((model) => modelEntry(string(model.modelId), model.name, model.description, current)),
+    }
+  }
+  const option = (Array.isArray(value.configOptions) ? value.configOptions.filter(isRecord) : []).find(
+    (item) => item.category === "model" && item.type === "select" && typeof item.id === "string",
+  )
+  if (!option) return { models: [] }
+  const current = string(option.currentValue)
+  const options = Array.isArray(option.options) ? option.options.filter(isRecord) : []
+  return {
+    current,
+    configId: string(option.id),
+    models: options.flatMap((item) => modelEntry(string(item.value), item.name, item.description, current)),
+  }
 }
 
-function parseModels(response: unknown): ReadonlyArray<Harness.Model> {
-  const models = isRecord(response) && isRecord(response.models) ? response.models : undefined
-  const current = string(models?.currentModelId)
-  const available = Array.isArray(models?.availableModels) ? models.availableModels.filter(isRecord) : []
-  return available.flatMap((model) => {
-    const id = string(model.modelId)
-    if (!id) return []
-    return [
-      Harness.Model.make({
-        id,
-        name: string(model.name) ?? id,
-        description: string(model.description),
-        reasoningEfforts: [],
-        serviceTiers: [],
-        isDefault: id === current,
-      }),
-    ]
-  })
+function modelEntry(id: string | undefined, name: unknown, description: unknown, current: string | undefined) {
+  if (!id) return []
+  return [
+    Harness.Model.make({
+      id,
+      name: string(name) ?? id,
+      description: string(description),
+      reasoningEfforts: [],
+      serviceTiers: [],
+      isDefault: id === current,
+    }),
+  ]
 }
 
 export function configuredModels(models: ReadonlyArray<string>) {

@@ -97,13 +97,25 @@ when the agent supports it. The ACP session ID is stored as the Run's harness
 continuation. The client advertises no file-system or terminal capability;
 the agent uses its own tools and asks permission through
 `session/request_permission`, which maps to Second Brain approvals. ACP agents
-receive no Second Brain system prompt.
+receive no Second Brain system prompt. An agent reports its models either in
+the legacy `models` field or as a `configOptions` select of category `model`.
+The driver switches models with `session/set_model` or
+`session/set_config_option` to match.
 
-Agents register harnesses with `harness_register`. OpenCode-harness sessions
-get it as a built-in tool. Codex threads get it as a dynamic tool answered
-through `item/tool/call`. Registration is implemented in
-`packages/core/src/harness/registry.ts`, and only ACP commands can be
-registered this way.
+Users manage ACP harnesses in Settings → Harnesses. The page calls
+`/api/harness/settings`, `/api/harness/discover`, and
+`/api/harness/registry[/:id]`. Their thin handlers in
+`packages/server/src/handlers/harness.ts` delegate to `HarnessRuntime`, which
+uses `packages/core/src/harness/registry.ts`:
+
+- Test runs the ACP handshake and `session/new` to list models, and writes
+  nothing.
+- Save checks the command again and appends the entry.
+- Enable/disable and remove change only `harnesses.json` entries.
+
+Built-ins and config-file entries are read-only. After each change the runtime
+refreshes its cached instance list, so the next turn and the picker see it.
+Agents have no tool for registering harnesses.
 
 ## Session compatibility and review
 

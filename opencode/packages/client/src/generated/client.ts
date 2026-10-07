@@ -53,6 +53,16 @@ import type {
   ProvidersGetOutput,
   HarnessesListInput,
   HarnessesListOutput,
+  HarnessesSettingsInput,
+  HarnessesSettingsOutput,
+  HarnessesDiscoverInput,
+  HarnessesDiscoverOutput,
+  HarnessesAddInput,
+  HarnessesAddOutput,
+  HarnessesUpdateInput,
+  HarnessesUpdateOutput,
+  HarnessesRemoveInput,
+  HarnessesRemoveOutput,
   IntegrationsListInput,
   IntegrationsListOutput,
   IntegrationsGetInput,
@@ -602,6 +612,75 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      settings: (input?: HarnessesSettingsInput, requestOptions?: RequestOptions) =>
+        request<HarnessesSettingsOutput>(
+          {
+            method: "GET",
+            path: `/api/harness/settings`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      discover: (input: HarnessesDiscoverInput, requestOptions?: RequestOptions) =>
+        request<HarnessesDiscoverOutput>(
+          {
+            method: "POST",
+            path: `/api/harness/discover`,
+            query: { location: input["location"] },
+            body: { command: input["command"], args: input["args"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      add: (input: HarnessesAddInput, requestOptions?: RequestOptions) =>
+        request<HarnessesAddOutput>(
+          {
+            method: "POST",
+            path: `/api/harness/registry`,
+            query: { location: input["location"] },
+            body: {
+              id: input["id"],
+              name: input["name"],
+              command: input["command"],
+              args: input["args"],
+              models: input["models"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      update: (input: HarnessesUpdateInput, requestOptions?: RequestOptions) =>
+        request<HarnessesUpdateOutput>(
+          {
+            method: "PATCH",
+            path: `/api/harness/registry/${encodeURIComponent(input.id)}`,
+            query: { location: input["location"] },
+            body: { enabled: input["enabled"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      remove: (input: HarnessesRemoveInput, requestOptions?: RequestOptions) =>
+        request<HarnessesRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/harness/registry/${encodeURIComponent(input.id)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
             empty: false,
           },
           requestOptions,

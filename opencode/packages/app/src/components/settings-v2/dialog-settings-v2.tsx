@@ -8,6 +8,7 @@ import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
+import { SettingsHarnessesV2 } from "./harnesses"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -39,6 +40,10 @@ export const DialogSettings: Component<{
 
   const showProviders = () => {
     void dialog.show(() => <DialogSettings sessionID={props.sessionID} defaultValue="providers" />)
+  }
+
+  const showHarnesses = () => {
+    void dialog.show(() => <DialogSettings sessionID={props.sessionID} defaultValue="harnesses" />)
   }
 
   return (
@@ -83,6 +88,10 @@ export const DialogSettings: Component<{
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="harnesses">
+                      <Icon name="console" />
+                      {language.t("harness.settings.title")}
+                    </TabsV2.Trigger>
                   </div>
                 </div>
               </div>
@@ -107,6 +116,9 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="harnesses" class="settings-v2-panel">
+          <SettingsHarnessesV2 directory={directory} onBack={showHarnesses} />
         </TabsV2.Content>
       </TabsV2>
     </Dialog>

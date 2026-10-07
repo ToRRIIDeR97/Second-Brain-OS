@@ -1,5 +1,10 @@
 # ACP harness driver and agent registration
 
+> Superseded in part (2026-10-07): the `harness_register` tool and the approval
+> step (AC-7 approval, AC-8) were removed. Harnesses are now added in Settings;
+> see [harness-settings-page](../harness-settings-page/implementation.md). The
+> AC-7 and AC-8 tests in this package no longer apply.
+
 ## Problem
 
 Second Brain OS runs agent turns through Harnesses. Only two drivers can

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 420" width="860" height="420" role="img" aria-labelledby="title desc">
+<title id="title">Proposed: a Settings page manages harnesses through HTTP routes</title>
+<desc id="desc">A new Harnesses tab in Settings calls new /api/harness routes. Thin handlers delegate to HarnessRuntime, which calls HarnessRegistry to discover, add, enable or disable, and remove entries in harnesses.json, then refreshes its cached instance list so the picker sees changes. The harness_register chat tool is removed. ACP sessions read models from configOptions too.</desc>
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .new{fill:#dafbe1;stroke:#1a7f37;stroke-width:1.4}
+  .chg{fill:#ddf4ff;stroke:#0969da;stroke-width:1.4}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .del{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2;stroke-dasharray:6 4}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .ah{fill:#57606a}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+  .k{font-size:11px;fill:#57606a}
+</style>
+<rect class="bg" width="860" height="420"/>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+<text class="zonet" x="20" y="26">Proposed (not yet implemented)</text>
+<rect class="new" x="20" y="44" width="230" height="58" rx="6"/><text class="t" x="34" y="68">Settings → Harnesses tab</text><text class="s" x="34" y="88">settings-v2/harnesses.tsx (AC-10)</text>
+<rect class="new" x="310" y="44" width="230" height="58" rx="6"/><text class="t" x="324" y="68">/api/harness/* routes</text><text class="s" x="324" y="88">protocol group + thin handlers (AC-8, AC-9)</text>
+<rect class="chg" x="600" y="44" width="240" height="58" rx="6"/><text class="t" x="614" y="68">HarnessRuntime</text><text class="s" x="614" y="88">settings, add, setEnabled, remove, discover</text>
+<rect class="chg" x="600" y="160" width="240" height="58" rx="6"/><text class="t" x="614" y="184">HarnessRegistry</text><text class="s" x="614" y="204">register, setEnabled, remove, discover</text>
+<rect class="store" x="310" y="160" width="230" height="58" rx="6"/><text class="t" x="324" y="184">harnesses.json</text><text class="s" x="324" y="204">unchanged format, plus `enabled`</text>
+<rect class="chg" x="20" y="160" width="230" height="58" rx="6"/><text class="t" x="34" y="184">AcpHarness</text><text class="s" x="34" y="204">models from configOptions (AC-5, AC-6)</text>
+<rect class="chg" x="600" y="276" width="240" height="58" rx="6"/><text class="t" x="614" y="300">Cached instance list</text><text class="s" x="614" y="320">refreshed after each change (AC-8)</text>
+<rect class="box" x="310" y="276" width="230" height="58" rx="6"/><text class="t" x="324" y="300">Harness picker</text><text class="s" x="324" y="320">GET /api/harness (unchanged)</text>
+<rect class="del" x="20" y="276" width="230" height="58" rx="6"/><text class="t" x="34" y="300">harness_register tool</text><text class="s" x="34" y="320">removed from chat (AC-1)</text>
+<path class="e" d="M250 73H306" marker-end="url(#a)"/>
+<path class="e" d="M540 73H596" marker-end="url(#a)"/>
+<path class="e" d="M720 102V156" marker-end="url(#a)"/>
+<path class="e" d="M600 189H544" marker-end="url(#a)"/>
+<path class="e" d="M600 210H570V240H135V222" marker-end="url(#a)"/>
+<path class="e" d="M720 218V272" marker-end="url(#a)"/>
+<path class="e" d="M600 305H544" marker-end="url(#a)"/>
+<rect class="new" x="20" y="366" width="14" height="14"/><text class="k" x="40" y="377">new</text>
+<rect class="chg" x="90" y="366" width="14" height="14"/><text class="k" x="110" y="377">changed</text>
+<rect class="del" x="180" y="366" width="14" height="14"/><text class="k" x="200" y="377">removed</text>
+<rect class="store" x="270" y="366" width="14" height="14"/><text class="k" x="290" y="377">canonical file</text>
+</svg>

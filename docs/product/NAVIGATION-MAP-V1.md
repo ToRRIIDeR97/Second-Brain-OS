@@ -223,6 +223,7 @@ Settings contains:
 - Permissions
 - Project locations
 - Agent providers
+- Harnesses: add, test, enable, disable, and remove ACP agent CLIs
 - Data and recovery
 - Diagnostics
 
