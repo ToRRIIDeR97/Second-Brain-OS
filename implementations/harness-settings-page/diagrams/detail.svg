@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 560" width="860" height="560" role="img" aria-labelledby="title desc">
+<title id="title">Implementation detail: add, toggle and remove a harness</title>
+<desc id="desc">Sequence across the Settings tab, the HTTP route, HarnessRuntime, HarnessRegistry and the ACP agent process. Test runs discover (handshake plus session/new, no write). Save runs register (validate, resolve, handshake, locked atomic write) and refreshes the cached list. Toggle and remove run under the same write lock. Errors map to 400, 404, 409 or 500 with a reason.</desc>
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12.5px;fill:#1f2328}
+  .t{font-weight:600;font-size:13px}
+  .s{font-size:11.5px;fill:#57606a}
+  .hd{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .life{stroke:#8c959f;stroke-width:1;stroke-dasharray:4 4}
+  .e{fill:none;stroke:#57606a;stroke-width:1.2}
+  .r{fill:none;stroke:#57606a;stroke-width:1.2;stroke-dasharray:5 4}
+  .ah{fill:#57606a}
+  .frag{fill:none;stroke:#8c959f;stroke-width:1}
+  .fragt{font-size:11.5px;font-weight:600;fill:#57606a}
+  .err{fill:#fff1f0;stroke:#cf222e;stroke-width:1.1}
+</style>
+<rect class="bg" width="860" height="560"/>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="hd" x="20" y="16" width="140" height="40" rx="5"/><text class="t" x="30" y="41">Settings tab</text>
+<rect class="hd" x="190" y="16" width="140" height="40" rx="5"/><text class="t" x="200" y="41">Route handler</text>
+<rect class="hd" x="360" y="16" width="150" height="40" rx="5"/><text class="t" x="370" y="41">HarnessRuntime</text>
+<rect class="hd" x="540" y="16" width="150" height="40" rx="5"/><text class="t" x="550" y="41">HarnessRegistry</text>
+<rect class="hd" x="720" y="16" width="120" height="40" rx="5"/><text class="t" x="730" y="41">ACP agent</text>
+<path class="life" d="M90 56V540M260 56V540M435 56V540M615 56V540M780 56V540"/>
+<rect class="frag" x="10" y="70" width="840" height="150"/><text class="fragt" x="18" y="86">Test (AC-5)</text>
+<path class="e" d="M90 104H256" marker-end="url(#a)"/><text class="s" x="96" y="98">POST /discover {command,args}</text>
+<path class="e" d="M260 124H431" marker-end="url(#a)"/><text class="s" x="266" y="118">discover()</text>
+<path class="e" d="M435 144H611" marker-end="url(#a)"/><text class="s" x="441" y="138">discover(input, deps)</text>
+<path class="e" d="M615 164H776" marker-end="url(#a)"/><text class="s" x="621" y="158">initialize, session/new</text>
+<path class="r" d="M780 184H94" marker-end="url(#a)"/><text class="s" x="300" y="178">{agentName, version, models} from `models` or configOptions; nothing written</text>
+<rect class="frag" x="10" y="232" width="840" height="170"/><text class="fragt" x="18" y="248">Save (AC-2, AC-8)</text>
+<path class="e" d="M90 266H256" marker-end="url(#a)"/><text class="s" x="96" y="260">POST /registry {id,...}</text>
+<path class="e" d="M260 286H431" marker-end="url(#a)"/><text class="s" x="266" y="280">add()</text>
+<path class="e" d="M435 306H611" marker-end="url(#a)"/><text class="s" x="441" y="300">register(): no approve dep</text>
+<path class="e" d="M615 326H776" marker-end="url(#a)"/><text class="s" x="621" y="320">initialize (handshake)</text>
+<text class="s" x="560" y="346">writeLock + writeAtomic (0600)</text>
+<path class="r" d="M611 362H439" marker-end="url(#a)"/><text class="s" x="452" y="356">Registered</text>
+<path class="r" d="M431 382H94" marker-end="url(#a)"/><text class="s" x="120" y="376">refresh cached list, return SettingsEntry; UI invalidates picker queries</text>
+<rect class="frag" x="10" y="414" width="840" height="64"/><text class="fragt" x="18" y="430">Toggle / remove (AC-3, AC-4)</text>
+<path class="e" d="M90 452H611" marker-end="url(#a)"/><text class="s" x="96" y="446">PATCH {enabled} or DELETE → runtime checks source → setEnabled() / remove() under writeLock</text>
+<rect class="err" x="20" y="492" width="820" height="44" rx="5"/><text class="t" x="32" y="510">Errors (AC-9)</text><text class="s" x="32" y="527">400 invalid-input, invalid-id, reserved, read-only, command-not-found, probe-failed · 404 not-found · 409 exists · 500 write-failed</text>
+</svg>

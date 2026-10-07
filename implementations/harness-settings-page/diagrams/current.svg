@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 400" width="860" height="400" role="img" aria-labelledby="title desc">
+<title id="title">Current: harnesses are added only through the chat tool</title>
+<desc id="desc">A chat agent calls harness_register, the user approves a permission prompt, HarnessRegistry.register probes and writes harnesses.json, and HarnessRuntime.list feeds the picker. A working model is required, the tool ships with every turn, and nothing can list, disable or remove entries.</desc>
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px;fill:#1f2328}
+  .t{font-weight:600}
+  .s{font-size:11.5px;fill:#57606a}
+  .box{fill:#f6f8fa;stroke:#57606a;stroke-width:1.2}
+  .store{fill:#fff8e5;stroke:#9a6700;stroke-width:1.2}
+  .gapz{fill:#fff1f0;stroke:#cf222e;stroke-width:1.2}
+  .e{fill:none;stroke:#57606a;stroke-width:1.3}
+  .ah{fill:#57606a}
+  .zone{fill:none;stroke:#8c959f;stroke-width:1.2;stroke-dasharray:7 5}
+  .zonet{font-size:12px;font-weight:600;fill:#57606a}
+</style>
+<rect class="bg" width="860" height="400"/>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+<text class="zonet" x="20" y="26">Current (baseline, main @ ff29d85)</text>
+<rect class="box" x="20" y="44" width="230" height="58" rx="6"/><text class="t" x="34" y="68">System chat prompt</text><text class="s" x="34" y="88">"add my CLI as a harness"</text>
+<rect class="gapz" x="310" y="44" width="230" height="58" rx="6"/><text class="t" x="324" y="68">Agent turn</text><text class="s" x="324" y="88">needs a working model first</text>
+<rect class="gapz" x="600" y="44" width="240" height="58" rx="6"/><text class="t" x="614" y="68">harness_register tool</text><text class="s" x="614" y="88">tool/harness-register.ts; in every turn</text>
+<rect class="box" x="600" y="160" width="240" height="58" rx="6"/><text class="t" x="614" y="184">Permission prompt</text><text class="s" x="614" y="204">harness.ts register(): alwaysAsk</text>
+<rect class="box" x="310" y="160" width="230" height="58" rx="6"/><text class="t" x="324" y="184">HarnessRegistry.register</text><text class="s" x="324" y="204">validate, resolve, approve, probe</text>
+<rect class="store" x="20" y="160" width="230" height="58" rx="6"/><text class="t" x="34" y="184">harnesses.json</text><text class="s" x="34" y="204">global config dir, 0600, add-only</text>
+<rect class="box" x="20" y="276" width="230" height="58" rx="6"/><text class="t" x="34" y="300">HarnessRuntime.list</text><text class="s" x="34" y="320">configuredInstances + probe</text>
+<rect class="box" x="310" y="276" width="230" height="58" rx="6"/><text class="t" x="324" y="300">Harness picker</text><text class="s" x="324" y="320">GET /api/harness</text>
+<rect class="gapz" x="600" y="276" width="240" height="96" rx="6"/><text class="t" x="614" y="300">Gaps</text><text class="s" x="614" y="320">No list, disable, or remove</text><text class="s" x="614" y="338">Models read only from legacy</text><text class="s" x="614" y="354">ACP `models`, not configOptions</text>
+<path class="e" d="M250 73H306" marker-end="url(#a)"/>
+<path class="e" d="M540 73H596" marker-end="url(#a)"/>
+<path class="e" d="M720 102V156" marker-end="url(#a)"/>
+<path class="e" d="M600 189H544" marker-end="url(#a)"/>
+<path class="e" d="M310 189H254" marker-end="url(#a)"/>
+<path class="e" d="M135 218V272" marker-end="url(#a)"/>
+<path class="e" d="M250 305H306" marker-end="url(#a)"/>
+</svg>
