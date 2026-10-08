@@ -65,7 +65,14 @@ capability. The following limits still apply:
 - The handshake times out and the process is stopped afterwards.
 
 Test also calls `session/new` to list models, so some agents record an empty
-session in their own history. Save runs the ACP `initialize` handshake again.
+session in their own history.
+
+The setup assistant's functional test (`/api/harness/verify`) also sends one
+short prompt to the proposed agent. That costs one model call on the agent's
+own credentials, and the test refuses every tool permission request. The
+assistant's proposal is model output: Second Brain runs a proposed command
+only through the verify route's limits above, and saving still needs the
+user's Save click. Save runs the ACP `initialize` handshake again.
 It writes `harnesses.json` (mode `0600`, atomic rename, serialized within the
 process) only when the handshake succeeds. Enable/disable and remove change
 only `harnesses.json` entries under the same lock. A malformed file is

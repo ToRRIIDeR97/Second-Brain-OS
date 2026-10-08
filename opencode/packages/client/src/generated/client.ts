@@ -57,6 +57,10 @@ import type {
   HarnessesSettingsOutput,
   HarnessesDiscoverInput,
   HarnessesDiscoverOutput,
+  HarnessesAssistantDirectoryInput,
+  HarnessesAssistantDirectoryOutput,
+  HarnessesVerifyInput,
+  HarnessesVerifyOutput,
   HarnessesAddInput,
   HarnessesAddOutput,
   HarnessesUpdateInput,
@@ -635,6 +639,31 @@ export function make(options: ClientOptions) {
             path: `/api/harness/discover`,
             query: { location: input["location"] },
             body: { command: input["command"], args: input["args"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      assistantDirectory: (input?: HarnessesAssistantDirectoryInput, requestOptions?: RequestOptions) =>
+        request<HarnessesAssistantDirectoryOutput>(
+          {
+            method: "GET",
+            path: `/api/harness/assistant-directory`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      verify: (input: HarnessesVerifyInput, requestOptions?: RequestOptions) =>
+        request<HarnessesVerifyOutput>(
+          {
+            method: "POST",
+            path: `/api/harness/verify`,
+            query: { location: input["location"] },
+            body: { command: input["command"], args: input["args"], model: input["model"] },
             successStatus: 200,
             declaredStatuses: [400, 404, 409, 500, 401],
             empty: false,

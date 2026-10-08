@@ -301,6 +301,38 @@
   opacity: 1;
 }
 
+.settings-v2-harness-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 160px;
+  max-height: 360px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+.settings-v2-harness-user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  white-space: pre-wrap;
+}
+
+.settings-v2-harness-test {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  border-radius: 8px;
+}
+
+.settings-v2-harness-assistant {
+  width: min(640px, 92vw);
+}
+
 .settings-v2-harness-detail {
   font-size: 12px;
   line-height: 1.4;

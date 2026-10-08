@@ -83,6 +83,36 @@ export const HarnessGroup = HttpApiGroup.make("server.harness")
       ),
   )
   .add(
+    HttpApiEndpoint.get("harness.assistantDirectory", "/api/harness/assistant-directory", {
+      query: LocationQuery,
+      success: Location.response(Schema.Struct({ directory: Schema.String })),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.assistantDirectory",
+          "Setup assistant folder",
+          "Return the folder where harness setup-assistant sessions run.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("harness.verify", "/api/harness/verify", {
+      query: LocationQuery,
+      payload: Harness.VerifyInput,
+      success: Location.response(Harness.Verification),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.verify",
+          "Run a functional test",
+          "Open a session with an ACP command and send one short prompt to check that it answers.",
+        ),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("harness.add", "/api/harness/registry", {
       query: LocationQuery,
       payload: Harness.SettingsInput,

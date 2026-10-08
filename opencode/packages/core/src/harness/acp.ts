@@ -43,6 +43,7 @@ export interface OpenInput {
 export interface Session {
   readonly sessionId: string
   readonly resumed: boolean
+  readonly agent: { readonly name?: string; readonly version?: string }
   readonly models: ReadonlyArray<Harness.Model>
   readonly turn: (input: { readonly text: string; readonly model?: string }) => Stream.Stream<LLMEvent, LLMError>
 }
@@ -136,6 +137,30 @@ export const discover = (process: Process, settings: Settings, directory: string
     Effect.timeoutOrElse({
       duration: "15 seconds",
       orElse: () => Effect.fail(new ProtocolError("The ACP agent did not start a session within 15 seconds.")),
+    }),
+  )
+
+export const verifyPrompt = "Reply with exactly: harness ok"
+
+/**
+ * Functional check used before saving a harness: open a real session, optionally switch model,
+ * and run one short prompt. Tool permission requests are refused; the prompt needs no tools.
+ */
+export const verify = (process: Process, settings: Settings, directory: string, model?: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const session = yield* open(process, { settings, directory, approve: () => Effect.succeed(false) })
+      const events = yield* Stream.runCollect(session.turn({ text: verifyPrompt, model }))
+      const reply = Array.from(events)
+        .flatMap((event) => (event.type === "text-delta" ? [event.text] : []))
+        .join("")
+        .trim()
+      return { ...session.agent, models: session.models, reply }
+    }),
+  ).pipe(
+    Effect.timeoutOrElse({
+      duration: "120 seconds",
+      orElse: () => Effect.fail(new ProtocolError("The ACP agent did not finish the test prompt within 120 seconds.")),
     }),
   )
 
@@ -242,6 +267,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   return {
     sessionId: session.sessionId,
     resumed: loaded !== undefined,
+    agent: agentInfo(initialize),
     models: selector.models,
     turn,
   } satisfies Session

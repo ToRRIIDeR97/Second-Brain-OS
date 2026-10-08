@@ -14,9 +14,17 @@ import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { harnessSettingsChanged } from "@/components/prompt-input/harness-controller"
-import { addHarness, discoverHarness, listHarnessSettings, removeHarness, setHarnessEnabled } from "@/utils/server"
+import {
+  addHarness,
+  discoverHarness,
+  harnessAssistantDirectory,
+  listHarnessSettings,
+  removeHarness,
+  setHarnessEnabled,
+} from "@/utils/server"
 import { showToast } from "@/utils/toast"
 import { SettingsListV2 } from "./parts/list"
+import { DialogHarnessAssistant } from "./harness-assistant"
 import "./settings-v2.css"
 
 // Splits an arguments field on whitespace; quoted arguments with spaces aren't supported here.
@@ -80,20 +88,28 @@ export const SettingsHarnessesV2: Component<{
     const dir = directory()
     if (!dir) return
     void dialog.show(() => (
-      <DialogAddHarness
-        directory={dir}
-        server={server()}
-        onClose={props.onBack}
-        onSaved={(entry) => {
-          changed()
-          showToast({
-            variant: "success",
-            icon: "circle-check",
-            title: language.t("harness.settings.added", { name: entry.name }),
-          })
-        }}
-      />
+      <DialogAddHarness directory={dir} server={server()} onClose={props.onBack} onSaved={saved} />
     ))
+  }
+
+  const saved = (entry: Harness.SettingsEntry) => {
+    changed()
+    showToast({
+      variant: "success",
+      icon: "circle-check",
+      title: language.t("harness.settings.added", { name: entry.name }),
+    })
+  }
+
+  // The assistant chat runs in a server-provided non-project folder so its session stays out of project lists.
+  const openAssistant = () => {
+    const dir = directory()
+    if (!dir) return
+    void harnessAssistantDirectory(server(), dir).then(
+      (assistantDir) =>
+        dialog.show(() => <DialogHarnessAssistant directory={assistantDir} onClose={props.onBack} onSaved={saved} />),
+      failed,
+    )
   }
 
   const sourceLabel = (entry: Harness.SettingsEntry) =>
@@ -122,9 +138,14 @@ export const SettingsHarnessesV2: Component<{
         <div class="settings-v2-section">
           <div class="flex items-center justify-between">
             <h3 class="settings-v2-section-title">{language.t("harness.settings.section.added")}</h3>
-            <ButtonV2 size="normal" variant="neutral" icon="plus" disabled={!directory()} onClick={openAdd}>
-              {language.t("harness.settings.add")}
-            </ButtonV2>
+            <div class="flex items-center gap-2">
+              <ButtonV2 size="normal" variant="ghost-muted" disabled={!directory()} onClick={openAdd}>
+                {language.t("harness.settings.addManually")}
+              </ButtonV2>
+              <ButtonV2 size="normal" variant="neutral" icon="plus" disabled={!directory()} onClick={openAssistant}>
+                {language.t("harness.settings.assistant")}
+              </ButtonV2>
+            </div>
           </div>
           <SettingsListV2>
             <Show

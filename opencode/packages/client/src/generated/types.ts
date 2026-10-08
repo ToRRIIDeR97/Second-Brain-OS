@@ -2765,6 +2765,64 @@ export type HarnessesDiscoverOutput = {
   }
 }
 
+export type HarnessesAssistantDirectoryInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesAssistantDirectoryOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: { readonly directory: string }
+}
+
+export type HarnessesVerifyInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly command: {
+    readonly command: string
+    readonly args?: ReadonlyArray<string>
+    readonly model?: string
+  }["command"]
+  readonly args?: { readonly command: string; readonly args?: ReadonlyArray<string>; readonly model?: string }["args"]
+  readonly model?: { readonly command: string; readonly args?: ReadonlyArray<string>; readonly model?: string }["model"]
+}
+
+export type HarnessesVerifyOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly command: string
+    readonly args: ReadonlyArray<string>
+    readonly agentName?: string
+    readonly version?: string
+    readonly models: ReadonlyArray<{
+      readonly id: string
+      readonly name: string
+      readonly description?: string
+      readonly reasoningEfforts: ReadonlyArray<string>
+      readonly serviceTiers: ReadonlyArray<{
+        readonly id: string
+        readonly name: string
+        readonly description?: string
+      }>
+      readonly defaultReasoningEffort?: string
+      readonly defaultServiceTier?: string
+      readonly isDefault: boolean
+    }>
+    readonly reply: string
+    readonly ok: boolean
+  }
+}
+
 export type HarnessesAddInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
