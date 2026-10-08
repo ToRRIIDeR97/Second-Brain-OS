@@ -17,6 +17,7 @@ import { Context, DateTime, Effect, Exit, Layer, Option, Schema, Scope, Stream }
 import { ChildProcess } from "effect/unstable/process"
 import { eq } from "drizzle-orm"
 import os from "os"
+import fs from "fs/promises"
 import path from "path"
 import { Config } from "./config"
 import { ConfigHarness } from "./config/harness"
@@ -71,6 +72,9 @@ export interface Interface {
   ) => Effect.Effect<Harness.SettingsEntry, HarnessRegistry.RegisterError>
   readonly remove: (id: string) => Effect.Effect<void, HarnessRegistry.RegisterError>
   readonly discover: (input: unknown) => Effect.Effect<Harness.Discovery, HarnessRegistry.RegisterError>
+  readonly verify: (input: unknown) => Effect.Effect<Harness.Verification, HarnessRegistry.RegisterError>
+  /** A non-project folder for setup-assistant sessions, so they stay out of project lists. */
+  readonly assistantDirectory: () => Effect.Effect<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/HarnessRuntime") {}
@@ -486,6 +490,18 @@ const layer = Layer.effect(
         HarnessRegistry.discover(input, { directory: location.directory, process }).pipe(
           Effect.map((result) =>
             Harness.Discovery.make({ ...result, args: [...result.args], models: [...result.models] }),
+          ),
+        ),
+      assistantDirectory: () =>
+        Effect.promise(async () => {
+          const directory = path.join(global.state, "harness-assistant")
+          await fs.mkdir(directory, { recursive: true })
+          return directory
+        }),
+      verify: (input) =>
+        HarnessRegistry.verify(input, { directory: location.directory, process }).pipe(
+          Effect.map((result) =>
+            Harness.Verification.make({ ...result, args: [...result.args], models: [...result.models] }),
           ),
         ),
     })

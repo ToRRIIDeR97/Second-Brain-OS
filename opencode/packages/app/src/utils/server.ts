@@ -171,6 +171,22 @@ export async function discoverHarness(input: HarnessServer, directory: string, v
   ).data
 }
 
+const decodeAssistantDirectory = Schema.decodeUnknownSync(
+  Location.response(Schema.Struct({ directory: Schema.String })),
+)
+
+export async function harnessAssistantDirectory(input: HarnessServer, directory: string) {
+  return decodeAssistantDirectory(await harnessSettingsRequest(input, directory, "/assistant-directory")).data.directory
+}
+
+const decodeVerification = Schema.decodeUnknownSync(Location.response(HarnessSchema.Verification))
+
+export async function verifyHarness(input: HarnessServer, directory: string, value: HarnessSchema.VerifyInput) {
+  return decodeVerification(
+    await harnessSettingsRequest(input, directory, "/verify", { method: "POST", body: JSON.stringify(value) }),
+  ).data
+}
+
 export async function addHarness(input: HarnessServer, directory: string, value: HarnessSchema.SettingsInput) {
   return decodeSettingsEntry(
     await harnessSettingsRequest(input, directory, "/registry", { method: "POST", body: JSON.stringify(value) }),

@@ -117,6 +117,20 @@ Built-ins and config-file entries are read-only. After each change the runtime
 refreshes its cached instance list, so the next turn and the picker see it.
 Agents have no tool for registering harnesses.
 
+The page also offers a setup assistant
+(`app/src/components/settings-v2/harness-assistant.tsx`). It is an ordinary
+session on a harness and model the user picks, created in the app state
+directory so it stays out of project lists. Because ACP agents get no Second
+Brain system prompt, the task instructions travel in the first user message.
+
+1. The assistant investigates with its own tools and replies with a
+   ```` ```harness ```` JSON block.
+2. When the session goes idle, the page parses the block and calls
+   `POST /api/harness/verify`. That runs the handshake, `session/new`, and one
+   short prompt in the proposed agent, refusing tool permissions.
+3. A failed test is sent back to the chat, up to three times automatically.
+4. A passed test enables Save. The assistant can't save anything itself.
+
 ## Session compatibility and review
 
 The managed server uses native `/api/session` execution and history alongside

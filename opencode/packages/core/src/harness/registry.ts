@@ -71,6 +71,7 @@ export interface Dependencies {
 
 const decodeInput = Schema.decodeUnknownOption(Input)
 const decodeDiscoverInput = Schema.decodeUnknownOption(Harness.DiscoverInput)
+const decodeVerifyInput = Schema.decodeUnknownOption(Harness.VerifyInput)
 const decodeInstance = Schema.decodeUnknownOption(ConfigHarness.Instance)
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
@@ -124,7 +125,7 @@ export const register = Effect.fn("HarnessRegistry.register")(function* (input: 
         config: { command, args: entry.args, ...(settings.models.length ? { models: settings.models } : {}) },
       },
     }
-    yield* Effect.tryPromise({
+    return yield* Effect.tryPromise({
       try: () => writeAtomic(path.join(deps.configDir, fileName), `${JSON.stringify(next, null, 2)}\n`),
       catch: (cause) => registerError("write-failed", `Could not save ${fileName}: ${String(cause)}`),
     })
@@ -158,6 +159,38 @@ export const discover = Effect.fn("HarnessRegistry.discover")(function* (
   return { command, args, agentName: agent.name, version: agent.version, models: agent.models } satisfies Discovery
 })
 
+/**
+ * Functional check: handshake, a real session, and one short prompt. `ok` means the agent
+ * answered with text. Nothing is written.
+ */
+export const verify = Effect.fn("HarnessRegistry.verify")(function* (
+  input: unknown,
+  deps: Pick<Dependencies, "directory" | "process">,
+) {
+  const decoded = Option.getOrUndefined(decodeVerifyInput(input))
+  if (!decoded?.command.trim()) return yield* fail("invalid-input", "Provide a command.")
+  const command = yield* resolveCommand(decoded.command.trim())
+  if (!command) return yield* fail("command-not-found", `"${decoded.command}" is not an executable on PATH.`)
+  const args = decoded.args ?? []
+  const result = yield* AcpHarness.verify(
+    deps.process,
+    { command, args, env: {}, models: [] },
+    deps.directory,
+    decoded.model?.trim() || undefined,
+  ).pipe(
+    Effect.mapError((error) => registerError("probe-failed", `${command} failed the test prompt: ${error.message}`)),
+  )
+  return {
+    command,
+    args,
+    agentName: result.name,
+    version: result.version,
+    models: result.models,
+    reply: result.reply,
+    ok: result.reply.length > 0,
+  }
+})
+
 // Read-modify-write of one existing entry under the shared lock. `change` returns the new entry,
 // or undefined to delete it. A malformed file is reported and never overwritten.
 function update(
@@ -176,7 +209,7 @@ function update(
     const entries = Object.fromEntries(
       Object.entries(raw).flatMap(([key, value]) => (key !== id ? [[key, value]] : next ? [[key, next]] : [])),
     )
-    yield* Effect.tryPromise({
+    return yield* Effect.tryPromise({
       try: () => writeAtomic(path.join(configDir, fileName), `${JSON.stringify(entries, null, 2)}\n`),
       catch: (cause) => registerError("write-failed", `Could not save ${fileName}: ${String(cause)}`),
     })

@@ -35,6 +35,20 @@ export const HarnessHandler = HttpApiBuilder.group(Api, "server.harness", (handl
       }),
     )
     .handle(
+      "harness.assistantDirectory",
+      Effect.fn(function* () {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.assistantDirectory().pipe(Effect.map((directory) => ({ directory }))))
+      }),
+    )
+    .handle(
+      "harness.verify",
+      Effect.fn(function* (ctx) {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.verify(ctx.payload)).pipe(Effect.mapError(httpError))
+      }),
+    )
+    .handle(
       "harness.add",
       Effect.fn(function* (ctx) {
         const harnesses = yield* HarnessRuntime.Service

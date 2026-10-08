@@ -143,7 +143,7 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
 | Desktop startup | Critical workflow | Sequence: startup | `desktop/src/main/index.ts` |
-| Harness settings (add, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
+| Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
 
 ## Unverified relationships and assumptions
 

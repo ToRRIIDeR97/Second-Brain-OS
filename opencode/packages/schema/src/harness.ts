@@ -98,6 +98,25 @@ export const DiscoverInput = Schema.Struct({
 }).annotate({ identifier: "Harness.DiscoverInput" })
 export interface DiscoverInput extends Schema.Schema.Type<typeof DiscoverInput> {}
 
+export const VerifyInput = Schema.Struct({
+  command: Schema.String,
+  args: Schema.Array(Schema.String).pipe(optional),
+  model: Schema.String.pipe(optional),
+}).annotate({ identifier: "Harness.VerifyInput" })
+export interface VerifyInput extends Schema.Schema.Type<typeof VerifyInput> {}
+
+// Result of a functional check: handshake, session, and one real reply.
+export const Verification = Schema.Struct({
+  command: Schema.String,
+  args: Schema.Array(Schema.String),
+  agentName: Schema.String.pipe(optional),
+  version: Schema.String.pipe(optional),
+  models: Schema.Array(Model),
+  reply: Schema.String,
+  ok: Schema.Boolean,
+}).annotate({ identifier: "Harness.Verification" })
+export interface Verification extends Schema.Schema.Type<typeof Verification> {}
+
 export const OpenCode = InstanceID.make("opencode")
 export const Codex = InstanceID.make("codex")
 export const OpenCodeDriver = DriverKind.make("opencode")
