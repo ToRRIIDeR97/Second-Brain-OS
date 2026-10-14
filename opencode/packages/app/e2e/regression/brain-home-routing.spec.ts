@@ -116,3 +116,41 @@ test("groups threads by Project, Brain and Other threads, and starts a thread in
   await expect(page).toHaveURL(/\/new-thread\?project=prj_repo&draftId=[^&]+$/)
   await expect(page.locator('[data-slot="titlebar-tab-item"]')).toHaveCount(0)
 })
+
+test("archiving a thread can be undone with mod+z", async ({ page }) => {
+  const repoThread = thread("ses_repo", repo, "Repo thread", 1_700_000_000_000)
+  await openApp(page, { projects: [project], sessions: [repoThread] })
+  const updates: unknown[] = []
+  await page.route(/\/session\/ses_repo(\?|$)/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback()
+    const body = route.request().postDataJSON() as { time?: { archived?: number | null } }
+    updates.push(body)
+    const archived = body.time?.archived ?? undefined
+    // Keep the mock's session list in step with the server's archive state.
+    Object.assign(repoThread.time, { archived })
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ ...repoThread, time: { ...repoThread.time, archived } }),
+    })
+  })
+  await page.goto("/")
+
+  const projectGroup = sidebar(page).locator('[data-sidebar-project="prj_repo"]')
+  await projectGroup.getByRole("button", { name: "Repo project" }).click()
+  const row = projectGroup.locator('[data-sidebar-thread="ses_repo"]')
+  await row.hover()
+  await row.getByRole("button", { name: "Thread actions" }).click()
+  await page.getByRole("menuitem", { name: "Archive" }).click()
+  await expect(row).toHaveCount(0)
+  await expect(page.getByText("Thread archived", { exact: true })).toBeVisible()
+
+  // mod+z belongs to text fields while one has focus; elsewhere it undoes the archive.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  const mod = (await page.evaluate(() => /(Mac|iPod|iPhone|iPad)/.test(navigator.platform))) ? "Meta" : "Control"
+  await page.keyboard.press(`${mod}+z`)
+  await expect(row).toBeVisible()
+  await expect(page.getByText("Thread archived", { exact: true })).toHaveCount(0)
+  expect(updates).toEqual([{ time: { archived: expect.any(Number) } }, { time: { archived: null } }])
+})

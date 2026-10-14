@@ -56,7 +56,14 @@ controller (`components/sidebar/sidebar-controller.ts`) reads
 threads outside any Project, and groups them with
 `features/second-brain/sidebar-threads.ts` into Projects, Brain and Other
 threads. The active Project is derived from the route's thread or draft
-directory. `context/drafts.tsx` holds unsent drafts per window and keeps prompt
+directory. Sidebar actions (archive, unarchive, pin through `PATCH /session/:id`;
+rename; delete through `session.remove`) apply the server's reply to every
+loaded directory list and to the recent-session index at once, then offer a
+5-second undo from `utils/undo-action.ts` (in memory only; a deferred delete
+that has not run when the app closes is dropped). The recent-session index
+query uses the shell's QueryClient, so the sidebar binds its own index cache
+to that client; `serverSync().homeSessions` writes to the outer client and
+its live events do not reach the sidebar's copy. `context/drafts.tsx` holds unsent drafts per window and keeps prompt
 state alive across route changes; it replaced the tab store.
 
 | Data                       | Owner and persistence                                                                                                 |

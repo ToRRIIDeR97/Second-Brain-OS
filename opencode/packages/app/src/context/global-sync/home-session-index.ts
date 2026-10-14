@@ -170,5 +170,7 @@ function toLegacySummary(session: SessionV2Info): Session {
     model: session.model,
     version: "",
     time: session.time,
+    // V2 exposes the pin as `time.pinned`; the legacy shape keeps it in `metadata.pinned`.
+    metadata: session.time.pinned === undefined ? undefined : { pinned: session.time.pinned },
   }
 }
