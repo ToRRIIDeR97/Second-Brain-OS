@@ -2,13 +2,17 @@ import { InstanceState } from "@/effect/instance-state"
 import { KnowledgeNote } from "@/knowledge/note"
 import { PlannerCalendar } from "@/planner/calendar"
 import { BrainProject } from "@/project/brain"
+import { Project } from "@/project/project"
+import { Database } from "@opencode-ai/core/database/database"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Effect, Layer } from "effect"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { Effect, Layer, Semaphore } from "effect"
+import path from "node:path"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { SecondBrainConflictError } from "../groups/second-brain"
@@ -18,6 +22,12 @@ const CALENDAR_PATH = ".second-brain/calendar-v1.json"
 export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "secondBrain", (handlers) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
+    const opencodeProjects = yield* Project.Service
+    const database = yield* Database.Service
+    // Serializes Project creation from Workspaces so concurrent requests cannot duplicate cards.
+    const ensureLock = Semaphore.makeUnsafe(1)
+    // Brain directories whose one-shot Workspace migration ran in this server process.
+    const migrated = new Set<string>()
     const filesystem = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
       return yield* effect.pipe(
         Effect.provide(
@@ -206,6 +216,78 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       return project
     })
 
+    const workspaces = Effect.fn("SecondBrain.workspaces")(function* () {
+      return (yield* opencodeProjects.list()).map(
+        (project): BrainProject.Workspace => ({
+          id: project.id,
+          worktree: project.worktree,
+          ...(project.name ? { name: project.name } : {}),
+        }),
+      )
+    })
+
+    // One-shot migration hook: the Brain location is chosen by the renderer, so the
+    // server learns it on the first Project thread listing for that directory.
+    const migrateOnce = Effect.fn("SecondBrain.migrateOnce")(function* (known: ReadonlyArray<BrainProject.Workspace>) {
+      const brainDirectory = (yield* InstanceState.context).directory
+      if (migrated.has(brainDirectory)) return
+      const withThreads = yield* BrainProject.workspaceIdsWithThreads().pipe(
+        Effect.provideService(Database.Service, database),
+      )
+      const candidates = BrainProject.migrationCandidates({ workspaces: known, withThreads, brainDirectory })
+      const counts = yield* filesystem(BrainProject.migrateWorkspaces(candidates))
+      migrated.add(brainDirectory)
+      yield* Effect.logInfo("Second Brain workspace migration", { candidates: candidates.length, ...counts })
+    })
+
+    const listProjectThreads = Effect.fn("SecondBrain.listProjectThreads")(function* () {
+      const known = yield* workspaces()
+      yield* ensureLock.withPermits(1)(migrateOnce(known)).pipe(
+        Effect.catch(() => Effect.logWarning("Second Brain workspace migration failed; it will retry")),
+      )
+      return yield* filesystem(
+        Effect.gen(function* () {
+          const projects = yield* BrainProject.list()
+          const resolved = yield* Effect.forEach(
+            projects,
+            (project) => BrainProject.threadDirectory(project, known).pipe(Effect.map((thread) => ({ project, thread }))),
+            { concurrency: 8 },
+          )
+          const stats = yield* BrainProject.threadStats(resolved.map((item) => item.thread.directory)).pipe(
+            Effect.provideService(Database.Service, database),
+          )
+          return resolved.map(({ project, thread }): BrainProject.ThreadSummary => {
+            const stat = stats.get(thread.directory)
+            return {
+              project,
+              threadDirectory: thread.directory,
+              threadDirectoryKind: thread.kind,
+              workspace: thread.workspace ?? null,
+              rootSessionCount: stat?.count ?? 0,
+              lastActivityAt: stat?.lastActivityAt ?? null,
+            }
+          })
+        }),
+      ).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    })
+
+    const ensureWorkspaceProject = Effect.fn("SecondBrain.ensureWorkspaceProject")(function* (ctx: {
+      payload: BrainProject.EnsureWorkspaceInput
+    }) {
+      const id = ctx.payload.workspaceId.trim()
+      if (!id || id === "global") return yield* new HttpApiError.BadRequest({})
+      const workspace = yield* opencodeProjects.get(ProjectV2.ID.make(id))
+      if (!workspace) return yield* new HttpApiError.NotFound({})
+      const brainDirectory = (yield* InstanceState.context).directory
+      if (path.resolve(workspace.worktree) === path.resolve(brainDirectory)) return yield* new HttpApiError.BadRequest({})
+      const result = yield* ensureLock.withPermits(1)(
+        projectConflict(
+          filesystem(BrainProject.ensureForWorkspace({ id: workspace.id, worktree: workspace.worktree })),
+        ),
+      )
+      return result.project
+    })
+
     const readProject = Effect.fn("SecondBrain.readProject")(function* (ctx: { query: { id: string } }) {
       return yield* projectRead(filesystem(BrainProject.get(ctx.query.id)))
     })
@@ -225,6 +307,8 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       .handle("writeCalendar", writeCalendar)
       .handle("listProjects", listProjects)
       .handle("createProject", createProject)
+      .handle("listProjectThreads", listProjectThreads)
+      .handle("ensureWorkspaceProject", ensureWorkspaceProject)
       .handle("readProject", readProject)
       .handle("updateProject", updateProject)
   }),

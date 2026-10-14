@@ -21,6 +21,8 @@ import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./la
 import { requireServerKey } from "@/utils/session-route"
 import { type DraftTab, useTabs } from "./tabs"
 import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
+import { ensureWorkspaceProject } from "@/features/second-brain/client"
+import { createWorkspaceProjectTracker } from "@/features/second-brain/workspace-projects"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -533,6 +535,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!project.id) continue
         if (project.id === "global") continue
         serverSync().project.icon(project.worktree, project.icon?.override)
+      }
+    })
+
+    // Every opened folder belongs to a Project: link newly opened Workspaces to one.
+    const workspaceProjects = new Map<string, ReturnType<typeof createWorkspaceProjectTracker>>()
+    createEffect(() => {
+      if (!server.ready()) return
+      const key = server.key
+      const tracker = workspaceProjects.get(key) ?? createWorkspaceProjectTracker()
+      workspaceProjects.set(key, tracker)
+      const selected = store.home.selection
+      const pending = tracker.next({
+        workspaces: enriched(),
+        brainDirectory: selected.server === key ? selected.directory : undefined,
+      })
+      for (const workspace of pending) {
+        void ensureWorkspaceProject(
+          { server: serverSdk().server, fetch: platform.fetch, target: { directory: workspace.brainDirectory } },
+          workspace.id,
+        ).catch(() => undefined)
       }
     })
 
