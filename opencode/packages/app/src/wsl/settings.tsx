@@ -15,7 +15,7 @@ import { ServerConnection } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { DialogAddWslServer } from "./dialog-add-server"
 import { useWslServers } from "./context"
-import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
+import { wslRuntimeRetryable } from "./settings-model"
 
 type Controller = ReturnType<typeof useServerManagementController>
 
@@ -95,8 +95,6 @@ export function WslServerSettings(props: {
         {(item) => {
           const key = ServerConnection.Key.make(item.config.id)
           const check = () => wsl.data?.opencodeChecks[item.config.distro]
-          const opencodeAction = () => wslOpencodeAction(check())
-          const busy = () => wsl.data?.job?.kind === "install-opencode" && wsl.data.job.distro === item.config.distro
           return (
             <div class="settings-v2-servers-row">
               <div class="settings-v2-servers-lead">
@@ -116,17 +114,6 @@ export function WslServerSettings(props: {
               <div class="settings-v2-servers-actions">
                 <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
                   <Tag>{language.t("dialog.server.status.default")}</Tag>
-                </Show>
-                <Show when={opencodeAction()}>
-                  {(label) => (
-                    <ButtonV2
-                      size="small"
-                      disabled={busy() || request.isPending}
-                      onClick={() => api && request.mutate(() => api.installOpencode(item.config.distro))}
-                    >
-                      {busy() ? language.t("wsl.server.updating") : language.t(label())}
-                    </ButtonV2>
-                  )}
                 </Show>
                 <MenuV2 gutter={4} modal={false} placement="bottom-end">
                   <MenuV2.Trigger

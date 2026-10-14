@@ -24,7 +24,7 @@ export type AddServerPrimaryButton = {
   variant: "neutral" | "contrast"
   label: AddServerText
   disabled: boolean
-  action: "install-opencode" | "add" | null
+  action: "add" | null
   loading: boolean
   width: string | null
 }
@@ -50,12 +50,6 @@ function isHiddenDistro(name: string) {
 
 export const wslRuntimeRetryable = (runtime: WslServerRuntime) =>
   runtime.kind === "failed" || runtime.kind === "stopped"
-
-export function wslOpencodeAction(check?: WslOpencodeCheck) {
-  if (!check) return
-  if (!check.resolvedPath) return "wsl.onboarding.installOpencode"
-  if (check.matchesDesktop === false) return "wsl.onboarding.updateOpencode"
-}
 
 export function wslDistroReady(state: WslServersState | undefined, name: string) {
   const installed = state?.installed.find((item) => item.name === name)
@@ -198,8 +192,6 @@ function addServerPrimaryButton(input: {
         (!!input.selectedDistro &&
           input.state?.job?.kind === "probe-addable" &&
           input.state.job.distros.includes(input.selectedDistro))))
-  const installingOpencode =
-    input.state?.job?.kind === "install-opencode" && input.state.job.distro === input.selectedDistro
   if (!ready || probingOpencode) {
     return {
       variant: "contrast",
@@ -210,19 +202,17 @@ function addServerPrimaryButton(input: {
       width: null,
     }
   }
+  // The desktop app does not download runtimes into WSL; the user installs a matching one.
   if (!addServerOpencodeReady(input.opencodeCheck)) {
-    const update = !!input.opencodeCheck?.resolvedPath && input.opencodeCheck.matchesDesktop === false
     return {
       variant: "neutral",
-      label: installingOpencode
-        ? { key: "wsl.onboarding.updatingOpencode" }
-        : update
-          ? { key: "wsl.onboarding.updateOpencode" }
-          : { key: "wsl.onboarding.installOpencode" },
-      disabled: !!input.state?.job || input.adding,
-      action: "install-opencode",
-      loading: installingOpencode,
-      width: update ? "138px" : "129px",
+      label: input.opencodeCheck?.resolvedPath
+        ? { key: "wsl.onboarding.updateOpencode" }
+        : { key: "wsl.onboarding.distroStatus.opencodeMissing" },
+      disabled: true,
+      action: null,
+      loading: false,
+      width: null,
     }
   }
   return {

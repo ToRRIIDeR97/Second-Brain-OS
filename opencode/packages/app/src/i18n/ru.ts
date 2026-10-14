@@ -39,10 +39,6 @@ export const dict = {
   "desktop.menu.nextProject": "Следующий проект",
   "desktop.menu.minimize": "Свернуть",
   "desktop.menu.maximize": "Развернуть",
-  "desktop.menu.documentation": "Документация OpenCode",
-  "desktop.menu.supportForum": "Форум поддержки",
-  "desktop.menu.shareFeedback": "Отправить отзыв",
-  "desktop.menu.reportBug": "Сообщить об ошибке",
   "desktop.menu.ariaLabel": "Меню OpenCode",
 
   "desktop.updater.dialog.checkFailed.message": "Не удалось проверить наличие обновлений.",
@@ -79,7 +75,6 @@ export const dict = {
   "desktop.wsl.error.executeDistro": "Не удаётся выполнять команды в дистрибутиве",
   "desktop.wsl.error.installWsl": "Не удалось установить WSL",
   "desktop.wsl.error.installDistro": "Не удалось установить дистрибутив: {{distro}}",
-  "desktop.wsl.error.installOpencode": "Не удалось установить OpenCode",
   "desktop.wsl.error.alreadyAdded": "Дистрибутив {{distro}} уже добавлен",
   "desktop.wsl.error.opencodeMissing": "opencode не установлен в этом дистрибутиве",
   "desktop.wsl.error.opencodeCannotRun": "opencode установлен, но его не удалось запустить",
@@ -187,10 +182,6 @@ export const dict = {
   "command.session.compact.description": "Сократить сессию для уменьшения размера контекста",
   "command.session.fork": "Создать ответвление",
   "command.session.fork.description": "Создать новую сессию из сообщения",
-  "command.session.share": "Поделиться сессией",
-  "command.session.share.description": "Поделиться сессией и скопировать URL в буфер обмена",
-  "command.session.unshare": "Отменить публикацию",
-  "command.session.unshare.description": "Прекратить публикацию сессии",
 
   "command.session.export": "Экспортировать сессию",
   "command.session.export.description": "Экспортировать полную историю сессии в формате JSON",
@@ -206,10 +197,6 @@ export const dict = {
   "dialog.provider.group.popular": "Популярные",
   "dialog.provider.group.other": "Другие",
   "dialog.provider.custom.label": "Пользовательский провайдер, совместимый с OpenAI",
-  "dialog.provider.tag.recommended": "Рекомендуемые",
-  "dialog.provider.opencode.note": "Отобранные модели, включая Claude, GPT, Gemini и другие",
-  "dialog.provider.opencode.tagline": "Надёжные оптимизированные модели",
-  "dialog.provider.opencodeGo.tagline": "Доступная подписка для всех",
   "dialog.provider.anthropic.note": "Прямой доступ к моделям Claude, включая Pro и Max",
   "dialog.provider.copilot.note": "ИИ-модели для помощи в кодировании через GitHub Copilot",
   "dialog.provider.openai.note": "Модели GPT для быстрых и мощных задач общего ИИ",
@@ -244,13 +231,6 @@ export const dict = {
   "provider.connect.apiKey.label": "Ключ API {{provider}}",
   "provider.connect.apiKey.placeholder": "Ключ API",
   "provider.connect.apiKey.required": "Требуется ключ API",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen даёт вам доступ к отобранным надёжным оптимизированным моделям для агентов программирования.",
-  "provider.connect.opencodeZen.line2":
-    "С одним ключом API вы получите доступ к таким моделям, как Claude, GPT, Gemini, GLM и другие.",
-  "provider.connect.opencodeZen.visit.prefix": "Посетите ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": ", чтобы получить ключ API.",
   "provider.connect.oauth.code.visit.prefix": "Посетите ",
   "provider.connect.oauth.code.visit.link": "эту ссылку",
   "provider.connect.oauth.code.visit.suffix":
@@ -270,8 +250,6 @@ export const dict = {
   "provider.custom.title": "Пользовательский провайдер",
   "provider.custom.unavailable": "Пользовательские провайдеры недоступны на этом сервере",
   "provider.custom.description.prefix": "Настройте провайдера, совместимого с OpenAI. См. ",
-  "provider.custom.description.link": "документацию по настройке провайдера",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID провайдера",
   "provider.custom.field.providerID.placeholder": "myprovider",
   "provider.custom.field.providerID.description": "Строчные буквы, цифры, дефисы или подчёркивания",
@@ -473,7 +451,6 @@ export const dict = {
   "wsl.server.label": "WSL",
   "wsl.server.menu.label": "Сервер WSL",
   "wsl.server.retryStart": "Повторить запуск",
-  "wsl.server.updating": "Обновление...",
   "wsl.onboarding.step.distro": "Выбрать дистрибутив",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Проверка WSL...",
@@ -491,13 +468,9 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Выберите дистрибутив или установите его ниже.",
   "wsl.onboarding.checkingOpencode": "Проверка OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Проверка OpenCode в {{distro}}...",
-  "wsl.onboarding.updatingOpencode": "Обновление OpenCode...",
-  "wsl.onboarding.updatingOpencodeIn": "Обновление OpenCode в {{distro}}...",
-  "wsl.onboarding.updateOpencodeIn": "Обновите OpenCode в {{distro}}.",
   "wsl.onboarding.updateOpencode": "Обновить OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode в {{distro}} готов к работе.",
   "wsl.onboarding.opencodeReady": "OpenCode готов к работе.",
-  "wsl.onboarding.installOpencodeIn": "Установите OpenCode в {{distro}}.",
   "wsl.onboarding.installOpencode": "Установить OpenCode",
   "wsl.onboarding.chooseDistroFirst": "Сначала выберите дистрибутив.",
   "wsl.onboarding.loadFailed": "Не удалось загрузить состояние WSL.",
@@ -567,7 +540,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Запускается после создания нового рабочего пространства (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "например, bun install",
-  "dialog.usageExceeded.dontShowAgain": "Больше не показывать",
 
   "context.breakdown.title": "Разбивка контекста",
   "context.breakdown.note":
@@ -649,16 +621,7 @@ export const dict = {
   "toast.file.listFailed.title": "Не удалось получить список файлов",
   "toast.context.noLineSelection.title": "Нет выделения строк",
   "toast.context.noLineSelection.description": "Сначала выберите диапазон строк во вкладке файла.",
-  "toast.session.share.copyFailed.title": "Не удалось скопировать URL в буфер обмена",
-  "toast.session.share.success.title": "Сессия опубликована",
-  "toast.session.share.success.description": "URL скопирован в буфер обмена!",
-  "toast.session.share.failed.title": "Не удалось опубликовать сессию",
-  "toast.session.share.failed.description": "Произошла ошибка при публикации сессии",
 
-  "toast.session.unshare.success.title": "Публикация отменена",
-  "toast.session.unshare.success.description": "Публикация успешно отменена!",
-  "toast.session.unshare.failed.title": "Не удалось отменить публикацию",
-  "toast.session.unshare.failed.description": "Произошла ошибка при отмене публикации",
 
   "toast.session.export.success.title": "Сессия экспортирована",
   "toast.session.export.success.description": "Сессия сохранена в файл {{filename}}",
@@ -683,8 +646,6 @@ export const dict = {
   "error.page.action.checking": "Проверка...",
   "error.page.action.checkUpdates": "Проверить обновления",
   "error.page.action.updateTo": "Обновить до {{version}}",
-  "error.page.report.prefix": "Пожалуйста, сообщите об этой ошибке команде OpenCode",
-  "error.page.report.discord": "в Discord",
   "error.page.version": "Версия: {{version}}",
 
   "error.dev.rootNotFound":
@@ -832,19 +793,7 @@ export const dict = {
   "status.popover.tab.plugins": "Плагины",
   "status.popover.action.manageServers": "Управлять серверами",
 
-  "session.share.popover.title": "Опубликовать в интернете",
-  "session.share.popover.description.shared":
-    "Эта сессия общедоступна. Доступ к ней может получить любой, у кого есть ссылка.",
-  "session.share.popover.description.unshared":
-    "Опубликуйте сессию в интернете. Доступ к ней сможет получить любой, у кого есть ссылка.",
-  "session.share.action.share": "Поделиться",
-  "session.share.action.publish": "Опубликовать",
-  "session.share.action.publishing": "Публикация...",
-  "session.share.action.unpublish": "Отменить публикацию",
-  "session.share.action.unpublishing": "Отмена публикации...",
-  "session.share.action.view": "Посмотреть",
   "session.share.copy.copied": "Скопировано",
-  "session.share.copy.copyLink": "Копировать ссылку",
 
   "lsp.tooltip.none": "Нет LSP-серверов",
   "lsp.label.connected": "{{count}} LSP",
@@ -868,7 +817,6 @@ export const dict = {
   "common.dismiss": "Закрыть",
   "common.requestFailed": "Запрос не выполнен",
   "common.moreOptions": "Дополнительные опции",
-  "common.learnMore": "Подробнее",
   "common.rename": "Переименовать",
   "common.export": "Экспортировать",
   "common.reset": "Сбросить",
@@ -882,7 +830,6 @@ export const dict = {
   "sidebar.menu.toggle": "Переключить меню",
   "sidebar.nav.projectsAndSessions": "Проекты и сессии",
   "sidebar.settings": "Настройки",
-  "sidebar.help": "Помощь",
   "sidebar.workspaces.enable": "Включить рабочие пространства",
   "sidebar.workspaces.disable": "Отключить рабочие пространства",
   "sidebar.gettingStarted.title": "Начало работы",
@@ -977,8 +924,6 @@ export const dict = {
   "settings.general.row.wayland.tooltip":
     "На Linux с мониторами разной частоты обновления нативный Wayland может быть стабильнее.",
 
-  "settings.general.row.releaseNotes.title": "Примечания к выпуску",
-  "settings.general.row.releaseNotes.description": 'Показывать всплывающие окна "Что нового" после обновлений',
 
   "settings.updates.row.startup.title": "Проверять обновления при запуске",
   "settings.updates.row.startup.description": "Автоматически проверять обновления при запуске OpenCode",
@@ -1160,10 +1105,6 @@ export const dict = {
   "workspace.reset.archived.many": "Будут архивированы сессии: {{count}}.",
   "workspace.reset.note": "Это сбросит рабочее пространство до соответствия ветке по умолчанию.",
   "common.open": "Открыть",
-  "dialog.releaseNotes.action.getStarted": "Начать",
-  "dialog.releaseNotes.action.next": "Далее",
-  "dialog.releaseNotes.action.hideFuture": "Больше не показывать",
-  "dialog.releaseNotes.media.alt": "Предварительный просмотр выпуска",
   "toast.project.reloadFailed.title": "Не удалось перезагрузить {{project}}",
   "error.server.invalidConfiguration": "Недопустимая конфигурация",
   "common.moreCountSuffix": " (ещё {{count}})",

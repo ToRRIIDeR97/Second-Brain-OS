@@ -67,14 +67,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.retry.geminiHot": "Gemini on praegu ülekoormatud",
   "ui.sessionTurn.error.freeUsageExceeded": "Tasuta kasutus on ületatud",
   "ui.sessionTurn.error.addCredits": "Lisa krediite",
-  "dialog.usageExceeded.freeTier.title": "Tasuta limiit on täis",
-  "dialog.usageExceeded.freeTier.description":
-    "Tellige OpenCode, et saada usaldusväärne juurdepääs parimatele avatud lähtekoodiga mudelitele alates 5 dollarist kuus.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Telli",
-  "dialog.usageExceeded.accountRateLimit.title": "Go limiit on täis",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Kasutuslimiit on täis. Selle mudeli kasutamise jätkamiseks lubage kasutus oma olemasoleva saldo pealt",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Ava seaded",
   "ui.sessionTurn.status.delegating": "Tööde delegeerimine",
   "ui.sessionTurn.status.planning": "Järgmiste sammude planeerimine",
   "ui.sessionTurn.status.gatheringContext": "Uurides",

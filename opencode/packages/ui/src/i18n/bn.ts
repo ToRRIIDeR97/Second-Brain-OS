@@ -69,14 +69,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.retry.geminiHot": "মিথুন এখন খুব গরম",
   "ui.sessionTurn.error.freeUsageExceeded": "বিনামূল্যে ব্যবহার অতিক্রম করেছে",
   "ui.sessionTurn.error.addCredits": "ক্রেডিট যোগ করুন",
-  "dialog.usageExceeded.freeTier.title": "বিনামূল্যের সীমা পৌঁছেছে",
-  "dialog.usageExceeded.freeTier.description":
-    "OpenCode-এ সদস্যতা নিন $5/মাস থেকে শুরু করে সেরা ওপেন-সোর্স মডেলগুলিতে নির্ভরযোগ্য অ্যাক্সেসের জন্য যান৷",
-  "dialog.usageExceeded.freeTier.actionLabel": "সদস্যতা",
-  "dialog.usageExceeded.accountRateLimit.title": "যাওয়ার সীমা পৌঁছে গেছে",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "ব্যবহারের সীমা পৌঁছেছে। এখন এই মডেল ব্যবহার চালিয়ে যেতে, আপনার উপলব্ধ ব্যালেন্স থেকে ব্যবহার সক্ষম করুন",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "সেটিংস খুলুন",
   "ui.sessionTurn.status.delegating": "কাজ অর্পণ",
   "ui.sessionTurn.status.planning": "পরবর্তী পদক্ষেপের পরিকল্পনা",
   "ui.sessionTurn.status.gatheringContext": "অন্বেষণ",

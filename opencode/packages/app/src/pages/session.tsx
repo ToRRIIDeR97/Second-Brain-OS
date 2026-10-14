@@ -104,7 +104,6 @@ import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError 
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import type { HarnessSession } from "@/utils/session"
 import { switchHarnessForServer } from "@/utils/server"
-import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
@@ -2092,7 +2091,6 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
-  useUsageExceededDialogs()
 
   const mobileTabs = (compact = false, bottom = false) => (
     <Tabs value={store.mobileTab} class="h-auto">
