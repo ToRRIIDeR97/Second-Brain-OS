@@ -581,4 +581,39 @@ describe("SessionV2.prompt", () => {
       expect(wakeCalls).toEqual([])
     }),
   )
+
+  it.effect("lists only unpromoted queued inputs in admission order", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Steer now" }), resume: false })
+      const first = yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Queued first" }),
+        delivery: "queue",
+        resume: false,
+      })
+      const second = yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Queued second" }),
+        delivery: "queue",
+        resume: false,
+      })
+
+      expect((yield* session.queued(sessionID)).map((item) => item.id)).toEqual([first.id, second.id])
+      yield* SessionInput.promoteNextQueued(db, events, sessionID)
+      expect((yield* session.queued(sessionID)).map((item) => item.id)).toEqual([second.id])
+    }),
+  )
+
+  it.effect("fails to list queued inputs for a missing Session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const failure = yield* session.queued(SessionV2.ID.make("ses_missing")).pipe(Effect.flip)
+      expect(failure._tag).toBe("Session.NotFoundError")
+    }),
+  )
 })

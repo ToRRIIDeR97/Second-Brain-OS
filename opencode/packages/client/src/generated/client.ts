@@ -23,6 +23,8 @@ import type {
   SessionsSwitchHarnessOutput,
   SessionsPromptInput,
   SessionsPromptOutput,
+  SessionsQueuedInput,
+  SessionsQueuedOutput,
   SessionsCompactInput,
   SessionsCompactOutput,
   SessionsWaitInput,
@@ -435,6 +437,17 @@ export function make(options: ClientOptions) {
             body: { id: input["id"], prompt: input["prompt"], delivery: input["delivery"], resume: input["resume"] },
             successStatus: 200,
             declaredStatuses: [409, 404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      queued: (input: SessionsQueuedInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsQueuedOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/queued`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
             empty: false,
           },
           requestOptions,

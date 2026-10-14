@@ -418,6 +418,8 @@ import type {
   V2SessionQuestionRejectResponses,
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
+  V2SessionQueuedErrors,
+  V2SessionQueuedResponses,
   V2SessionRevertClearErrors,
   V2SessionRevertClearResponses,
   V2SessionRevertCommitErrors,
@@ -6200,6 +6202,25 @@ export class Session3 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List queued messages
+   *
+   * List admitted queue-delivery inputs that have not been promoted into the transcript yet.
+   */
+  public queued<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionQueuedResponses, V2SessionQueuedErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/queued",
+      ...options,
+      ...params,
     })
   }
 
