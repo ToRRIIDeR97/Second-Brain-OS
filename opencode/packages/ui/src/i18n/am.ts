@@ -67,13 +67,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.retry.geminiHot": "gemini አሁን በጣም ሞቃት ነው",
   "ui.sessionTurn.error.freeUsageExceeded": "ነፃ አጠቃቀም ታልፏል",
   "ui.sessionTurn.error.addCredits": "ክሬዲት አክል",
-  "dialog.usageExceeded.freeTier.title": "ነፃ ገደብ ላይ ደርሷል",
-  "dialog.usageExceeded.freeTier.description": "ለOpenCode Go ለምርጥ ክፍት ምንጭ ሞዴሎች ታማኝ መዳረሻ ለማግኘት ይመዝገቡ፣ ከ$5 በወር ጀምሮ።",
-  "dialog.usageExceeded.freeTier.actionLabel": "ለደንበኝነት ይመዝገቡ",
-  "dialog.usageExceeded.accountRateLimit.title": "የሂድ ገደብ ላይ ደርሷል",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "የአጠቃቀም ገደብ ላይ ደርሷል። ይህን ሞዴል አሁን መጠቀሙን ለመቀጠል ካለው ቀሪ ሒሳብ መጠቀምን ያንቁ",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "ክፍት ቅንብሮች",
   "ui.sessionTurn.status.delegating": "ሥራን በውክልና መስጠት",
   "ui.sessionTurn.status.planning": "ቀጣዮቹን ደረጃዎች ማቀድ",
   "ui.sessionTurn.status.gatheringContext": "ማሰስ",

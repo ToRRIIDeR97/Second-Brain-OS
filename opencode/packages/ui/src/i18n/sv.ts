@@ -67,14 +67,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.retry.geminiHot": "Gemini är alldeles för belastad just nu",
   "ui.sessionTurn.error.freeUsageExceeded": "Gränsen för kostnadsfri användning har överskridits",
   "ui.sessionTurn.error.addCredits": "Lägg till krediter",
-  "dialog.usageExceeded.freeTier.title": "Gratisgränsen nådd",
-  "dialog.usageExceeded.freeTier.description":
-    "Prenumerera på OpenCode Go för pålitlig tillgång till de bästa modellerna med öppen källkod, från 5 USD/månad.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Prenumerera",
-  "dialog.usageExceeded.accountRateLimit.title": "Gränsen för Go har nåtts",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Användningsgräns nådd. För att fortsätta använda den här modellen nu, aktivera användning från ditt tillgängliga saldo",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Öppna inställningar",
   "ui.sessionTurn.status.delegating": "Delegerar arbete",
   "ui.sessionTurn.status.planning": "Planerar nästa steg",
   "ui.sessionTurn.status.gatheringContext": "Utforskar",

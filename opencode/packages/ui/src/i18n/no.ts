@@ -50,14 +50,6 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.error.freeUsageExceeded": "Gratisforbruket er overskredet",
   "ui.sessionTurn.error.addCredits": "Legg til kreditter",
 
-  "dialog.usageExceeded.freeTier.title": "Gratisgrensen er nådd",
-  "dialog.usageExceeded.freeTier.description":
-    "Abonner på OpenCode Go for pålitelig tilgang til de beste modellene med åpen kildekode, fra $5/måned.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Abonner",
-  "dialog.usageExceeded.accountRateLimit.title": "Go-grensen er nådd",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Bruksgrensen er nådd. For å fortsette å bruke denne modellen nå, aktiver bruk av den tilgjengelige saldoen din",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Åpne innstillinger",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbeid",
   "ui.sessionTurn.status.planning": "Planlegger neste trinn",

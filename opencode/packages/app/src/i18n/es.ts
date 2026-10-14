@@ -39,10 +39,6 @@ export const dict = {
   "desktop.menu.nextProject": "Siguiente proyecto",
   "desktop.menu.minimize": "Minimizar",
   "desktop.menu.maximize": "Maximizar",
-  "desktop.menu.documentation": "Documentación de OpenCode",
-  "desktop.menu.supportForum": "Foro de asistencia",
-  "desktop.menu.shareFeedback": "Enviar comentarios",
-  "desktop.menu.reportBug": "Informar de un error",
   "desktop.menu.ariaLabel": "Menú de OpenCode",
 
   "desktop.updater.dialog.checkFailed.message": "No se pudo buscar actualizaciones.",
@@ -80,7 +76,6 @@ export const dict = {
   "desktop.wsl.error.executeDistro": "No se pueden ejecutar comandos en la distribución",
   "desktop.wsl.error.installWsl": "No se pudo instalar WSL",
   "desktop.wsl.error.installDistro": "No se pudo instalar la distribución: {{distro}}",
-  "desktop.wsl.error.installOpencode": "No se pudo instalar OpenCode",
   "desktop.wsl.error.alreadyAdded": "Ya se ha añadido {{distro}}",
   "desktop.wsl.error.opencodeMissing": "opencode no está instalado en esta distribución",
   "desktop.wsl.error.opencodeCannotRun": "opencode está instalado, pero no se pudo ejecutar",
@@ -188,10 +183,6 @@ export const dict = {
   "command.session.compact.description": "Resumir la sesión para reducir el tamaño del contexto",
   "command.session.fork": "Bifurcar desde mensaje",
   "command.session.fork.description": "Crear una nueva sesión desde un mensaje anterior",
-  "command.session.share": "Compartir sesión",
-  "command.session.share.description": "Compartir esta sesión y copiar la URL al portapapeles",
-  "command.session.unshare": "Dejar de compartir sesión",
-  "command.session.unshare.description": "Dejar de compartir esta sesión",
 
   "command.session.export": "Exportar sesión",
   "command.session.export.description": "Exportar la transcripción completa de la sesión como JSON",
@@ -207,10 +198,6 @@ export const dict = {
   "dialog.provider.group.popular": "Populares",
   "dialog.provider.group.other": "Otros",
   "dialog.provider.custom.label": "Proveedor personalizado compatible con OpenAI",
-  "dialog.provider.tag.recommended": "Recomendado",
-  "dialog.provider.opencode.note": "Selección de modelos como Claude, GPT, Gemini y otros",
-  "dialog.provider.opencode.tagline": "Modelos optimizados y fiables",
-  "dialog.provider.opencodeGo.tagline": "Suscripción económica para todos",
   "dialog.provider.anthropic.note": "Acceso directo a modelos Claude, incluidos Pro y Max",
   "dialog.provider.copilot.note": "Modelos de IA para asistencia de codificación a través de GitHub Copilot",
   "dialog.provider.openai.note": "Modelos GPT para tareas de IA generales rápidas y capaces",
@@ -245,13 +232,6 @@ export const dict = {
   "provider.connect.apiKey.label": "Clave API de {{provider}}",
   "provider.connect.apiKey.placeholder": "Clave API",
   "provider.connect.apiKey.required": "La clave API es obligatoria",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen te da acceso a un conjunto curado de modelos fiables optimizados para agentes de programación.",
-  "provider.connect.opencodeZen.line2":
-    "Con una sola clave API obtendrás acceso a modelos como Claude, GPT, Gemini, GLM y más.",
-  "provider.connect.opencodeZen.visit.prefix": "Visita ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " para obtener tu clave API.",
   "provider.connect.oauth.code.visit.prefix": "Visita ",
   "provider.connect.oauth.code.visit.link": "este enlace",
   "provider.connect.oauth.code.visit.suffix":
@@ -271,8 +251,6 @@ export const dict = {
   "provider.custom.title": "Proveedor personalizado",
   "provider.custom.unavailable": "Los proveedores personalizados no están disponibles en este servidor",
   "provider.custom.description.prefix": "Configurar un proveedor compatible con OpenAI. Ver la ",
-  "provider.custom.description.link": "documentación de configuración del proveedor",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID del proveedor",
   "provider.custom.field.providerID.placeholder": "miproveedor",
   "provider.custom.field.providerID.description": "Letras minúsculas, números, guiones o guiones bajos",
@@ -476,7 +454,6 @@ export const dict = {
   "wsl.server.label": "WSL",
   "wsl.server.menu.label": "Servidor WSL",
   "wsl.server.retryStart": "Reintentar el inicio",
-  "wsl.server.updating": "Actualizando...",
   "wsl.onboarding.step.distro": "Elegir distribución",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Comprobando WSL...",
@@ -494,13 +471,9 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Elige una distribución o instala una abajo.",
   "wsl.onboarding.checkingOpencode": "Comprobando OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Comprobando OpenCode en {{distro}}...",
-  "wsl.onboarding.updatingOpencode": "Actualizando OpenCode...",
-  "wsl.onboarding.updatingOpencodeIn": "Actualizando OpenCode en {{distro}}...",
-  "wsl.onboarding.updateOpencodeIn": "Actualiza OpenCode en {{distro}}.",
   "wsl.onboarding.updateOpencode": "Actualizar OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode está listo en {{distro}}.",
   "wsl.onboarding.opencodeReady": "OpenCode está listo.",
-  "wsl.onboarding.installOpencodeIn": "Instala OpenCode en {{distro}}.",
   "wsl.onboarding.installOpencode": "Instalar OpenCode",
   "wsl.onboarding.chooseDistroFirst": "Elige primero una distribución.",
   "wsl.onboarding.loadFailed": "No se pudo cargar el estado de WSL.",
@@ -570,7 +543,6 @@ export const dict = {
     "Se ejecuta después de crear un nuevo espacio de trabajo (árbol de trabajo).",
   "dialog.project.edit.worktree.startup.placeholder": "p. ej. bun install",
 
-  "dialog.usageExceeded.dontShowAgain": "No volver a mostrar",
 
   "context.breakdown.title": "Desglose del contexto",
   "context.breakdown.note":
@@ -653,16 +625,7 @@ export const dict = {
   "toast.context.noLineSelection.title": "Sin selección de líneas",
   "toast.context.noLineSelection.description": "Primero selecciona un rango de líneas en una pestaña de archivo.",
 
-  "toast.session.share.copyFailed.title": "Fallo al copiar URL al portapapeles",
-  "toast.session.share.success.title": "Sesión compartida",
-  "toast.session.share.success.description": "Enlace para compartir copiado al portapapeles.",
-  "toast.session.share.failed.title": "Fallo al compartir sesión",
-  "toast.session.share.failed.description": "Ocurrió un error al compartir la sesión",
 
-  "toast.session.unshare.success.title": "La sesión dejó de compartirse",
-  "toast.session.unshare.success.description": "La sesión dejó de compartirse correctamente.",
-  "toast.session.unshare.failed.title": "Fallo al dejar de compartir sesión",
-  "toast.session.unshare.failed.description": "Ocurrió un error al dejar de compartir la sesión",
 
   "toast.session.export.success.title": "Sesión exportada",
   "toast.session.export.success.description": "Sesión guardada en {{filename}}",
@@ -687,8 +650,6 @@ export const dict = {
   "error.page.action.checking": "Comprobando...",
   "error.page.action.checkUpdates": "Buscar actualizaciones",
   "error.page.action.updateTo": "Actualizar a {{version}}",
-  "error.page.report.prefix": "Informa de este error al equipo de OpenCode",
-  "error.page.report.discord": "en Discord",
   "error.page.version": "Versión: {{version}}",
 
   "error.dev.rootNotFound":
@@ -835,19 +796,7 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Gestionar servidores",
 
-  "session.share.popover.title": "Publicar en la web",
-  "session.share.popover.description.shared":
-    "Esta sesión es pública en la web. Es accesible para cualquiera con el enlace.",
-  "session.share.popover.description.unshared":
-    "Compartir sesión públicamente en la web. Será accesible para cualquiera con el enlace.",
-  "session.share.action.share": "Compartir",
-  "session.share.action.publish": "Publicar",
-  "session.share.action.publishing": "Publicando...",
-  "session.share.action.unpublish": "Despublicar",
-  "session.share.action.unpublishing": "Despublicando...",
-  "session.share.action.view": "Ver",
   "session.share.copy.copied": "Copiado",
-  "session.share.copy.copyLink": "Copiar enlace",
 
   "lsp.tooltip.none": "Sin servidores LSP",
   "lsp.label.connected": "{{count}} LSP",
@@ -871,7 +820,6 @@ export const dict = {
   "common.dismiss": "Descartar",
   "common.requestFailed": "Solicitud fallida",
   "common.moreOptions": "Más opciones",
-  "common.learnMore": "Más información",
   "common.rename": "Renombrar",
   "common.export": "Exportar",
   "common.reset": "Restablecer",
@@ -885,7 +833,6 @@ export const dict = {
   "sidebar.menu.toggle": "Mostrar u ocultar menú",
   "sidebar.nav.projectsAndSessions": "Proyectos y sesiones",
   "sidebar.settings": "Ajustes",
-  "sidebar.help": "Ayuda",
   "sidebar.workspaces.enable": "Habilitar espacios de trabajo",
   "sidebar.workspaces.disable": "Deshabilitar espacios de trabajo",
   "sidebar.gettingStarted.title": "Primeros pasos",
@@ -980,9 +927,6 @@ export const dict = {
   "settings.general.row.wayland.tooltip":
     "En Linux con monitores de frecuencia de actualización mixta, Wayland nativo puede ser más estable.",
 
-  "settings.general.row.releaseNotes.title": "Notas de la versión",
-  "settings.general.row.releaseNotes.description":
-    'Mostrar ventanas emergentes de "Novedades" después de las actualizaciones',
 
   "settings.updates.row.startup.title": "Buscar actualizaciones al iniciar",
   "settings.updates.row.startup.description": "Buscar actualizaciones automáticamente cuando se inicia OpenCode",
@@ -1163,10 +1107,6 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} sesiones serán archivadas.",
   "workspace.reset.note": "Esto restablecerá el espacio de trabajo para coincidir con la rama predeterminada.",
   "common.open": "Abrir",
-  "dialog.releaseNotes.action.getStarted": "Comenzar",
-  "dialog.releaseNotes.action.next": "Siguiente",
-  "dialog.releaseNotes.action.hideFuture": "No mostrar esto en el futuro",
-  "dialog.releaseNotes.media.alt": "Vista previa de la versión",
   "toast.project.reloadFailed.title": "Error al recargar {{project}}",
   "error.server.invalidConfiguration": "Configuración inválida",
   "common.moreCountSuffix": " (+{{count}} más)",

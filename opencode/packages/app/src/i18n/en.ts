@@ -91,10 +91,6 @@ export const dict = {
   "command.session.compact.description": "Summarize the session to reduce context size",
   "command.session.fork": "Fork from message",
   "command.session.fork.description": "Create a new session from a previous message",
-  "command.session.share": "Share session",
-  "command.session.share.description": "Share this session and copy the URL to clipboard",
-  "command.session.unshare": "Unshare session",
-  "command.session.unshare.description": "Stop sharing this session",
   "command.session.export": "Export session",
   "command.session.export.description": "Export the full session transcript as JSON",
 
@@ -109,10 +105,6 @@ export const dict = {
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Other",
   "dialog.provider.custom.label": "Custom OpenAI-compatible provider",
-  "dialog.provider.tag.recommended": "Recommended",
-  "dialog.provider.opencode.note": "Curated models including Claude, GPT, Gemini and more",
-  "dialog.provider.opencode.tagline": "Reliable optimized models",
-  "dialog.provider.opencodeGo.tagline": "Low cost subscription for everyone",
   "dialog.provider.anthropic.note": "Direct access to Claude models, including Pro and Max",
   "dialog.provider.copilot.note": "AI models for coding assistance via GitHub Copilot",
   "dialog.provider.openai.note": "GPT models for fast, capable general AI tasks",
@@ -147,13 +139,6 @@ export const dict = {
   "provider.connect.apiKey.label": "{{provider}} API key",
   "provider.connect.apiKey.placeholder": "API key",
   "provider.connect.apiKey.required": "API key is required",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen gives you access to a curated set of reliable optimized models for coding agents.",
-  "provider.connect.opencodeZen.line2":
-    "With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and more.",
-  "provider.connect.opencodeZen.visit.prefix": "Visit ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " to collect your API key.",
   "provider.connect.oauth.code.visit.prefix": "Visit ",
   "provider.connect.oauth.code.visit.link": "this link",
   "provider.connect.oauth.code.visit.suffix":
@@ -173,8 +158,6 @@ export const dict = {
   "provider.custom.title": "Custom provider",
   "provider.custom.unavailable": "Custom providers are unavailable on this server",
   "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
-  "provider.custom.description.link": "provider config docs",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "Provider ID",
   "provider.custom.field.providerID.placeholder": "myprovider",
   "provider.custom.field.providerID.description": "Lowercase letters, numbers, hyphens, or underscores",
@@ -383,7 +366,6 @@ export const dict = {
   "wsl.server.label": "WSL",
   "wsl.server.menu.label": "WSL server",
   "wsl.server.retryStart": "Retry start",
-  "wsl.server.updating": "Updating...",
   "wsl.onboarding.step.distro": "Choose distro",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Checking WSL...",
@@ -401,13 +383,9 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Pick a distro or install one below.",
   "wsl.onboarding.checkingOpencode": "Checking OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Checking OpenCode in {{distro}}...",
-  "wsl.onboarding.updatingOpencode": "Updating OpenCode...",
-  "wsl.onboarding.updatingOpencodeIn": "Updating OpenCode in {{distro}}...",
-  "wsl.onboarding.updateOpencodeIn": "Update OpenCode in {{distro}}.",
   "wsl.onboarding.updateOpencode": "Update OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode is ready in {{distro}}.",
   "wsl.onboarding.opencodeReady": "OpenCode is ready.",
-  "wsl.onboarding.installOpencodeIn": "Install OpenCode in {{distro}}.",
   "wsl.onboarding.installOpencode": "Install OpenCode",
   "wsl.onboarding.chooseDistroFirst": "Choose a distro first.",
   "wsl.onboarding.loadFailed": "Failed to load WSL state.",
@@ -476,11 +454,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Runs after creating a new workspace (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
 
-  "dialog.releaseNotes.action.getStarted": "Get started",
-  "dialog.releaseNotes.action.next": "Next",
-  "dialog.releaseNotes.action.hideFuture": "Don't show these in the future",
-  "dialog.releaseNotes.media.alt": "Release preview",
-  "dialog.usageExceeded.dontShowAgain": "Don't show again",
 
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
@@ -561,16 +534,7 @@ export const dict = {
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
-  "toast.session.share.copyFailed.title": "Failed to copy URL to clipboard",
-  "toast.session.share.success.title": "Session shared",
-  "toast.session.share.success.description": "Share URL copied to clipboard!",
-  "toast.session.share.failed.title": "Failed to share session",
-  "toast.session.share.failed.description": "An error occurred while sharing the session",
 
-  "toast.session.unshare.success.title": "Session unshared",
-  "toast.session.unshare.success.description": "Session unshared successfully!",
-  "toast.session.unshare.failed.title": "Failed to unshare session",
-  "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
 
   "toast.session.export.success.title": "Session exported",
   "toast.session.export.success.description": "Saved session to {{filename}}",
@@ -597,8 +561,6 @@ export const dict = {
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",
   "error.page.circular": "[Circular]",
-  "error.page.report.prefix": "Please report this error to the OpenCode team",
-  "error.page.report.discord": "on Discord",
   "error.page.version": "Version: {{version}}",
 
   "error.dev.rootNotFound":
@@ -771,19 +733,7 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
 
-  "session.share.popover.title": "Publish on web",
-  "session.share.popover.description.shared":
-    "This session is public on the web. It is accessible to anyone with the link.",
-  "session.share.popover.description.unshared":
-    "Share session publicly on the web. It will be accessible to anyone with the link.",
-  "session.share.action.share": "Share",
-  "session.share.action.publish": "Publish",
-  "session.share.action.publishing": "Publishing...",
-  "session.share.action.unpublish": "Unpublish",
-  "session.share.action.unpublishing": "Unpublishing...",
-  "session.share.action.view": "View",
   "session.share.copy.copied": "Copied",
-  "session.share.copy.copyLink": "Copy link",
 
   "lsp.tooltip.none": "No LSP servers",
   "lsp.label.connected": "{{count}} LSP",
@@ -809,7 +759,6 @@ export const dict = {
   "common.moreCountSuffix": " (+{{count}} more)",
   "common.requestFailed": "Request failed",
   "common.moreOptions": "More options",
-  "common.learnMore": "Learn more",
   "common.rename": "Rename",
   "common.export": "Export",
   "common.reset": "Reset",
@@ -843,7 +792,6 @@ export const dict = {
   "sidebar.menu.toggle": "Toggle menu",
   "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
-  "sidebar.help": "Help",
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",
   "sidebar.gettingStarted.title": "Getting started",
@@ -1300,8 +1248,6 @@ export const dict = {
   "settings.general.row.wayland.tooltip":
     "On Linux with mixed refresh-rate monitors, native Wayland can be more stable.",
 
-  "settings.general.row.releaseNotes.title": "Release notes",
-  "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
 
   "settings.updates.row.startup.title": "Check for updates on startup",
   "settings.updates.row.startup.description": "Automatically check for updates when OpenCode launches",

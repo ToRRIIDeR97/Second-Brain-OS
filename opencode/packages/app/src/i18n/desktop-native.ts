@@ -273,10 +273,6 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.nextProject": "Next Project",
   "desktop.menu.minimize": "Minimize",
   "desktop.menu.maximize": "Maximize",
-  "desktop.menu.documentation": "OpenCode Documentation",
-  "desktop.menu.supportForum": "Support Forum",
-  "desktop.menu.shareFeedback": "Share Feedback",
-  "desktop.menu.reportBug": "Report a Bug",
   "desktop.menu.ariaLabel": "OpenCode menu",
 
   "desktop.updater.dialog.checkFailed.message": "Update check failed.",
@@ -313,7 +309,6 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.wsl.error.executeDistro": "Cannot execute commands in distro",
   "desktop.wsl.error.installWsl": "WSL installation failed",
   "desktop.wsl.error.installDistro": "Failed to install distro: {{distro}}",
-  "desktop.wsl.error.installOpencode": "OpenCode installation failed",
   "desktop.wsl.error.alreadyAdded": "{{distro}} is already added",
   "desktop.wsl.error.opencodeMissing": "opencode is not installed in this distro",
   "desktop.wsl.error.opencodeCannotRun": "opencode is installed but could not run",
