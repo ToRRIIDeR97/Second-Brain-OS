@@ -53,7 +53,8 @@ def classes():
                                               "AgentSwitched | ModelSwitched"], "union")
     klass(s, 540, 240, 230, "PermissionRequest", ["id per_…, sessionID", "action, resources[], save[]", "source? {messageID, callID}"], "in memory")
     klass(s, 800, 240, 240, "BrainProject", ["id project_<ULID>, name (unique)", "outcome, instructions", "status: active|paused|archived",
-                                            "progressPercent 0..100", "location? {workspaceId, path}", "card: projects/<id>/project.md"])
+                                            "progressPercent 0..100", "location? {workspaceId = Project.id}", "card: projects/<id>/project.md",
+                                            "threadDirectory: worktree | folder"])
     klass(s, 20, 470, 230, "SessionInput", ["id (= User message id)", "delivery: steer | queue", "admitted_seq, promoted_seq?"])
     klass(s, 280, 470, 230, "AssistantContent", ["Text | Reasoning | Tool", "Tool.state: ToolState", "snapshot {start, end, files}"])
     klass(s, 540, 470, 230, "HarnessInstance", ["id, driver: opencode|codex|acp", "status: available|unavailable", "models[]",
@@ -75,7 +76,7 @@ def classes():
     assoc(s, [(920, 84), (920, 64), (100, 64), (100, 84)], "1", "1", "resolves to", at=(700, 60))
     # second brain
     assoc(s, [(920, 179), (920, 240)], "1", "*")
-    assoc(s, [(920, 470), (920, 366)], "*", "*", "projectIds")
+    assoc(s, [(920, 470), (920, 381)], "*", "*", "projectIds")
     assoc(s, [(1040, 130), (1052, 130), (1052, 530), (1040, 530)], "1", "*")
     assoc(s, [(1040, 150), (1066, 150), (1066, 740), (1040, 740)], "1", "1")
     assoc(s, [(800, 740), (770, 740)], "1", "*", comp=True)

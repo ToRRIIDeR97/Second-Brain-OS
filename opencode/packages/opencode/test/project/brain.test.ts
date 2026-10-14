@@ -187,3 +187,83 @@ Keep this body intact.
     expect(existsSync(path.join(tmp.path, "projects"))).toBe(false)
   })
 })
+
+describe("BrainProject workspace threads", () => {
+  const run = <A, E>(
+    directory: string,
+    effect: Effect.Effect<A, E, Location.Service | LocationMutation.Service | FSUtil.Service | FileMutation.Service>,
+  ) =>
+    Effect.runPromise(
+      effect.pipe(
+        Effect.provide(LocationMutation.locationLayer),
+        Effect.provideService(Location.Service, {
+          directory: AbsolutePath.make(directory),
+          project: { id: ProjectV2.ID.global, directory: AbsolutePath.make(directory) },
+        }),
+        Effect.provide(LayerNode.compile(FSUtil.node)),
+        Effect.provide(LayerNode.compile(FileMutation.node)),
+      ),
+    )
+
+  test("ensureForWorkspace is idempotent and keeps generated names unique", async () => {
+    await using tmp = await tmpdir()
+    await run(tmp.path, BrainProject.create({ name: "repo", outcome: "Existing unlinked Project" }))
+    const workspace = { id: "proj_repo", worktree: "/work/repo" }
+    const first = await run(tmp.path, BrainProject.ensureForWorkspace(workspace))
+    const second = await run(tmp.path, BrainProject.ensureForWorkspace(workspace))
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(false)
+    expect(second.project.id).toBe(first.project.id)
+    expect(first.project).toMatchObject({
+      name: "repo (2)",
+      status: "active",
+      location: { workspaceId: "proj_repo", displayPath: "/work/repo" },
+    })
+    expect(await run(tmp.path, BrainProject.list())).toHaveLength(2)
+  })
+
+  test("threadDirectory uses the linked Workspace, else the Project folder (created for flat cards)", async () => {
+    await using tmp = await tmpdir()
+    const linked = (await run(tmp.path, BrainProject.ensureForWorkspace({ id: "proj_a", worktree: "/work/a" }))).project
+    const known = [{ id: "proj_a", worktree: "/work/a" }]
+    expect(await run(tmp.path, BrainProject.threadDirectory(linked, known))).toMatchObject({
+      kind: "workspace",
+      directory: "/work/a",
+    })
+    // A Workspace the server no longer knows falls back to the Project folder.
+    expect(await run(tmp.path, BrainProject.threadDirectory(linked, []))).toMatchObject({
+      kind: "folder",
+      directory: path.join(tmp.path, linked.folder),
+    })
+
+    mkdirSync(path.join(tmp.path, "projects"), { recursive: true })
+    writeFileSync(
+      path.join(tmp.path, "projects", "project_01FLAT.md"),
+      "---\nversion: 2\nid: project_01FLAT\ntitle: Flat\nstatus: active\n---\nFlat card outcome.\n",
+    )
+    const flat = await run(tmp.path, BrainProject.get("project_01FLAT"))
+    const resolved = await run(tmp.path, BrainProject.threadDirectory(flat, known))
+    expect(resolved).toMatchObject({ kind: "folder", directory: path.join(tmp.path, "projects", "project_01FLAT") })
+    expect(existsSync(path.join(tmp.path, "projects", "project_01FLAT", "notes", ".gitkeep"))).toBe(true)
+  })
+
+  test("migration only targets real Workspaces with threads and is idempotent", async () => {
+    await using tmp = await tmpdir()
+    const workspaces = [
+      { id: "global", worktree: "/" },
+      { id: "proj_brain", worktree: tmp.path },
+      { id: "proj_busy", worktree: "/work/busy" },
+      { id: "proj_idle", worktree: "/work/idle" },
+    ]
+    const candidates = BrainProject.migrationCandidates({
+      workspaces,
+      withThreads: new Set(["global", "proj_brain", "proj_busy"]),
+      brainDirectory: tmp.path,
+    })
+    expect(candidates.map((workspace) => workspace.id)).toEqual(["proj_busy"])
+    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({ created: 1, linked: 0, failed: 0 })
+    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({ created: 0, linked: 1, failed: 0 })
+    const projects = await run(tmp.path, BrainProject.list())
+    expect(projects.map((project) => project.location?.workspaceId)).toEqual(["proj_busy"])
+  })
+})

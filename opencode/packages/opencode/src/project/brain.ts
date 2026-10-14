@@ -1,11 +1,15 @@
 export * as BrainProject from "./brain"
 
+import { Database } from "@opencode-ai/core/database/database"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { and, count, inArray, isNull, max } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
 import matter from "gray-matter"
+import path from "node:path"
 import { ulid } from "ulid"
 import type { PlannerCalendar } from "../planner/calendar"
 
@@ -63,6 +67,35 @@ export const UpdateInput = Schema.Struct({
   location: Schema.optional(Schema.NullOr(ProjectLocation)),
 })
 export type UpdateInput = typeof UpdateInput.Type
+
+/** An OpenCode project (folder or repository), shown as a Workspace in the UI. */
+export const Workspace = Schema.Struct({
+  id: Schema.String,
+  worktree: Schema.String,
+  name: Schema.optional(Schema.String),
+})
+export type Workspace = typeof Workspace.Type
+
+export const ThreadDirectoryKind = Schema.Literals(["workspace", "folder"])
+export type ThreadDirectoryKind = typeof ThreadDirectoryKind.Type
+
+export const ThreadSummary = Schema.Struct({
+  project: Info,
+  /** Absolute directory where this Project's threads run; pass it verbatim as the session directory. */
+  threadDirectory: Schema.String,
+  threadDirectoryKind: ThreadDirectoryKind,
+  /** The linked Workspace when it is known to the server; null for unlinked or missing Workspaces. */
+  workspace: Schema.NullOr(Workspace),
+  rootSessionCount: Schema.Number,
+  /** Epoch milliseconds of the most recently updated root thread, or null when there are none. */
+  lastActivityAt: Schema.NullOr(Schema.Number),
+})
+export type ThreadSummary = typeof ThreadSummary.Type
+
+export const EnsureWorkspaceInput = Schema.Struct({
+  workspaceId: Schema.String,
+})
+export type EnsureWorkspaceInput = typeof EnsureWorkspaceInput.Type
 
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("BrainProject.InvalidError", {
   reason: Schema.String,
@@ -207,6 +240,127 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
     .pipe(Effect.catchTag("FileMutation.StaleContentError", () => Effect.fail(new ConflictError({ reason: "stale" }))))
   return info
 })
+
+/**
+ * Return the Project linked to `workspace`, creating one when none links to it.
+ * Idempotent: a second call returns the same Project. Only writes Markdown cards
+ * and the Project folder; never moves files.
+ */
+export const ensureForWorkspace = Effect.fn("BrainProject.ensureForWorkspace")(function* (workspace: Workspace) {
+  const projects = yield* list()
+  const existing = projects.find((project) => project.location?.workspaceId === workspace.id)
+  if (existing) return { project: existing, created: false }
+  const base = workspaceName(workspace)
+  const project = yield* create({
+    name: uniqueName(base, new Set(projects.map((project) => project.name.trim().toLowerCase()))),
+    outcome: `Threads and work in ${base}.`,
+    location: { workspaceId: workspace.id, displayPath: workspace.worktree },
+  })
+  return { project, created: true }
+})
+
+/**
+ * Resolve where a Project's threads run: the linked Workspace worktree when it is
+ * known, otherwise the Project folder inside the Brain directory (created when a
+ * legacy flat card has none yet).
+ */
+export const threadDirectory = Effect.fn("BrainProject.threadDirectory")(function* (
+  project: Info,
+  workspaces: ReadonlyArray<Workspace> = [],
+) {
+  const workspace = project.location
+    ? workspaces.find((candidate) => candidate.id === project.location?.workspaceId)
+    : undefined
+  if (workspace) return { kind: "workspace" as const, directory: workspace.worktree, workspace }
+  const location = yield* Location.Service
+  const fs = yield* FSUtil.Service
+  const directory = path.join(location.directory, project.folder)
+  if (!(yield* fs.existsSafe(directory))) {
+    const mutation = yield* LocationMutation.Service
+    const files = yield* FileMutation.Service
+    const target = yield* mutation.resolve({ path: `${project.folder}/notes/.gitkeep`, kind: "file" })
+    yield* files.write({ target, content: "" })
+  }
+  return { kind: "folder" as const, directory, workspace: undefined }
+})
+
+/** Root (non-archived, non-child) thread counts and last activity keyed by session directory. */
+export const threadStats = Effect.fn("BrainProject.threadStats")(function* (directories: ReadonlyArray<string>) {
+  if (directories.length === 0) return new Map<string, { count: number; lastActivityAt: number | null }>()
+  const database = yield* Database.Service
+  const db = database.db
+  const rows = yield* db
+    .select({ directory: SessionTable.directory, count: count(), last: max(SessionTable.time_updated) })
+    .from(SessionTable)
+    .where(
+      and(
+        inArray(SessionTable.directory, [...new Set(directories)]),
+        isNull(SessionTable.parent_id),
+        isNull(SessionTable.time_archived),
+      ),
+    )
+    .groupBy(SessionTable.directory)
+    .all()
+    .pipe(Effect.orDie)
+  return new Map(rows.map((row) => [row.directory, { count: row.count, lastActivityAt: row.last ?? null }]))
+})
+
+/** OpenCode project ids that own at least one root thread. */
+export const workspaceIdsWithThreads = Effect.fn("BrainProject.workspaceIdsWithThreads")(function* () {
+  const database = yield* Database.Service
+  const rows = yield* database.db
+    .selectDistinct({ id: SessionTable.project_id })
+    .from(SessionTable)
+    .where(isNull(SessionTable.parent_id))
+    .all()
+    .pipe(Effect.orDie)
+  return new Set(rows.map((row) => String(row.id)))
+})
+
+/**
+ * Workspaces the migration should give a Project: they have threads, are real
+ * folders (not the shared `global` project), and are not the Brain itself.
+ */
+export function migrationCandidates(input: {
+  workspaces: ReadonlyArray<Workspace>
+  withThreads: ReadonlySet<string>
+  brainDirectory: string
+}) {
+  const brain = path.resolve(input.brainDirectory)
+  return input.workspaces.filter(
+    (workspace) =>
+      workspace.id !== "global" &&
+      input.withThreads.has(workspace.id) &&
+      path.resolve(workspace.worktree) !== brain,
+  )
+}
+
+/** Create Projects for Workspaces no Project links to. Idempotent; returns counts only. */
+export const migrateWorkspaces = Effect.fn("BrainProject.migrateWorkspaces")(function* (
+  workspaces: ReadonlyArray<Workspace>,
+) {
+  // Sequential so generated names stay unique across this pass; one failure does not stop the rest.
+  const results = yield* Effect.forEach(workspaces, (workspace) => ensureForWorkspace(workspace).pipe(Effect.option))
+  const done = results.filter(Option.isSome).map((result) => result.value)
+  return {
+    created: done.filter((result) => result.created).length,
+    linked: done.filter((result) => !result.created).length,
+    failed: results.length - done.length,
+  }
+})
+
+function workspaceName(workspace: Workspace) {
+  const name = path.basename(workspace.worktree.replace(/[\\/]+$/, "")) || workspace.id
+  return [...name].slice(0, 180).join("")
+}
+
+function uniqueName(base: string, taken: ReadonlySet<string>) {
+  if (!taken.has(base.toLowerCase())) return base
+  for (let index = 2; ; index++) {
+    const candidate = `${base} (${index})`
+    if (!taken.has(candidate.toLowerCase())) return candidate
+  }
+}
 
 const existingProjectPath = Effect.fn("BrainProject.existingProjectPath")(function* (id: string) {
   if (!/^project_[0-9A-Z]+$/i.test(id)) return yield* new InvalidError({ reason: "invalid_id" })

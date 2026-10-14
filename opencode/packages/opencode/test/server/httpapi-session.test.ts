@@ -428,6 +428,36 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "keeps Brain Project folder threads separate by directory and by project subpath",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const alpha = path.join(test.directory, "projects", "project_01ALPHA")
+        const beta = path.join(test.directory, "projects", "project_01BETA")
+        yield* Effect.promise(() => mkdir(alpha, { recursive: true }))
+        yield* Effect.promise(() => mkdir(beta, { recursive: true }))
+        const root = yield* createSession({ title: "brain root" })
+        const first = yield* createSession({ title: "alpha" }).pipe(provideInstanceEffect(alpha))
+        const second = yield* createSession({ title: "beta" }).pipe(provideInstanceEffect(beta))
+        expect(first.projectID).toBe(root.projectID)
+        expect(second.projectID).toBe(root.projectID)
+
+        const ids = (query: Record<string, string>) =>
+          requestJson<{ data: Session.Info[] }>(`/api/session?${new URLSearchParams(query)}`, { headers }).pipe(
+            Effect.map((body) => body.data.map((session) => session.id).toSorted()),
+          )
+
+        expect(yield* ids({ directory: alpha })).toEqual([first.id])
+        expect(yield* ids({ directory: beta })).toEqual([second.id])
+        expect(yield* ids({ project: root.projectID, subpath: "projects/project_01ALPHA" })).toEqual([first.id])
+        expect(yield* ids({ project: root.projectID, subpath: "projects/project_01BETA" })).toEqual([second.id])
+        expect(yield* ids({ project: root.projectID })).toEqual([root.id, first.id, second.id].toSorted())
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "returns v2 public request errors for cursor and workspace query failures",
     () =>
       Effect.gen(function* () {

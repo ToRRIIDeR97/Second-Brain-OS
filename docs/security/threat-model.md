@@ -18,6 +18,13 @@ Detailed permission and request flows are in
 | Server to workspace files  | Second Brain handlers run in an instance location context. Note and project code resolves targets through `LocationMutation` before reading or writing files. See `opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `opencode/packages/opencode/src/knowledge/note.ts`, and `opencode/packages/opencode/src/project/brain.ts`. |
 | Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service encrypts its client secret and refresh token with Electron `safeStorage` and disables connection when secure storage is unavailable. See `opencode/packages/desktop/src/main/google-calendar.ts`.                                                                                  |
 
+`POST /second-brain/projects/workspace` takes only an OpenCode project id. The
+server looks the id up in its own project table and rejects `global` and the
+Brain directory itself; it never accepts a renderer path. The resulting card
+stores that Workspace's worktree as `location.displayPath`, and
+`GET /second-brain/project-threads` returns absolute thread directories the
+same way session responses already return `directory`.
+
 Workspace notes, projects, calendar files, session data, provider tokens, and
 agent tool permissions are sensitive. Treat note contents, provider responses,
 workspace files, URL input, and IPC arguments as untrusted. Keep file access
