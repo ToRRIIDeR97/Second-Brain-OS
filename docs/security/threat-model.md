@@ -73,10 +73,16 @@ on its own. Removed in the T3 parity Phase 1 cleanup:
 Still outbound: the configured LLM providers (including the `opencode` Zen
 provider when the user selects it), the `models.dev` catalog, Google APIs,
 and links the user opens. `$schema` URLs in config files are identifiers, not
-fetches. Known remaining references, out of this phase's scope: the
-`opencode` CLI commands under `packages/opencode/src/cli/` (removal planned in
-Phase 8), upstream agent prompts that point the model at `opencode.ai/docs`,
-and the MCP OAuth `client_uri` metadata value.
+fetches. Known remaining references: upstream agent prompts that point the
+model at `opencode.ai/docs`, the MCP OAuth `client_uri` metadata value, and
+two help-text links printed by the developer-only `providers login` command.
+
+Phase 8 removed the TUI and the upstream CLI commands that reached GitHub,
+the OpenCode console, and share or install endpoints (`github`, `pr`,
+`account`, `upgrade`, `uninstall`, `web`, `acp`, `attach`, `stats`, `plug`,
+`export`, `import`). The remaining CLI in `packages/opencode/src/index.ts`
+runs only from source for development (`serve`, `generate`, `mcp`, `debug`,
+`providers`, `agent`, `models`, `session`, `db`) and isn't shipped.
 
 ## Harness registration
 

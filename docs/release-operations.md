@@ -37,6 +37,9 @@ Locally on Windows, `bun run desktop:build` builds and packages the app with
 publishing disabled. Output is under `opencode/packages/desktop/dist/`.
 The build downloads the pinned upstream CLI for the optional development
 sidecar and bundles the fork's local server. These are separate runtimes.
+The local server comes from `opencode/packages/opencode/script/build-node.ts`
+(entry `src/node.ts`). The fork doesn't build or ship its own `opencode` CLI
+binary, and the desktop app has no "Install CLI" action.
 
 The product display name is Second Brain OS. Existing `ai.opencode.desktop.*`
 application IDs and data paths are retained to preserve profile compatibility.
