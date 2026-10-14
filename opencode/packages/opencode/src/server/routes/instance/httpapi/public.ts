@@ -127,6 +127,11 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           if (properties?.branch) properties.branch = { anyOf: [properties.branch, { type: "null" }] }
           if (properties?.extra) properties.extra = { anyOf: [properties.extra, { type: "null" }] }
         }
+        if (path === "/session/{sessionID}" && method === "patch") {
+          // `time.archived: null` unarchives a session; keep that null in the SDK.
+          const time = body?.schema?.properties?.time
+          if (time?.properties?.archived) time.properties.archived = nullable(time.properties.archived)
+        }
         if (path === "/experimental/workspace/warp" && method === "post") {
           const ref = operation.requestBody.content?.["application/json"]?.schema?.$ref?.replace(
             "#/components/schemas/",

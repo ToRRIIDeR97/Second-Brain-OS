@@ -207,6 +207,18 @@ than assuming that every operation uses one API generation. PTY sockets use
 short-lived tickets from the legacy connection endpoint on managed servers
 and the native `/api/pty` endpoints on servers using only the current API.
 
+Archive, unarchive, and pin go through the legacy
+`PATCH /session/:sessionID` route. `time.archived: <ms>` archives and
+`time.archived: null` clears the `time_archived` column. `pinned: true`
+stores the pin time as `metadata.pinned` (epoch ms) and `pinned: false`
+removes that key, leaving other metadata intact, so pins need no migration.
+Legacy session info returns `metadata.pinned`; native `SessionV2.Info`
+derives `time.pinned` from it. Each change publishes `session.updated`, and
+the renderer reducer drops archived sessions and re-inserts unarchived ones.
+The renderer helpers are `unarchiveSession` and `setSessionPinned` in
+`app/src/pages/session/session-archive.ts` and `sessionPinnedAt` in
+`app/src/utils/session.ts`.
+
 Native forks copy the selected history into a new session through durable
 `session.next.message.imported` events. Forks receive new message IDs and do
 not inherit provider continuation handles or filesystem snapshots. The
@@ -219,6 +231,20 @@ Snapshot capture discovers Git initialized after a workspace is already open.
 Renderer Last turn review uses this endpoint; working-tree and branch review
 use the managed server's legacy Git routes. File search refreshes the
 ripgrep fallback on each query so newly written files are discoverable.
+
+"Edit from here" on a user message stages a revert at that message
+(`POST /api/session/:sessionID/revert/stage`) and loads the message into the
+composer. The user picks "Messages only" (`files: false`, workspace files
+untouched) or "Messages and files". For the second choice the renderer first
+unions `GET /api/session/:sessionID/diff` across the selected turn and every
+later turn, and asks for confirmation with that file list before staging.
+Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
+files, so the compatibility layer rejects `files: false` for them.
+
+The session timeline collapses runs of two or more completed tool calls into
+one "Ran N tools" summary row (`session-ui/src/components/part-group.ts`).
+File edits, questions, subagent tasks, errored tools and running tools stay as
+their own rows. Read-only runs keep the "Explored" context group.
 
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the

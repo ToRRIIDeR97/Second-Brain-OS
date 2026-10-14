@@ -165,6 +165,7 @@ Later turns in the same runtime send only the user message. See
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
 | Project thread directories and Workspace migration | Critical workflow | Class | `opencode/src/project/brain.ts` (`ensureForWorkspace`, `threadDirectory`, `migrateWorkspaces`), `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `app/src/features/second-brain/workspace-projects.ts` |
+| Session archive, unarchive, pin | Critical workflow | Text only ([README](README.md#session-compatibility-and-review)): `time_archived` set or NULL, `metadata.pinned` | `opencode/src/server/routes/instance/httpapi/handlers/session.ts`, `opencode/src/session/session.ts`, `core/src/session/projector.ts`, `app/src/context/global-sync/event-reducer.ts` |
 | Desktop startup | Critical workflow | Sequence: startup | `desktop/src/main/index.ts` |
 | Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
 

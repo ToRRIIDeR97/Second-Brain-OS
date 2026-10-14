@@ -8,12 +8,12 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
   const contextByPart = new Map<string, PriorContext>()
   previous.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type !== "context") return
+    if (row._tag !== "AssistantPart" || row.group.type === "part") return
     row.group.refs.forEach((ref) => contextByPart.set(`${row.userMessageID}:${ref.partID}`, { index, row }))
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type !== "context") return
+    if (row._tag !== "AssistantPart" || row.group.type === "part") return
     const key = TimelineRow.key(row)
     if (byKey.has(key) && !reserved.has(key)) reserved.set(key, index)
   })
@@ -35,7 +35,7 @@ function stabilizeContextKey(
   rowIndex: number,
   claimed: Set<string>,
 ) {
-  if (row._tag !== "AssistantPart" || row.group.type !== "context") return row
+  if (row._tag !== "AssistantPart" || row.group.type === "part") return row
   const existing = row.group.refs.reduce<PriorContext | undefined>((result, ref) => {
     const candidate = contextByPart.get(`${row.userMessageID}:${ref.partID}`)
     if (!candidate) return result

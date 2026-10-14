@@ -21,6 +21,7 @@ const session = (input: {
   id: input.id,
   parentID: input.parentID,
   projectID: "project",
+  harnessInstanceID: "opencode",
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   time: { created: 1, updated: input.updated ?? 1, archived: input.archived },

@@ -684,6 +684,10 @@ export const dict = {
   "session.revertDock.collapse": "Collapse rolled back messages",
   "session.revertDock.expand": "Expand rolled back messages",
   "session.revertDock.restore": "Restore message",
+  "secondBrain.editFromHere.title": "Restore files?",
+  "secondBrain.editFromHere.description": "Editing from here also restores these files to their state before this message.",
+  "secondBrain.editFromHere.unavailable": "The list of changed files could not be loaded.",
+  "secondBrain.editFromHere.confirm": "Restore files",
 
   "session.new.title": "Build anything",
   "session.new.project.new": "New project",

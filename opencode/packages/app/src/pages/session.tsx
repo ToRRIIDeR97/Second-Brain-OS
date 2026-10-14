@@ -47,6 +47,7 @@ import { useCommand } from "@/context/command"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
+import { confirmEditFromHere, editFromHereFiles } from "@/pages/session/edit-from-here"
 import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
@@ -1851,7 +1852,7 @@ export default function Page() {
       : Promise.resolve()
 
   const revertMutation = useMutation(() => ({
-    mutationFn: async (input: { sessionID: string; messageID: string }) => {
+    mutationFn: async (input: { sessionID: string; messageID: string; files: boolean }) => {
       const session = sdk().api.session
       const target = sync()
       const last = target.session.get(input.sessionID)?.revert
@@ -1895,7 +1896,16 @@ export default function Page() {
         request: () =>
           !next
             ? halt(sessionID).then(() => session.revert.clear({ sessionID }))
-            : halt(sessionID).then(() => session.revert.stage({ sessionID, messageID: next.id }).then(() => undefined)),
+            : halt(sessionID).then(() =>
+                // keep a messages-only rewind from restoring files when moving the boundary forward
+                session.revert
+                  .stage({
+                    sessionID,
+                    messageID: next.id,
+                    files: last?.diff === undefined ? undefined : last.diff.length > 0,
+                  })
+                  .then(() => undefined),
+              ),
         complete: () => undefined,
         rollback: () => roll(sessionID, last, target),
         fail,
@@ -1906,8 +1916,21 @@ export default function Page() {
   const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
 
-  const revert = (input: { sessionID: string; messageID: string }) => {
+  // "Edit from here": with files, list what will be restored and ask before touching the workspace.
+  const revert = async (input: { sessionID: string; messageID: string; files: boolean }) => {
     if (reverting()) return
+    if (input.files) {
+      const files = await editFromHereFiles({
+        diff: (value) => sessionDiffForServer({ server: serverSDK().server.http, fetch: platform.fetch }, value),
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        userMessageIDs: userMessages().map((item) => item.id),
+      }).catch(() => undefined)
+      if (!files || files.length > 0) {
+        if (!(await confirmEditFromHere(dialog, files))) return
+      }
+      if (reverting()) return
+    }
     return revertMutation.mutateAsync(input)
   }
 
