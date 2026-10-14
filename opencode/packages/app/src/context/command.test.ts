@@ -3,6 +3,7 @@ import {
   activeCommandRegistrations,
   addCommandRegistration,
   commandPaletteOptions,
+  outsideEditable,
   resolveKeybindOption,
   type CommandOption,
 } from "./command"
@@ -66,5 +67,26 @@ describe("resolveKeybindOption", () => {
     const contextual = { id: "terminal.close", title: "Close terminal", when: () => false }
 
     expect(resolveKeybindOption([fallback, contextual], new KeyboardEvent("keydown"))).toBe(fallback)
+  })
+})
+
+describe("outsideEditable guard", () => {
+  const undo: CommandOption = { id: "undo.latest", title: "Undo", keybind: "mod+z", when: outsideEditable }
+  const press = (target: EventTarget) => ({ target }) as unknown as KeyboardEvent
+
+  test("leaves mod+z to text fields and editors", () => {
+    const editor = document.createElement("div")
+    editor.setAttribute("contenteditable", "")
+    const line = document.createElement("span")
+    editor.append(line)
+    for (const target of [document.createElement("input"), document.createElement("textarea"), line])
+      expect(resolveKeybindOption([undo], press(target))).toBeUndefined()
+  })
+
+  test("runs the shortcut elsewhere", () => {
+    const readonly = document.createElement("div")
+    readonly.setAttribute("contenteditable", "false")
+    for (const target of [document.createElement("button"), readonly, document.body])
+      expect(resolveKeybindOption([undo], press(target))).toBe(undo)
   })
 })

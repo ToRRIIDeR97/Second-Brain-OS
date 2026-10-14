@@ -256,10 +256,13 @@ export function formatKeybindKeys(config: string, t?: (key: KeyLabel) => string)
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
   if (target.isContentEditable) return true
-  if (target.closest("[contenteditable='true']")) return true
+  if (target.closest("[contenteditable]:not([contenteditable='false'])")) return true
   if (target.closest("input, textarea, select")) return true
   return false
 }
+
+/** `when` guard for global shortcuts that must not override a text field's own handling (e.g. mod+z). */
+export const outsideEditable = (event: KeyboardEvent) => !isEditableTarget(event.target)
 
 export const { use: useCommand, provider: CommandProvider } = createSimpleContext({
   name: "Command",
