@@ -1730,7 +1730,7 @@ export default function Page() {
       showToast({
         variant: "error",
         title: language.t("common.requestFailed"),
-        description: language.t("session.followupDock.unsupported"),
+        description: language.t("secondBrain.followupDock.unsupported"),
       }),
   })
 

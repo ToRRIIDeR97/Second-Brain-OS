@@ -101,7 +101,7 @@ export function SessionFollowupDock(props: {
                         disabled={!!props.pending}
                         onClick={() => actions().onRemove(item.id)}
                       >
-                        {language.t("session.followupDock.remove")}
+                        {language.t("secondBrain.followupDock.remove")}
                       </Button>
                     </>
                   )}
