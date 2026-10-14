@@ -48,20 +48,29 @@ test.describe("session timeline projection", () => {
     ]
     await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
-    await expect(
-      page.locator('[data-timeline-part-ids="prt_01_read,prt_02_glob,prt_03_grep,prt_04_list"]'),
-    ).toBeVisible()
+    // Parts render in ID order. Runs of completed non-file-change tools fold into collapsed "tools" summary rows;
+    // file changes, questions, and subagent tasks stay as their own rows.
+    const leading = page.locator(
+      '[data-timeline-part-ids="prt_01_read,prt_02_glob,prt_03_grep,prt_04_list,prt_bash,prt_custom"]',
+    )
+    const web = page.locator('[data-timeline-part-ids="prt_webfetch,prt_websearch"]')
+    await expect(leading.getByRole("button", { name: /^Ran 6 tool/ })).toBeVisible()
+    await expect(web.getByRole("button", { name: /^Ran 2 tool/ })).toBeVisible()
+    for (const id of ["prt_edit", "prt_patch", "prt_question", "prt_skill", "prt_task", "prt_write"]) {
+      await expect(page.locator(`[data-timeline-part-id="${id}"]`).first(), id).toBeVisible()
+    }
+
+    await leading.getByRole("button", { name: /^Ran 6 tool/ }).click()
+    await web.getByRole("button", { name: /^Ran 2 tool/ }).click()
     for (const id of [
+      "prt_01_read",
+      "prt_02_glob",
+      "prt_03_grep",
+      "prt_04_list",
+      "prt_bash",
+      "prt_custom",
       "prt_webfetch",
       "prt_websearch",
-      "prt_task",
-      "prt_bash",
-      "prt_edit",
-      "prt_write",
-      "prt_patch",
-      "prt_question",
-      "prt_skill",
-      "prt_custom",
     ]) {
       await expect(page.locator(`[data-timeline-part-id="${id}"]`).first(), id).toBeVisible()
     }
