@@ -17,7 +17,9 @@ instructions, and Activity. A Project may have a local location, but it is not
 the same thing as a folder or repository. Every thread belongs to a Project,
 and every Project owns a **thread directory**: its linked Workspace's folder
 when it has one, otherwise its Project folder. Opening a folder that no Project
-links to creates a Project for it.
+links to creates a Project for it. The sidebar lists threads under their
+Project; threads in the Brain folder itself show under **Brain**, and threads
+in any other folder under **Other threads**.
 _Avoid_: Workspace, folder, repository
 
 **Project folder**:

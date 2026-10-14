@@ -1,6 +1,5 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createQuery } from "@tanstack/solid-query"
-import { useNavigate, useSearchParams } from "@solidjs/router"
+import { useSearchParams } from "@solidjs/router"
 import { type Accessor, createMemo } from "solid-js"
 import type { PromptInputControls } from "@/components/prompt-input/contracts"
 import type { PromptProjectControls } from "@/components/prompt-project-selector"
@@ -13,7 +12,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
 import { useProviders } from "@/hooks/use-providers"
 import { pathKey } from "@/utils/path-key"
 
@@ -63,12 +62,11 @@ export function createPromptInputController(input: {
 }
 
 export function createPromptProjectControls() {
-  const navigate = useNavigate()
   const layout = useLayout()
   const server = useServer()
   const serverSDK = useServerSDK()
   const sdk = useSDK()
-  const tabs = useTabs()
+  const drafts = useDrafts()
   const global = useGlobal()
   const pickDirectory = useDirectoryPicker()
   const [search] = useSearchParams<{ draftId?: string }>()
@@ -93,14 +91,14 @@ export function createPromptProjectControls() {
       const target = global.ensureServerCtx(conn)
       target.projects.open(worktree)
       target.projects.touch(worktree)
-      tabs.updateDraft(search.draftId, { server: ServerConnection.key(conn), directory: worktree })
+      drafts.update(search.draftId, { server: ServerConnection.key(conn), directory: worktree, projectID: undefined })
       return
     }
 
     if (!serverKey) {
       layout.projects.open(worktree)
       server.projects.touch(worktree)
-      navigate(`/${base64Encode(worktree)}/session`)
+      void drafts.create({ server: server.key, directory: worktree })
       return
     }
 
@@ -109,7 +107,7 @@ export function createPromptProjectControls() {
     target.projects.open(worktree)
     target.projects.touch(worktree)
     server.setActive(ServerConnection.key(conn))
-    navigate(`/${base64Encode(worktree)}/session`)
+    void drafts.create({ server: ServerConnection.key(conn), directory: worktree })
   }
 
   const addProject = (title: string, serverKey?: string) => {

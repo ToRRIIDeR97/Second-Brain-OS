@@ -1,9 +1,10 @@
 # Architecture
 
-Second Brain OS is an OpenCode fork. The Solid renderer, Electron host, and
-managed local OpenCode server remain the base application. New product domains
-are added inside the existing OpenCode application rather than replacing its
-shell or agent runtime.
+Second Brain OS is an OpenCode fork. OpenCode is the runtime base: the
+Electron host, the managed local OpenCode server and the session runtime. The
+app shell and navigation are Second Brain's own: a sidebar of Home, Notes,
+Calendar, Activity and Projects with their threads. New product domains are
+added inside the existing OpenCode application rather than beside it.
 
 The previous React/Tauri and Rust implementation is retired. Its database
 schemas and remaining migration gaps are recorded in
@@ -36,10 +37,27 @@ Brain files through the server's location services. See
 
 ## Product entry points and persistence
 
-`opencode/packages/app/src/app.tsx` owns routing. The current layout exposes
-Home, Workspaces, Notes, Calendar, Projects, Activity, and agent sessions.
-Settings, model/provider selection, file panels, and terminals are shared
-dialogs or session panels rather than standalone routes.
+`opencode/packages/app/src/app.tsx` owns routing: `/`, `/notes`,
+`/calendar`, `/activity`, `/projects`, the draft route
+`/new-thread?project=<id>&draftId=<id>` and server-scoped threads at
+`/server/<server>/session/<id>`. Old `/workspaces`, `/brain`, `/new-session`
+and `/<dir>/session[/<id>]` URLs redirect. Settings, model/provider
+selection, file panels, and terminals are shared dialogs or session panels
+rather than standalone routes. The
+[navigation map](../product/NAVIGATION-MAP-V1.md) describes the sidebar,
+routes and shortcuts.
+
+`pages/layout-new.tsx` is the only shell: the titlebar (window chrome, back
+and forward) and `components/second-brain-sidebar.tsx`. The sidebar's
+controller (`components/sidebar/sidebar-controller.ts`) reads
+`GET /second-brain/project-threads`, loads each Project's threads with
+`serverSync().project.loadSessions(threadDirectory)` (kept live by
+`session.created/updated/deleted` events), adds the recent-session index for
+threads outside any Project, and groups them with
+`features/second-brain/sidebar-threads.ts` into Projects, Brain and Other
+threads. The active Project is derived from the route's thread or draft
+directory. `context/drafts.tsx` holds unsent drafts per window and keeps prompt
+state alive across route changes; it replaced the tab store.
 
 | Data                       | Owner and persistence                                                                                                 |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -49,6 +67,7 @@ dialogs or session panels rather than standalone routes.
 | Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in the XDG data directory                   |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
+| Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
 | Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
 
 Package paths in this table are relative to `opencode/`. Workspace files are
@@ -80,11 +99,14 @@ workspace routing):
 - `POST /second-brain/projects/workspace` with `{ workspaceId }` returns the
   Project linked to that OpenCode project id, creating one named after the
   folder when none exists. The renderer calls it from `context/layout.tsx`
-  for folders opened during the app session.
+  for folders opened during the app session, and from the sidebar's
+  open-folder flow (`mod+shift+n`, Home's Open Workspace, and
+  `opencode://open-project` deep links).
 
 ## Home navigation
 
-Home renders its shell independently of dashboard requests. Panel content,
+Home is the sidebar's first item and the fallback for unknown routes. Its
+Open Workspace buttons run the sidebar's open-folder flow. Home renders its shell independently of dashboard requests. Panel content,
 metrics, and the harness selector have local loading boundaries. Harness
 availability uses the renderer query cache, keyed by server and workspace
 directory, with 30 seconds of freshness and background refresh on stale

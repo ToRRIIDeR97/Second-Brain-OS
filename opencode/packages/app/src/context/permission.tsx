@@ -6,11 +6,9 @@ import { Persist, persisted } from "@/utils/persist"
 import type { ServerSDK } from "@/context/server-sdk"
 import type { ServerSync } from "./server-sync"
 import { useParams, useSearchParams } from "@solidjs/router"
-import { decode64 } from "@/utils/base64"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
-import { type DraftTab, useTabs } from "./tabs"
-import { useSettings } from "./settings"
+import { useDrafts } from "./drafts"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
 import { normalizePermissionRequest } from "./global-sync/utils"
@@ -56,22 +54,18 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
   name: "Permission",
   gate: false,
   init: () => {
-    const params = useParams<{ serverKey?: string; dir?: string; id?: string }>()
+    const params = useParams<{ serverKey?: string; id?: string }>()
     const [search] = useSearchParams<{ draftId?: string }>()
     const global = useGlobal()
     const server = useServer()
-    const tabs = useTabs()
-    const settings = useSettings()
+    const drafts = useDrafts()
     const owner = getOwner()
     const states = new Map<ServerScope, { key: ServerConnection.Key; dispose: () => void; state: PermissionState }>()
 
-    const activeDraft = createMemo(() => {
-      if (!search.draftId) return
-      return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
-    })
+    const activeDraft = createMemo(() => drafts.get(search.draftId))
 
     const activeServer = createMemo(() => {
-      if (params.serverKey && settings.general.newLayoutDesigns()) return requireServerKey(params.serverKey)
+      if (params.serverKey) return requireServerKey(params.serverKey)
       return activeDraft()?.server ?? server.key
     })
 
@@ -127,8 +121,6 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       return ensure(server.key)
     }
     const activeDirectory = createMemo(() => {
-      const directory = decode64(params.dir)
-      if (directory) return directory
       const draft = activeDraft()
       if (draft) return draft.directory
       if (!params.id) return

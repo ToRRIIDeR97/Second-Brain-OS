@@ -1,4 +1,3 @@
-import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import type { ServerConnection } from "@/context/server"
 
 type HomeSession = {
@@ -17,11 +16,6 @@ export async function archiveHomeSession(input: {
     .archive(input.session.id)
     .then(() => {
       input.remove()
-      notifySessionTabsRemoved({
-        server: input.server,
-        directory: input.session.directory,
-        sessionIDs: [input.session.id],
-      })
     })
     .catch((error) => input.onError?.(error))
 }

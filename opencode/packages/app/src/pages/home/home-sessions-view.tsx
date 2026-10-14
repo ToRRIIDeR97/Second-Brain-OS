@@ -50,7 +50,6 @@ export type HomeSessionsViewProps = {
   searchActive: Accessor<string>
   searchNoResultsLabel: Accessor<string>
   titleOpacity: (id: HomeSessionGroup["id"]) => number
-  isOpenTab: (record: HomeSessionRecord) => boolean
   onCreateSession: () => void
   onOpenSession: (session: Session, options?: OpenSessionOptions) => void
   onArchiveSession: (session: Session) => Promise<void>
@@ -220,7 +219,6 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
 
 function HomeSessionLeadingController(props: {
   server: HomeSessionsViewProps["server"]
-  isOpenTab: HomeSessionsViewProps["isOpenTab"]
   record: HomeSessionRecord
   revealProjectOnHover: boolean
 }) {
@@ -228,12 +226,10 @@ function HomeSessionLeadingController(props: {
     <HomeSessionStatusController
       server={props.server}
       record={props.record}
-      isOpenTab={props.isOpenTab}
       render={(state) => (
         <HomeSessionLeading
           record={props.record}
           revealProjectOnHover={props.revealProjectOnHover}
-          open={state.open()}
           unread={state.unread()}
           loading={state.loading()}
         />
@@ -245,22 +241,11 @@ function HomeSessionLeadingController(props: {
 function HomeSessionLeading(props: {
   record: HomeSessionRecord
   revealProjectOnHover: boolean
-  open: boolean
   unread: boolean
   loading: boolean
 }) {
   return (
     <div class="relative shrink-0">
-      <Show when={props.open}>
-        <span
-          aria-hidden="true"
-          class={`
-            pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2
-            rounded-[2px] bg-v2-background-bg-layer-04
-          `}
-          style={{ right: "calc(100% + 4px)" }}
-        />
-      </Show>
       <SessionTabAvatarView
         project={props.record.project}
         directory={props.record.session.directory}
@@ -449,8 +434,7 @@ function HomeSessionSearchResultRow(
     >
       <HomeSessionLeadingController
         server={props.server}
-        isOpenTab={props.isOpenTab}
-        record={props.record}
+          record={props.record}
         revealProjectOnHover={!!showProjectName()}
       />
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
@@ -531,8 +515,7 @@ function HomeSessionRow(
       >
         <HomeSessionLeadingController
           server={props.server}
-          isOpenTab={props.isOpenTab}
-          record={props.record}
+              record={props.record}
           revealProjectOnHover={!!showProjectName()}
         />
         <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />

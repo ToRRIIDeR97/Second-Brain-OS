@@ -11,7 +11,8 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
+import { useCommand } from "@/context/command"
 import { localDateKey } from "@/features/second-brain/calendar-domain"
 import {
   listProjects,
@@ -34,7 +35,8 @@ export default function BrainHomePage() {
   const platform = usePlatform()
   const server = useServer()
   const serverSDK = useServerSDK()
-  const tabs = useTabs()
+  const drafts = useDrafts()
+  const command = useCommand()
   const openCodeHome = createHomeController()
   const openCodeSessions = createHomeSessionsController(openCodeHome)
   const [state, setState] = createStore({
@@ -136,7 +138,7 @@ export default function BrainHomePage() {
     if (!prompt || !state.directory || state.starting || harnessQuery.isPending) return
     setState("starting", true)
     try {
-      await tabs.newDraft(
+      await drafts.create(
         { server: server.key, directory: state.directory },
         prompt,
         undefined,
@@ -156,7 +158,7 @@ export default function BrainHomePage() {
           </h1>
           <p class="truncate text-[12px] text-v2-text-text-faint">{language.t("secondBrain.home.description")}</p>
         </div>
-        <ButtonV2 size="small" variant="ghost" icon="workspace" onClick={() => navigate("/workspaces")}>
+        <ButtonV2 size="small" variant="ghost" icon="workspace" onClick={() => command.trigger("project.open")}>
           {language.t("secondBrain.home.openWorkspace")}
         </ButtonV2>
         <Show when={locations().length > 0}>
@@ -195,7 +197,7 @@ export default function BrainHomePage() {
               <p class="text-[13px] leading-5 text-v2-text-text-muted">
                 {language.t("secondBrain.home.empty.description")}
               </p>
-              <ButtonV2 variant="contrast" onClick={() => navigate("/workspaces")}>
+              <ButtonV2 variant="contrast" onClick={() => command.trigger("project.open")}>
                 {language.t("secondBrain.home.openWorkspace")}
               </ButtonV2>
             </div>
@@ -268,7 +270,7 @@ export default function BrainHomePage() {
                   <ButtonV2 variant="contrast" onClick={() => navigate("/projects")}>
                     {language.t("secondBrain.home.firstRun.project")}
                   </ButtonV2>
-                  <ButtonV2 variant="outline" onClick={() => navigate("/workspaces")}>
+                  <ButtonV2 variant="outline" onClick={() => command.trigger("project.open")}>
                     {language.t("secondBrain.home.firstRun.folder")}
                   </ButtonV2>
                   <Show when={platform.googleCalendar}>

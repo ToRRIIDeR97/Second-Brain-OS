@@ -12,7 +12,6 @@ test("Home remains usable during loading and reuses fresh harness availability",
   })
   await page.addInitScript(
     ({ directory }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({ projects: { local: [{ worktree: directory, expanded: true }] } }),

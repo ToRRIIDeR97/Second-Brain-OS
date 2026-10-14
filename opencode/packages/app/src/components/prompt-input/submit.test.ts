@@ -184,11 +184,11 @@ beforeAll(async () => {
     useServer: () => ({ key: "server-key" }),
   }))
 
-  mock.module("@/context/tabs", () => ({
-    useTabs: () => ({
-      draft: () => ({ server: "project-server" }),
-      promoteDraft: (draftID: string, session: { server: string; sessionId: string }) => {
-        promotedDrafts.push({ draftID, ...session })
+  mock.module("@/context/drafts", () => ({
+    useDrafts: () => ({
+      get: (draftID?: string) => (draftID ? { server: "project-server" } : undefined),
+      promote: (draftID: string, session: { server: string; sessionID: string }) => {
+        promotedDrafts.push({ draftID, server: session.server, sessionId: session.sessionID })
       },
     }),
   }))

@@ -1,13 +1,13 @@
 import { useNavigate } from "@solidjs/router"
 import { produce } from "solid-js/store"
-import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
+import { useServer } from "@/context/server"
 import { errorMessage } from "@/pages/layout/helpers"
 import { useSessionKey } from "@/pages/session/session-layout"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { requireServerKey, sessionHref } from "@/utils/session-route"
 import { showToast } from "@/utils/toast"
 
 export function useSessionArchive() {
@@ -15,13 +15,14 @@ export function useSessionArchive() {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
-  const tabs = useTabs()
+  const drafts = useDrafts()
+  const server = useServer()
   const { params } = useSessionKey()
 
   const navigateAfterRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
     if (params.id !== sessionID) return
-    const href = (id: string) =>
-      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id)
+    const serverKey = params.serverKey ? requireServerKey(params.serverKey) : server.key
+    const href = (id: string) => sessionHref(serverKey, id)
     if (parentID) {
       navigate(href(parentID))
       return
@@ -30,11 +31,7 @@ export function useSessionArchive() {
       navigate(href(nextSessionID))
       return
     }
-    if (params.serverKey) {
-      tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
-      return
-    }
-    navigate(`/${params.dir}/session`)
+    void drafts.create({ server: serverKey, directory: sdk().directory })
   }
 
   const archive = async (sessionID: string) => {
@@ -60,7 +57,6 @@ export function useSessionArchive() {
         )
         sync().session.evict(sessionID)
         navigateAfterRemoval(sessionID, session.parentID, nextSession?.id)
-        notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
       })
       .catch((err) => {
         showToast({
