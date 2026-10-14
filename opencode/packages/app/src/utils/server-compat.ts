@@ -278,7 +278,8 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
             })),
           ],
         })
-        return pendingUser(value)
+        // V1 ignores delivery and handles every follow-up as a steer.
+        return { ...pendingUser(value), delivery: "steer" as const }
       },
       async command(value: SessionCommandInput) {
         await legacy().session.command({

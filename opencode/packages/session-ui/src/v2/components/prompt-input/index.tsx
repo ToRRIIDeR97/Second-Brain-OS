@@ -22,6 +22,7 @@ import type {
   PromptInputV2Suggestion,
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
+import { promptInputV2KeyIntent } from "./machine"
 import "./attachments.css"
 import "./responsive-controls.css"
 
@@ -42,6 +43,8 @@ export type PromptInputV2Props = {
   borderUnderlay?: boolean
   class?: string
   runtimeControl?: JSX.Element
+  /** Trailing toolbar slot next to the submit button (e.g. the prompt stash menu). */
+  trailingControl?: JSX.Element
   modelControl?: JSX.Element
   modelControlVisible?: boolean
   agentControlVisible?: boolean
@@ -175,11 +178,11 @@ export function PromptInputV2(props: PromptInputV2Props) {
             }}
             onKeyDown={(event) => {
               if (props.controller.onKeyDown(event)) return
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                event.preventDefault()
-                if (event.repeat) return
-                props.controller.submit()
-              }
+              const intent = promptInputV2KeyIntent(event)
+              if (intent?.type !== "submit") return
+              event.preventDefault()
+              if (event.repeat) return
+              props.controller.submit(intent.options)
             }}
             onKeyUp={updateCursor}
             onPointerUp={updateCursor}
@@ -265,13 +268,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
               )}
             </Show>
           </div>
+          {props.trailingControl}
           <PromptInputV2SubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}
             disabled={!props.controller.canSubmit()}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
-            onSubmit={props.controller.submit}
+            onSubmit={() => props.controller.submit()}
             onStop={props.controller.stop}
           />
         </div>

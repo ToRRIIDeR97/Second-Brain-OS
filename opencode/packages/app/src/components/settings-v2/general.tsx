@@ -87,6 +87,35 @@ const PermissionScopeSetting: Component<{ controller: PermissionScopeController 
   )
 }
 
+const DeliverySetting = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo(() =>
+    (["steer", "queue"] as const).map((value) => ({
+      value,
+      label: language.t(`secondBrain.composer.delivery.${value}`),
+    })),
+  )
+  return (
+    <SettingsRowV2
+      title={language.t("secondBrain.composer.delivery.title")}
+      description={language.t("secondBrain.composer.delivery.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-followup-delivery"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.followup())}
+        placement="bottom-end"
+        gutter={6}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        onSelect={(option) => option && settings.general.setFollowup(option.value)}
+      />
+    </SettingsRowV2>
+  )
+}
+
 const ShellSetting: Component<{ controller: ShellSettingsController }> = (props) => {
   const language = useLanguage()
   const options = createMemo(() =>
@@ -297,6 +326,8 @@ export const SettingsGeneralV2: Component<{
         <LanguageSetting />
 
         <PermissionScopeSetting controller={permissionScope} />
+
+        <DeliverySetting />
 
         <ShellSetting controller={shell} />
 

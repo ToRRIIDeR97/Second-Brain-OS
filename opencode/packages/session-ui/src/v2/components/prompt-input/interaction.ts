@@ -15,8 +15,10 @@ import type {
 import {
   createPromptInputV2InteractionState,
   transitionPromptInputV2,
+  promptInputV2KeyIntent,
   type PromptInputV2InteractionCommand,
   type PromptInputV2InteractionEvent,
+  type PromptInputV2SubmitOptions,
 } from "./machine"
 
 export type PromptInputV2SelectControl = {
@@ -37,9 +39,11 @@ export type PromptInputV2ViewConfig = {
   submit: {
     stopping: Accessor<boolean>
     working?: Accessor<boolean>
-    onSubmit: () => void
+    onSubmit: (options?: PromptInputV2SubmitOptions) => void
     onStop: () => void
   }
+  /** Editor-local mod+S: park the current prompt. */
+  stash?: () => void
   shell?: {
     onOpen: () => void
     onClose: () => void
@@ -232,6 +236,11 @@ export function createPromptInputV2Controller(input: {
       event.preventDefault()
       return true
     }
+    if (state.mode === "normal" && input.view.stash && promptInputV2KeyIntent(event)?.type === "stash") {
+      event.preventDefault()
+      input.view.stash()
+      return true
+    }
     input.view.onKeyDown?.(event)
     return event.defaultPrevented
   }
@@ -357,8 +366,8 @@ export function createPromptInputV2Controller(input: {
     closeShell() {
       dispatch({ type: "mode.normal" })
     },
-    submit() {
-      input.view.submit.onSubmit()
+    submit(options?: PromptInputV2SubmitOptions) {
+      input.view.submit.onSubmit(options)
       dispatch({ type: "popover.close" })
     },
     stop() {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PromptInputV2PersistedState, PromptInputV2Suggestion } from "./types"
-import { createPromptInputV2InteractionState, transitionPromptInputV2 } from "./machine"
+import { createPromptInputV2InteractionState, promptInputV2KeyIntent, transitionPromptInputV2 } from "./machine"
 
 const command: PromptInputV2Suggestion = {
   id: "review",
@@ -160,5 +160,51 @@ describe("prompt input v2 interaction machine", () => {
 
     expect(result.state.popover).toEqual({ type: "context", query: "", activeID: "first" })
     expect(result.handled).toBeTrue()
+  })
+})
+
+describe("prompt input v2 key intents", () => {
+  const key = (input: Partial<KeyboardEvent> & { key: string }) => ({
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    isComposing: false,
+    ...input,
+  })
+
+  test("Enter sends with the default delivery", () => {
+    expect(promptInputV2KeyIntent(key({ key: "Enter" }))).toEqual({ type: "submit", options: {} })
+  })
+
+  test("mod+Enter sends with the opposite delivery on either modifier", () => {
+    expect(promptInputV2KeyIntent(key({ key: "Enter", metaKey: true }))).toEqual({
+      type: "submit",
+      options: { opposite: true },
+    })
+    expect(promptInputV2KeyIntent(key({ key: "Enter", ctrlKey: true }))).toEqual({
+      type: "submit",
+      options: { opposite: true },
+    })
+  })
+
+  test("mod+alt+Enter sends in the background", () => {
+    expect(promptInputV2KeyIntent(key({ key: "Enter", metaKey: true, altKey: true }))).toEqual({
+      type: "submit",
+      options: { background: true },
+    })
+  })
+
+  test("Shift+Enter and IME composition do not submit", () => {
+    expect(promptInputV2KeyIntent(key({ key: "Enter", shiftKey: true }))).toBeUndefined()
+    expect(promptInputV2KeyIntent(key({ key: "Enter", isComposing: true }))).toBeUndefined()
+  })
+
+  test("mod+S stashes, other S chords do not", () => {
+    expect(promptInputV2KeyIntent(key({ key: "s", metaKey: true }))).toEqual({ type: "stash" })
+    expect(promptInputV2KeyIntent(key({ key: "S", ctrlKey: true }))).toEqual({ type: "stash" })
+    expect(promptInputV2KeyIntent(key({ key: "s" }))).toBeUndefined()
+    expect(promptInputV2KeyIntent(key({ key: "s", metaKey: true, altKey: true }))).toBeUndefined()
+    expect(promptInputV2KeyIntent(key({ key: "s", metaKey: true, shiftKey: true }))).toBeUndefined()
   })
 })

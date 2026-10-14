@@ -147,6 +147,36 @@ describe("createCompatibleApi", () => {
     expect(await requests[1]!.json()).toEqual({ id: "msg_1", prompt: { text: "hello" } })
   })
 
+  test("passes queue delivery through to V2 servers", async () => {
+    const { api, requests } = setup("v2")
+    await api.session.prompt({ sessionID: "ses_1", id: "msg_1", text: "hello", delivery: "queue" })
+
+    expect(await requests[0]!.json()).toEqual({ id: "msg_1", prompt: { text: "hello" }, delivery: "queue" })
+  })
+
+  test("passes delivery through the harness prompt route", async () => {
+    const { api, requests } = setup("v1")
+    await api.session.prompt({
+      sessionID: "ses_1",
+      id: "msg_1",
+      text: "hello",
+      delivery: "queue",
+      model: { providerID: Harness.Codex, modelID: "gpt-5.6-sol" },
+      harness: true,
+    })
+
+    expect(await requests[0]!.json()).toEqual({ id: "msg_1", prompt: { text: "hello" }, delivery: "queue" })
+  })
+
+  test("reports V1 prompts as steered", async () => {
+    const { api, requests } = setup("v1")
+    const result = await api.session.prompt({ sessionID: "ses_1", id: "msg_1", text: "hello", delivery: "queue" })
+
+    expect(result.delivery).toBe("steer")
+    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/prompt_async")
+    expect(await requests[0]!.json()).not.toHaveProperty("delivery")
+  })
+
   test("uses the current prompt contract on V2 servers", async () => {
     const { api, requests } = setup("v2")
     await api.session.prompt({ sessionID: "ses_1", id: "msg_1", text: "hello" })

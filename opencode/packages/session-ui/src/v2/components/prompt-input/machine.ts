@@ -46,6 +46,28 @@ export type PromptInputV2Transition = {
   handled: boolean
 }
 
+/** Per-submit overrides passed from the editor to the host's submit handler. */
+export type PromptInputV2SubmitOptions = { opposite?: boolean; background?: boolean }
+
+export type PromptInputV2KeyIntent = { type: "submit"; options: PromptInputV2SubmitOptions } | { type: "stash" }
+
+type PromptInputV2Key = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "isComposing">
+
+/**
+ * Editor-local shortcuts. Enter sends; mod+Enter sends with the opposite delivery; mod+alt+Enter sends into a
+ * new background thread; mod+S stashes the prompt. Shift+Enter (newline) and IME composition fall through.
+ */
+export function promptInputV2KeyIntent(event: PromptInputV2Key): PromptInputV2KeyIntent | undefined {
+  if (event.isComposing || event.shiftKey) return
+  const mod = event.metaKey || event.ctrlKey
+  if (event.key === "Enter") {
+    if (!mod) return { type: "submit", options: {} }
+    if (event.altKey) return { type: "submit", options: { background: true } }
+    return { type: "submit", options: { opposite: true } }
+  }
+  if (mod && !event.altKey && event.key.toLowerCase() === "s") return { type: "stash" }
+}
+
 export function createPromptInputV2InteractionState(): PromptInputV2InteractionState {
   return {
     mode: "normal",

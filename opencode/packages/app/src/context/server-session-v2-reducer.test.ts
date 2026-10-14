@@ -188,6 +188,28 @@ describe("v2 session reducer", () => {
   })
 })
 
+test("queued prompts join the transcript only when promoted", () => {
+  const reducer = createV2SessionReducer()
+  const prompt = (type: "session.next.prompt.admitted" | "session.next.prompted", messages: SessionMessageInfo[]) =>
+    reducer.reduce(
+      messages,
+      event({
+        id: `evt_${type}`,
+        type,
+        data: {
+          timestamp: 1,
+          sessionID: "ses_1",
+          messageID: "msg_queued",
+          prompt: { text: "later", files: [], agents: [] },
+          delivery: "queue",
+        },
+      }),
+    )
+
+  expect(prompt("session.next.prompt.admitted", [])).toBeUndefined()
+  expect(prompt("session.next.prompted", [])?.messages).toMatchObject([{ id: "msg_queued", text: "later" }])
+})
+
 test("fork import events hydrate copied history once", () => {
   const reducer = createV2SessionReducer()
   const message = { id: "msg_fork", type: "user" as const, text: "copied context", time: { created: 1 } }

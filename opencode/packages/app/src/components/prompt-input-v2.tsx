@@ -3,10 +3,12 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
-import { createEffect, createMemo, on, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import type { PromptInputProps } from "@/components/prompt-input/contracts"
@@ -18,6 +20,7 @@ import { normalizePromptHistoryEntry, promptLength, type PromptHistoryComment } 
 import { createPersistedPromptInputHistory } from "@/components/prompt-input/history-store"
 import { promptDesignPlaceholder, promptPlaceholder } from "@/components/prompt-input/placeholder"
 import { createPromptSubmit } from "@/components/prompt-input/submit"
+import { createPersistedPromptStash, type PromptStash } from "@/components/prompt-input/stash-store"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
@@ -27,6 +30,7 @@ import { usePermission } from "@/context/permission"
 import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
@@ -48,6 +52,7 @@ export type PromptInputV2ComposerProps = {
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
+  readonly stash: PromptStash & { save: () => void; restore: (id: string) => void }
 }
 
 export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
@@ -69,6 +74,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         borderUnderlay={props.borderUnderlay}
         class={props.class}
         variantControlVisible={openCode() && !props.controller.model.loading}
+        trailingControl={<PromptStashMenu stash={props.controller.stash} />}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         modelControl={
@@ -104,6 +110,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const settings = useSettings()
   const prompt = props.state ?? usePrompt()
   let editor: HTMLDivElement | undefined
 
@@ -233,8 +240,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     harnessDriver: () => props.harnessDriver,
     harnessChanging: () => props.harnessChanging,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: props.shouldQueue,
-    onQueue: props.onQueue,
+    followup: () => settings.general.followup(),
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
     model: props.controls.model.selection,
@@ -422,12 +428,36 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       submit: {
         stopping,
         working,
-        onSubmit: () => void submission.handleSubmit(new Event("submit")),
+        onSubmit: (options) => void submission.handleSubmit(new Event("submit"), options),
         onStop: () => void submission.abort(),
       },
+      stash: () => stash.save(),
     },
   })
   Object.defineProperty(controller, "model", { get: () => props.controls.model })
+  // Stash keeps prompt text, mentions, and images; comment context stays attached to the composer.
+  const stashStore = createPersistedPromptStash()
+  const stash = {
+    ...stashStore,
+    save() {
+      if (!stashStore.push(prompt.current())) return
+      prompt.reset()
+      controller.resetHistory()
+      controller.restoreFocus(0)
+      showToast({ title: language.t("secondBrain.composer.stash.saved") })
+    },
+    restore(id: string) {
+      const entry = stashStore.take(id)
+      if (!entry) return
+      // Swap rather than overwrite: an unsent composer prompt goes back into the stash.
+      stashStore.push(prompt.current())
+      controller.dispatch({ type: "mode.normal" })
+      controller.resetHistory()
+      prompt.set(entry.prompt, promptLength(entry.prompt))
+      controller.restoreFocus(promptLength(entry.prompt))
+    },
+  }
+  Object.defineProperty(controller, "stash", { value: stash })
 
   command.register("prompt-input", () => [
     {
@@ -456,35 +486,60 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
   ])
 
-  createEffect(
-    on(
-      () => props.edit?.id,
-      (id) => {
-        const edit = props.edit
-        if (!id || !edit) return
-        prompt.context.items().forEach((item) => prompt.context.remove(item.key))
-        edit.context.forEach((item) =>
-          prompt.context.add({
-            type: item.type,
-            path: item.path,
-            selection: item.selection,
-            comment: item.comment,
-            commentID: item.commentID,
-            commentOrigin: item.commentOrigin,
-            preview: item.preview,
-          }),
-        )
-        controller.dispatch({ type: "mode.normal" })
-        controller.resetHistory()
-        prompt.set(edit.prompt, promptLength(edit.prompt))
-        controller.restoreFocus()
-        props.onEditLoaded?.()
-      },
-      { defer: true },
-    ),
-  )
-
   return controller as PromptInputV2ComposerController
+}
+
+function PromptStashMenu(props: { stash: PromptInputV2ComposerController["stash"] }) {
+  const language = useLanguage()
+  const preview = (entry: ReturnType<PromptStash["entries"]>[number]) =>
+    entry.prompt
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => !!line) ?? `[${language.t("common.attachment")}]`
+  return (
+    <Show when={props.stash.entries().length > 0}>
+      <TooltipV2 placement="top" value={language.t("secondBrain.composer.stash.title")}>
+        <MenuV2 gutter={6} modal={false} placement="top-end">
+          <MenuV2.Trigger
+            as={IconButtonV2}
+            data-action="prompt-stash"
+            type="button"
+            icon={<Icon name="archive" />}
+            variant="ghost-muted"
+            size="large"
+            class="mr-1"
+            aria-label={language.t("secondBrain.composer.stash.title")}
+          />
+          <MenuV2.Portal>
+            <MenuV2.Content style={{ "min-width": "220px", "max-width": "320px" }}>
+              <MenuV2.GroupLabel>{language.t("secondBrain.composer.stash.title")}</MenuV2.GroupLabel>
+              <For each={props.stash.entries()}>
+                {(entry) => (
+                  <MenuV2.Sub gutter={0}>
+                    <MenuV2.SubTrigger data-stash-id={entry.id}>
+                      <span class="truncate">{preview(entry)}</span>
+                    </MenuV2.SubTrigger>
+                    <MenuV2.Portal>
+                      <MenuV2.SubContent>
+                        <MenuV2.Item onSelect={() => props.stash.restore(entry.id)}>
+                          {language.t("secondBrain.composer.stash.restore")}
+                        </MenuV2.Item>
+                        <MenuV2.Item onSelect={() => props.stash.remove(entry.id)}>
+                          {language.t("secondBrain.composer.stash.delete")}
+                        </MenuV2.Item>
+                      </MenuV2.SubContent>
+                    </MenuV2.Portal>
+                  </MenuV2.Sub>
+                )}
+              </For>
+            </MenuV2.Content>
+          </MenuV2.Portal>
+        </MenuV2>
+      </TooltipV2>
+    </Show>
+  )
 }
 
 function PromptInputV2ModelControl(props: {
