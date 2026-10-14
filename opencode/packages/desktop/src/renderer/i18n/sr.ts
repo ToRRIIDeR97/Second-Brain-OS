@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Проверите да ли постоје ажурирања...",
-  "desktop.menu.installCli": "Инсталирај CLI...",
   "desktop.menu.reloadWebview": "Поново учитај Webview",
   "desktop.menu.restart": "Поново покрените",
   "desktop.dialog.chooseFolder": "Изаберите фасциклу",
@@ -17,11 +16,6 @@ export const dict = {
     "Верзија {{version}} од OpenCode је преузета, да ли желите да је инсталирате и поново покренете?",
   "desktop.updater.installFailed.title": "Ажурирање није успело",
   "desktop.updater.installFailed.message": "Инсталација ажурирања није успела",
-  "desktop.cli.installed.title": "CLI Инсталиран",
-  "desktop.cli.installed.message":
-    "CLI инсталиран на {{path}}\n\nПоново покрените терминал да бисте користили команду 'opencode'.",
-  "desktop.cli.failed.title": "Инсталација није успела",
-  "desktop.cli.failed.message": "Инсталација CLI-ја није успела: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Основни елемент није пронађен. Да ли сте заборавили да га додате у свој index.html? Или је можда атрибут ид погрешно написан?",

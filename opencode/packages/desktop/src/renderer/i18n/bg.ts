@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Проверете за актуализации...",
-  "desktop.menu.installCli": "Инсталирайте CLI...",
   "desktop.menu.reloadWebview": "Презареди Webview",
   "desktop.menu.restart": "Рестартирайте",
   "desktop.dialog.chooseFolder": "Изберете папка",
@@ -17,11 +16,6 @@ export const dict = {
     "Версия {{version}} от OpenCode е изтеглена. Искате ли да я инсталирате и рестартирате?",
   "desktop.updater.installFailed.title": "Неуспешна актуализация",
   "desktop.updater.installFailed.message": "Неуспешно инсталиране на актуализация",
-  "desktop.cli.installed.title": "CLI е инсталиран",
-  "desktop.cli.installed.message":
-    "CLI инсталиран на {{path}}\n\nРестартирайте терминала си, за да използвате командата 'opencode'.",
-  "desktop.cli.failed.title": "Неуспешно инсталиране",
-  "desktop.cli.failed.message": "Неуспешно инсталиране на CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Основният елемент не е намерен. Забравихте ли да го добавите към вашия index.html? Или може би атрибутът id е изписан неправилно?",

@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "अद्यतन के लिए जाँच...",
-  "desktop.menu.installCli": "CLI स्थापित करें...",
   "desktop.menu.reloadWebview": "Webview पुनः लोड करें",
   "desktop.menu.restart": "पुनः आरंभ करें",
   "desktop.dialog.chooseFolder": "एक फ़ोल्डर चुनें",
@@ -17,11 +16,6 @@ export const dict = {
     "OpenCode का संस्करण {{version}} डाउनलोड हो गया है। क्या आप इसे इंस्टॉल करके ऐप को फिर से खोलना चाहेंगे?",
   "desktop.updater.installFailed.title": "अपडेट विफल",
   "desktop.updater.installFailed.message": "अद्यतन स्थापित करने में विफल",
-  "desktop.cli.installed.title": "CLI स्थापित",
-  "desktop.cli.installed.message":
-    "CLI को {{path}} पर इंस्टॉल किया गया\n\n'opencode' कमांड का उपयोग करने के लिए अपना टर्मिनल पुनः आरंभ करें।",
-  "desktop.cli.failed.title": "स्थापना विफल",
-  "desktop.cli.failed.message": "CLI इंस्टॉल करने में विफल: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "मूल तत्व नहीं मिला. क्या आप इसे अपने index.html में जोड़ना भूल गए? या हो सकता है कि आईडी विशेषता गलत वर्तनी हो गई हो?",

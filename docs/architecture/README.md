@@ -108,7 +108,10 @@ The packaged desktop disables embedded web UI fallback. The server serves only
 a UI bundled into its binary; without one, and for missing `/api` routes, it
 returns a local 404. There is no hosted UI proxy. The
 optional upstream CLI is a separate runtime from the fork's bundled server;
-see [release operations](../release-operations.md).
+see [release operations](../release-operations.md). The fork has no terminal
+UI. `packages/opencode/src/index.ts` is a headless developer CLI (`serve`,
+`generate`, and inspection commands) that runs from source and isn't
+shipped.
 
 ## Harness drivers and registration
 

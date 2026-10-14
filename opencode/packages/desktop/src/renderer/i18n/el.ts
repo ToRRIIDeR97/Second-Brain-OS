@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Έλεγχος για ενημερώσεις...",
-  "desktop.menu.installCli": "Εγκατάσταση CLI...",
   "desktop.menu.reloadWebview": "Επανάληψη φόρτωσης Webview",
   "desktop.menu.restart": "Επανεκκίνηση",
   "desktop.dialog.chooseFolder": "Επιλογή φακέλου",
@@ -17,11 +16,6 @@ export const dict = {
     "Έχει γίνει λήψη της έκδοσης {{version}} του OpenCode. Θέλετε να την εγκαταστήσετε και να επανεκκινήσετε την εφαρμογή;",
   "desktop.updater.installFailed.title": "Η ενημέρωση απέτυχε",
   "desktop.updater.installFailed.message": "Αποτυχία εγκατάστασης ενημέρωσης",
-  "desktop.cli.installed.title": "Το CLI εγκαταστάθηκε",
-  "desktop.cli.installed.message":
-    "CLI εγκατεστημένο στο {{path}}\n\nΕπανεκκινήστε το τερματικό σας για να χρησιμοποιήσετε την εντολή 'opencode'.",
-  "desktop.cli.failed.title": "Η εγκατάσταση απέτυχε",
-  "desktop.cli.failed.message": "Απέτυχε η εγκατάσταση του CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Το στοιχείο ρίζας δεν βρέθηκε. Ξεχάσατε να το προσθέσετε στο index.html; Ή μήπως το χαρακτηριστικό id γράφτηκε λάθος;",

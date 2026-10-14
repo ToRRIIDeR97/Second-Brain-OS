@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "التحقق من وجود تحديثات...",
-  "desktop.menu.installCli": "تثبيت CLI...",
   "desktop.menu.reloadWebview": "إعادة تحميل عرض الويب",
   "desktop.menu.restart": "إعادة تشغيل",
 
@@ -19,11 +18,6 @@ export const dict = {
     "تم تنزيل الإصدار {{version}} من OpenCode. هل ترغب في تثبيته وإعادة تشغيل التطبيق؟",
   "desktop.updater.installFailed.title": "فشل التحديث",
   "desktop.updater.installFailed.message": "فشل تثبيت التحديث",
-
-  "desktop.cli.installed.title": "تم تثبيت CLI",
-  "desktop.cli.installed.message": "تم تثبيت CLI في {{path}}\n\nأعد تشغيل الطرفية لاستخدام الأمر 'opencode'.",
-  "desktop.cli.failed.title": "فشل التثبيت",
-  "desktop.cli.failed.message": "فشل تثبيت CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "لم يتم العثور على العنصر الجذري. هل نسيت إضافته إلى index.html؟ أو ربما تمت كتابة سمة id بشكل خاطئ؟",
