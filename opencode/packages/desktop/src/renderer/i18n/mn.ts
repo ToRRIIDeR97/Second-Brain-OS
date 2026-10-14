@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Шинэчлэлтүүдийг шалгана уу...",
-  "desktop.menu.installCli": "Суулгах CLI...",
   "desktop.menu.reloadWebview": "Дахин ачаалах Webview",
   "desktop.menu.restart": "Дахин эхлүүлэх",
   "desktop.dialog.chooseFolder": "Фолдер сонгоно уу",
@@ -17,11 +16,6 @@ export const dict = {
     "OpenCode-ийн {{version}} хувилбарыг татаж авсан тул та үүнийг суулгаад дахин эхлүүлэхийг хүсэж байна уу?",
   "desktop.updater.installFailed.title": "Шинэчилж чадсангүй",
   "desktop.updater.installFailed.message": "Шинэчлэлтийг суулгаж чадсангүй",
-  "desktop.cli.installed.title": "CLI Суулгасан",
-  "desktop.cli.installed.message":
-    "CLI {{path}}-д суулгасан\n\n'opencode' командыг ашиглахын тулд терминалаа дахин эхлүүлнэ үү.",
-  "desktop.cli.failed.title": "Суулгалт амжилтгүй боллоо",
-  "desktop.cli.failed.message": "CLI суулгаж чадсангүй: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Үндэс элемент олдсонгүй. Та үүнийг index.html дээрээ нэмэхээ мартсан уу? Эсвэл id атрибутыг буруу бичсэн байж магадгүй юм уу?",

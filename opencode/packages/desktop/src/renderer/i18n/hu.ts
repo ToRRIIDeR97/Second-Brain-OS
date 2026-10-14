@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Frissítések keresése...",
-  "desktop.menu.installCli": "CLI telepítése...",
   "desktop.menu.reloadWebview": "A Webview újratöltése",
   "desktop.menu.restart": "Újraindítás",
   "desktop.dialog.chooseFolder": "Válasszon egy mappát",
@@ -17,11 +16,6 @@ export const dict = {
     "Az OpenCode {{version}} verziója letöltődött. Szeretné telepíteni és újraindítani az alkalmazást?",
   "desktop.updater.installFailed.title": "Frissítés sikertelen",
   "desktop.updater.installFailed.message": "Nem sikerült telepíteni a frissítést",
-  "desktop.cli.installed.title": "CLI telepítve",
-  "desktop.cli.installed.message":
-    "A CLI telepítési helye: {{path}}\n\nIndítsa újra a terminált az 'opencode' parancs használatához.",
-  "desktop.cli.failed.title": "A telepítés sikertelen",
-  "desktop.cli.failed.message": "A CLI telepítése sikertelen: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "A gyökérelem nem található. Elfelejtette hozzáadni az index.html-hez? Vagy lehet, hogy az id attribútumot rosszul írták?",

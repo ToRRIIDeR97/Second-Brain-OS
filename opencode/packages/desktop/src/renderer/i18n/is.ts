@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Leita að uppfærslum...",
-  "desktop.menu.installCli": "Setja upp CLI...",
   "desktop.menu.reloadWebview": "Endurhlaða Webview",
   "desktop.menu.restart": "Endurræsa",
   "desktop.dialog.chooseFolder": "Veldu möppu",
@@ -17,11 +16,6 @@ export const dict = {
     "Útgáfu {{version}} af OpenCode hefur verið hlaðið niður. Viltu setja hana upp og endurræsa?",
   "desktop.updater.installFailed.title": "Uppfærsla mistókst",
   "desktop.updater.installFailed.message": "Mistókst að setja upp uppfærslu",
-  "desktop.cli.installed.title": "CLI uppsett",
-  "desktop.cli.installed.message":
-    "CLI sett upp í {{path}}\n\nEndurræstu skjáherminn til að nota 'opencode' skipunina.",
-  "desktop.cli.failed.title": "Uppsetning mistókst",
-  "desktop.cli.failed.message": "Mistókst að setja upp CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Rótarþáttur fannst ekki. Gleymdirðu að bæta því við index.html þinn? Eða er id eigindin kannski rangt stafsett?",

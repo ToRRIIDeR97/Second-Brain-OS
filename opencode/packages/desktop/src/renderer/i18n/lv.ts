@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Pārbaudīt atjauninājumus...",
-  "desktop.menu.installCli": "Instalēt CLI...",
   "desktop.menu.reloadWebview": "Pārlādēt tīmekļa skatu",
   "desktop.menu.restart": "Restartēt",
   "desktop.dialog.chooseFolder": "Izvēlieties mapi",
@@ -17,11 +16,6 @@ export const dict = {
     "OpenCode versija {{version}} ir lejupielādēta. Vai vēlaties to instalēt un palaist no jauna?",
   "desktop.updater.installFailed.title": "Atjaunināšana neizdevās",
   "desktop.updater.installFailed.message": "Neizdevās instalēt atjauninājumu",
-  "desktop.cli.installed.title": "CLI instalēts",
-  "desktop.cli.installed.message":
-    "CLI instalēts uz {{path}}\n\nRestartējiet termināli, lai izmantotu komandu 'opencode'.",
-  "desktop.cli.failed.title": "Instalēšana neizdevās",
-  "desktop.cli.failed.message": "Neizdevās instalēt CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Saknes elements nav atrasts. Vai aizmirsāt to pievienot index.html? Vai arī id atribūts ir kļūdaini uzrakstīts?",

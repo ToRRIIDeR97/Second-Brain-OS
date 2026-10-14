@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Навсозиро санҷед...",
-  "desktop.menu.installCli": "Насб кунед CLI...",
   "desktop.menu.reloadWebview": "Аз нав бор кунед Webview",
   "desktop.menu.restart": "Оғози дубора",
   "desktop.dialog.chooseFolder": "Папкаро интихоб кунед",
@@ -17,11 +16,6 @@ export const dict = {
     "Версияи {{version}} аз OpenCode зеркашӣ карда шуд, оё шумо мехоҳед онро насб кунед ва аз нав оғоз кунед?",
   "desktop.updater.installFailed.title": "Навсозӣ ноком шуд",
   "desktop.updater.installFailed.message": "Навсозӣ насб карда нашуд",
-  "desktop.cli.installed.title": "CLI насб карда шуд",
-  "desktop.cli.installed.message":
-    "CLI ба {{path}} насб карда шудааст\n\nБарои истифодаи фармони 'opencode' терминали худро аз нав оғоз кунед.",
-  "desktop.cli.failed.title": "Насб карда нашуд",
-  "desktop.cli.failed.message": "Насб карда нашуд CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Элементи решавӣ ёфт нашуд. Оё шумо онро ба index.html илова карданро фаромӯш кардаед? Ё шояд атрибути id хато навишта шудааст?",

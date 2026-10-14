@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Kanna fyri dagføringum...",
-  "desktop.menu.installCli": "Set upp CLI...",
   "desktop.menu.reloadWebview": "Endurlesa vevvísing",
   "desktop.menu.restart": "Endurbyrja",
   "desktop.dialog.chooseFolder": "Vel eina mappu",
@@ -17,11 +16,6 @@ export const dict = {
     "Útgáva {{version}} av OpenCode er heintað, vilt tú seta hana upp og seta hana í gongd aftur?",
   "desktop.updater.installFailed.title": "Dagføring miseydnaðist",
   "desktop.updater.installFailed.message": "Tað eydnaðist ikki at seta upp dagføring",
-  "desktop.cli.installed.title": "CLI Sett upp",
-  "desktop.cli.installed.message":
-    "CLI sett upp í {{path}}\n\nEndurbyrja terminalin fyri at brúka skipanina 'opencode'.",
-  "desktop.cli.failed.title": "Innleggingin miseydnaðist",
-  "desktop.cli.failed.message": "Tað eydnaðist ikki at seta upp CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Rótarevni ikki funnið. Gloymdi tú at leggja tað til títt index.html? Ella kanska fekk id eginleikin skeivt stavað?",

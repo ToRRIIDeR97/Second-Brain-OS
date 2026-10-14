@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Yeniləmələri yoxla...",
-  "desktop.menu.installCli": "CLI-ni quraşdır...",
   "desktop.menu.reloadWebview": "Webview-u yenidən yüklə",
   "desktop.menu.restart": "Yenidən başlat",
 
@@ -19,12 +18,6 @@ export const dict = {
     "OpenCode-un {{version}} versiyası yüklənib. Onu quraşdırıb tətbiqi yenidən başlatmaq istəyirsiniz?",
   "desktop.updater.installFailed.title": "Yeniləmə uğursuz oldu",
   "desktop.updater.installFailed.message": "Yeniləmə quraşdırıla bilmədi",
-
-  "desktop.cli.installed.title": "CLI quraşdırıldı",
-  "desktop.cli.installed.message":
-    "CLI {{path}} ünvanına quraşdırıldı\n\n'opencode' əmrindən istifadə etmək üçün terminalı yenidən başladın.",
-  "desktop.cli.failed.title": "Quraşdırma uğursuz oldu",
-  "desktop.cli.failed.message": "CLI quraşdırıla bilmədi: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Kök element tapılmadı. index.html-ə əlavə etməyi unutmusunuz? Yoxsa id atributu səhv yazılıb?",
