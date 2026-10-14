@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { Exit, Schema } from "effect"
-import { configuredInstances } from "@opencode-ai/core/harness"
+import { LLM, Model } from "@opencode-ai/llm"
+import { route } from "@opencode-ai/llm/protocols/openai-chat"
+import { Harness } from "@opencode-ai/schema/harness"
+import { configuredInstances, continuationFor, renderCodexPrompt } from "@opencode-ai/core/harness"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigHarness } from "@opencode-ai/core/config/harness"
 import { AcpHarness } from "@opencode-ai/core/harness/acp"
@@ -81,6 +84,46 @@ describe("ACP harness", () => {
       "codex:codex",
       "gemini:acp",
     ])
+  })
+
+  test("a returning ACP session gets only the messages since its last turn", () => {
+    const gemini = Harness.InstanceID.make("gemini")
+    const text = (id: string, role: "user" | "assistant", value: string) => ({
+      id,
+      role,
+      content: [{ type: "text" as const, text: value }],
+    })
+    // Gemini answered u1, then Codex took u2 and u3, then the user switched back to Gemini.
+    const metadata = {
+      harnessContinuations: {
+        gemini: { nativeID: "acp-session", lastSeenMessageID: "u1" },
+        codex: { nativeID: "thread", lastSeenMessageID: "u3" },
+      },
+    }
+    const continuation = continuationFor(metadata, gemini, 4)!
+    const prompt = renderCodexPrompt(
+      LLM.request({
+        model: Model.make({ id: "gemini-test", provider: "test", route }),
+        messages: [
+          text("u1", "user", "Gemini task"),
+          text("a1", "assistant", "Gemini reply"),
+          text("u2", "user", "Codex task"),
+          text("a2", "assistant", "Codex reply"),
+          text("u3", "user", "Codex follow-up"),
+          text("a3", "assistant", "Codex follow-up reply"),
+          text("u4", "user", "Back to Gemini"),
+        ],
+      }),
+      continuation.handoff,
+    )
+
+    expect(continuation.nativeID).toBe("acp-session")
+    expect(prompt).toContain("since you last participated")
+    expect(prompt).toContain("USER:\nCodex task")
+    expect(prompt).toContain("ASSISTANT:\nCodex follow-up reply")
+    expect(prompt).not.toContain("Gemini task")
+    expect(prompt).not.toContain("Gemini reply")
+    expect(prompt.endsWith("New user message (respond to this):\nBack to Gemini")).toBe(true)
   })
 
   test("expands both home-directory separators", () => {

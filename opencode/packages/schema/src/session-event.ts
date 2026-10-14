@@ -81,6 +81,9 @@ export const HarnessContinuationSet = Event.define({
     ...Base,
     instanceID: Harness.InstanceID,
     continuation: Schema.String,
+    /** Last canonical message this native session saw; set after a successful turn. */
+    lastSeenMessageID: Schema.String.pipe(optional),
+    /** Legacy single-slot revision; ignored by per-instance continuations. */
     revision: Schema.Finite.pipe(optional),
   },
 })
