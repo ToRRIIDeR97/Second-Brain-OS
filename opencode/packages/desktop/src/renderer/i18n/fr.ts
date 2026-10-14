@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Rechercher des mises à jour...",
-  "desktop.menu.installCli": "Installer l'interface en ligne de commande...",
   "desktop.menu.reloadWebview": "Recharger la vue Web",
   "desktop.menu.restart": "Redémarrer",
 
@@ -19,12 +18,6 @@ export const dict = {
     "La version {{version}} d'OpenCode a été téléchargée. Voulez-vous l'installer et relancer l'application ?",
   "desktop.updater.installFailed.title": "Échec de la mise à jour",
   "desktop.updater.installFailed.message": "Impossible d'installer la mise à jour",
-
-  "desktop.cli.installed.title": "Interface en ligne de commande installée",
-  "desktop.cli.installed.message":
-    "Interface en ligne de commande installée dans {{path}}\n\nRedémarrez votre terminal pour utiliser la commande 'opencode'.",
-  "desktop.cli.failed.title": "Échec de l'installation",
-  "desktop.cli.failed.message": "Impossible d'installer l'interface en ligne de commande : {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Élément racine introuvable. Avez-vous oublié de l'ajouter à votre index.html ? Ou peut-être que l'attribut id est mal orthographié ?",

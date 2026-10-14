@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Tarkista päivitykset...",
-  "desktop.menu.installCli": "Asenna CLI...",
   "desktop.menu.reloadWebview": "Lataa verkkonäkymä uudelleen",
   "desktop.menu.restart": "Käynnistä uudelleen",
   "desktop.dialog.chooseFolder": "Valitse kansio",
@@ -17,11 +16,6 @@ export const dict = {
     "OpenCoden versio {{version}} on ladattu. Haluatko asentaa sen ja käynnistää OpenCoden uudelleen?",
   "desktop.updater.installFailed.title": "Päivitys epäonnistui",
   "desktop.updater.installFailed.message": "Päivityksen asentaminen epäonnistui",
-  "desktop.cli.installed.title": "CLI on asennettu",
-  "desktop.cli.installed.message":
-    "CLI on asennettu polkuun {{path}}\n\nKäynnistä terminaali uudelleen, jotta voit käyttää 'opencode'-komentoa.",
-  "desktop.cli.failed.title": "Asennus epäonnistui",
-  "desktop.cli.failed.message": "CLI:n asennus epäonnistui: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Juurielementtiä ei löydy. Unohditko lisätä sen index.html-tiedostoosi? Tai ehkä id-attribuutti on kirjoitettu väärin?",
