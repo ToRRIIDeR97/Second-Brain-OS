@@ -208,7 +208,6 @@ export const dict = {
   "dialog.model.search.placeholder": "Cari model",
   "dialog.model.empty": "Tidak ada hasil model",
   "dialog.model.manage": "Kelola model",
-  "dialog.model.manage.description": "Sesuaikan model mana yang muncul di pemilih model.",
   "dialog.model.manage.provider.toggle": "Alihkan semua model {{provider}}",
 
   "dialog.model.unpaid.freeModels.title": "Model gratis disediakan oleh OpenCode",
@@ -722,7 +721,6 @@ export const dict = {
   "session.review.empty": "Belum ada perubahan di sesi ini",
   "session.review.noVcs": "Tidak ada sistem kontrol versi Git yang terdeteksi, perubahan tidak ditampilkan",
   "session.review.noVcs.createGit.title": "Buat repositori Git",
-  "session.review.noVcs.createGit.description": "Lacak, tinjau, dan urungkan perubahan di proyek ini",
   "session.review.noVcs.createGit.actionLoading": "Membuat repositori Git...",
   "session.review.noVcs.createGit.action": "Buat repositori Git",
   "session.review.noSnapshot":
@@ -932,7 +930,6 @@ export const dict = {
   "settings.general.section.display": "Tampilan",
 
   "settings.general.row.language.title": "Bahasa",
-  "settings.general.row.language.description": "Ubah bahasa tampilan untuk OpenCode",
   "settings.general.row.shell.title": "Shell terminal",
   "settings.general.row.shell.description": "Shell yang digunakan oleh terminal dan alat agen",
   "settings.general.row.shell.autoDefault": "Otomatis (Bawaan)",
@@ -940,47 +937,30 @@ export const dict = {
   "settings.general.row.appearance.title": "Tampilan",
   "settings.general.row.appearance.description": "Sesuaikan tampilan OpenCode di perangkat Anda",
   "settings.general.row.colorScheme.title": "Skema warna",
-  "settings.general.row.colorScheme.description": "Pilih apakah OpenCode mengikuti tema sistem, terang, atau gelap",
   "settings.general.row.theme.title": "Tema",
-  "settings.general.row.theme.description": "Sesuaikan tema OpenCode.",
   "settings.general.row.font.title": "Font kode",
-  "settings.general.row.font.description": "Sesuaikan font yang digunakan di blok kode",
   "settings.general.row.terminalFont.title": "Font terminal",
-  "settings.general.row.terminalFont.description": "Sesuaikan font yang digunakan di terminal",
   "settings.general.row.uiFont.title": "Font UI",
-  "settings.general.row.uiFont.description": "Sesuaikan font yang digunakan di seluruh antarmuka",
   "settings.general.row.followup.title": "Perilaku lanjutan",
   "settings.general.row.followup.description":
     "Pilih apakah prompt lanjutan segera mengarahkan atau menunggu dalam antrean",
   "settings.general.row.followup.option.queue": "Antrean",
   "settings.general.row.followup.option.steer": "Arahkan",
   "settings.general.row.showFileTree.title": "Pohon berkas",
-  "settings.general.row.showFileTree.description": "Tampilkan panel pohon berkas di sesi",
   "settings.general.row.showNavigation.title": "Kontrol navigasi",
   "settings.general.row.showNavigation.description": "Tampilkan tombol mundur dan maju di bilah judul desktop",
   "settings.general.row.showSearch.title": "Palet perintah",
-  "settings.general.row.showSearch.description": "Tampilkan tombol pencarian dan palet perintah di bilah judul",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Tampilkan tombol terminal di bilah judul desktop",
   "settings.general.row.showStatus.title": "Status server",
-  "settings.general.row.showStatus.description": "Tampilkan tombol status server di bilah judul",
   "settings.general.row.mobileTitlebarBottom.title": "Navigasi bawah",
-  "settings.general.row.mobileTitlebarBottom.description":
-    "Tempatkan bilah judul dan tab sesi di bagian bawah layar pada perangkat seluler",
   "settings.general.row.showCustomAgents.title": "Tampilkan agen",
   "settings.general.row.showCustomAgents.description":
     "Beralih antaragen di penyusun. Saat disembunyikan, Agen Build digunakan sebagai bawaan.",
   "settings.general.row.reasoningSummaries.title": "Tampilkan ringkasan penalaran",
-  "settings.general.row.reasoningSummaries.description": "Tampilkan ringkasan penalaran model di linimasa",
   "settings.general.row.shellToolPartsExpanded.title": "Bentangkan bagian alat shell",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Tampilkan bagian alat shell yang dibentangkan secara bawaan di linimasa",
   "settings.general.row.editToolPartsExpanded.title": "Bentangkan bagian alat edit",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Tampilkan bagian alat edit, tulis, dan patch yang dibentangkan secara bawaan di linimasa",
   "settings.general.row.pinchZoom.title": "Cubit untuk zum",
-  "settings.general.row.pinchZoom.description":
-    "Izinkan gerakan cubit pada trackpad dan Ctrl-gulir untuk melakukan zum",
 
   "settings.general.row.wayland.title": "Gunakan Wayland asli",
   "settings.general.row.wayland.description": "Nonaktifkan sistem cadangan X11 di Wayland. Memerlukan mulai ulang.",
@@ -991,7 +971,6 @@ export const dict = {
   "settings.updates.row.startup.title": "Periksa pembaruan saat dimulai",
   "settings.updates.row.startup.description": "Secara otomatis memeriksa pembaruan saat OpenCode diluncurkan",
   "settings.updates.row.check.title": "Periksa pembaruan",
-  "settings.updates.row.check.description": "Periksa pembaruan secara manual dan instal jika tersedia",
   "settings.updates.action.checkNow": "Periksa sekarang",
   "settings.updates.action.checking": "Memeriksa...",
   "settings.updates.action.downloading": "Mengunduh...",
@@ -1046,19 +1025,12 @@ export const dict = {
   "sound.option.yup06": "Yup 06",
 
   "settings.general.notifications.agent.title": "Agen",
-  "settings.general.notifications.agent.description":
-    "Tampilkan notifikasi sistem saat agen selesai atau memerlukan perhatian",
   "settings.general.notifications.permissions.title": "Izin",
-  "settings.general.notifications.permissions.description": "Tampilkan notifikasi sistem saat izin diperlukan",
   "settings.general.notifications.errors.title": "Kesalahan",
-  "settings.general.notifications.errors.description": "Tampilkan notifikasi sistem saat terjadi kesalahan",
 
   "settings.general.sounds.agent.title": "Agen",
-  "settings.general.sounds.agent.description": "Mainkan suara saat agen selesai atau memerlukan perhatian",
   "settings.general.sounds.permissions.title": "Izin",
-  "settings.general.sounds.permissions.description": "Mainkan suara saat izin diperlukan",
   "settings.general.sounds.errors.title": "Kesalahan",
-  "settings.general.sounds.errors.description": "Mainkan suara saat terjadi kesalahan",
 
   "settings.shortcuts.title": "Pintasan keyboard",
   "settings.shortcuts.reset.button": "Atur ulang ke bawaan",
@@ -1081,7 +1053,6 @@ export const dict = {
   "settings.providers.title": "Penyedia",
   "settings.providers.description": "Pengaturan penyedia akan dapat dikonfigurasi di sini.",
   "settings.providers.section.connected": "Penyedia terhubung",
-  "settings.providers.connected.empty": "Tidak ada penyedia terhubung",
   "settings.providers.connected.environmentDescription": "Terhubung dari variabel lingkungan Anda",
   "settings.providers.section.popular": "Penyedia populer",
   "settings.providers.custom.description": "Tambahkan penyedia yang kompatibel dengan OpenAI berdasarkan URL dasar.",

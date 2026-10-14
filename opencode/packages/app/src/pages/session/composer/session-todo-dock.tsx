@@ -92,7 +92,7 @@ export function SessionTodoDock(props: {
   return (
     <div
       data-component="session-todo-dock"
-      class="w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
+      class="w-full overflow-hidden rounded-[24px] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
       style={{
         "overflow-x": "visible",
         "overflow-y": "hidden",
@@ -102,7 +102,7 @@ export function SessionTodoDock(props: {
       <div ref={contentRef}>
         <div
           data-action="session-todo-toggle"
-          class="flex items-center gap-2 overflow-visible h-[42px] pl-4 pr-2"
+          class="flex items-center gap-2 overflow-visible h-[42px] pl-5 pr-3"
           role="button"
           tabIndex={0}
           onClick={props.onToggle}
@@ -203,7 +203,7 @@ function TodoList(props: { todos: Todo[] }) {
   return (
     <div class="relative">
       <div
-        class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar"
+        class="px-5 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar"
         style={{ "overflow-anchor": "none" }}
         onScroll={(e) => {
           setStore("stuck", e.currentTarget.scrollTop > 0)

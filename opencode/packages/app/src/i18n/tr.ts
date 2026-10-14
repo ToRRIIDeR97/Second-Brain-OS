@@ -212,7 +212,6 @@ export const dict = {
   "dialog.model.search.placeholder": "Model ara",
   "dialog.model.empty": "Model sonucu yok",
   "dialog.model.manage": "Modelleri yönet",
-  "dialog.model.manage.description": "Model seçicide hangi modellerin görüneceğini özelleştirin.",
   "dialog.model.manage.provider.toggle": "Tüm {{provider}} modellerini aç/kapat",
 
   "dialog.model.unpaid.freeModels.title": "OpenCode tarafından sunulan ücretsiz modeller",
@@ -846,7 +845,6 @@ export const dict = {
   "settings.general.section.display": "Ekran",
 
   "settings.general.row.language.title": "Dil",
-  "settings.general.row.language.description": "OpenCode'un görünüm dilini değiştirin",
   "settings.general.row.shell.title": "Terminal Kabuğu",
   "settings.general.row.shell.description":
     "Terminalinizde kullanılacak kabuğu seçin. Uyumlu kabuklar, ajan araç çağrılarında da kullanılır.",
@@ -855,48 +853,30 @@ export const dict = {
   "settings.general.row.appearance.title": "Görünüm",
   "settings.general.row.appearance.description": "OpenCode'un cihazınızdaki görünümünü özelleştirin",
   "settings.general.row.colorScheme.title": "Renk şeması",
-  "settings.general.row.colorScheme.description":
-    "OpenCode'un sistem, açık veya koyu temayı takip etip etmeyeceğini seçin",
   "settings.general.row.theme.title": "Tema",
-  "settings.general.row.theme.description": "OpenCode'un temasını özelleştirin.",
   "settings.general.row.font.title": "Kod yazı tipi",
-  "settings.general.row.font.description": "Kod bloklarında kullanılan yazı tipini özelleştirin",
   "settings.general.row.terminalFont.title": "Terminal yazı tipi",
-  "settings.general.row.terminalFont.description": "Terminalde kullanılan yazı tipini özelleştirin",
   "settings.general.row.uiFont.title": "Arayüz yazı tipi",
-  "settings.general.row.uiFont.description": "Arayüz genelinde kullanılan yazı tipini özelleştirin",
   "settings.general.row.followup.title": "Takip davranışı",
   "settings.general.row.followup.description":
     "Takip istemlerinin hemen yönlendirilmesini mi yoksa sırada beklemesini mi istediğinizi seçin",
   "settings.general.row.followup.option.queue": "Sıra",
   "settings.general.row.followup.option.steer": "Yönlendir",
   "settings.general.row.showFileTree.title": "Dosya ağacı",
-  "settings.general.row.showFileTree.description": "Oturumlarda dosya ağacı panelini göster",
   "settings.general.row.showNavigation.title": "Gezinme denetimleri",
   "settings.general.row.showNavigation.description": "Masaüstü başlık çubuğunda geri ve ileri düğmelerini göster",
   "settings.general.row.showSearch.title": "Komut paleti",
-  "settings.general.row.showSearch.description": "Başlık çubuğunda arama ve komut paleti düğmesini göster",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Masaüstü başlık çubuğunda terminal düğmesini göster",
   "settings.general.row.showStatus.title": "Sunucu durumu",
-  "settings.general.row.showStatus.description": "Başlık çubuğunda sunucu durumu düğmesini göster",
   "settings.general.row.mobileTitlebarBottom.title": "Alt gezinme",
-  "settings.general.row.mobileTitlebarBottom.description":
-    "Mobil cihazlarda başlık çubuğunu ve oturum sekmelerini ekranın altına yerleştir",
   "settings.general.row.showCustomAgents.title": "Ajanı göster",
   "settings.general.row.showCustomAgents.description":
     "Düzenleyicide ajanlar arasında geçiş yapın. Gizlendiğinde varsayılan olarak Build ajanı kullanılır.",
   "settings.general.row.reasoningSummaries.title": "Akıl yürütme özetlerini göster",
-  "settings.general.row.reasoningSummaries.description": "Zaman çizelgesinde model akıl yürütme özetlerini görüntüle",
   "settings.general.row.shellToolPartsExpanded.title": "Kabuk araç bileşenlerini genişlet",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Zaman çizelgesinde kabuk araç bileşenlerini varsayılan olarak genişletilmiş göster",
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
   "settings.general.row.pinchZoom.title": "Sıkıştırarak yakınlaştır",
-  "settings.general.row.pinchZoom.description":
-    "İzleme dörtgeninde sıkıştırma ve Ctrl-kaydırma hareketleriyle yakınlaştırmaya izin ver",
 
   "settings.general.row.wayland.title": "Yerel Wayland kullan",
   "settings.general.row.wayland.description":
@@ -908,7 +888,6 @@ export const dict = {
   "settings.updates.row.startup.title": "Başlangıçta güncellemeleri kontrol et",
   "settings.updates.row.startup.description": "OpenCode başladığında otomatik güncelleme kontrolü yap",
   "settings.updates.row.check.title": "Güncellemeleri kontrol et",
-  "settings.updates.row.check.description": "Elle güncelleme kontrolü yap ve varsa yükle",
   "settings.updates.action.checkNow": "Şimdi kontrol et",
   "settings.updates.action.checking": "Kontrol ediliyor...",
   "settings.updates.action.downloading": "İndiriliyor...",
@@ -964,19 +943,12 @@ export const dict = {
   "sound.option.yup06": "Evet 06",
 
   "settings.general.notifications.agent.title": "Ajan",
-  "settings.general.notifications.agent.description":
-    "Ajan tamamlandığında veya dikkat gerektirdiğinde sistem bildirimi göster",
   "settings.general.notifications.permissions.title": "İzinler",
-  "settings.general.notifications.permissions.description": "İzin gerektiğinde sistem bildirimi göster",
   "settings.general.notifications.errors.title": "Hatalar",
-  "settings.general.notifications.errors.description": "Hata oluştuğunda sistem bildirimi göster",
 
   "settings.general.sounds.agent.title": "Ajan",
-  "settings.general.sounds.agent.description": "Ajan tamamlandığında veya dikkat gerektirdiğinde ses çal",
   "settings.general.sounds.permissions.title": "İzinler",
-  "settings.general.sounds.permissions.description": "İzin gerektiğinde ses çal",
   "settings.general.sounds.errors.title": "Hatalar",
-  "settings.general.sounds.errors.description": "Hata oluştuğunda ses çal",
 
   "settings.shortcuts.title": "Klavye kısayolları",
   "settings.shortcuts.reset.button": "Varsayılanlara sıfırla",
@@ -999,7 +971,6 @@ export const dict = {
   "settings.providers.title": "Sağlayıcılar",
   "settings.providers.description": "Sağlayıcı ayarları burada yapılandırılabilecek.",
   "settings.providers.section.connected": "Bağlı sağlayıcılar",
-  "settings.providers.connected.empty": "Bağlı sağlayıcı yok",
   "settings.providers.section.popular": "Popüler sağlayıcılar",
   "settings.providers.tag.environment": "Ortam",
   "settings.providers.tag.config": "Yapılandırma",
@@ -1100,7 +1071,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parola",
   "server.row.noUsername": "kullanıcı adı yok",
   "session.review.noVcs.createGit.title": "Git deposu oluştur",
-  "session.review.noVcs.createGit.description": "Bu projedeki değişiklikleri takip et, incele ve geri al",
   "session.review.noVcs.createGit.actionLoading": "Git deposu oluşturuluyor...",
   "session.review.noVcs.createGit.action": "Git deposu oluştur",
   "session.todo.progress": "{{total}} görevin {{done}} tanesi tamamlandı",

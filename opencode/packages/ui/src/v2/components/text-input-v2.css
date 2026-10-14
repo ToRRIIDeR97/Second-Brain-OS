@@ -179,3 +179,13 @@
   color: var(--v2-state-fg-danger);
   opacity: 1;
 }
+
+/* Material 3 shape: softer fields with circular inline buttons. */
+[data-component="text-input-v2"] {
+  border-radius: var(--v2-radius-md);
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"],
+[data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
+  border-radius: var(--v2-radius-full);
+}

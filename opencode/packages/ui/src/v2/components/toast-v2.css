@@ -223,3 +223,8 @@
     width: 100%;
   }
 }
+
+/* Material 3 shape: snackbar corners and pill actions. */
+.toast-v2 {
+  border-radius: var(--v2-radius-lg);
+}

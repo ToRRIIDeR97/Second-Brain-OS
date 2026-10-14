@@ -1,5 +1,8 @@
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import {
   applyNoteEditorCommand,
@@ -63,9 +66,27 @@ const defaults: Required<NoteEditorLabels> = {
   placeholder: "Write Markdown, or type / at the start of a line for commands...",
 }
 
-const controlClass =
-  "h-7 shrink-0 rounded-[5px] px-2 text-[11px] text-v2-text-text-muted transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus disabled:pointer-events-none disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
-const iconControlClass = `${controlClass} flex size-7 items-center justify-center px-0`
+// Compact glyphs for the circular formatting buttons; the tooltip and aria-label carry the full name.
+const glyph: Partial<Record<NoteEditorCommand, string>> = {
+  h1: "H1",
+  h2: "H2",
+  h3: "H3",
+  bold: "B",
+  italic: "I",
+  strike: "S",
+  bullet: "•",
+  ordered: "1.",
+  task: "☐",
+  quote: "“",
+  "inline-code": "</>",
+  link: "↗",
+}
+const glyphClass: Partial<Record<NoteEditorCommand, string>> = {
+  bold: "[font-weight:700]",
+  italic: "italic",
+  strike: "line-through",
+  "inline-code": "font-mono text-[10px]",
+}
 const toolbarCommands = noteEditorCommands.filter((command) =>
   ["h1", "h2", "h3", "bold", "italic", "strike", "bullet", "ordered", "task", "quote", "inline-code", "link"].includes(
     command.id,
@@ -217,9 +238,9 @@ export function NoteEditor(props: NoteEditorProps) {
   return (
     <section
       classList={{
-        "flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden bg-v2-background-bg-base": true,
+        "flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] bg-v2-background-bg-base shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]": true,
         relative: !fullscreen(),
-        "fixed inset-3 z-50 rounded-[8px] border border-v2-border-border-base shadow-2xl": fullscreen(),
+        "fixed inset-3 z-50 !rounded-[24px] shadow-2xl": fullscreen(),
       }}
       aria-label={label("editor")}
       onKeyDown={(event) => {
@@ -229,91 +250,101 @@ export function NoteEditor(props: NoteEditorProps) {
         setFullscreen(false)
       }}
     >
-      <div class="flex min-h-10 shrink-0 items-center gap-1 border-b border-v2-border-border-base px-2">
-        <div class="flex rounded-[6px] bg-v2-background-bg-layer-02 p-0.5">
-          <ModeButton active={mode() === "write"} label={label("write")} onClick={() => setMode("write")} />
-          <ModeButton active={mode() === "split"} label={label("split")} onClick={() => setMode("split")} />
-          <ModeButton active={mode() === "preview"} label={label("preview")} onClick={() => setMode("preview")} />
-        </div>
-        <Show when={mode() === "split"}>
-          <button
-            type="button"
-            class={iconControlClass}
-            aria-label={orientation() === "side-by-side" ? label("stacked") : label("sideBySide")}
-            aria-pressed={orientation() === "stacked"}
-            onClick={() => setOrientation((value) => (value === "side-by-side" ? "stacked" : "side-by-side"))}
-          >
-            <Icon name={orientation() === "side-by-side" ? "layout-bottom" : "layout-left"} size="small" />
-          </button>
-        </Show>
-        <span class="ml-auto hidden text-[11px] tabular-nums text-v2-text-text-faint sm:inline">
-          {label("words")(props.value.trim() ? props.value.trim().split(/\s+/).length : 0)}
-        </span>
-        <button
-          type="button"
-          class={iconControlClass}
-          aria-label={fullscreen() ? label("exitFullscreen") : label("fullscreen")}
-          aria-pressed={fullscreen()}
-          onClick={() => setFullscreen((value) => !value)}
-        >
-          <Icon name={fullscreen() ? "collapse" : "expand"} size="small" />
-        </button>
-      </div>
-
-      <Show when={mode() !== "preview"}>
-        <div
-          class="relative flex h-9 shrink-0 items-center gap-0.5 border-b border-v2-border-border-base px-2"
-          role="toolbar"
-          aria-label={label("toolbar")}
-        >
-          <For each={toolbarCommands}>
-            {(command) => (
-              <button
-                type="button"
-                class={controlClass}
-                aria-label={commandLabel(command)}
-                title={commandLabel(command)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => run(command.id)}
-              >
-                {command.shortLabel}
-              </button>
-            )}
-          </For>
-          <span class="mx-1 h-4 w-px shrink-0 bg-v2-border-border-base" aria-hidden="true" />
-          <button
-            type="button"
-            class={controlClass}
-            aria-expanded={insertOpen()}
-            aria-haspopup="menu"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => setInsertOpen((value) => !value)}
-          >
-            {label("insert")}
-          </button>
-          <Show when={insertOpen()}>
-            <div
-              role="menu"
-              class="absolute right-2 top-8 z-30 w-52 rounded-[7px] border border-v2-border-border-base bg-v2-background-bg-layer-02 p-1 shadow-lg"
-            >
-              <For each={insertCommands}>
-                {(command) => (
-                  <button
+      <div class="relative flex min-h-12 shrink-0 flex-wrap items-center gap-1 px-2 py-1.5">
+        <SegmentedControlV2 class="!w-auto" value={mode()} onChange={(value) => value && setMode(value as EditorMode)}>
+          <SegmentedControlItemV2 value="write">{label("write")}</SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="split">{label("split")}</SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="preview">{label("preview")}</SegmentedControlItemV2>
+        </SegmentedControlV2>
+        <Show when={mode() !== "preview"}>
+          <div class="flex min-w-0 flex-wrap items-center gap-0.5 pl-1" role="toolbar" aria-label={label("toolbar")}>
+            <For each={toolbarCommands}>
+              {(command) => (
+                <TooltipV2 value={commandLabel(command)}>
+                  <IconButtonV2
                     type="button"
-                    role="menuitem"
-                    class="flex h-8 w-full items-center justify-between rounded-[5px] px-2 text-left text-[12px] text-v2-text-text-muted hover:bg-v2-background-bg-layer-03 hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
-                    onMouseDown={(event) => event.preventDefault()}
+                    variant="ghost-muted"
+                    size="large"
+                    aria-label={commandLabel(command)}
+                    icon={
+                      <span class={`text-[12px] leading-none ${glyphClass[command.id] ?? ""}`}>
+                        {glyph[command.id]}
+                      </span>
+                    }
+                    onMouseDown={(event: MouseEvent) => event.preventDefault()}
                     onClick={() => run(command.id)}
-                  >
-                    <span>{commandLabel(command)}</span>
-                    <span class="text-[10px] text-v2-text-text-faint">{command.shortLabel}</span>
-                  </button>
-                )}
-              </For>
-            </div>
+                  />
+                </TooltipV2>
+              )}
+            </For>
+            <TooltipV2 value={label("insert")}>
+              <IconButtonV2
+                type="button"
+                variant="ghost-muted"
+                size="large"
+                aria-label={label("insert")}
+                aria-expanded={insertOpen()}
+                aria-haspopup="menu"
+                icon={<Icon name="plus" size="small" />}
+                onMouseDown={(event: MouseEvent) => event.preventDefault()}
+                onClick={() => setInsertOpen((value) => !value)}
+              />
+            </TooltipV2>
+          </div>
+        </Show>
+        <div class="ml-auto flex items-center gap-1">
+          <Show when={props.value.trim()}>
+            <span class="hidden px-1 text-[11px] tabular-nums text-v2-text-text-faint sm:inline">
+              {label("words")(props.value.trim().split(/\s+/).length)}
+            </span>
           </Show>
+          <Show when={mode() === "split"}>
+            <TooltipV2 value={orientation() === "side-by-side" ? label("stacked") : label("sideBySide")}>
+              <IconButtonV2
+                type="button"
+                variant="ghost-muted"
+                size="large"
+                aria-label={orientation() === "side-by-side" ? label("stacked") : label("sideBySide")}
+                aria-pressed={orientation() === "stacked"}
+                icon={<Icon name={orientation() === "side-by-side" ? "layout-bottom" : "layout-left"} size="small" />}
+                onClick={() => setOrientation((value) => (value === "side-by-side" ? "stacked" : "side-by-side"))}
+              />
+            </TooltipV2>
+          </Show>
+          <TooltipV2 value={fullscreen() ? label("exitFullscreen") : label("fullscreen")}>
+            <IconButtonV2
+              type="button"
+              variant="ghost-muted"
+              size="large"
+              aria-label={fullscreen() ? label("exitFullscreen") : label("fullscreen")}
+              aria-pressed={fullscreen()}
+              icon={<Icon name={fullscreen() ? "collapse" : "expand"} size="small" />}
+              onClick={() => setFullscreen((value) => !value)}
+            />
+          </TooltipV2>
         </div>
-      </Show>
+        <Show when={insertOpen() && mode() !== "preview"}>
+          <div
+            role="menu"
+            class="absolute right-2 top-11 z-30 w-56 rounded-[16px] bg-v2-background-bg-layer-02 p-1.5 shadow-[var(--v2-elevation-raised)]"
+          >
+            <For each={insertCommands}>
+              {(command) => (
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="flex h-9 w-full items-center justify-between rounded-[12px] px-3 text-left text-[12px] text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => run(command.id)}
+                >
+                  <span>{commandLabel(command)}</span>
+                  <span class="text-[10px] text-v2-text-text-faint">{command.shortLabel}</span>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
 
       <Show
         when={!props.loading}
@@ -360,7 +391,7 @@ export function NoteEditor(props: NoteEditorProps) {
                   id="note-editor-slash-menu"
                   role="listbox"
                   aria-label={label("slashMenu")}
-                  class="absolute left-5 top-12 z-20 max-h-64 w-64 overflow-y-auto rounded-[7px] border border-v2-border-border-base bg-v2-background-bg-layer-02 p-1 shadow-lg"
+                  class="absolute left-5 top-12 z-20 max-h-64 w-64 overflow-y-auto rounded-[16px] bg-v2-background-bg-layer-02 p-1.5 shadow-[var(--v2-elevation-raised)]"
                 >
                   <Show
                     when={commands().length}
@@ -373,7 +404,7 @@ export function NoteEditor(props: NoteEditorProps) {
                           type="button"
                           role="option"
                           aria-selected={activeCommand() === index()}
-                          class="flex h-8 w-full items-center justify-between rounded-[5px] px-2 text-left text-[12px] text-v2-text-text-muted hover:bg-v2-background-bg-layer-03 hover:text-v2-text-text-base aria-selected:bg-v2-background-bg-layer-03 aria-selected:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
+                          class="flex h-9 w-full items-center justify-between rounded-[12px] px-3 text-left text-[12px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base aria-selected:bg-v2-background-bg-accent-container aria-selected:text-v2-text-text-on-accent-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
                           onMouseEnter={() => setActiveCommand(index())}
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => run(command.id, slash())}
@@ -442,18 +473,5 @@ export function NoteEditor(props: NoteEditorProps) {
         </div>
       </Show>
     </section>
-  )
-}
-
-function ModeButton(props: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      class={`${controlClass} ${props.active ? "bg-v2-background-bg-base text-v2-text-text-base" : ""}`}
-      aria-pressed={props.active}
-      onClick={props.onClick}
-    >
-      {props.label}
-    </button>
   )
 }

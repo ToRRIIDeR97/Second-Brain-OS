@@ -31,3 +31,7 @@
   background: var(--v2-background-bg-accent);
   color: var(--v2-text-text-contrast);
 }
+
+[data-component="tag"] {
+  border-radius: var(--v2-radius-full);
+}

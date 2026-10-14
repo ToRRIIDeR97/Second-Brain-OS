@@ -137,3 +137,7 @@
     height: 0;
   }
 }
+
+[data-component="accordion-v2"] {
+  border-radius: var(--v2-radius-lg);
+}

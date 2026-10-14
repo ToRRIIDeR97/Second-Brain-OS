@@ -33,10 +33,14 @@ flowchart LR
 
 ## Sidebar
 
-From top to bottom:
+The sidebar has two columns: a navigation rail that is always shown and a
+Projects panel beside it.
 
-1. **Home**, **Notes** (labelled Knowledge), **Calendar** and **Activity**.
-2. **Projects** section. The heading opens `/projects`, the card management
+1. **Rail**, from top to bottom: a **New thread** button (same as `mod+n`),
+   then **Home**, **Notes** (labelled Knowledge), **Calendar** and
+   **Activity** as icons with a label underneath (the current page gets a
+   pill highlight), and **Settings** at the bottom.
+2. **Projects** panel. The heading opens `/projects`, the card management
    page. The folder button opens a folder as a Project.
    - One row per active Project, sorted by name, expandable. Expanding shows
      **New thread** and the Project's root threads: pinned threads first (most
@@ -77,8 +81,8 @@ recent one, unless focus is in a text field or editor, which keeps its own undo.
   hard delete (`session.remove`) runs only when the toast expires. If the app
   closes before then, the thread is not deleted.
 
-The sidebar collapses to an icon rail (`mod+b` or the titlebar button). The
-Projects section is hidden while collapsed. The current Project and the
+`mod+b` or the titlebar button hides and shows the Projects panel; the rail
+stays. The current Project and the
 expanded Projects are remembered per window.
 
 ## Titlebar

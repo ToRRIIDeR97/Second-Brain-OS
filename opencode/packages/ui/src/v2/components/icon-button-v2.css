@@ -158,3 +158,47 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Material 3 shape and motion: circular icon buttons that morph toward a rounded square while pressed. */
+[data-component="icon-button-v2"],
+[data-component="icon-button-v2"][data-size="small"] {
+  border-radius: var(--v2-radius-full);
+  transition:
+    border-radius var(--v2-duration-medium) var(--v2-ease-standard),
+    background-color var(--v2-duration-short) var(--v2-ease-standard),
+    color var(--v2-duration-short) var(--v2-ease-standard);
+}
+
+[data-component="icon-button-v2"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  border-radius: 35%;
+}
+
+[data-component="icon-button-v2"][data-variant="contrast"] {
+  background-image: none;
+  background-color: var(--v2-background-bg-accent);
+  color: #ffffff;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+[data-component="icon-button-v2"][data-variant="contrast"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-image: linear-gradient(
+    90deg,
+    var(--v2-overlay-simple-overlay-contrast-hover) 0%,
+    var(--v2-overlay-simple-overlay-contrast-hover) 100%
+  );
+}
+
+[data-component="icon-button-v2"][data-variant="contrast"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-image: linear-gradient(
+    90deg,
+    var(--v2-overlay-simple-overlay-contrast-pressed) 0%,
+    var(--v2-overlay-simple-overlay-contrast-pressed) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="icon-button-v2"] {
+    transition: none;
+  }
+}

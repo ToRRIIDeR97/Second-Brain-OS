@@ -1,7 +1,8 @@
-import { TextField } from "@opencode-ai/ui/text-field"
 import * as Sentry from "@sentry/solid"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Button } from "@opencode-ai/ui/button"
+import { useI18n } from "@opencode-ai/ui/context/i18n"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Component, createSignal, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
@@ -221,6 +222,8 @@ interface ErrorPageProps {
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
   const language = useLanguage()
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
   const formattedError = () => formatError(props.error, language.t)
   let recordedFatalError: Promise<void> | undefined
   const [store, setStore] = createStore({
@@ -274,41 +277,59 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       })
   }
 
+  const copyDetails = () =>
+    navigator.clipboard
+      .writeText(formattedError())
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+      .catch(() => undefined)
+
   return (
     <div
-      class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center font-sans"
+      class="relative flex h-screen w-screen min-h-0 flex-1 flex-col items-center justify-center bg-v2-background-bg-deep p-4 font-sans"
       data-tauri-drag-region
     >
-      <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
-        <Logo class="w-58.5 opacity-12 shrink-0" />
+      <div class="flex w-full max-w-2xl flex-col items-center gap-6">
         <div class="flex flex-col items-center gap-2 text-center">
-          <h1 class="text-lg font-medium text-text-strong">{language.t("error.page.title")}</h1>
-          <p class="text-sm text-text-weak">{language.t(errorDescriptionKey(props.error))}</p>
+          <h1 class="text-[22px] font-[600] leading-7 text-v2-text-text-base">{language.t("error.page.title")}</h1>
+          <p class="text-[14px] leading-5 text-v2-text-text-muted">{language.t(errorDescriptionKey(props.error))}</p>
         </div>
-        <TextField
-          value={formattedError()}
-          readOnly
-          copyable
-          multiline
-          class="max-h-96 w-full font-mono text-xs no-scrollbar"
-          label={language.t("error.page.details.label")}
-          hideLabel
-        />
-        <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
-          <Button size="large" onClick={platform.restart}>
+        <div class="relative w-full rounded-[20px] bg-v2-background-bg-layer-01 shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
+          <pre
+            class="no-scrollbar max-h-96 overflow-auto whitespace-pre-wrap break-words p-4 pr-12 font-mono text-[12px] leading-5 text-v2-text-text-base select-text"
+            aria-label={language.t("error.page.details.label")}
+            tabIndex={0}
+          >
+            {formattedError()}
+          </pre>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="absolute right-2 top-2"
+            icon={<Icon name={copied() ? "check" : "outline-copy"} />}
+            onClick={() => void copyDetails()}
+            aria-label={i18n.t(copied() ? "ui.textField.copied" : "ui.textField.copyToClipboard")}
+          />
+        </div>
+        <div class="flex flex-row flex-wrap items-center justify-center gap-2">
+          <ButtonV2 size="large" variant="contrast" onClick={platform.restart}>
             {language.t("error.page.action.restart")}
-          </Button>
+          </ButtonV2>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
-            <Button size="large" variant="ghost" onClick={exportDebugLogs}>
+            <ButtonV2 size="large" variant="neutral" onClick={exportDebugLogs}>
               {language.t("error.page.action.exportLogs")}
-            </Button>
+            </ButtonV2>
           </Show>
           <Show when={Sentry.isEnabled}>
             {(_) => {
               const [reported, setReported] = createSignal(false)
               return (
-                <Button
+                <ButtonV2
                   size="large"
+                  variant="neutral"
                   disabled={reported()}
                   onClick={() => {
                     Sentry.captureException(props.error)
@@ -316,7 +337,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                   }}
                 >
                   {language.t(reported() ? "error.page.action.reported" : "error.page.action.report")}
-                </Button>
+                </ButtonV2>
               )
             }}
           </Show>
@@ -324,7 +345,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             <Show
               when={updateVersion()}
               fallback={
-                <Button
+                <ButtonV2
                   size="large"
                   variant="ghost"
                   onClick={checkForUpdates}
@@ -333,27 +354,31 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                   {platform.updater?.state().status === "checking"
                     ? language.t("error.page.action.checking")
                     : language.t("error.page.action.checkUpdates")}
-                </Button>
+                </ButtonV2>
               }
             >
               {(version) => (
-                <Button size="large" onClick={installUpdate}>
+                <ButtonV2 size="large" variant="neutral" onClick={installUpdate}>
                   {language.t("error.page.action.updateTo", { version: version() })}
-                </Button>
+                </ButtonV2>
               )}
             </Show>
           </Show>
         </div>
         <Show when={store.actionError}>
-          {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message()}</p>}
+          {(message) => (
+            <p role="alert" class="max-w-2xl text-center text-[12px] leading-4 text-v2-state-fg-danger">
+              {message()}
+            </p>
+          )}
         </Show>
-        <div class="flex flex-col items-center gap-2">
-          <Show when={platform.version}>
-            {(version) => (
-              <p class="text-xs text-text-weak">{language.t("error.page.version", { version: version() })}</p>
-            )}
-          </Show>
-        </div>
+        <Show when={platform.version}>
+          {(version) => (
+            <p class="text-[12px] leading-4 text-v2-text-text-faint">
+              {language.t("error.page.version", { version: version() })}
+            </p>
+          )}
+        </Show>
       </div>
     </div>
   )

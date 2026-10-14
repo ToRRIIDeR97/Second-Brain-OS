@@ -208,7 +208,6 @@ export const dict = {
   "dialog.model.search.placeholder": "Пошук моделей",
   "dialog.model.empty": "Моделей не знайдено",
   "dialog.model.manage": "Керувати моделями",
-  "dialog.model.manage.description": "Налаштуйте, які моделі відображатимуться у виборі моделей.",
   "dialog.model.manage.provider.toggle": "Перемкнути всі моделі {{provider}}",
 
   "dialog.model.unpaid.freeModels.title": "Безкоштовні моделі від OpenCode",
@@ -726,7 +725,6 @@ export const dict = {
   "session.review.empty": "У цій сесії ще немає змін",
   "session.review.noVcs": "Систему контролю версій Git не виявлено, зміни не відображаються",
   "session.review.noVcs.createGit.title": "Створити Git-репозиторій",
-  "session.review.noVcs.createGit.description": "Відстежуйте, переглядайте та скасовуйте зміни в цьому проєкті",
   "session.review.noVcs.createGit.actionLoading": "Створення Git-репозиторію...",
   "session.review.noVcs.createGit.action": "Створити Git-репозиторій",
   "session.review.noSnapshot": "Відстеження знімків вимкнено в конфігурації, тому зміни сесії недоступні",
@@ -944,7 +942,6 @@ export const dict = {
   "settings.general.section.display": "Дисплей",
 
   "settings.general.row.language.title": "Мова",
-  "settings.general.row.language.description": "Змінити мову інтерфейсу OpenCode",
   "settings.general.row.shell.title": "Командна оболонка термінала",
   "settings.general.row.shell.description":
     "Виберіть оболонку для термінала. Сумісні оболонки також використовуються для викликів інструментів агента.",
@@ -953,48 +950,31 @@ export const dict = {
   "settings.general.row.appearance.title": "Зовнішній вигляд",
   "settings.general.row.appearance.description": "Налаштуйте вигляд OpenCode на вашому пристрої",
   "settings.general.row.colorScheme.title": "Кольорова схема",
-  "settings.general.row.colorScheme.description": "Виберіть, чи OpenCode використовує системну, світлу або темну тему",
   "settings.general.row.theme.title": "Тема",
-  "settings.general.row.theme.description": "Налаштуйте тему OpenCode.",
   "settings.general.row.font.title": "Шрифт коду",
-  "settings.general.row.font.description": "Налаштуйте шрифт, який використовується в блоках коду",
   "settings.general.row.terminalFont.title": "Шрифт термінала",
-  "settings.general.row.terminalFont.description": "Налаштуйте шрифт, який використовується в терміналі",
   "settings.general.row.uiFont.title": "Шрифт інтерфейсу",
-  "settings.general.row.uiFont.description": "Налаштуйте шрифт, який використовується в інтерфейсі",
   "settings.general.row.followup.title": "Поведінка продовження",
   "settings.general.row.followup.description": "Виберіть, чи продовження виконується негайно, чи чекає в черзі",
   "settings.general.row.followup.option.queue": "Черга",
   "settings.general.row.followup.option.steer": "Керування",
   "settings.general.row.showFileTree.title": "Дерево файлів",
-  "settings.general.row.showFileTree.description": "Показувати панель дерева файлів у сесіях",
   "settings.general.row.showNavigation.title": "Елементи навігації",
   "settings.general.row.showNavigation.description":
     "Показувати кнопки назад і вперед на панелі заголовка десктопного застосунку",
   "settings.general.row.showSearch.title": "Палітра команд",
-  "settings.general.row.showSearch.description": "Показувати кнопку пошуку та палітри команд на панелі заголовка",
   "settings.general.row.showTerminal.title": "Термінал",
   "settings.general.row.showTerminal.description":
     "Показувати кнопку термінала на панелі заголовка десктопного застосунку",
   "settings.general.row.showStatus.title": "Статус сервера",
-  "settings.general.row.showStatus.description": "Показувати кнопку стану сервера на панелі заголовка",
   "settings.general.row.mobileTitlebarBottom.title": "Нижня навігація",
-  "settings.general.row.mobileTitlebarBottom.description":
-    "Розмістити панель заголовка та вкладки сесії внизу екрана на мобільних пристроях",
   "settings.general.row.showCustomAgents.title": "Показувати агента",
   "settings.general.row.showCustomAgents.description":
     "Перемикатися між агентами в редакторі запиту. Якщо приховано, типовим є агент Build.",
   "settings.general.row.reasoningSummaries.title": "Показувати підсумки мислення",
-  "settings.general.row.reasoningSummaries.description": "Відображати підсумки мислення моделі на часовій шкалі",
   "settings.general.row.shellToolPartsExpanded.title": "Розгортати частини інструменту оболонки",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Показувати частини інструменту оболонки розгорнутими за замовчуванням на часовій шкалі",
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
   "settings.general.row.pinchZoom.title": "Масштабування щипком",
-  "settings.general.row.pinchZoom.description":
-    "Дозволити масштабування жестом щипка на трекпаді та прокручуванням із Ctrl",
 
   "settings.general.row.wayland.title": "Використовувати нативний Wayland",
   "settings.general.row.wayland.description": "Вимкнути резервний X11 на Wayland. Потребує перезапуску.",
@@ -1005,7 +985,6 @@ export const dict = {
   "settings.updates.row.startup.title": "Перевіряти оновлення під час запуску",
   "settings.updates.row.startup.description": "Автоматично перевіряти наявність оновлень під час запуску OpenCode",
   "settings.updates.row.check.title": "Перевірити оновлення",
-  "settings.updates.row.check.description": "Вручну перевірити наявність оновлень і встановити, якщо доступні",
   "settings.updates.action.checkNow": "Перевірити зараз",
   "settings.updates.action.checking": "Перевірка...",
   "settings.updates.action.downloading": "Завантаження...",
@@ -1060,19 +1039,12 @@ export const dict = {
   "sound.option.yup06": "Yup 06",
 
   "settings.general.notifications.agent.title": "Агент",
-  "settings.general.notifications.agent.description":
-    "Показувати системне сповіщення, коли агент завершує роботу або потребує уваги",
   "settings.general.notifications.permissions.title": "Дозволи",
-  "settings.general.notifications.permissions.description": "Показувати системне сповіщення, коли потрібен дозвіл",
   "settings.general.notifications.errors.title": "Помилки",
-  "settings.general.notifications.errors.description": "Показувати системне сповіщення, коли виникає помилка",
 
   "settings.general.sounds.agent.title": "Агент",
-  "settings.general.sounds.agent.description": "Відтворювати звук, коли агент завершує роботу або потребує уваги",
   "settings.general.sounds.permissions.title": "Дозволи",
-  "settings.general.sounds.permissions.description": "Відтворювати звук, коли потрібен дозвіл",
   "settings.general.sounds.errors.title": "Помилки",
-  "settings.general.sounds.errors.description": "Відтворювати звук, коли виникає помилка",
 
   "settings.shortcuts.title": "Клавіатурні скорочення",
   "settings.shortcuts.reset.button": "Відновити стандартні",
@@ -1095,7 +1067,6 @@ export const dict = {
   "settings.providers.title": "Провайдери",
   "settings.providers.description": "Налаштування провайдерів будуть доступні тут.",
   "settings.providers.section.connected": "Підключені провайдери",
-  "settings.providers.connected.empty": "Немає підключених провайдерів",
   "settings.providers.connected.environmentDescription": "Підключено зі змінних середовища",
   "settings.providers.section.popular": "Популярні провайдери",
   "settings.providers.custom.description": "Додайте провайдера, сумісного з OpenAI, за базовим URL.",

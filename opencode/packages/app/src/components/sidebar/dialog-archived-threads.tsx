@@ -1,6 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { createResource, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import type { SidebarController, SidebarProjectItem } from "@/components/sidebar/sidebar-controller"
@@ -26,10 +26,7 @@ export function DialogArchivedThreads(props: { ctrl: SidebarController; project:
   return (
     <Dialog fit>
       <DialogHeader>
-        <DialogTitleGroup
-          title={language.t("secondBrain.sidebar.archivedThreads")}
-          description={language.t("secondBrain.sidebar.archivedThreadsDescription")}
-        />
+        <DialogTitle>{language.t("secondBrain.sidebar.archivedThreads")}</DialogTitle>
       </DialogHeader>
       <DialogBody class="flex max-h-[min(480px,calc(100vh-160px))] w-[min(440px,calc(100vw-32px))] flex-col gap-1 overflow-y-auto px-4 pb-4">
         <Show when={threads.error}>
@@ -40,7 +37,10 @@ export function DialogArchivedThreads(props: { ctrl: SidebarController; project:
         </Show>
         <For each={threads.state === "ready" ? threads() : []}>
           {(session) => (
-            <div data-archived-thread={session.id} class="flex h-9 min-w-0 items-center gap-2">
+            <div
+              data-archived-thread={session.id}
+              class="flex h-11 min-w-0 items-center gap-2 rounded-full pl-3 pr-1 transition-colors duration-150 ease-standard hover:bg-v2-background-bg-layer-02 motion-reduce:transition-none"
+            >
               <span class="min-w-0 flex-1 truncate text-[13px] text-v2-text-text-base">
                 {sessionTitle(session.title) || session.id}
               </span>

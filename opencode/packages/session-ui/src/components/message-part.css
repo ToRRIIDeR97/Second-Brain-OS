@@ -39,7 +39,7 @@
     align-items: center;
     justify-content: center;
     min-width: 0;
-    border-radius: 6px;
+    border-radius: 12px;
     overflow: hidden;
     background: var(--v2-background-bg-layer-02);
     border: 0.5px solid var(--v2-border-border-base);
@@ -141,8 +141,9 @@
     unicode-bidi: plaintext;
     background: var(--v2-background-bg-layer-02);
     border: none;
-    padding: 8px 12px;
-    border-radius: 10px;
+    padding: 10px 16px;
+    border-radius: 22px;
+    border-end-end-radius: 8px;
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -373,7 +374,7 @@
   unicode-bidi: isolate;
   width: 100%;
   border: 0.5px solid var(--v2-border-border-base);
-  border-radius: 6px;
+  border-radius: 16px;
   background: transparent;
   position: relative;
   overflow: hidden;
@@ -974,7 +975,7 @@
     padding: 8px 8px 8px 10px;
     background-color: var(--v2-background-bg-layer-01);
     border: 0.5px solid var(--v2-border-border-base);
-    border-radius: 6px;
+    border-radius: 16px;
     box-shadow: none;
     text-align: left;
     width: 100%;

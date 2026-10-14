@@ -40,8 +40,8 @@
 }
 
 .settings-v2-tab-title {
-  font-size: 15px;
-  font-weight: 640;
+  font-size: 18px;
+  font-weight: 600;
   line-height: 1;
   color: var(--v2-text-text-base);
 }
@@ -49,19 +49,9 @@
 .settings-v2-tab-body {
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 32px;
   width: 100%;
   padding: 0 40px 40px;
-}
-
-[data-slot="settings-v2-row-description"] a.settings-v2-link {
-  color: var(--v2-text-text-accent);
-  cursor: pointer;
-  text-decoration: none;
-}
-
-[data-slot="settings-v2-row-description"] a.settings-v2-link:hover {
-  color: var(--v2-text-text-accent-hover);
 }
 
 .settings-v2-section {
@@ -71,28 +61,18 @@
 }
 
 .settings-v2-section-title {
-  padding-bottom: 8px;
-  font-size: 15px;
-  font-weight: 640;
+  padding-inline-start: 4px;
+  font-size: 13px;
+  font-weight: 530;
   line-height: 1;
-  color: var(--v2-text-text-base);
-}
-
-.settings-v2-section-title + [data-component="settings-v2-list"] {
-  margin-top: -4px;
-  margin-bottom: 0;
+  color: var(--v2-text-text-muted);
 }
 
 [data-component="settings-v2-list"] {
-  border-radius: 8px;
+  border-radius: 20px;
   background-color: var(--v2-background-bg-layer-01);
   padding-inline: 20px;
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
-}
-
-.settings-v2-interface-feature [data-component="settings-v2-list"] {
-  background-color: var(--v2-background-bg-base);
-  box-shadow: var(--v2-elevation-raised);
 }
 
 [data-component="settings-v2-row"] {
@@ -100,8 +80,9 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 16px;
-  padding-block: 20px;
-  border-bottom: 0.5px solid var(--v2-border-border-base);
+  min-height: 56px;
+  padding-block: 14px;
+  border-bottom: 0.5px solid var(--v2-border-border-muted);
 }
 
 [data-component="settings-v2-row"]:last-child {
@@ -119,7 +100,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 [data-slot="settings-v2-row-title"] {
@@ -133,7 +114,7 @@
 }
 
 [data-slot="settings-v2-row-description"] {
-  margin-block: -3.5px;
+  margin-block: -3px;
   font-size: 13px;
   font-weight: 440;
   line-height: 20px;
@@ -178,6 +159,31 @@
   background-color: var(--v2-background-bg-layer-01);
 }
 
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-trigger-wrapper"] {
+  height: 36px;
+  transition:
+    background-color 200ms var(--v2-ease-standard),
+    color 200ms var(--v2-ease-standard);
+}
+
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-trigger"] {
+  padding: 0 12px;
+  gap: 8px;
+}
+
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  background-color: var(--v2-background-bg-accent-container);
+  color: var(--v2-text-text-on-accent-container);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+    [data-slot="tabs-v2-trigger-wrapper"] {
+    transition: none;
+  }
+}
+
 @media (max-width: 639px) {
   .settings-v2[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
     [data-slot="tabs-v2-list"] {
@@ -191,7 +197,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 4px 0 4px 4px;
+  padding: 4px 0 4px 12px;
   user-select: none;
 }
 
@@ -202,23 +208,15 @@
   color: var(--v2-text-text-faint);
 }
 
-.settings-v2-legacy-panel {
-  height: 100%;
-  overflow: hidden;
-}
-
-.settings-v2-legacy-panel [data-component="dialog"] {
-  display: contents;
-}
-
 .settings-v2-provider-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding-block: 20px;
-  border-bottom: 0.5px solid var(--v2-border-border-base);
+  min-height: 56px;
+  padding-block: 14px;
+  border-bottom: 0.5px solid var(--v2-border-border-muted);
 }
 
 .settings-v2-provider-row:last-child {
@@ -314,8 +312,8 @@
 .settings-v2-harness-user {
   align-self: flex-end;
   max-width: 85%;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 16px;
   background: var(--v2-background-bg-layer-01);
   white-space: pre-wrap;
 }
@@ -324,9 +322,9 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 12px 16px;
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
-  border-radius: 8px;
+  border-radius: 16px;
 }
 
 .settings-v2-harness-assistant {
@@ -341,8 +339,8 @@
 }
 
 .settings-v2-providers-view-all {
-  margin-top: 20px;
-  padding: 0;
+  margin-top: 4px;
+  padding: 0 4px;
   border: 0;
   background: transparent;
   font-size: 13px;
@@ -365,21 +363,10 @@
   padding-bottom: 32px;
 }
 
-.settings-v2-providers .settings-v2-section-title {
-  padding-bottom: 0;
-  font-size: 13px;
-  font-weight: 530;
-  line-height: 1;
-}
-
-.settings-v2-providers .settings-v2-section-title + [data-component="settings-v2-list"] {
-  margin-top: 16px;
-}
-
 .settings-v2-tab-header.settings-v2-tab-header--stacked {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 20px;
   padding-bottom: 32px;
 }
 
@@ -434,9 +421,10 @@
   align-items: center;
   gap: 4px;
   height: 28px;
-  padding: 4px 8px 4px 4px;
+  padding: 4px 10px 4px 4px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--v2-radius-full);
+  transition: background-color 150ms var(--v2-ease-standard);
   background: transparent;
   color: var(--v2-text-text-base);
 }
@@ -473,10 +461,9 @@
 }
 
 .settings-v2-models .settings-v2-section-title {
-  padding-bottom: 0;
-  font-size: 13px;
-  font-weight: 530;
+  padding-inline-start: 0;
   line-height: 16px;
+  color: var(--v2-text-text-base);
 }
 
 .settings-v2-models [data-component="provider-icon"] {
@@ -485,14 +472,6 @@
 
 .settings-v2-models [data-component="settings-v2-list"] {
   padding-inline: 16px;
-}
-
-.settings-v2-models .settings-v2-section-title + [data-component="settings-v2-list"] {
-  margin-top: 0;
-}
-
-.settings-v2-models [data-slot="settings-v2-row-description"]:empty {
-  display: none;
 }
 
 .settings-v2-models [data-slot="settings-v2-row-copy"] {
@@ -531,19 +510,12 @@
   gap: 16px;
 }
 
-.settings-v2-shortcuts .settings-v2-section-title {
-  padding-bottom: 0;
-  font-size: 13px;
-  font-weight: 530;
-  line-height: 1;
-}
-
 .settings-v2-shortcuts [data-component="settings-v2-list"] {
   display: flex;
   flex-direction: column;
   gap: 0;
   padding: 20px;
-  border-radius: 6px;
+  border-radius: 20px;
 }
 
 .settings-v2-shortcuts [data-component="settings-v2-list"] > div {
@@ -559,7 +531,7 @@
 .settings-v2-shortcuts [data-component="settings-v2-list"] > div:not(:last-child) {
   padding-bottom: 16px;
   margin-bottom: 16px;
-  border-bottom: 0.5px solid var(--v2-border-border-base);
+  border-bottom: 0.5px solid var(--v2-border-border-muted);
 }
 
 .settings-v2-shortcuts [data-component="settings-v2-list"] > div > span {
@@ -574,10 +546,10 @@
 .settings-v2-keybind-button {
   box-sizing: border-box;
   flex-shrink: 0;
-  padding: 6px 8px;
-  margin: -6px -8px;
+  padding: 6px 10px;
+  margin: -6px -10px;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--v2-radius-full);
   background: transparent;
   cursor: pointer;
   font-style: normal;
@@ -603,9 +575,8 @@
 }
 
 .settings-v2-keybind-button--active {
-  color: var(--v2-text-text-faint);
-  border-radius: 2px;
-  background-color: var(--v2-background-bg-layer-02);
+  color: var(--v2-text-text-on-accent-container);
+  background-color: var(--v2-background-bg-accent-container);
 }
 
 .settings-v2-shortcuts-status {
@@ -651,7 +622,7 @@
   flex-direction: column;
   gap: 0;
   padding: 20px;
-  border-radius: 6px;
+  border-radius: 20px;
 }
 
 .settings-v2-servers-row {
@@ -664,7 +635,7 @@
 .settings-v2-servers-row:not(:last-child) {
   padding-bottom: 16px;
   margin-bottom: 16px;
-  border-bottom: 0.5px solid var(--v2-border-border-base);
+  border-bottom: 0.5px solid var(--v2-border-border-muted);
 }
 
 .settings-v2-servers-actions {
@@ -727,7 +698,6 @@
   width: 480px;
   max-width: calc(100vw - 32px);
   height: auto;
-  border-radius: 8px;
   align-items: stretch;
 }
 
@@ -761,8 +731,8 @@
 }
 
 .settings-v2-server-dialog-error {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 440;
-  line-height: 1;
+  line-height: 16px;
   color: var(--v2-state-fg-danger);
 }

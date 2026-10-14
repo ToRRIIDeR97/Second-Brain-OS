@@ -157,6 +157,18 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M8 10.5V14.5M5.5 2H10.5M6.5 2V6.5L4 9.5V10.5H12V9.5L9.5 6.5V2" stroke="currentColor" stroke-linejoin="round"/>`,
   },
+  calendar: {
+    viewBox: "0 0 16 16",
+    body: `<rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor"/><path d="M2 6.5H14M5.5 1.5V4.5M10.5 1.5V4.5" stroke="currentColor" stroke-linecap="round"/>`,
+  },
+  book: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3 13V3.5C3 2.67 3.67 2 4.5 2H13V11.5H4.5C3.67 11.5 3 12.17 3 13ZM3 13C3 13.83 3.67 14.5 4.5 14.5H13" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"/>`,
+  },
+  activity: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 8H4.5L6.5 3L9.5 13L11.5 8H14.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
 }
 
 const spriteID = "opencode-v2-icon-sprite"

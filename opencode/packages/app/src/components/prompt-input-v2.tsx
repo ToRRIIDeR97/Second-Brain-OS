@@ -8,7 +8,7 @@ import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, For, Show, type JSX } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import type { PromptInputProps } from "@/components/prompt-input/contracts"
@@ -47,6 +47,8 @@ export type PromptInputV2ComposerProps = {
   controller: PromptInputV2ComposerController
   harness?: PromptInputHarnessController
   borderUnderlay?: boolean
+  /** Extra controls before the stash menu, such as the session's context usage ring. */
+  trailing?: JSX.Element
 }
 
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
@@ -74,7 +76,12 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         borderUnderlay={props.borderUnderlay}
         class={props.class}
         variantControlVisible={openCode() && !props.controller.model.loading}
-        trailingControl={<PromptStashMenu stash={props.controller.stash} />}
+        trailingControl={
+          <>
+            {props.trailing}
+            <PromptStashMenu stash={props.controller.stash} />
+          </>
+        }
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         modelControl={
@@ -509,7 +516,6 @@ function PromptStashMenu(props: { stash: PromptInputV2ComposerController["stash"
             icon={<Icon name="archive" />}
             variant="ghost-muted"
             size="large"
-            class="mr-1"
             aria-label={language.t("secondBrain.composer.stash.title")}
           />
           <MenuV2.Portal>

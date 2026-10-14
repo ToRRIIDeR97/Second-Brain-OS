@@ -76,6 +76,7 @@ export const SettingsServersV2: Component = () => {
                 variant="ghost-muted"
                 size="small"
                 class="settings-v2-tab-search-clear"
+                aria-label={language.t("common.clear")}
                 icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
                 onClick={() => setStore("filter", "")}
               />

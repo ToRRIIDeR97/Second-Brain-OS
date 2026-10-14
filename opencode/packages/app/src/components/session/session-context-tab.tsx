@@ -331,7 +331,7 @@ export function SessionContextTab() {
     >
       <div class="px-6 pt-4 pb-10 flex flex-col gap-10">
         <Show when={harnessOptions().length > 1}>
-          <div class="flex items-center justify-between gap-3 rounded-md border border-border-base bg-surface-base px-3 py-2">
+          <div class="flex items-center justify-between gap-3 rounded-[16px] bg-v2-background-bg-layer-01 px-4 py-2.5">
             <div class="text-12-regular text-text-weak">{language.t("harness.label")}</div>
             <Select
               options={harnessOptions()}
@@ -387,7 +387,7 @@ export function SessionContextTab() {
           {(prompt) => (
             <div class="flex flex-col gap-2">
               <div class="text-12-regular text-text-weak">{language.t("context.systemPrompt.title")}</div>
-              <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
+              <div class="rounded-[16px] bg-v2-background-bg-layer-01 px-4 py-2.5">
                 <Markdown text={prompt()} class="text-12-regular" />
               </div>
             </div>

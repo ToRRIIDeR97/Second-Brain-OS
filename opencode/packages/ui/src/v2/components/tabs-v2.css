@@ -222,3 +222,9 @@
   background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
 }
+
+/* Material 3 shape: pill tab triggers. */
+[data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"] [data-slot="tabs-v2-trigger-wrapper"],
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-trigger-wrapper"] {
+  border-radius: var(--v2-radius-full);
+}

@@ -67,3 +67,7 @@
     animation: none;
   }
 }
+
+[data-component="tooltip-v2"] {
+  border-radius: var(--v2-radius-sm);
+}

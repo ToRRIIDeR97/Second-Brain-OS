@@ -295,3 +295,17 @@
   svg {
   visibility: hidden;
 }
+
+/* Material 3 shape: pill triggers, rounded menus. */
+[data-component="select-v2"],
+[data-component="select-v2"][data-appearance="inline"] {
+  border-radius: var(--v2-radius-full);
+}
+
+[data-component="select-v2"] [data-slot="select-v2-chevron"] {
+  border-radius: var(--v2-radius-full);
+}
+
+[data-component="menu-v2-content"][data-slot="select-v2-content"] {
+  border-radius: var(--v2-radius-md);
+}

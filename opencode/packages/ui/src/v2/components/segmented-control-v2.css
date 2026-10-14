@@ -78,3 +78,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Material 3 shape and motion: pill segments. */
+[data-slot="segmented-control-v2"],
+[data-slot="segmented-control-v2-item"] {
+  border-radius: var(--v2-radius-full);
+}
+
+[data-slot="segmented-control-v2-item"] {
+  transition:
+    background-color var(--v2-duration-short) var(--v2-ease-standard),
+    color var(--v2-duration-short) var(--v2-ease-standard);
+}
+
+/* Size to content so pill segments fit any label count; full-width stays opt-in. */
+[data-slot="segmented-control-v2"]:not(.segmented-control-v2--full-width) {
+  width: auto;
+}
+
+[data-slot="segmented-control-v2"]:not(.segmented-control-v2--full-width) [data-slot="segmented-control-v2-item"] {
+  flex: 0 0 auto;
+}

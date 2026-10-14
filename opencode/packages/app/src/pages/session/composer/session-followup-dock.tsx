@@ -30,12 +30,11 @@ export function SessionFollowupDock(props: {
       data-component="session-followup-dock"
       style={{
         "margin-bottom": "-0.875rem",
-        "border-bottom-left-radius": 0,
-        "border-bottom-right-radius": 0,
+        "border-radius": "24px",
       }}
     >
       <div
-        class="pl-3 pr-2 py-2 flex items-center gap-2"
+        class="pl-5 pr-3 py-2.5 flex items-center gap-2"
         role="button"
         tabIndex={0}
         onClick={toggle}
@@ -76,7 +75,7 @@ export function SessionFollowupDock(props: {
       </Show>
 
       <Show when={!store.collapsed}>
-        <div class="px-3 pb-7 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
+        <div class="px-5 pb-7 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
           <For each={props.items}>
             {(item) => (
               <div class="flex items-center gap-2 min-w-0 py-1" data-queued-id={item.id}>

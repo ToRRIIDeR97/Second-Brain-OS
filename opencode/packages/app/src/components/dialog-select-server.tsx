@@ -123,7 +123,7 @@ function ServerForm(props: ServerFormProps) {
 
   return (
     <div>
-      <div class="bg-surface-base rounded-md p-5 flex flex-col gap-3">
+      <div class="bg-surface-base rounded-[20px] p-5 flex flex-col gap-3">
         <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
           <TextField
             type="text"
@@ -553,7 +553,7 @@ export function ServerConnectionList(props: { controller: ReturnType<typeof useS
   return (
     <div class="flex flex-1 min-h-0 flex-col gap-4">
       <List
-        class="flex-1 min-h-0 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
+        class="flex-1 min-h-0 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-[20px] [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
         search={{
           placeholder: language.t("dialog.server.search.placeholder"),
           autofocus: false,

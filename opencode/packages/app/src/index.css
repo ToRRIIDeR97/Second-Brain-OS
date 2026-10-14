@@ -328,3 +328,13 @@
     }
   }
 }
+
+/* Running-thread indicator: a soft ring that expands and fades (Material 3 standard easing). */
+@keyframes running-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--v2-icon-icon-accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--v2-icon-icon-accent) 0%, transparent);
+  }
+}

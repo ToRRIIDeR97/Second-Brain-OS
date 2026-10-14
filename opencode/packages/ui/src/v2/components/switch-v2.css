@@ -160,3 +160,22 @@
     pointer-events: none;
   }
 }
+
+/* Material 3 shape: pill track, round thumb, accent when on. */
+[data-component="switch"] [data-slot="switch-control"],
+[data-component="switch"] [data-slot="switch-thumb"],
+[data-component="switch"]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"],
+[data-component="switch"][data-checked] [data-slot="switch-thumb"] {
+  border-radius: var(--v2-radius-full);
+}
+
+[data-component="switch"] [data-slot="switch-thumb"] {
+  transition:
+    transform var(--v2-duration-medium) var(--v2-ease-spring),
+    width var(--v2-duration-short) var(--v2-ease-standard),
+    background var(--v2-duration-short) var(--v2-ease-standard);
+}
+
+[data-component="switch"][data-checked] [data-slot="switch-control"] {
+  background: var(--v2-background-bg-accent);
+}

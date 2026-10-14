@@ -207,7 +207,6 @@ export const dict = {
   "dialog.model.search.placeholder": "Поиск моделей",
   "dialog.model.empty": "Модели не найдены",
   "dialog.model.manage": "Управление моделями",
-  "dialog.model.manage.description": "Настройте, какие модели отображаются при выборе модели",
   "dialog.model.manage.provider.toggle": "Переключить все модели {{provider}}",
 
   "dialog.model.unpaid.freeModels.title": "Бесплатные модели от OpenCode",
@@ -842,7 +841,6 @@ export const dict = {
   "settings.general.section.display": "Экран",
 
   "settings.general.row.language.title": "Язык",
-  "settings.general.row.language.description": "Изменить язык отображения OpenCode",
   "settings.general.row.shell.title": "Оболочка терминала",
   "settings.general.row.shell.description":
     "Выберите оболочку для терминала. Совместимые оболочки также используются агентом при вызове инструментов.",
@@ -851,49 +849,32 @@ export const dict = {
   "settings.general.row.appearance.title": "Внешний вид",
   "settings.general.row.appearance.description": "Настройте внешний вид OpenCode на вашем устройстве",
   "settings.general.row.colorScheme.title": "Цветовая схема",
-  "settings.general.row.colorScheme.description": "Выберите, следует ли OpenCode системной, светлой или тёмной теме",
   "settings.general.row.theme.title": "Тема",
-  "settings.general.row.theme.description": "Настройте оформление OpenCode.",
   "settings.general.row.font.title": "Шрифт кода",
-  "settings.general.row.font.description": "Настройте шрифт, используемый в блоках кода",
   "settings.general.row.terminalFont.title": "Шрифт терминала",
-  "settings.general.row.terminalFont.description": "Настройте шрифт, используемый в терминале",
   "settings.general.row.uiFont.title": "Шрифт интерфейса",
-  "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всём интерфейсе",
   "settings.general.row.followup.title": "Поведение уточняющих вопросов",
   "settings.general.row.followup.description":
     "Выберите, отправлять ли уточняющие вопросы сразу или помещать их в очередь",
   "settings.general.row.followup.option.queue": "Очередь",
   "settings.general.row.followup.option.steer": "Направлять",
   "settings.general.row.showFileTree.title": "Дерево файлов",
-  "settings.general.row.showFileTree.description": "Показывать панель дерева файлов в сессиях",
   "settings.general.row.showNavigation.title": "Элементы навигации",
   "settings.general.row.showNavigation.description":
     "Показывать кнопки «Назад» и «Вперёд» в строке заголовка приложения",
   "settings.general.row.showSearch.title": "Палитра команд",
-  "settings.general.row.showSearch.description": "Показывать кнопку поиска и палитры команд в строке заголовка",
   "settings.general.row.showTerminal.title": "Терминал",
   "settings.general.row.showTerminal.description": "Показывать кнопку терминала в строке заголовка приложения",
   "settings.general.row.showStatus.title": "Состояние сервера",
-  "settings.general.row.showStatus.description": "Показывать кнопку состояния сервера в строке заголовка",
   "settings.general.row.mobileTitlebarBottom.title": "Нижняя навигация",
-  "settings.general.row.mobileTitlebarBottom.description":
-    "На мобильных устройствах размещать строку заголовка и вкладки сессии внизу экрана",
   "settings.general.row.showCustomAgents.title": "Выбор агента",
   "settings.general.row.showCustomAgents.description":
     "Показывать переключатель агентов в редакторе запросов. Если он скрыт, по умолчанию используется агент Build.",
   "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
-  "settings.general.row.reasoningSummaries.description": "Отображать сводки рассуждений модели в ленте",
 
   "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Показывать элементы инструмента shell в ленте развернутыми по умолчанию",
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
   "settings.general.row.pinchZoom.title": "Масштабирование сведением пальцев",
-  "settings.general.row.pinchZoom.description":
-    "Разрешить масштабирование сведением пальцев на трекпаде и прокруткой с нажатой клавишей Ctrl",
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить резервный режим X11 в Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":
@@ -903,7 +884,6 @@ export const dict = {
   "settings.updates.row.startup.title": "Проверять обновления при запуске",
   "settings.updates.row.startup.description": "Автоматически проверять обновления при запуске OpenCode",
   "settings.updates.row.check.title": "Проверить обновления",
-  "settings.updates.row.check.description": "Проверить обновления вручную и установить, если доступны",
   "settings.updates.action.checkNow": "Проверить сейчас",
   "settings.updates.action.checking": "Проверка...",
   "settings.updates.action.downloading": "Загрузка...",
@@ -958,20 +938,12 @@ export const dict = {
   "sound.option.yup06": "Yup 06",
 
   "settings.general.notifications.agent.title": "Агент",
-  "settings.general.notifications.agent.description":
-    "Показывать системное уведомление, когда агент завершил работу или требует внимания",
   "settings.general.notifications.permissions.title": "Разрешения",
-  "settings.general.notifications.permissions.description":
-    "Показывать системное уведомление, когда требуется разрешение",
   "settings.general.notifications.errors.title": "Ошибки",
-  "settings.general.notifications.errors.description": "Показывать системное уведомление, когда происходит ошибка",
 
   "settings.general.sounds.agent.title": "Агент",
-  "settings.general.sounds.agent.description": "Воспроизводить звук, когда агент завершил работу или требует внимания",
   "settings.general.sounds.permissions.title": "Разрешения",
-  "settings.general.sounds.permissions.description": "Воспроизводить звук, когда требуется разрешение",
   "settings.general.sounds.errors.title": "Ошибки",
-  "settings.general.sounds.errors.description": "Воспроизводить звук, когда происходит ошибка",
 
   "settings.shortcuts.title": "Горячие клавиши",
   "settings.shortcuts.reset.button": "Восстановить настройки по умолчанию",
@@ -994,7 +966,6 @@ export const dict = {
   "settings.providers.title": "Провайдеры",
   "settings.providers.description": "Настройки провайдеров будут доступны здесь.",
   "settings.providers.section.connected": "Подключённые провайдеры",
-  "settings.providers.connected.empty": "Нет подключённых провайдеров",
   "settings.providers.section.popular": "Популярные провайдеры",
   "settings.providers.tag.environment": "Среда",
   "settings.providers.tag.config": "Конфигурация",
@@ -1097,7 +1068,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "пароль",
   "server.row.noUsername": "нет имени пользователя",
   "session.review.noVcs.createGit.title": "Создать репозиторий Git",
-  "session.review.noVcs.createGit.description": "Отслеживайте, просматривайте и отменяйте изменения в этом проекте",
   "session.review.noVcs.createGit.actionLoading": "Создание репозитория Git...",
   "session.review.noVcs.createGit.action": "Создать репозиторий Git",
   "session.todo.progress": "Выполнено {{done}} из {{total}} задач",

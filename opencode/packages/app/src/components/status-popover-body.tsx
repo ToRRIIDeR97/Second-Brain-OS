@@ -197,13 +197,13 @@ function ServerStatusPopoverView(props: { state: ServerStatusState }) {
 function ServerStatusList(props: { state: ServerStatusState }) {
   return (
     <div class="flex flex-col px-2 pb-2">
-      <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+      <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
         <For each={props.state.servers()}>
           {(item) => {
             return (
               <button
                 type="button"
-                class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
+                class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-full transition-colors text-left"
                 classList={{
                   "hover:bg-surface-raised-base-hover": !item.blocked,
                   "cursor-not-allowed": item.blocked,
@@ -224,7 +224,7 @@ function ServerStatusList(props: { state: ServerStatusState }) {
                   versionClass="text-12-regular text-text-weak truncate"
                   badge={
                     <Show when={item.key === props.state.defaultKey()}>
-                      <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
+                      <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-full">
                         {props.state.defaultLabel}
                       </span>
                     </Show>
@@ -306,7 +306,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
 
         <Tabs.Content value="mcp">
           <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+            <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
               <Show
                 when={mcpNames().length > 0}
                 fallback={
@@ -320,7 +320,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     return (
                       <button
                         type="button"
-                        class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                        class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-full hover:bg-surface-raised-base-hover transition-colors text-left"
                         onClick={() => {
                           if (toggleMcp.isPending) return
                           toggleMcp.mutate(name)
@@ -368,7 +368,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
 
         <Tabs.Content value="lsp">
           <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+            <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
               <Show
                 when={lspItems().length > 0}
                 fallback={
@@ -397,7 +397,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         <Show when={protocol() === "v1"}>
           <Tabs.Content value="plugins">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+              <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
                 <Show
                   when={plugins().length > 0}
                   fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}

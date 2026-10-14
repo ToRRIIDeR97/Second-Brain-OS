@@ -1,10 +1,15 @@
 import { projectGraph } from "@/features/second-brain/project-graph"
 import { useBeforeLeave, useNavigate, useSearchParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { ProjectAvatar, PROJECT_AVATAR_VARIANTS } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { PageFrame, PageHeader, pageRowClass } from "@/components/page"
 import { createEffect, createMemo, createResource, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SetStoreFunction } from "solid-js/store"
@@ -270,258 +275,294 @@ export default function ProjectsPage() {
     setState({ selectedId: project.id, view: "overview", creating: false, error: "" })
   }
 
-  return (
-    <section class="flex h-full min-h-0 w-full flex-col gap-2 p-2" aria-labelledby="projects-title">
-      <header class="flex min-h-12 shrink-0 items-center gap-3 rounded-[10px] bg-v2-background-bg-base px-4 shadow-[var(--v2-elevation-raised)]">
-        <div class="min-w-0 flex-1">
-          <h1 id="projects-title" class="text-[15px] text-v2-text-text-strong [font-weight:530]">
-            {language.t("secondBrain.projects.title")}
-          </h1>
-          <p class="truncate text-[12px] text-v2-text-text-faint">{language.t("secondBrain.projects.description")}</p>
-        </div>
-        <Show when={locations().length > 0}>
-          <label class="flex items-center gap-2 text-[12px] text-v2-text-text-muted">
-            <span>{language.t("secondBrain.projects.brainLocation")}</span>
-            <SelectV2
-              aria-label={language.t("secondBrain.projects.brainLocation")}
-              class="!h-8 !w-auto max-w-56"
-              options={locations()}
-              current={locations().find((location) => location.worktree === state.brainDirectory)}
-              value={(location) => location.worktree}
-              label={(location) => location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree}
-              disabled={overviewDirty() || state.saving}
-              onSelect={(location) => location && setState({ brainDirectory: location.worktree, selectedId: "" })}
-            />
-          </label>
-          <ButtonV2
-            variant="contrast"
-            size="small"
-            icon="plus"
-            disabled={overviewDirty()}
-            onClick={() => setState({ creating: true, selectedId: "", error: "" })}
-          >
-            {language.t("secondBrain.projects.new")}
-          </ButtonV2>
-        </Show>
-      </header>
+  const leaveBlocked = () => {
+    if (!overviewDirty()) return false
+    setState("error", language.t("secondBrain.projects.error.unsaved"))
+    return true
+  }
 
+  return (
+    <PageFrame labelledBy="projects-title">
       <Show
         when={state.brainDirectory}
         fallback={
-          <div class="flex min-h-0 flex-1 items-center justify-center rounded-[10px] bg-v2-background-bg-base text-[13px] text-v2-text-text-muted shadow-[var(--v2-elevation-raised)]">
-            {language.t("secondBrain.empty.workspace")}
-          </div>
+          <>
+            <PageHeader id="projects-title" title={language.t("secondBrain.projects.title")} />
+            <p class="px-6 py-16 text-center text-[13px] text-v2-text-text-muted">
+              {language.t("secondBrain.empty.workspace")}
+            </p>
+          </>
         }
       >
         <Show
-          when={!state.creating}
+          when={selected()}
+          keyed
           fallback={
-            <CreateProjectForm
-              state={state}
-              setState={setState}
-              locations={linkableLocations()}
-              submit={submitCreate}
-              language={language}
-            />
+            <>
+              <PageHeader
+                id="projects-title"
+                title={language.t(state.creating ? "secondBrain.projects.create.title" : "secondBrain.projects.title")}
+                actions={
+                  <>
+                    <Show when={!state.creating}>
+                      <SegmentedControlV2
+                        class="!w-auto"
+                        value={state.filter}
+                        onChange={(filter) => filter && setState("filter", filter as ProjectStatus)}
+                      >
+                        <For each={statuses}>
+                          {(filter) => (
+                            <SegmentedControlItemV2 value={filter}>
+                              {language.t(statusKey[filter])}
+                            </SegmentedControlItemV2>
+                          )}
+                        </For>
+                      </SegmentedControlV2>
+                    </Show>
+                    <Show when={locations().length > 1}>
+                      <TooltipV2 value={language.t("secondBrain.projects.brainLocation")}>
+                        <SelectV2
+                          aria-label={language.t("secondBrain.projects.brainLocation")}
+                          class="!h-8 !w-auto max-w-56"
+                          options={locations()}
+                          current={locations().find((location) => location.worktree === state.brainDirectory)}
+                          value={(location) => location.worktree}
+                          label={(location) =>
+                            location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree
+                          }
+                          disabled={state.saving}
+                          onSelect={(location) =>
+                            location && setState({ brainDirectory: location.worktree, selectedId: "" })
+                          }
+                        />
+                      </TooltipV2>
+                    </Show>
+                    <Show when={!state.creating}>
+                      <ButtonV2
+                        variant="contrast"
+                        size="small"
+                        icon="plus"
+                        onClick={() => setState({ creating: true, selectedId: "", error: "" })}
+                      >
+                        {language.t("secondBrain.projects.new")}
+                      </ButtonV2>
+                    </Show>
+                  </>
+                }
+              />
+              <Show
+                when={state.creating}
+                fallback={
+                  <ProjectList projects={filtered()} loading={projects.loading} choose={choose} language={language} />
+                }
+              >
+                <CreateProjectForm
+                  state={state}
+                  setState={setState}
+                  locations={linkableLocations()}
+                  submit={submitCreate}
+                  language={language}
+                />
+              </Show>
+            </>
           }
         >
-          <Show
-            when={selected()}
-            keyed
-            fallback={
-              <ProjectList
-                projects={filtered()}
-                loading={projects.loading}
-                filter={state.filter}
-                setFilter={(filter) => setState("filter", filter)}
-                choose={choose}
-                language={language}
-              />
+          {(project) => {
+            const startWork = () => {
+              const location = selectedLocation()
+              if (!location) return
+              void drafts.create(
+                { server: server.key, directory: location.worktree, projectID: project.id },
+                projectWorkPrompt(project),
+              )
             }
-          >
-            {(project) => {
-              const startWork = () => {
-                const location = selectedLocation()
-                if (!location) return
-                void drafts.create(
-                  { server: server.key, directory: location.worktree, projectID: project.id },
-                  projectWorkPrompt(project),
-                )
-              }
-              const openNotes = () => navigate(`/notes?project=${encodeURIComponent(project.id)}`)
-              const openCalendar = () => navigate(`/calendar?project=${encodeURIComponent(project.id)}`)
-              const openActivity = () => {
-                const location = selectedLocation()
-                if (location) layout.home.setSelection({ server: server.key, directory: location.worktree })
-                navigate("/activity")
-              }
-              const openWorkspace = () => {
-                const location = selectedLocation()
-                if (!location) return
-                layout.projects.open(location.worktree)
-                void drafts.create({ server: server.key, directory: location.worktree, projectID: project.id })
-              }
-              return (
-                <div class="flex min-h-0 flex-1 flex-col gap-2">
-                  <ProjectViewNavigation
+            const openNotes = () => navigate(`/notes?project=${encodeURIComponent(project.id)}`)
+            const openCalendar = () => navigate(`/calendar?project=${encodeURIComponent(project.id)}`)
+            const openActivity = () => {
+              const location = selectedLocation()
+              if (location) layout.home.setSelection({ server: server.key, directory: location.worktree })
+              navigate("/activity")
+            }
+            const openWorkspace = () => {
+              const location = selectedLocation()
+              if (!location) return
+              layout.projects.open(location.worktree)
+              void drafts.create({ server: server.key, directory: location.worktree, projectID: project.id })
+            }
+            return (
+              <>
+                <header class="flex min-h-14 shrink-0 flex-wrap items-center gap-2 pl-3 pr-6 pt-3">
+                  <TooltipV2 value={language.t("secondBrain.projects.back")}>
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      class="!size-8"
+                      aria-label={language.t("secondBrain.projects.back")}
+                      icon={
+                        <span class="flex rotate-90">
+                          <Icon name="chevron-down" size="small" />
+                        </span>
+                      }
+                      onClick={() => {
+                        if (leaveBlocked()) return
+                        setState({ selectedId: "", view: "overview", error: "" })
+                      }}
+                    />
+                  </TooltipV2>
+                  <div class="flex min-w-0 flex-1 items-baseline gap-2">
+                    <h1 id="projects-title" class="truncate text-[17px] text-v2-text-text-base [font-weight:560]">
+                      {project.name}
+                    </h1>
+                    <span class="shrink-0 text-[12px] text-v2-text-text-faint">
+                      {language.t(statusKey[project.status])}
+                    </span>
+                  </div>
+                  <SegmentedControlV2
+                    class="!w-auto max-w-full overflow-x-auto"
+                    aria-label={project.name}
+                    value={state.view}
+                    onChange={(view) => {
+                      if (!view || leaveBlocked()) return
+                      setState({ view: view as ProjectView, error: "" })
+                    }}
+                  >
+                    <For each={views}>
+                      {(view) => (
+                        <SegmentedControlItemV2 value={view}>
+                          {language.t(`secondBrain.projects.view.${view}`)}
+                        </SegmentedControlItemV2>
+                      )}
+                    </For>
+                  </SegmentedControlV2>
+                </header>
+                <Show when={state.view === "overview"}>
+                  <ProjectOverview
                     project={project}
-                    view={state.view}
-                    setView={(view) => {
-                      if (overviewDirty()) {
-                        setState("error", language.t("secondBrain.projects.error.unsaved"))
-                        return
-                      }
-                      setState({ view, error: "" })
-                    }}
-                    back={() => {
-                      if (overviewDirty()) {
-                        setState("error", language.t("secondBrain.projects.error.unsaved"))
-                        return
-                      }
-                      setState({ selectedId: "", view: "overview", error: "" })
-                    }}
+                    state={state}
+                    setState={setState}
+                    dirty={overviewDirty()}
+                    save={saveOverview}
+                    setStatus={setStatus}
+                    canStartWork={Boolean(selectedLocation())}
+                    startWork={startWork}
+                    openNotes={openNotes}
+                    openCalendar={openCalendar}
+                    openActivity={openActivity}
                     language={language}
                   />
-                  <Show when={state.view === "overview"}>
-                    <ProjectOverview
-                      project={project}
-                      state={state}
-                      setState={setState}
-                      dirty={overviewDirty()}
-                      save={saveOverview}
-                      setStatus={setStatus}
-                      canStartWork={Boolean(selectedLocation())}
-                      startWork={startWork}
-                      openNotes={openNotes}
-                      openCalendar={openCalendar}
-                      openActivity={openActivity}
-                      language={language}
-                    />
-                  </Show>
-                  <Show when={state.view === "plan"}>
-                    <ProjectPlan
-                      project={project}
-                      calendar={calendar()}
-                      loading={calendar.loading}
-                      openCalendar={openCalendar}
-                      language={language}
-                    />
-                  </Show>
-                  <Show when={state.view === "work"}>
-                    <ProjectWork
-                      project={project}
-                      canStartWork={Boolean(selectedLocation())}
-                      startWork={startWork}
-                      openNotes={openNotes}
-                      language={language}
-                    />
-                  </Show>
-                  <Show when={state.view === "files"}>
-                    <ProjectFiles
-                      project={project}
-                      canOpen={Boolean(selectedLocation())}
-                      openWorkspace={openWorkspace}
-                      language={language}
-                    />
-                  </Show>
-                  <Show when={state.view === "activity"}>
-                    <ProjectActivity openActivity={openActivity} language={language} />
-                  </Show>
-                  <Show when={state.view === "map"}>
-                    <ProjectMap
-                      project={project}
-                      notes={notes() ?? []}
-                      loading={notes.loading}
-                      openNotes={openNotes}
-                      language={language}
-                      openNote={(path) =>
-                        navigate(`/notes?project=${encodeURIComponent(project.id)}&note=${encodeURIComponent(path)}`)
-                      }
-                    />
-                  </Show>
-                </div>
-              )
-            }}
-          </Show>
+                </Show>
+                <Show when={state.view === "plan"}>
+                  <ProjectPlan
+                    project={project}
+                    calendar={calendar()}
+                    loading={calendar.loading}
+                    openCalendar={openCalendar}
+                    language={language}
+                  />
+                </Show>
+                <Show when={state.view === "work"}>
+                  <ProjectWork
+                    project={project}
+                    canStartWork={Boolean(selectedLocation())}
+                    startWork={startWork}
+                    openNotes={openNotes}
+                    language={language}
+                  />
+                </Show>
+                <Show when={state.view === "files"}>
+                  <ProjectFiles
+                    project={project}
+                    canOpen={Boolean(selectedLocation())}
+                    openWorkspace={openWorkspace}
+                    language={language}
+                  />
+                </Show>
+                <Show when={state.view === "activity"}>
+                  <div class={panelClass}>
+                    <ButtonV2 variant="contrast" class="self-start" onClick={openActivity}>
+                      {language.t("secondBrain.projects.openActivity")}
+                    </ButtonV2>
+                  </div>
+                </Show>
+                <Show when={state.view === "map"}>
+                  <ProjectMap
+                    project={project}
+                    notes={notes() ?? []}
+                    loading={notes.loading}
+                    openNotes={openNotes}
+                    language={language}
+                    openNote={(path) =>
+                      navigate(`/notes?project=${encodeURIComponent(project.id)}&note=${encodeURIComponent(path)}`)
+                    }
+                  />
+                </Show>
+              </>
+            )
+          }}
         </Show>
       </Show>
-    </section>
+    </PageFrame>
   )
 }
+
+const statuses: ProjectStatus[] = ["active", "paused", "archived"]
+const views: ProjectView[] = ["overview", "plan", "work", "files", "activity", "map"]
+const panelClass = "mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 pb-10 pt-4"
+const labelClass = "flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted"
+const summaryClass =
+  "-ml-3 w-fit cursor-pointer rounded-full px-3 py-1.5 text-[13px] text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
 
 function ProjectList(props: {
   projects: ProjectRecord[]
   loading: boolean
-  filter: ProjectStatus
-  setFilter: (filter: ProjectStatus) => void
   choose: (project: ProjectRecord) => void
   language: ReturnType<typeof useLanguage>
 }) {
-  const filters: ProjectStatus[] = ["active", "paused", "archived"]
   return (
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]">
-      <div class="flex min-h-12 shrink-0 items-center gap-1 border-b border-v2-border-border-weak px-3">
-        <For each={filters}>
-          {(filter) => (
-            <button
-              type="button"
-              aria-pressed={props.filter === filter}
-              data-selected={props.filter === filter ? "" : undefined}
-              class="min-h-8 cursor-pointer rounded-[6px] px-3 text-[12px] text-v2-text-text-muted transition-colors duration-150 hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-              onClick={() => props.setFilter(filter)}
-            >
-              {props.language.t(statusKey[filter])}
-            </button>
-          )}
-        </For>
-      </div>
+    <div class="flex flex-col gap-0.5 px-3 pb-6 pt-2">
       <Show
         when={!props.loading}
-        fallback={
-          <div class="flex flex-1 items-center justify-center text-[13px] text-v2-text-text-faint">
-            {props.language.t("common.loading")}
-          </div>
-        }
+        fallback={<p class="px-3 py-2 text-[13px] text-v2-text-text-faint">{props.language.t("common.loading")}</p>}
       >
         <Show
           when={props.projects.length > 0}
           fallback={
-            <div class="flex flex-1 items-center justify-center px-6 text-center text-[13px] text-v2-text-text-faint">
+            <p class="px-3 py-2 text-[13px] text-v2-text-text-faint">
               {props.language.t("secondBrain.projects.empty")}
-            </div>
+            </p>
           }
         >
-          <div class="min-h-0 flex-1 overflow-auto">
-            <div class="grid min-w-[680px] grid-cols-[minmax(200px,1.4fr)_minmax(160px,1fr)_120px_100px] border-b border-v2-border-border-weak px-4 py-2 text-[11px] uppercase tracking-[0.04em] text-v2-text-text-faint">
-              <span>{props.language.t("secondBrain.projects.column.project")}</span>
-              <span>{props.language.t("secondBrain.projects.column.milestone")}</span>
-              <span>{props.language.t("secondBrain.projects.column.progress")}</span>
-              <span>{props.language.t("secondBrain.projects.column.status")}</span>
-            </div>
-            <For each={props.projects}>
-              {(project) => (
-                <button
-                  type="button"
-                  class="grid min-h-16 w-full min-w-[680px] cursor-pointer grid-cols-[minmax(200px,1.4fr)_minmax(160px,1fr)_120px_100px] items-center border-b border-v2-border-border-weak px-4 text-left transition-colors duration-150 hover:bg-v2-background-bg-layer-01 focus-visible:bg-v2-background-bg-layer-01 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                  onClick={() => props.choose(project)}
-                >
-                  <span class="min-w-0 pr-4">
-                    <strong class="block truncate text-[13px] text-v2-text-text-base [font-weight:530]">
-                      {project.name}
-                    </strong>
-                    <small class="block truncate text-[12px] text-v2-text-text-faint">{project.outcome}</small>
+          <For each={props.projects}>
+            {(project) => (
+              <button type="button" class={pageRowClass} onClick={() => props.choose(project)}>
+                <ProjectAvatar
+                  aria-hidden="true"
+                  fallback={project.name}
+                  variant={avatarVariant(project.id)}
+                  class="!size-8 [&_[data-slot=project-avatar-surface]]:!rounded-full [&_[data-slot=project-avatar-surface]]:!text-[13px]"
+                />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-[13px] text-v2-text-text-base [font-weight:530]">
+                    {project.name}
                   </span>
-                  <span class="truncate pr-4 text-[12px] text-v2-text-text-muted">
-                    {project.nextMilestone ?? props.language.t("secondBrain.projects.none")}
-                  </span>
-                  <span class="text-[12px] text-v2-text-text-muted">{project.progressPercent}%</span>
-                  <span class="text-[12px] capitalize text-v2-text-text-muted">
-                    {props.language.t(statusKey[project.status])}
-                  </span>
-                </button>
-              )}
-            </For>
-          </div>
+                  <span class="block truncate text-[12px] text-v2-text-text-faint">{project.outcome}</span>
+                </span>
+                <Show when={project.nextMilestone}>
+                  {(milestone) => (
+                    <span
+                      class="hidden max-w-[36%] truncate text-[12px] text-v2-text-text-muted md:block"
+                      title={props.language.t("secondBrain.projects.nextMilestone")}
+                    >
+                      {milestone()}
+                    </span>
+                  )}
+                </Show>
+                <span class="w-10 shrink-0 text-right text-[12px] tabular-nums text-v2-text-text-muted">
+                  {project.progressPercent}%
+                </span>
+              </button>
+            )}
+          </For>
         </Show>
       </Show>
     </div>
@@ -537,148 +578,93 @@ function CreateProjectForm(props: {
 }) {
   return (
     <form
-      class="min-h-0 flex-1 overflow-y-auto rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
+      class="mx-auto flex w-full max-w-2xl flex-col gap-5 px-6 pb-10 pt-4"
       onSubmit={(event) => {
         event.preventDefault()
         void props.submit()
       }}
     >
-      <div class="mx-auto flex w-full max-w-2xl flex-col gap-5 px-6 py-7">
-        <div>
-          <h2 class="text-[16px] text-v2-text-text-strong [font-weight:560]">
-            {props.language.t("secondBrain.projects.create.title")}
-          </h2>
-          <p class="mt-1 text-[13px] leading-5 text-v2-text-text-muted">
-            {props.language.t("secondBrain.projects.create.description")}
-          </p>
+      <label class={labelClass} for="project-name">
+        {props.language.t("secondBrain.projects.name")}
+        <TextInputV2
+          id="project-name"
+          appearance="large"
+          autofocus
+          value={props.state.draft.name}
+          onInput={(event) => props.setState("draft", "name", event.currentTarget.value)}
+        />
+      </label>
+      <label class={labelClass} for="project-outcome">
+        {props.language.t("secondBrain.projects.outcome")}
+        <TextareaV2
+          id="project-outcome"
+          rows={4}
+          value={props.state.draft.outcome}
+          onInput={(event) => props.setState("draft", "outcome", event.currentTarget.value)}
+        />
+      </label>
+      <label class={labelClass} for="project-location">
+        {props.language.t("secondBrain.projects.location")}
+        <SelectV2
+          id="project-location"
+          aria-label={props.language.t("secondBrain.projects.location")}
+          class="!h-9 !w-full"
+          appearance="large"
+          options={["__none__", ...props.locations.map((location) => location.id)]}
+          current={props.state.draft.locationId || "__none__"}
+          label={(locationID) => {
+            if (locationID === "__none__") return props.language.t("secondBrain.projects.location.none")
+            const location = props.locations.find((item) => item.id === locationID)
+            return location?.name ?? location?.worktree ?? locationID
+          }}
+          onSelect={(locationID) =>
+            props.setState("draft", "locationId", locationID === "__none__" ? "" : (locationID ?? ""))
+          }
+        />
+      </label>
+      <details>
+        <summary class={summaryClass}>{props.language.t("secondBrain.projects.advanced")}</summary>
+        <div class="mt-3 flex flex-col gap-4">
+          <label class={labelClass} for="project-instructions">
+            {props.language.t("secondBrain.projects.instructions")}
+            <TextareaV2
+              id="project-instructions"
+              rows={5}
+              value={props.state.draft.instructions}
+              onInput={(event) => props.setState("draft", "instructions", event.currentTarget.value)}
+            />
+          </label>
+          <label class={labelClass} for="project-tags">
+            {props.language.t("secondBrain.projects.tags")}
+            <TextInputV2
+              id="project-tags"
+              appearance="large"
+              value={props.state.draft.tags}
+              onInput={(event) => props.setState("draft", "tags", event.currentTarget.value)}
+            />
+          </label>
         </div>
-        <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-name">
-          {props.language.t("secondBrain.projects.name")}
-          <TextInputV2
-            id="project-name"
-            appearance="large"
-            autofocus
-            value={props.state.draft.name}
-            onInput={(event) => props.setState("draft", "name", event.currentTarget.value)}
-          />
-        </label>
-        <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-outcome">
-          {props.language.t("secondBrain.projects.outcome")}
-          <TextareaV2
-            id="project-outcome"
-            rows={4}
-            value={props.state.draft.outcome}
-            onInput={(event) => props.setState("draft", "outcome", event.currentTarget.value)}
-          />
-        </label>
-        <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-location">
-          {props.language.t("secondBrain.projects.location")}
-          <SelectV2
-            id="project-location"
-            aria-label={props.language.t("secondBrain.projects.location")}
-            class="!h-9 !w-full"
-            appearance="large"
-            options={["__none__", ...props.locations.map((location) => location.id)]}
-            current={props.state.draft.locationId || "__none__"}
-            label={(locationID) => {
-              if (locationID === "__none__") return props.language.t("secondBrain.projects.location.none")
-              const location = props.locations.find((item) => item.id === locationID)
-              return location?.name ?? location?.worktree ?? locationID
-            }}
-            onSelect={(locationID) =>
-              props.setState("draft", "locationId", locationID === "__none__" ? "" : (locationID ?? ""))
-            }
-          />
-        </label>
-        <details class="rounded-[8px] border border-v2-border-border-weak px-4 py-3">
-          <summary class="cursor-pointer text-[13px] text-v2-text-text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus">
-            {props.language.t("secondBrain.projects.advanced")}
-          </summary>
-          <div class="mt-4 flex flex-col gap-4">
-            <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-instructions">
-              {props.language.t("secondBrain.projects.instructions")}
-              <TextareaV2
-                id="project-instructions"
-                rows={5}
-                value={props.state.draft.instructions}
-                onInput={(event) => props.setState("draft", "instructions", event.currentTarget.value)}
-              />
-            </label>
-            <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-tags">
-              {props.language.t("secondBrain.projects.tags")}
-              <TextInputV2
-                id="project-tags"
-                appearance="large"
-                value={props.state.draft.tags}
-                onInput={(event) => props.setState("draft", "tags", event.currentTarget.value)}
-              />
-            </label>
-          </div>
-        </details>
-        <Show when={props.state.error}>
-          <p id="project-create-error" role="alert" class="text-[12px] text-v2-text-text-critical">
-            {props.state.error}
-          </p>
-        </Show>
-        <div class="flex justify-end gap-2">
-          <ButtonV2
-            type="button"
-            variant="ghost"
-            onClick={() => props.setState({ creating: false, draft: emptyDraft(), error: "" })}
-          >
-            {props.language.t("common.cancel")}
-          </ButtonV2>
-          <ButtonV2 type="submit" variant="contrast" disabled={props.state.saving}>
-            {props.state.saving
-              ? props.language.t("secondBrain.saving")
-              : props.language.t("secondBrain.projects.create")}
-          </ButtonV2>
-        </div>
+      </details>
+      <Show when={props.state.error}>
+        <p id="project-create-error" role="alert" class="text-[12px] text-v2-text-text-critical">
+          {props.state.error}
+        </p>
+      </Show>
+      <div class="flex justify-end gap-2">
+        <ButtonV2
+          type="button"
+          variant="ghost"
+          onClick={() => props.setState({ creating: false, draft: emptyDraft(), error: "" })}
+        >
+          {props.language.t("common.cancel")}
+        </ButtonV2>
+        <ButtonV2 type="submit" variant="contrast" disabled={props.state.saving}>
+          {props.state.saving
+            ? props.language.t("secondBrain.saving")
+            : props.language.t("secondBrain.projects.create")}
+        </ButtonV2>
       </div>
     </form>
-  )
-}
-
-function ProjectViewNavigation(props: {
-  project: ProjectRecord
-  view: ProjectView
-  setView: (view: ProjectView) => void
-  back: () => void
-  language: ReturnType<typeof useLanguage>
-}) {
-  const views: ProjectView[] = ["overview", "plan", "work", "files", "activity", "map"]
-  return (
-    <header class="flex min-h-12 shrink-0 items-center gap-2 rounded-[10px] bg-v2-background-bg-base px-3 shadow-[var(--v2-elevation-raised)]">
-      <IconButton
-        icon="chevron-left"
-        variant="ghost"
-        aria-label={props.language.t("secondBrain.projects.back")}
-        onClick={props.back}
-      />
-      <div class="mr-2 min-w-0">
-        <strong class="block max-w-52 truncate text-[13px] text-v2-text-text-base [font-weight:530]">
-          {props.project.name}
-        </strong>
-        <span class="block max-w-52 truncate text-[10px] text-v2-text-text-faint">
-          {props.language.t(statusKey[props.project.status])}
-        </span>
-      </div>
-      <nav class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label={props.project.name}>
-        <For each={views}>
-          {(view) => (
-            <button
-              type="button"
-              aria-current={props.view === view ? "page" : undefined}
-              data-selected={props.view === view ? "" : undefined}
-              class="h-8 shrink-0 rounded-[6px] px-3 text-[12px] text-v2-text-text-muted transition-colors duration-120 hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-              onClick={() => props.setView(view)}
-            >
-              {props.language.t(`secondBrain.projects.view.${view}`)}
-            </button>
-          )}
-        </For>
-      </nav>
-    </header>
   )
 }
 
@@ -709,61 +695,57 @@ function ProjectPlan(props: {
       )
       .slice(0, 20)
   return (
-    <ProjectSurface title={props.language.t("secondBrain.projects.plan.title")}>
-      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <section class="rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3">
-          <Show
-            when={!props.loading && items().length > 0}
-            fallback={
-              <p class="p-2 text-[12px] text-v2-text-text-faint">
-                {props.loading
-                  ? props.language.t("common.loading")
-                  : props.language.t("secondBrain.projects.plan.empty")}
-              </p>
-            }
-          >
-            <ul class="flex flex-col gap-1">
-              <For each={items()}>
-                {(item) => (
-                  <li class="grid min-h-10 grid-cols-[100px_minmax(0,1fr)_auto] items-center gap-3 rounded-[6px] px-2 hover:bg-v2-background-bg-layer-02">
-                    <span class="text-[11px] tabular-nums text-v2-text-text-faint">
-                      {item.date || props.language.t("secondBrain.tasks.unscheduled")}
-                    </span>
-                    <span class="truncate text-[13px] text-v2-text-text-base">{item.title}</span>
-                    <span class="text-[10px] text-v2-text-text-faint">
-                      {props.language.t(`secondBrain.calendar.source.${item.source}`)}
-                    </span>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
-        </section>
-        <aside class="flex flex-col gap-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-4">
-          <div>
-            <p class="text-[11px] uppercase tracking-[0.04em] text-v2-text-text-faint">
-              {props.language.t("secondBrain.projects.nextMilestone")}
+    <div class={`${panelClass} lg:flex-row`}>
+      <div class="min-w-0 flex-1">
+        <Show
+          when={!props.loading && items().length > 0}
+          fallback={
+            <p class="px-3 py-2 text-[13px] text-v2-text-text-faint">
+              {props.loading ? props.language.t("common.loading") : props.language.t("secondBrain.projects.plan.empty")}
             </p>
-            <p class="mt-1 text-[13px] leading-5 text-v2-text-text-base">
-              {props.project.nextMilestone ?? props.language.t("secondBrain.projects.none")}
-            </p>
-          </div>
-          <Show when={props.project.blocker}>
-            {(blocker) => (
-              <div>
-                <p class="text-[11px] uppercase tracking-[0.04em] text-v2-text-text-faint">
-                  {props.language.t("secondBrain.projects.blocker")}
-                </p>
-                <p class="mt-1 text-[13px] leading-5 text-v2-text-text-critical">{blocker()}</p>
-              </div>
-            )}
-          </Show>
-          <ButtonV2 variant="outline" onClick={props.openCalendar}>
-            {props.language.t("secondBrain.projects.openCalendar")}
-          </ButtonV2>
-        </aside>
+          }
+        >
+          <ul class="flex flex-col gap-0.5">
+            <For each={items()}>
+              {(item) => (
+                <li class="grid min-h-10 grid-cols-[100px_minmax(0,1fr)_auto] items-center gap-3 rounded-[16px] px-3">
+                  <span class="text-[11px] tabular-nums text-v2-text-text-faint">
+                    {item.date || props.language.t("secondBrain.tasks.unscheduled")}
+                  </span>
+                  <span class="truncate text-[13px] text-v2-text-text-base">{item.title}</span>
+                  <span class="text-[11px] text-v2-text-text-faint">
+                    {props.language.t(`secondBrain.calendar.source.${item.source}`)}
+                  </span>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
       </div>
-    </ProjectSurface>
+      <aside class="flex shrink-0 flex-col items-start gap-4 lg:w-[260px]">
+        <Show when={props.project.nextMilestone}>
+          {(milestone) => (
+            <div>
+              <p class="text-[12px] text-v2-text-text-muted">
+                {props.language.t("secondBrain.projects.nextMilestone")}
+              </p>
+              <p class="mt-1 text-[13px] leading-5 text-v2-text-text-base">{milestone()}</p>
+            </div>
+          )}
+        </Show>
+        <Show when={props.project.blocker}>
+          {(blocker) => (
+            <div>
+              <p class="text-[12px] text-v2-text-text-muted">{props.language.t("secondBrain.projects.blocker")}</p>
+              <p class="mt-1 text-[13px] leading-5 text-v2-text-text-critical">{blocker()}</p>
+            </div>
+          )}
+        </Show>
+        <ButtonV2 variant="outline" onClick={props.openCalendar}>
+          {props.language.t("secondBrain.projects.openCalendar")}
+        </ButtonV2>
+      </aside>
+    </div>
   )
 }
 
@@ -775,34 +757,32 @@ function ProjectWork(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <ProjectSurface title={props.language.t("secondBrain.projects.work.title")}>
-      <div class="mx-auto flex max-w-2xl flex-col gap-4">
-        <p class="text-[14px] leading-6 text-v2-text-text-base">{props.project.outcome}</p>
-        <Show when={props.project.instructions}>
-          {(instructions) => (
-            <section class="rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-4">
-              <h3 class="text-[12px] text-v2-text-text-muted [font-weight:530]">
-                {props.language.t("secondBrain.projects.instructions")}
-              </h3>
-              <p class="mt-2 whitespace-pre-wrap text-[13px] leading-5 text-v2-text-text-base">{instructions()}</p>
-            </section>
-          )}
-        </Show>
-        <div class="flex flex-wrap gap-2">
-          <ButtonV2 variant="contrast" disabled={!props.canStartWork} onClick={props.startWork}>
-            {props.language.t("secondBrain.projects.startWork")}
-          </ButtonV2>
-          <ButtonV2 variant="outline" onClick={props.openNotes}>
-            {props.language.t("secondBrain.projects.openNotes")}
-          </ButtonV2>
-        </div>
+    <div class={panelClass}>
+      <p class="max-w-3xl text-[15px] leading-6 text-v2-text-text-base">{props.project.outcome}</p>
+      <Show when={props.project.instructions}>
+        {(instructions) => (
+          <section class="flex max-w-3xl flex-col gap-1">
+            <h2 class="text-[13px] text-v2-text-text-muted [font-weight:530]">
+              {props.language.t("secondBrain.projects.instructions")}
+            </h2>
+            <p class="whitespace-pre-wrap text-[13px] leading-5 text-v2-text-text-base">{instructions()}</p>
+          </section>
+        )}
+      </Show>
+      <div class="flex flex-wrap items-center gap-2">
+        <ButtonV2 variant="contrast" disabled={!props.canStartWork} onClick={props.startWork}>
+          {props.language.t("secondBrain.projects.startWork")}
+        </ButtonV2>
+        <ButtonV2 variant="outline" onClick={props.openNotes}>
+          {props.language.t("secondBrain.projects.openNotes")}
+        </ButtonV2>
         <Show when={!props.canStartWork}>
-          <p class="text-[12px] text-v2-text-text-faint">
+          <span class="text-[12px] text-v2-text-text-faint">
             {props.language.t("secondBrain.projects.startWorkUnavailable")}
-          </p>
+          </span>
         </Show>
       </div>
-    </ProjectSurface>
+    </div>
   )
 }
 
@@ -813,40 +793,28 @@ function ProjectFiles(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <ProjectSurface title={props.language.t("secondBrain.projects.files.title")}>
-      <div class="mx-auto flex max-w-xl flex-col items-start gap-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-5">
-        <p class="text-[13px] leading-5 text-v2-text-text-muted">
-          {props.language.t("secondBrain.projects.files.managed")}
-        </p>
-        <code class="max-w-full truncate text-[11px] text-v2-text-text-faint">{props.project.folder}</code>
-        <p class="text-[13px] leading-5 text-v2-text-text-muted">
-          {props.canOpen
-            ? props.language.t("secondBrain.projects.files.description")
-            : props.language.t("secondBrain.projects.files.unlinked")}
-        </p>
-        <Show when={props.project.location?.displayPath}>
-          {(path) => <code class="max-w-full truncate text-[11px] text-v2-text-text-faint">{path()}</code>}
-        </Show>
-        <ButtonV2 variant="contrast" disabled={!props.canOpen} onClick={props.openWorkspace}>
-          {props.language.t("secondBrain.projects.files.open")}
-        </ButtonV2>
+    <div class={`${panelClass} items-start !gap-3`}>
+      <div class="flex max-w-full items-center gap-2 text-v2-icon-icon-muted">
+        <Icon name="folder" size="small" />
+        <code class="truncate text-[12px] text-v2-text-text-muted">{props.project.folder}</code>
       </div>
-    </ProjectSurface>
-  )
-}
-
-function ProjectActivity(props: { openActivity: () => void; language: ReturnType<typeof useLanguage> }) {
-  return (
-    <ProjectSurface title={props.language.t("secondBrain.projects.activity.title")}>
-      <div class="mx-auto flex max-w-xl flex-col items-start gap-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-5">
+      <Show when={props.project.location?.displayPath}>
+        {(path) => (
+          <div class="flex max-w-full items-center gap-2 text-v2-icon-icon-muted">
+            <Icon name="workspace" size="small" />
+            <code class="truncate text-[12px] text-v2-text-text-muted">{path()}</code>
+          </div>
+        )}
+      </Show>
+      <Show when={!props.canOpen}>
         <p class="text-[13px] leading-5 text-v2-text-text-muted">
-          {props.language.t("secondBrain.projects.activity.description")}
+          {props.language.t("secondBrain.projects.files.unlinked")}
         </p>
-        <ButtonV2 variant="contrast" onClick={props.openActivity}>
-          {props.language.t("secondBrain.projects.openActivity")}
-        </ButtonV2>
-      </div>
-    </ProjectSurface>
+      </Show>
+      <ButtonV2 variant="contrast" class="mt-2" disabled={!props.canOpen} onClick={props.openWorkspace}>
+        {props.language.t("secondBrain.projects.files.open")}
+      </ButtonV2>
+    </div>
   )
 }
 
@@ -861,106 +829,91 @@ function ProjectMap(props: {
   const linked = () => props.notes.filter((note) => note.projectIds.includes(props.project.id))
   const graph = createMemo(() => projectGraph(props.project, linked().slice(0, 36)))
   return (
-    <ProjectSurface title={props.language.t("secondBrain.projects.map.title")}>
+    <div class={panelClass}>
       <Show
         when={!props.loading && linked().length > 0}
         fallback={
-          <div class="mx-auto flex max-w-xl flex-col items-start gap-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-5">
+          <div class="flex flex-col items-start gap-3">
             <p class="text-[13px] leading-5 text-v2-text-text-muted">
               {props.loading ? props.language.t("common.loading") : props.language.t("secondBrain.projects.map.empty")}
             </p>
-            <ButtonV2 variant="outline" onClick={props.openNotes}>
-              {props.language.t("secondBrain.projects.openNotes")}
-            </ButtonV2>
+            <Show when={!props.loading}>
+              <ButtonV2 variant="outline" onClick={props.openNotes}>
+                {props.language.t("secondBrain.projects.openNotes")}
+              </ButtonV2>
+            </Show>
           </div>
         }
       >
-        <div class="mx-auto max-w-3xl">
-          <Show when={linked().length > 100}>
-            <p role="status" class="mb-3 text-[12px] text-v2-text-text-muted">
-              {props.language.t("secondBrain.projects.map.limit", { count: linked().length })}
-            </p>
-          </Show>
-          <div class="mb-4 overflow-hidden rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01">
-            <svg
-              viewBox="0 0 800 420"
-              class="block aspect-[16/8.4] w-full"
-              aria-hidden="true"
-              preserveAspectRatio="xMidYMid meet"
-            >
-              <For each={graph().edges}>
-                {(edge) => (
-                  <line
-                    x1={edge.from.x}
-                    y1={edge.from.y}
-                    x2={edge.to.x}
-                    y2={edge.to.y}
-                    class="stroke-v2-border-border-base"
-                    stroke-width={edge.project ? 1.5 : 1}
-                    stroke-opacity={edge.project ? 0.8 : 0.45}
-                  />
-                )}
-              </For>
-              <For each={graph().nodes}>
-                {(node) => (
-                  <g transform={`translate(${node.x} ${node.y})`}>
-                    <circle
-                      r={node.project ? 28 : 18}
-                      class={node.project ? "fill-v2-icon-icon-accent" : "fill-v2-background-bg-layer-03"}
-                    />
-                    <text y={node.project ? 45 : 33} text-anchor="middle" class="fill-v2-text-text-muted text-[11px]">
-                      {shortLabel(node.label)}
-                    </text>
-                  </g>
-                )}
-              </For>
-            </svg>
-          </div>
-          <ul class="grid gap-2 sm:grid-cols-2">
-            <For each={linked().slice(0, 100)}>
-              {(note) => (
-                <li>
-                  <button
-                    type="button"
-                    class="w-full rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3 text-left hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
-                    onClick={() => props.openNote(note.path)}
-                  >
-                    <strong class="block truncate text-[13px] text-v2-text-text-base [font-weight:530]">
-                      {note.title}
-                    </strong>
-                    <span class="mt-1 block text-[11px] text-v2-text-text-faint">
-                      {props.language.t("secondBrain.projects.map.links", { count: note.links.length })}
-                    </span>
-                    <Show when={note.links.length > 0}>
-                      <span class="mt-2 block truncate text-[11px] text-v2-text-text-muted">
-                        {note.links.slice(0, 3).join(" Â· ")}
-                      </span>
-                    </Show>
-                  </button>
-                </li>
+        <Show when={linked().length > 100}>
+          <p role="status" class="text-[12px] text-v2-text-text-muted">
+            {props.language.t("secondBrain.projects.map.limit", { count: linked().length })}
+          </p>
+        </Show>
+        <div class="overflow-hidden rounded-[24px] bg-v2-background-bg-layer-01">
+          <svg
+            viewBox="0 0 800 420"
+            class="block aspect-[16/8.4] w-full"
+            aria-hidden="true"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <For each={graph().edges}>
+              {(edge) => (
+                <line
+                  x1={edge.from.x}
+                  y1={edge.from.y}
+                  x2={edge.to.x}
+                  y2={edge.to.y}
+                  class="stroke-v2-border-border-base"
+                  stroke-width={edge.project ? 1.5 : 1}
+                  stroke-opacity={edge.project ? 0.8 : 0.45}
+                />
               )}
             </For>
-          </ul>
+            <For each={graph().nodes}>
+              {(node) => (
+                <g transform={`translate(${node.x} ${node.y})`}>
+                  <circle
+                    r={node.project ? 28 : 18}
+                    class={node.project ? "fill-v2-icon-icon-accent" : "fill-v2-background-bg-layer-03"}
+                  />
+                  <text y={node.project ? 45 : 33} text-anchor="middle" class="fill-v2-text-text-muted text-[11px]">
+                    {shortLabel(node.label)}
+                  </text>
+                </g>
+              )}
+            </For>
+          </svg>
         </div>
+        <ul class="grid gap-0.5 sm:grid-cols-2">
+          <For each={linked().slice(0, 100)}>
+            {(note) => (
+              <li>
+                <button type="button" class={pageRowClass} onClick={() => props.openNote(note.path)}>
+                  <span class="min-w-0 flex-1 truncate text-[13px] text-v2-text-text-base">{note.title}</span>
+                  <span class="shrink-0 text-[11px] text-v2-text-text-faint">
+                    {props.language.t("secondBrain.projects.map.links", { count: note.links.length })}
+                  </span>
+                </button>
+              </li>
+            )}
+          </For>
+        </ul>
       </Show>
-    </ProjectSurface>
+    </div>
   )
 }
 
 function shortLabel(value: string) {
   const characters = [...value]
-  return characters.length > 20 ? `${characters.slice(0, 19).join("")}â€¦` : value
+  return characters.length > 20 ? `${characters.slice(0, 19).join("")}…` : value
 }
 
-function ProjectSurface(props: { title: string; children: import("solid-js").JSX.Element }) {
-  return (
-    <article class="min-h-0 flex-1 overflow-y-auto rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]">
-      <div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-6 py-6">
-        <h2 class="text-[16px] text-v2-text-text-strong [font-weight:560]">{props.title}</h2>
-        {props.children}
-      </div>
-    </article>
-  )
+// Second Brain Projects carry no color, so derive a stable avatar color from the ID.
+function avatarVariant(id: string) {
+  return PROJECT_AVATAR_VARIANTS[
+    [...id].reduce((sum, character) => sum + character.charCodeAt(0), 0) % PROJECT_AVATAR_VARIANTS.length
+  ]
 }
 
 function projectWorkPrompt(project: ProjectRecord) {
@@ -993,140 +946,128 @@ function ProjectOverview(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <article class="min-h-0 flex-1 overflow-y-auto rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]">
-      <div class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-6">
-        <section class="max-w-3xl">
-          <p class="mb-1 text-[11px] uppercase tracking-[0.04em] text-v2-text-text-faint">
-            {props.language.t("secondBrain.projects.outcome")}
-          </p>
-          <p class="text-[15px] leading-6 text-v2-text-text-base">{props.project.outcome}</p>
-        </section>
-        <nav class="flex flex-wrap gap-2" aria-label={props.language.t("secondBrain.projects.actions")}>
-          <ButtonV2 variant="contrast" disabled={!props.canStartWork || props.dirty} onClick={props.startWork}>
-            {props.language.t("secondBrain.projects.startWork")}
-          </ButtonV2>
-          <ButtonV2 variant="outline" disabled={props.dirty} onClick={props.openNotes}>
-            {props.language.t("secondBrain.projects.openNotes")}
-          </ButtonV2>
-          <ButtonV2 variant="outline" disabled={props.dirty} onClick={props.openCalendar}>
-            {props.language.t("secondBrain.projects.openCalendar")}
-          </ButtonV2>
-          <ButtonV2 variant="ghost" disabled={props.dirty} onClick={props.openActivity}>
-            {props.language.t("secondBrain.projects.openActivity")}
-          </ButtonV2>
-          <Show when={!props.canStartWork}>
-            <span class="self-center text-[11px] text-v2-text-text-faint">
-              {props.language.t("secondBrain.projects.startWorkUnavailable")}
-            </span>
-          </Show>
-        </nav>
-        <section class="flex flex-col gap-2" aria-labelledby="project-progress-label">
-          <div class="flex items-center justify-between text-[12px] text-v2-text-text-muted">
-            <label id="project-progress-label" for="project-progress">
-              {props.language.t("secondBrain.projects.progress")}
-            </label>
-            <output for="project-progress">{props.state.progress}%</output>
-          </div>
-          <input
-            id="project-progress"
-            type="range"
-            min="0"
-            max="100"
-            value={props.state.progress}
-            class="h-6 w-full cursor-pointer accent-v2-icon-icon-accent"
-            onInput={(event) => props.setState("progress", Number(event.currentTarget.value))}
-          />
-        </section>
-        <div class="grid gap-4 md:grid-cols-2">
-          <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-next-milestone">
-            {props.language.t("secondBrain.projects.nextMilestone")}
-            <TextareaV2
-              id="project-next-milestone"
-              rows={4}
-              value={props.state.nextMilestone}
-              onInput={(event) => props.setState("nextMilestone", event.currentTarget.value)}
-            />
-          </label>
-          <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-blocker">
-            {props.language.t("secondBrain.projects.blocker")}
-            <TextareaV2
-              id="project-blocker"
-              rows={4}
-              value={props.state.blocker}
-              onInput={(event) => props.setState("blocker", event.currentTarget.value)}
-            />
-          </label>
-        </div>
-        <details class="rounded-[8px] border border-v2-border-border-weak px-4 py-3">
-          <summary class="cursor-pointer text-[13px] text-v2-text-text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus">
-            {props.language.t("secondBrain.projects.settings")}
-          </summary>
-          <div class="mt-4 flex flex-col gap-4">
-            <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-settings-outcome">
-              {props.language.t("secondBrain.projects.outcome")}
-              <TextareaV2
-                id="project-settings-outcome"
-                rows={4}
-                value={props.state.outcome}
-                onInput={(event) => props.setState("outcome", event.currentTarget.value)}
-              />
-            </label>
-            <label
-              class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted"
-              for="project-settings-instructions"
-            >
-              {props.language.t("secondBrain.projects.instructions")}
-              <TextareaV2
-                id="project-settings-instructions"
-                rows={5}
-                value={props.state.instructions}
-                onInput={(event) => props.setState("instructions", event.currentTarget.value)}
-              />
-            </label>
-            <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="project-settings-tags">
-              {props.language.t("secondBrain.projects.tags")}
-              <TextInputV2
-                id="project-settings-tags"
-                appearance="large"
-                value={props.state.tags}
-                onInput={(event) => props.setState("tags", event.currentTarget.value)}
-              />
-            </label>
-          </div>
-        </details>
-        <Show when={props.state.error}>
-          <p role="alert" class="text-[12px] text-v2-text-text-critical">
-            {props.state.error}
-          </p>
+    <div class={panelClass}>
+      <p class="max-w-3xl text-[15px] leading-6 text-v2-text-text-base">{props.project.outcome}</p>
+      <nav class="flex flex-wrap items-center gap-2" aria-label={props.language.t("secondBrain.projects.actions")}>
+        <ButtonV2 variant="contrast" disabled={!props.canStartWork || props.dirty} onClick={props.startWork}>
+          {props.language.t("secondBrain.projects.startWork")}
+        </ButtonV2>
+        <ButtonV2 variant="outline" disabled={props.dirty} onClick={props.openNotes}>
+          {props.language.t("secondBrain.projects.openNotes")}
+        </ButtonV2>
+        <ButtonV2 variant="outline" disabled={props.dirty} onClick={props.openCalendar}>
+          {props.language.t("secondBrain.projects.openCalendar")}
+        </ButtonV2>
+        <ButtonV2 variant="ghost" disabled={props.dirty} onClick={props.openActivity}>
+          {props.language.t("secondBrain.projects.openActivity")}
+        </ButtonV2>
+        <Show when={!props.canStartWork}>
+          <span class="text-[12px] text-v2-text-text-faint">
+            {props.language.t("secondBrain.projects.startWorkUnavailable")}
+          </span>
         </Show>
-        <div class="flex flex-wrap items-center gap-2 border-t border-v2-border-border-weak pt-4">
-          <ButtonV2 variant="contrast" disabled={!props.dirty || props.state.saving} onClick={() => void props.save()}>
-            {props.state.saving
-              ? props.language.t("secondBrain.saving")
-              : props.language.t("secondBrain.projects.saveState")}
-          </ButtonV2>
-          <ButtonV2
-            variant="ghost"
-            disabled={props.state.saving || props.dirty}
-            onClick={() => void props.setStatus(props.project.status === "active" ? "paused" : "active")}
-          >
-            {props.language.t(
-              props.project.status === "archived"
-                ? "secondBrain.projects.restore"
-                : props.project.status === "paused"
-                  ? "secondBrain.projects.resume"
-                  : "secondBrain.projects.pause",
-            )}
-          </ButtonV2>
-          <ButtonV2
-            variant="danger"
-            disabled={props.state.saving || props.dirty || props.project.status === "archived"}
-            onClick={() => void props.setStatus("archived")}
-          >
-            {props.language.t("secondBrain.projects.archive")}
-          </ButtonV2>
+      </nav>
+      <section class="flex flex-col gap-2" aria-labelledby="project-progress-label">
+        <div class="flex items-center justify-between text-[12px] text-v2-text-text-muted">
+          <label id="project-progress-label" for="project-progress">
+            {props.language.t("secondBrain.projects.progress")}
+          </label>
+          <output for="project-progress">{props.state.progress}%</output>
         </div>
+        <input
+          id="project-progress"
+          type="range"
+          min="0"
+          max="100"
+          value={props.state.progress}
+          class="h-6 w-full cursor-pointer accent-v2-icon-icon-accent"
+          onInput={(event) => props.setState("progress", Number(event.currentTarget.value))}
+        />
+      </section>
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class={labelClass} for="project-next-milestone">
+          {props.language.t("secondBrain.projects.nextMilestone")}
+          <TextareaV2
+            id="project-next-milestone"
+            rows={4}
+            value={props.state.nextMilestone}
+            onInput={(event) => props.setState("nextMilestone", event.currentTarget.value)}
+          />
+        </label>
+        <label class={labelClass} for="project-blocker">
+          {props.language.t("secondBrain.projects.blocker")}
+          <TextareaV2
+            id="project-blocker"
+            rows={4}
+            value={props.state.blocker}
+            onInput={(event) => props.setState("blocker", event.currentTarget.value)}
+          />
+        </label>
       </div>
-    </article>
+      <details>
+        <summary class={summaryClass}>{props.language.t("secondBrain.projects.settings")}</summary>
+        <div class="mt-3 flex flex-col gap-4">
+          <label class={labelClass} for="project-settings-outcome">
+            {props.language.t("secondBrain.projects.outcome")}
+            <TextareaV2
+              id="project-settings-outcome"
+              rows={4}
+              value={props.state.outcome}
+              onInput={(event) => props.setState("outcome", event.currentTarget.value)}
+            />
+          </label>
+          <label class={labelClass} for="project-settings-instructions">
+            {props.language.t("secondBrain.projects.instructions")}
+            <TextareaV2
+              id="project-settings-instructions"
+              rows={5}
+              value={props.state.instructions}
+              onInput={(event) => props.setState("instructions", event.currentTarget.value)}
+            />
+          </label>
+          <label class={labelClass} for="project-settings-tags">
+            {props.language.t("secondBrain.projects.tags")}
+            <TextInputV2
+              id="project-settings-tags"
+              appearance="large"
+              value={props.state.tags}
+              onInput={(event) => props.setState("tags", event.currentTarget.value)}
+            />
+          </label>
+        </div>
+      </details>
+      <Show when={props.state.error}>
+        <p role="alert" class="text-[12px] text-v2-text-text-critical">
+          {props.state.error}
+        </p>
+      </Show>
+      <div class="flex flex-wrap items-center gap-2">
+        <ButtonV2 variant="contrast" disabled={!props.dirty || props.state.saving} onClick={() => void props.save()}>
+          {props.state.saving
+            ? props.language.t("secondBrain.saving")
+            : props.language.t("secondBrain.projects.saveState")}
+        </ButtonV2>
+        <ButtonV2
+          variant="ghost"
+          disabled={props.state.saving || props.dirty}
+          onClick={() => void props.setStatus(props.project.status === "active" ? "paused" : "active")}
+        >
+          {props.language.t(
+            props.project.status === "archived"
+              ? "secondBrain.projects.restore"
+              : props.project.status === "paused"
+                ? "secondBrain.projects.resume"
+                : "secondBrain.projects.pause",
+          )}
+        </ButtonV2>
+        <ButtonV2
+          variant="danger"
+          disabled={props.state.saving || props.dirty || props.project.status === "archived"}
+          onClick={() => void props.setStatus("archived")}
+        >
+          {props.language.t("secondBrain.projects.archive")}
+        </ButtonV2>
+      </div>
+    </div>
   )
 }

@@ -99,7 +99,7 @@ export const DialogConnectProvider: Component<{
         >
           <button
             type="button"
-            class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+            class="flex size-6 items-center justify-center rounded-full text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
             onClick={() => back.current()}
             aria-label={language.t("common.goBack")}
           >
@@ -216,7 +216,7 @@ function ProviderPickerV2(props: {
                       <button
                         type="button"
                         data-provider-id={provider.id}
-                        class="flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] leading-none tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                        class="flex min-h-9 w-full items-center gap-2 rounded-full px-4 py-2.5 text-left text-[13px] leading-none tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
                         classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                         onMouseEnter={() => setStore("active", provider.id)}
                         disabled={store.connecting !== undefined}
@@ -613,7 +613,7 @@ function ProviderConnection(props: {
               return (
                 <button
                   type="button"
-                  class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+                  class="group flex h-9 w-full items-center gap-2 rounded-full px-4 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
                   onClick={() => void selectMethod(index())}
                 >
                   <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
