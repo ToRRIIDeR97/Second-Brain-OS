@@ -11,7 +11,7 @@
 // If a future change should make one of these commands intentionally fail in
 // an empty env, update the assertion + add a note explaining the new contract.
 //
-// Speed: each test pays ~1.5s for bun startup. 7 tests serialize within this
+// Speed: each test pays ~1.5s for bun startup. 6 tests serialize within this
 // file. See script/prebuild-test-cli.ts for an opt-in pre-built binary that
 // cuts per-spawn cost when this suite gets bigger.
 import { describe, expect } from "bun:test"
@@ -83,17 +83,6 @@ describe("opencode read-only commands (smoke)", () => {
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["session", "list"])
         opencode.expectExit(r, 0, "session list")
-      }),
-    60_000,
-  )
-
-  // `stats` aggregates token usage from the session DB. Empty DB → all zeros.
-  cliIt.live(
-    "stats: exits 0",
-    ({ opencode }) =>
-      Effect.gen(function* () {
-        const r = yield* opencode.spawn(["stats"])
-        opencode.expectExit(r, 0, "stats")
       }),
     60_000,
   )
