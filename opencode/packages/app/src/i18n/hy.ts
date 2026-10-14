@@ -132,7 +132,6 @@ export const dict = {
   "command.session.new": "Նոր նիստ",
   "command.file.open": "Բացել ֆայլ",
   "command.tab.close": "Փակել ներդիրը",
-  "command.tab.reopenClosed": "Վերաբացել փակ ներդիրը",
   "command.context.addSelection": "Ավելացնել ընտրությունը համատեքստում",
   "command.context.addSelection.description": "Ավելացնել ընտրված տողերը ընթացիկ ֆայլից",
   "command.input.focus": "Կիզակետային մուտքագրում",
@@ -484,21 +483,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "աշխատասեղանի {{version}}",
   "wsl.onboarding.versionMismatch": "Տեղադրված տարբերակը չի համապատասխանում աշխատասեղանի հավելվածի տարբերակին։",
   "wsl.onboarding.adding": "Ավելացվում է...",
-  "help.tabs.toast.ariaLabel": "Ներկայացնում ենք ներդիրները։ Կազմակերպեք ձեր աշխատանքը և ակտիվ նիստերը ներդիրներով",
-  "help.tabs.toast.dismiss": "Փակել ներդիրների տեղեկությունները",
-  "help.tabs.title": "Ներկայացնում ենք ներդիրները",
-  "help.tabs.description": "Կազմակերպեք ձեր աշխատանքը և ակտիվ նիստերը ներդիրներով",
-  "help.tabs.date": "հուլիսի 14",
-  "help.tabs.introduction": "OpenCode Desktop-ն այժմ կառուցված է ներդիրների շուրջ։",
-  "help.tabs.sessions":
-    "Սկսեք նոր նիստ ներդիրում կամ բացեք գոյություն ունեցող նիստը ձեր ցանկացած նախագծից: Բացեք նոր ներդիր, երբ ինչ-որ նոր բան եք սկսում, և փակեք այն, երբ ավարտեք:",
-  "help.tabs.organize":
-    "Մի քանի ներդիր բաց պահելը հեշտացնում է ձեր ակտիվ նիստերի կազմակերպումը։ Վերանվանեք ներդիրները հիշարժան որևէ բանի, եթե նախատեսում եք դրանք պահել:",
-  "help.tabs.home":
-    "Դուք կգտնեք ձեր բոլոր նիստերն ու նախագծերը նոր Հիմնական էկրանին։ Ընտրելով նիստը՝ այն բացվում է ներդիրում:",
-  "help.tabs.persistence": "Երբ վերաբացեք հավելվածը, ձեր ներդիրները դեռ բաց են։",
-  "help.tabs.worktrees":
-    "Նոր դիզայնը դեռ չի աջակցում Git Worktrees-ին, այն շուտով կլինի: Այսպիսով, եթե նախընտրում եք շարունակել օգտագործել նախորդ դասավորությունը, կարող եք անցնել դասավորությունների միջև Կարգավորումներում: Պարզապես հիշեք, որ նոր դասավորությունը կդառնա մշտական ​​մի քանի շաբաթից:",
   "server.row.noUsername": "առանց օգտվողի անուն",
   "dialog.project.edit.title": "Խմբագրել նախագիծը",
   "dialog.project.edit.name": "Անուն",
@@ -666,7 +650,6 @@ export const dict = {
   "session.tab.session": "Նիստ",
   "session.tab.review": "Վերանայել",
   "session.tab.context": "Համատեքստ",
-  "session.tab.unknown": "Անհայտ նիստ",
   "session.panel.reviewAndFiles": "Վերանայել և ֆայլեր",
   "session.error.notFound": "Այս նիստը հնարավոր չէ գտնել",
   "session.error.notFound.description": "Այս ներդիրը ցույց է տալիս նիստ, որն այլևս գոյություն չունի այս սերվերում։",
@@ -920,13 +903,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Ընդարձակել խմբագրման գործիքի մասերը",
   "settings.general.row.editToolPartsExpanded.description":
     "Ցուցադրել խմբագրման, գրելու և կարկատելու գործիքի մասերը, որոնք լռելյայն ընդլայնվել են ժամանակացույցում",
-  "settings.general.row.newInterface.title": "Նոր դասավորություն",
-  "settings.general.row.newInterface.badge": "Նոր",
-  "settings.general.row.newInterface.description":
-    "Օգտագործեք նոր ներդիրները և տան դասավորությունը։ Անցեք դասավորությունների միջև սահմանափակ ժամանակով:",
-  "settings.general.row.newInterfaceNotice.title": "Դուք այժմ օգտագործում եք նոր դասավորություն",
-  "settings.general.row.newInterfaceNotice.description": "Նախորդ դասավորությունն այլևս հասանելի չէ",
-  "settings.general.row.newInterfaceNotice.dismiss": "Փակել",
   "settings.general.row.pinchZoom.title": "Սեղմեք՝ խոշորացնելու համար",
   "settings.general.row.pinchZoom.description": "Թույլատրել մատնաչափի սեղմումը և Ctrl-scroll ժեստերը մեծացնելու համար",
   "settings.general.row.wayland.title": "Օգտագործել բնիկ Wayland",

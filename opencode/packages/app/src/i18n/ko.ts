@@ -847,7 +847,6 @@ export const dict = {
   "command.project.previous": "이전 프로젝트",
   "command.project.next": "다음 프로젝트",
   "command.project.index": "{{index}}번 프로젝트로 전환",
-  "command.tab.reopenClosed": "닫은 탭 다시 열기",
   "model.tooltip.context.label": "컨텍스트",
   "model.tooltip.inputs": "입력",
   "model.tooltip.model": "모델",
@@ -942,7 +941,6 @@ export const dict = {
   "home.sessions.group.older": "이전",
   "home.providerTip": "75개 이상의 공급자에 연결하여 Claude, GPT, Gemini 등의 다른 모델을 사용하세요",
 
-  "session.tab.unknown": "알 수 없는 세션",
   "session.error.notFound": "이 세션을 찾을 수 없습니다",
   "session.error.notFound.description": "이 탭은 이 서버에 더 이상 존재하지 않는 세션을 가리킵니다.",
   "session.error.notFound.closeTab": "탭 닫기",
@@ -986,34 +984,12 @@ export const dict = {
   "settings.general.row.showCustomAgents.title": "에이전트 표시",
   "settings.general.row.showCustomAgents.description":
     "입력창에서 에이전트를 전환합니다. 숨기면 기본적으로 Build 에이전트를 사용합니다.",
-  "settings.general.row.newInterface.title": "새 레이아웃",
-  "settings.general.row.newInterface.badge": "신규",
-  "settings.general.row.newInterface.description":
-    "새 탭과 홈 화면 레이아웃을 사용합니다. 제한된 기간 동안 레이아웃을 전환할 수 있습니다.",
-  "settings.general.row.newInterfaceNotice.title": "이제 새 레이아웃을 사용 중입니다",
-  "settings.general.row.newInterfaceNotice.description": "이전 레이아웃은 더 이상 사용할 수 없습니다",
-  "settings.general.row.newInterfaceNotice.dismiss": "닫기",
   "settings.general.row.pinchZoom.title": "핀치 줌",
   "settings.general.row.pinchZoom.description": "트랙패드 핀치 및 Ctrl-스크롤 제스처로 확대/축소 허용",
   "settings.updates.action.downloading": "다운로드 중...",
   "settings.updates.action.installing": "설치 중...",
 
   "command.logs.export": "로그 내보내기",
-
-  "help.tabs.toast.ariaLabel": "탭을 소개합니다. 탭으로 작업과 활성 세션을 정리하세요",
-  "help.tabs.toast.dismiss": "탭 정보 닫기",
-  "help.tabs.title": "탭 소개",
-  "help.tabs.description": "탭으로 작업과 활성 세션을 정리하세요",
-  "help.tabs.date": "7월 14일",
-  "help.tabs.introduction": "이제 OpenCode Desktop은 탭을 중심으로 구성됩니다.",
-  "help.tabs.sessions":
-    "탭에서 새 세션을 시작하거나 프로젝트에서 기존 세션을 여세요. 새로운 작업을 시작할 때 새 탭을 열고, 작업을 마치면 닫으세요.",
-  "help.tabs.organize":
-    "탭을 몇 개 열어 두면 활성 세션을 더 쉽게 정리할 수 있습니다. 탭을 계속 열어 둘 예정이라면 기억하기 쉬운 이름으로 바꾸세요.",
-  "help.tabs.home": "새 홈 화면에서 모든 세션과 프로젝트를 확인할 수 있습니다. 세션을 선택하면 탭에서 열립니다.",
-  "help.tabs.persistence": "앱을 다시 열어도 탭은 그대로 열려 있습니다.",
-  "help.tabs.worktrees":
-    "새 디자인은 아직 Git Worktrees를 지원하지 않지만 곧 지원할 예정입니다. 이전 레이아웃을 계속 사용하려면 설정에서 레이아웃을 전환할 수 있습니다. 단, 몇 주 후에는 새 레이아웃이 영구 적용됩니다.",
 
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "파일",

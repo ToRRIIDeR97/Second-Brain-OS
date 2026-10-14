@@ -130,7 +130,6 @@ export const dict = {
   "command.session.new": "Nýggj setan",
   "command.file.open": "Opna fíluna",
   "command.tab.close": "Lat flipan aftur",
-  "command.tab.reopenClosed": "Opna aftur stongdan flipan",
   "command.context.addSelection": "Legg val til samanhang",
   "command.context.addSelection.description": "Legg valdar linjur til frá verandi fílu",
   "command.input.focus": "Fokus inntak",
@@ -481,21 +480,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "skriviborð {{version}}",
   "wsl.onboarding.versionMismatch": "Innsetta útgávan passar ikki til skriviborðsappiútgávuna.",
   "wsl.onboarding.adding": "Leggi til...",
-  "help.tabs.toast.ariaLabel": "Innleiðing av flikum. Skipa títt arbeiði og virknu setur við flikum",
-  "help.tabs.toast.dismiss": "Vís frá upplýsingum um fliparnar",
-  "help.tabs.title": "Innleiðing av flikum",
-  "help.tabs.description": "Skipa títt arbeiði og virknu setur við flikum",
-  "help.tabs.date": "14. juli Kl.",
-  "help.tabs.introduction": "OpenCode Skrivaraborð er nú bygt rundan um flikar.",
-  "help.tabs.sessions":
-    "Byrja eina nýggja setu í einum flipa, ella opna eina verandi setu frá nøkrum av tínum verkætlanum. Lat ein nýggjan flipa upp, tá tú byrjar okkurt nýtt, og lat hann aftur, tá tú ert liðugur.",
-  "help.tabs.organize":
-    "At hava nakrar fáar flikar opnar ger tað lættari at skipa tínar virknu setur. Umnevna fliparnar til okkurt minniligt, um tú ætlar at hava teir við.",
-  "help.tabs.home":
-    "Tú finnur allar setur og verkætlanir á nýggja heimaskíggjanum. Velur tú eina setu, verður hon latin upp í einum flipa.",
-  "help.tabs.persistence": "Tá tú letur appina upp aftur, eru tínir flikar enn opnir.",
-  "help.tabs.worktrees":
-    "Nýggja sniðið stuðlar ikki Git Worktrees enn, tað kemur skjótt. So um tú heldur vilt halda fram at brúka fyrru uppsetingina, kanst tú skifta millum uppsetingar í Innstillingum. Havi bara í huga, at nýggja uppsetingin verður varandi um nakrar vikur.",
   "server.row.noUsername": "einki brúkaranavn",
   "dialog.project.edit.title": "Rætta verkætlan",
   "dialog.project.edit.name": "Navn",
@@ -662,7 +646,6 @@ export const dict = {
   "session.tab.session": "Seta",
   "session.tab.review": "Ummæli",
   "session.tab.context": "Samanhangur",
-  "session.tab.unknown": "Ókend seta",
   "session.panel.reviewAndFiles": "Ummæli og skráir",
   "session.error.notFound": "Henda setan er ikki at finna",
   "session.error.notFound.description": "Hesin flipin vísir á eina setu, sum ikki longur er til á hesum ambætaranum.",
@@ -911,13 +894,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Víðka rætta tólpartar",
   "settings.general.row.editToolPartsExpanded.description":
     "Vís rætta, skriva og lappa tólpartar víðkaðir sum standard á tíðarlinjuni",
-  "settings.general.row.newInterface.title": "Nýggj uppseting",
-  "settings.general.row.newInterface.badge": "Nýtt",
-  "settings.general.row.newInterface.description":
-    "Brúka nýggju fliparnar og heimauppsetingina. Skift millum uppsetingar í eina avmarkaða tíð.",
-  "settings.general.row.newInterfaceNotice.title": "Tú brúkar nú nýggja uppseting",
-  "settings.general.row.newInterfaceNotice.description": "Fyrra uppsetingin er ikki tøk longur",
-  "settings.general.row.newInterfaceNotice.dismiss": "Loysa úr starvi",
   "settings.general.row.pinchZoom.title": "Klíp fyri at zooma",
   "settings.general.row.pinchZoom.description": "Loyva trackpad-klípi og Ctrl-rullubendingum at zooma",
   "settings.general.row.wayland.title": "Brúka innfødd Wayland",

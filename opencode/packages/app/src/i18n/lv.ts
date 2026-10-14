@@ -130,7 +130,6 @@ export const dict = {
   "command.session.new": "Jauna sesija",
   "command.file.open": "Atvērt failu",
   "command.tab.close": "Aizvērt cilni",
-  "command.tab.reopenClosed": "Atvērt aizvērtu cilni",
   "command.context.addSelection": "Pievienot atlasi kontekstam",
   "command.context.addSelection.description": "Pievienot atlasītās rindas no pašreizējā faila",
   "command.input.focus": "Aktivizēt ievadi",
@@ -482,21 +481,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "darbvirsmas {{version}}",
   "wsl.onboarding.versionMismatch": "Instalētā versija neatbilst darbvirsmas lietotnes versijai.",
   "wsl.onboarding.adding": "Pievieno...",
-  "help.tabs.toast.ariaLabel": "Iepazīstinām ar cilnēm. Organizējiet darbu un aktīvās sesijas ar cilnēm",
-  "help.tabs.toast.dismiss": "Aizvērt cilņu informāciju",
-  "help.tabs.title": "Iepazīstinām ar cilnēm",
-  "help.tabs.description": "Organizējiet darbu un aktīvās sesijas ar cilnēm",
-  "help.tabs.date": "14. jūlijs",
-  "help.tabs.introduction": "OpenCode Desktop tagad balstās uz cilnēm.",
-  "help.tabs.sessions":
-    "Sāciet jaunu sesiju cilnē vai atveriet esošu sesiju no jebkura projekta. Atveriet jaunu cilni, uzsākot ko jaunu, un aizveriet to, kad esat pabeidzis.",
-  "help.tabs.organize":
-    "Dažas atvērtas cilnes atvieglo aktīvo sesiju pārvaldību. Ja plānojat tās paturēt, pārdēvējiet cilnes saprotamāk.",
-  "help.tabs.home":
-    "Visas sesijas un projektus atradīsiet jaunajā sākuma ekrānā. Izvēloties sesiju, tā tiks atvērta cilnē.",
-  "help.tabs.persistence": "Atverot lietotni no jauna, jūsu cilnes paliek atvērtas.",
-  "help.tabs.worktrees":
-    "Jaunais dizains vēl neatbalsta Git Worktrees, tas drīzumā būs pieejams. Ja vēlaties turpināt lietot iepriekšējo izkārtojumu, varat pārslēgties starp izkārtojumiem iestatījumos. Ņemiet vērā, ka jaunais izkārtojums pēc dažām nedēļām kļūs pastāvīgs.",
   "server.row.noUsername": "nav lietotājvārda",
   "dialog.project.edit.title": "Rediģēt projektu",
   "dialog.project.edit.name": "Nosaukums",
@@ -663,7 +647,6 @@ export const dict = {
   "session.tab.session": "Sesija",
   "session.tab.review": "Pārskats",
   "session.tab.context": "Konteksts",
-  "session.tab.unknown": "Nezināma sesija",
   "session.panel.reviewAndFiles": "Pārskats un faili",
   "session.error.notFound": "Šī sesija nav atrodama",
   "session.error.notFound.description": "Šī cilne norāda uz sesiju, kas vairs neeksistē šajā serverī.",
@@ -920,13 +903,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Izvērst rediģēšanas rīka daļas",
   "settings.general.row.editToolPartsExpanded.description":
     "Pēc noklusējuma rādīt rediģēšanas, rakstīšanas un labošanas rīka daļas izvērstas laika joslā",
-  "settings.general.row.newInterface.title": "Jauns izkārtojums",
-  "settings.general.row.newInterface.badge": "Jauns",
-  "settings.general.row.newInterface.description":
-    "Izmantot jauno cilņu un sākuma izkārtojumu. Ierobežotu laiku var pārslēgties starp izkārtojumiem.",
-  "settings.general.row.newInterfaceNotice.title": "Tagad izmantojat jauno izkārtojumu",
-  "settings.general.row.newInterfaceNotice.description": "Iepriekšējais izkārtojums vairs nav pieejams",
-  "settings.general.row.newInterfaceNotice.dismiss": "Aizvērt",
   "settings.general.row.pinchZoom.title": "Tuvināt ar šķipsnu",
   "settings.general.row.pinchZoom.description": "Atļaut tuvināšanu ar skārienpaliktņa šķipsnu un Ctrl-ritināšanu",
   "settings.general.row.wayland.title": "Izmantot vietējo Wayland",

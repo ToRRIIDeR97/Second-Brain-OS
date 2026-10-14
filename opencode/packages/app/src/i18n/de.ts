@@ -46,7 +46,6 @@ export const dict = {
   "command.session.new": "Neue Sitzung",
   "command.file.open": "Datei öffnen",
   "command.tab.close": "Tab schließen",
-  "command.tab.reopenClosed": "Geschlossenen Tab wieder öffnen",
   "command.context.addSelection": "Auswahl zum Kontext hinzufügen",
   "command.context.addSelection.description": "Ausgewählte Zeilen aus der aktuellen Datei hinzufügen",
   "command.input.focus": "Eingabefeld fokussieren",
@@ -555,7 +554,6 @@ export const dict = {
   "session.tab.session": "Sitzung",
   "session.tab.review": "Überprüfung",
   "session.tab.context": "Kontext",
-  "session.tab.unknown": "Unbekannte Sitzung",
   "session.panel.reviewAndFiles": "Überprüfung und Dateien",
   "session.error.notFound": "Diese Sitzung wurde nicht gefunden",
   "session.error.notFound.description":
@@ -740,13 +738,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Edit-Tool-Abschnitte ausklappen",
   "settings.general.row.editToolPartsExpanded.description":
     "Edit-, Write- und Patch-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
-  "settings.general.row.newInterface.title": "Neues Layout",
-  "settings.general.row.newInterface.badge": "Neu",
-  "settings.general.row.newInterface.description":
-    "Verwenden Sie die neuen Tabs und das Startseitenlayout. Für begrenzte Zeit können Sie zwischen den Layouts wechseln.",
-  "settings.general.row.newInterfaceNotice.title": "Sie verwenden jetzt das neue Layout",
-  "settings.general.row.newInterfaceNotice.description": "Das vorherige Layout ist nicht mehr verfügbar",
-  "settings.general.row.newInterfaceNotice.dismiss": "Verwerfen",
   "settings.general.row.pinchZoom.title": "Zoom per Fingergeste",
   "settings.general.row.pinchZoom.description": "Zoomen per Zwei-Finger- und Ctrl-Scroll-Geste erlauben",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",
@@ -1108,19 +1099,4 @@ export const dict = {
   "desktop.picker.error.notSelected": "Im Auswahldialog wurde keine Datei ausgewählt",
   "desktop.picker.error.sizeLimit": "Die ausgewählten Anhänge überschreiten das Limit von {{limit}} MB",
   "command.logs.export": "Protokolle exportieren",
-  "help.tabs.toast.ariaLabel": "Neu: Tabs. Organisieren Sie Ihre Arbeit und aktiven Sitzungen mithilfe von Tabs",
-  "help.tabs.toast.dismiss": "Informationen zu Tabs schließen",
-  "help.tabs.title": "Neu: Tabs",
-  "help.tabs.description": "Organisieren Sie Ihre Arbeit und aktiven Sitzungen mithilfe von Tabs",
-  "help.tabs.date": "14. Juli",
-  "help.tabs.introduction": "OpenCode Desktop basiert jetzt auf Tabs.",
-  "help.tabs.sessions":
-    "Starten Sie eine neue Sitzung in einem Tab oder öffnen Sie eine vorhandene Sitzung aus einem Ihrer Projekte. Öffnen Sie einen neuen Tab, wenn Sie etwas Neues beginnen, und schließen Sie ihn, wenn Sie fertig sind.",
-  "help.tabs.organize":
-    "Wenn Sie einige Tabs geöffnet lassen, können Sie Ihre aktiven Sitzungen leichter organisieren. Benennen Sie Tabs einprägsam, wenn Sie sie länger behalten möchten.",
-  "help.tabs.home":
-    "Auf der neuen Startseite finden Sie alle Ihre Sitzungen und Projekte. Wenn Sie eine Sitzung auswählen, wird sie in einem Tab geöffnet.",
-  "help.tabs.persistence": "Wenn Sie die App erneut öffnen, sind Ihre Tabs weiterhin geöffnet.",
-  "help.tabs.worktrees":
-    "Das neue Design unterstützt Git-Worktrees noch nicht. Diese Funktion folgt in Kürze. Wenn Sie das bisherige Layout vorerst weiterverwenden möchten, können Sie in den Einstellungen zwischen den Layouts wechseln. Beachten Sie jedoch, dass das neue Layout in einigen Wochen dauerhaft verwendet wird.",
 } satisfies Partial<Record<Keys, string>>

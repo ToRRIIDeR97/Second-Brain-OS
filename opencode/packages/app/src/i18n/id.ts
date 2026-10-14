@@ -144,7 +144,6 @@ export const dict = {
   "command.session.new": "Sesi baru",
   "command.file.open": "Buka berkas",
   "command.tab.close": "Tutup tab",
-  "command.tab.reopenClosed": "Buka kembali tab yang ditutup",
   "command.context.addSelection": "Tambahkan pilihan ke konteks",
   "command.context.addSelection.description": "Tambahkan baris yang dipilih dari berkas saat ini",
   "command.input.focus": "Fokuskan masukan",
@@ -519,20 +518,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Versi terinstal tidak cocok dengan versi aplikasi desktop.",
   "wsl.onboarding.adding": "Menambahkan...",
 
-  "help.tabs.toast.ariaLabel": "Memperkenalkan Tab. Atur pekerjaan dan sesi aktif Anda dengan tab",
-  "help.tabs.toast.dismiss": "Tutup informasi tentang Tab",
-  "help.tabs.title": "Memperkenalkan Tab",
-  "help.tabs.description": "Atur pekerjaan dan sesi aktif Anda dengan tab",
-  "help.tabs.date": "14 Juli",
-  "help.tabs.introduction": "OpenCode Desktop kini dirancang dengan tab sebagai pusatnya.",
-  "help.tabs.sessions":
-    "Mulai sesi baru di tab, atau buka sesi yang sudah ada dari proyek Anda. Buka tab baru saat Anda memulai sesuatu yang baru, lalu tutup setelah selesai.",
-  "help.tabs.organize":
-    "Membiarkan beberapa tab tetap terbuka memudahkan Anda mengatur sesi aktif. Ganti nama tab agar mudah diingat jika Anda berencana mempertahankannya.",
-  "help.tabs.home": "Semua sesi dan proyek Anda tersedia di layar Beranda baru. Memilih sesi akan membukanya di tab.",
-  "help.tabs.persistence": "Saat Anda membuka kembali aplikasi, tab Anda tetap terbuka.",
-  "help.tabs.worktrees":
-    "Desain baru belum mendukung Git Worktrees, tetapi dukungan tersebut akan segera hadir. Jika Anda ingin tetap menggunakan tata letak sebelumnya, Anda dapat beralih antartata letak di Pengaturan. Perlu diingat bahwa tata letak baru akan menjadi permanen dalam beberapa minggu.",
   "server.row.noUsername": "tanpa nama pengguna",
 
   "dialog.project.edit.title": "Sunting proyek",
@@ -725,7 +710,6 @@ export const dict = {
   "session.tab.session": "Sesi",
   "session.tab.review": "Tinjauan",
   "session.tab.context": "Konteks",
-  "session.tab.unknown": "Sesi Tidak Dikenal",
   "session.panel.reviewAndFiles": "Tinjauan dan berkas",
   "session.error.notFound": "Sesi ini tidak dapat ditemukan",
   "session.error.notFound.description": "Tab ini mengarah ke sesi yang sudah tidak ada di server ini.",
@@ -994,13 +978,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Bentangkan bagian alat edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Tampilkan bagian alat edit, tulis, dan patch yang dibentangkan secara bawaan di linimasa",
-  "settings.general.row.newInterface.title": "Tata letak baru",
-  "settings.general.row.newInterface.badge": "Baru",
-  "settings.general.row.newInterface.description":
-    "Gunakan tab dan tata letak beranda baru. Beralihlah antartata letak untuk waktu terbatas.",
-  "settings.general.row.newInterfaceNotice.title": "Anda sekarang menggunakan tata letak baru",
-  "settings.general.row.newInterfaceNotice.description": "Tata letak sebelumnya sudah tidak tersedia",
-  "settings.general.row.newInterfaceNotice.dismiss": "Tutup",
   "settings.general.row.pinchZoom.title": "Cubit untuk zum",
   "settings.general.row.pinchZoom.description":
     "Izinkan gerakan cubit pada trackpad dan Ctrl-gulir untuk melakukan zum",

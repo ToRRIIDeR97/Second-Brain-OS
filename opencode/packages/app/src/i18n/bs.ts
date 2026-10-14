@@ -144,7 +144,6 @@ export const dict = {
   "command.session.new": "Nova sesija",
   "command.file.open": "Otvori datoteku",
   "command.tab.close": "Zatvori karticu",
-  "command.tab.reopenClosed": "Ponovo otvori zatvorenu karticu",
   "command.context.addSelection": "Dodaj odabir u kontekst",
   "command.context.addSelection.description": "Dodaj odabrane linije iz trenutne datoteke",
   "command.input.focus": "Fokusiraj polje za unos",
@@ -513,22 +512,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Instalirana verzija ne odgovara verziji desktop aplikacije.",
   "wsl.onboarding.adding": "Dodavanje...",
 
-  "help.tabs.toast.ariaLabel": "Predstavljamo kartice. Organizuj svoj rad i aktivne sesije pomoću kartica",
-  "help.tabs.toast.dismiss": "Odbaci informacije o karticama",
-  "help.tabs.title": "Predstavljamo kartice",
-  "help.tabs.description": "Organizuj svoj rad i aktivne sesije pomoću kartica",
-  "help.tabs.date": "14. juli",
-  "help.tabs.introduction": "OpenCode Desktop sada je organizovan oko kartica.",
-  "help.tabs.sessions":
-    "Započni novu sesiju u kartici ili otvori postojeću sesiju iz bilo kojeg projekta. Otvori novu karticu kada započinješ nešto novo, a zatvori je kada završiš.",
-  "help.tabs.organize":
-    "Nekoliko otvorenih kartica olakšava organizovanje aktivnih sesija. Preimenuj kartice tako da ih možeš lako prepoznati ako ih namjeravaš zadržati.",
-  "help.tabs.home":
-    "Sve svoje sesije i projekte pronaći ćeš na novom početnom ekranu. Odabirom sesije ona se otvara u kartici.",
-  "help.tabs.persistence": "Kada ponovo otvoriš aplikaciju, tvoje kartice ostaju otvorene.",
-  "help.tabs.worktrees":
-    "Novi dizajn još ne podržava Git Worktrees, ali podrška stiže uskoro. Ako želiš nastaviti koristiti prethodni raspored, možeš mijenjati rasporede u Postavkama. Imaj na umu da će novi raspored za nekoliko sedmica postati trajan.",
-
   "dialog.project.edit.title": "Uredi projekat",
   "dialog.project.edit.name": "Naziv",
   "dialog.project.edit.icon": "Ikonica",
@@ -711,7 +694,6 @@ export const dict = {
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",
   "session.tab.context": "Kontekst",
-  "session.tab.unknown": "Nepoznata sesija",
   "session.panel.reviewAndFiles": "Pregled i datoteke",
   "session.error.notFound": "Ova sesija nije pronađena",
   "session.error.notFound.description": "Ova kartica upućuje na sesiju koja više ne postoji na ovom serveru.",
@@ -907,13 +889,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
   "settings.general.row.editToolPartsExpanded.description":
     "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
-  "settings.general.row.newInterface.title": "Novi raspored",
-  "settings.general.row.newInterface.badge": "Novo",
-  "settings.general.row.newInterface.description":
-    "Koristi nove kartice i raspored početne stranice. Ograničeno vrijeme možeš se prebacivati između rasporeda.",
-  "settings.general.row.newInterfaceNotice.title": "Sada koristiš novi raspored",
-  "settings.general.row.newInterfaceNotice.description": "Prethodni raspored više nije dostupan",
-  "settings.general.row.newInterfaceNotice.dismiss": "Odbaci",
   "settings.general.row.pinchZoom.title": "Zumiranje štipanjem",
   "settings.general.row.pinchZoom.description":
     "Dozvoli zumiranje gestom štipanja na dodirnoj ploči i pomoću Ctrl-pomjeranja",

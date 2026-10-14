@@ -148,7 +148,6 @@ export const dict = {
   "command.session.new": "Yeni oturum",
   "command.file.open": "Dosya aç",
   "command.tab.close": "Sekmeyi kapat",
-  "command.tab.reopenClosed": "Kapatılan sekmeyi yeniden aç",
   "command.context.addSelection": "Seçimi bağlama ekle",
   "command.context.addSelection.description": "Mevcut dosyadan seçili satırları ekle",
   "command.input.focus": "Girişi odakla",
@@ -517,22 +516,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Kurulu sürüm masaüstü uygulamasının sürümüyle eşleşmiyor.",
   "wsl.onboarding.adding": "Ekleniyor...",
 
-  "help.tabs.toast.ariaLabel": "Sekmelerle tanışın. Çalışmalarınızı ve etkin oturumlarınızı sekmelerle düzenleyin",
-  "help.tabs.toast.dismiss": "Sekmeler bilgilerini kapat",
-  "help.tabs.title": "Sekmelerle tanışın",
-  "help.tabs.description": "Çalışmalarınızı ve etkin oturumlarınızı sekmelerle düzenleyin",
-  "help.tabs.date": "14 Temmuz",
-  "help.tabs.introduction": "OpenCode Desktop artık sekmeler üzerine kurulu.",
-  "help.tabs.sessions":
-    "Bir sekmede yeni oturum başlatın veya projelerinizden mevcut bir oturumu açın. Yeni bir işe başlarken yeni sekme açın, işiniz bittiğinde sekmeyi kapatın.",
-  "help.tabs.organize":
-    "Birkaç sekmeyi açık tutmak, etkin oturumlarınızı düzenlemenizi kolaylaştırır. Sekmeleri açık tutmayı planlıyorsanız onlara akılda kalıcı adlar verin.",
-  "help.tabs.home":
-    "Tüm oturumlarınızı ve projelerinizi yeni Ana Sayfa ekranında bulabilirsiniz. Bir oturum seçtiğinizde oturum bir sekmede açılır.",
-  "help.tabs.persistence": "Uygulamayı yeniden açtığınızda sekmeleriniz açık kalır.",
-  "help.tabs.worktrees":
-    "Yeni tasarım henüz Git Worktrees'i desteklemiyor; bu özellik yakında kullanıma sunulacak. Önceki düzeni kullanmaya devam etmek isterseniz Ayarlar'da düzenler arasında geçiş yapabilirsiniz. Yeni düzenin birkaç hafta içinde kalıcı olacağını unutmayın.",
-
   "dialog.project.edit.title": "Projeyi düzenle",
   "dialog.project.edit.name": "Ad",
   "dialog.project.edit.icon": "Simge",
@@ -715,7 +698,6 @@ export const dict = {
   "session.tab.session": "Oturum",
   "session.tab.review": "İnceleme",
   "session.tab.context": "Bağlam",
-  "session.tab.unknown": "Bilinmeyen Oturum",
   "session.panel.reviewAndFiles": "İnceleme ve dosyalar",
   "session.error.notFound": "Bu oturum bulunamıyor",
   "session.error.notFound.description": "Bu sekme, artık bu sunucuda bulunmayan bir oturuma yönlendiriyor.",
@@ -912,13 +894,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
-  "settings.general.row.newInterface.title": "Yeni düzen",
-  "settings.general.row.newInterface.badge": "Yeni",
-  "settings.general.row.newInterface.description":
-    "Yeni sekmeleri ve ana sayfa düzenini kullanın. Sınırlı bir süre boyunca düzenler arasında geçiş yapabilirsiniz.",
-  "settings.general.row.newInterfaceNotice.title": "Artık yeni düzeni kullanıyorsunuz",
-  "settings.general.row.newInterfaceNotice.description": "Önceki düzen artık kullanılamıyor",
-  "settings.general.row.newInterfaceNotice.dismiss": "Kapat",
   "settings.general.row.pinchZoom.title": "Sıkıştırarak yakınlaştır",
   "settings.general.row.pinchZoom.description":
     "İzleme dörtgeninde sıkıştırma ve Ctrl-kaydırma hareketleriyle yakınlaştırmaya izin ver",

@@ -53,7 +53,6 @@ export const dict = {
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
-  "command.tab.reopenClosed": "Reopen closed tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
   "command.input.focus": "Focus input",
@@ -426,21 +425,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Installed version does not match the desktop app version.",
   "wsl.onboarding.adding": "Adding...",
 
-  "help.tabs.toast.ariaLabel": "Introducing Tabs. Organize your work and active sessions with tabs",
-  "help.tabs.toast.dismiss": "Dismiss Tabs information",
-  "help.tabs.title": "Introducing Tabs",
-  "help.tabs.description": "Organize your work and active sessions with tabs",
-  "help.tabs.date": "July 14",
-  "help.tabs.introduction": "Second Brain OS is now built around tabs.",
-  "help.tabs.sessions":
-    "Start a new session in a tab, or open an existing session from any of your projects. Open a new tab when you're starting something new, and close it when you're done.",
-  "help.tabs.organize":
-    "Keeping a few tabs open makes it easier to organize your active sessions. Rename tabs to something memorable if you plan to keep them around.",
-  "help.tabs.home":
-    "You'll find all your sessions and projects on the new Home screen. Selecting a session opens it in a tab.",
-  "help.tabs.persistence": "When you reopen the app, your tabs are still open.",
-  "help.tabs.worktrees":
-    "The new design does not support Git Worktrees yet, it's coming soon. So if you'd prefer to continue using the previous layout, you can switch between layouts in Settings. Just keep in mind that the new layout will become permanent in a few weeks.",
   "server.row.noUsername": "no username",
 
   "dialog.project.edit.title": "Edit project",
@@ -631,7 +615,6 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
-  "session.tab.unknown": "Unknown Session",
   "session.panel.reviewAndFiles": "Review and files",
   "session.error.notFound": "This session cannot be found",
   "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
@@ -1252,13 +1235,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-  "settings.general.row.newInterface.title": "New layout",
-  "settings.general.row.newInterface.badge": "New",
-  "settings.general.row.newInterface.description":
-    "Use the new tabs and home layout. Switch between layouts for a limited time.",
-  "settings.general.row.newInterfaceNotice.title": "You're now using new layout",
-  "settings.general.row.newInterfaceNotice.description": "The previous layout is no longer available",
-  "settings.general.row.newInterfaceNotice.dismiss": "Dismiss",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
