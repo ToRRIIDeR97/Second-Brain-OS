@@ -220,6 +220,20 @@ Renderer Last turn review uses this endpoint; working-tree and branch review
 use the managed server's legacy Git routes. File search refreshes the
 ripgrep fallback on each query so newly written files are discoverable.
 
+"Edit from here" on a user message stages a revert at that message
+(`POST /api/session/:sessionID/revert/stage`) and loads the message into the
+composer. The user picks "Messages only" (`files: false`, workspace files
+untouched) or "Messages and files". For the second choice the renderer first
+unions `GET /api/session/:sessionID/diff` across the selected turn and every
+later turn, and asks for confirmation with that file list before staging.
+Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
+files, so the compatibility layer rejects `files: false` for them.
+
+The session timeline collapses runs of two or more completed tool calls into
+one "Ran N tools" summary row (`session-ui/src/components/part-group.ts`).
+File edits, questions, subagent tasks, errored tools and running tools stay as
+their own rows. Read-only runs keep the "Explored" context group.
+
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the
 native destination picker and completes the file write before reporting

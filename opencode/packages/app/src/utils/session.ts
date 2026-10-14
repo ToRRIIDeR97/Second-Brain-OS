@@ -48,6 +48,8 @@ export function normalizeSessionInfo(input: SessionInfo | Session): HarnessSessi
       messageID: input.revert.messageID,
       partID: input.revert.partID,
       snapshot: input.revert.snapshot,
+      // empty when the rewind left files untouched ("Messages only")
+      diff: current.revert?.files?.map((file) => file.patch).join(""),
     },
   } as HarnessSession
 }

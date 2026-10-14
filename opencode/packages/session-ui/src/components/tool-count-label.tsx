@@ -29,7 +29,12 @@ export function AnimatedCountLabel(props: { count: number; plural: UiI18nPluralK
   const category = createMemo(() => pluralCategory(i18n.locale(), Math.round(props.count)))
   const one = createMemo(() => split(i18n.t(pluralKey(props.plural, "one"))))
   const other = createMemo(() => split(i18n.t(pluralKey(props.plural, "other"))))
-  const active = createMemo(() => split(i18n.t(pluralKey(props.plural, category()))))
+  const active = createMemo(() => {
+    const key = pluralKey(props.plural, category())
+    const text = i18n.t(key)
+    // Locales without this plural form fall back to the "other" form instead of showing the raw key.
+    return split(text === key ? i18n.t(pluralKey(props.plural, "other")) : text)
+  })
   const suffix = createMemo(() => common(one().after, other().after))
   const splitSuffix = createMemo(
     () =>
