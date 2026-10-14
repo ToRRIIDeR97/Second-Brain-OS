@@ -843,7 +843,7 @@ export const dict = {
   "secondBrain.home.projectsEmpty": "No active Projects yet.",
   "secondBrain.home.openCalendar": "Open Calendar",
   "secondBrain.home.openProjects": "Open Projects",
-  "secondBrain.home.openWorkspace": "Open Workspace",
+  "secondBrain.home.openWorkspace": "Open folder",
   "secondBrain.home.resume": "Resume",
   "secondBrain.home.resumeEmpty": "No recent threads in this workspace.",
   "secondBrain.home.running": "Running work",
