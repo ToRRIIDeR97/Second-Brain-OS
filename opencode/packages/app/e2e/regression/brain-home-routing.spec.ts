@@ -39,8 +39,13 @@ const thread = (id: string, directory: string, title: string, created: number, p
   time: { created, updated: created },
 })
 
-async function openApp(page: Page, input: { projects: unknown[]; sessions: ReturnType<typeof thread>[] }) {
+async function openApp(
+  page: Page,
+  input: { projects: unknown[]; sessions: ReturnType<typeof thread>[]; events?: () => unknown[] },
+) {
   await mockOpenCodeServer(page, {
+    events: input.events,
+    eventRetry: input.events ? 16 : undefined,
     sessions: input.sessions,
     provider: fixture.provider,
     directory: fixture.directory,
@@ -153,4 +158,30 @@ test("archiving a thread can be undone with mod+z", async ({ page }) => {
   await expect(row).toBeVisible()
   await expect(page.getByText("Thread archived", { exact: true })).toHaveCount(0)
   expect(updates).toEqual([{ time: { archived: expect.any(Number) } }, { time: { archived: null } }])
+})
+
+test("threads created or archived elsewhere update the sidebar live", async ({ page }) => {
+  const sessions = [thread("ses_scratch", scratch, "Scratch thread", 1_700_000_002_000)]
+  const events: unknown[] = []
+  await openApp(page, { projects: [project], sessions, events: () => events.splice(0, 1) })
+  await page.goto("/")
+
+  const otherGroup = sidebar(page).locator('[data-sidebar-group="__other__"]')
+  await otherGroup.getByRole("button", { name: "Other threads", exact: true }).click()
+  await expect(otherGroup.getByText("Scratch thread", { exact: true })).toBeVisible()
+
+  const created = thread("ses_live", scratch, "Live thread", 1_700_000_003_000)
+  sessions.push(created)
+  events.push({
+    directory: scratch,
+    payload: { type: "session.created", properties: { sessionID: created.id, info: created } },
+  })
+  await expect(otherGroup.getByText("Live thread", { exact: true })).toBeVisible()
+
+  Object.assign(created.time, { archived: 1_700_000_004_000 })
+  events.push({
+    directory: scratch,
+    payload: { type: "session.updated", properties: { sessionID: created.id, info: created } },
+  })
+  await expect(otherGroup.getByText("Live thread", { exact: true })).toHaveCount(0)
 })

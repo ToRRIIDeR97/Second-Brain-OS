@@ -1,14 +1,13 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, createResource, onCleanup, onMount } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createComputed, createEffect, createMemo, createResource, onCleanup, onMount } from "solid-js"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { outsideEditable, useCommand } from "@/context/command"
 import { useDrafts } from "@/context/drafts"
 import {
-  createHomeSessionIndexCache,
   loadHomeSessionIndex,
   retainHomeSessions,
   type HomeSessionEvents,
@@ -16,7 +15,7 @@ import {
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
-import { ServerConnection, useServer } from "@/context/server"
+import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import {
@@ -28,6 +27,7 @@ import {
 import {
   flattenThreads,
   groupSidebarThreads,
+  mergeSidebarSessions,
   projectForDirectory,
   type ThreadNode,
 } from "@/features/second-brain/sidebar-threads"
@@ -119,16 +119,17 @@ export function createSidebarController() {
   createEffect(() => {
     for (const directory of directories()) void serverSync().project.loadSessions(directory)
   })
-  const directorySessions = createMemo(() =>
-    directories().flatMap((directory) => serverSync().child(directory, { bootstrap: false })[0].session),
+  const directoryLists = createMemo(() =>
+    directories().map((directory) => ({
+      directory,
+      sessions: serverSync().child(directory, { bootstrap: false })[0].session,
+    })),
   )
 
   // Recent threads across every folder, so threads outside any Project still show.
-  // Bound to this subtree's QueryClient: `serverSync().homeSessions` writes to the outer
-  // GlobalProvider client, so its updates never reach the query below.
-  const homeSessions = createMemo(() =>
-    createHomeSessionIndexCache(queryClient, ServerConnection.key(serverSDK().server)),
-  )
+  // Reads the cache that `serverSync().homeSessions` keeps live from server events,
+  // the same one Home reads (the shell shares the app's QueryClient).
+  const homeSessions = () => serverSync().homeSessions
   const sessionEvents = useQuery(() => ({
     queryKey: homeSessions().eventsKey,
     queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
@@ -153,14 +154,27 @@ export function createSidebarController() {
     refetchOnMount: true,
     refetchOnReconnect: true,
   }))
-  const indexSessions = createMemo(() =>
-    retainHomeSessions(homeSessions().sessions(sessionIndex.data, sessionEvents.data), HOME_SESSION_LIMIT, Date.now()),
+  // Reconciled so a refetch that returns the same threads (e.g. after a reconnect) keeps
+  // their identity and does not re-render every row.
+  const [indexStore, setIndexStore] = createStore({ sessions: [] as Session[] })
+  createComputed(() =>
+    setIndexStore(
+      "sessions",
+      reconcile(
+        retainHomeSessions(
+          homeSessions().sessions(sessionIndex.data, sessionEvents.data),
+          HOME_SESSION_LIMIT,
+          Date.now(),
+        ),
+        { key: "id" },
+      ),
+    ),
   )
 
   // `hidden` holds threads whose delete waits for its undo window to close; their children hide too.
   const [local, setLocal] = createStore({ hidden: {} as Record<string, boolean>, undoPending: 0 })
   const sessions = createMemo<Session[]>(() => {
-    const all = [...directorySessions(), ...indexSessions()]
+    const all = mergeSidebarSessions(directoryLists(), indexStore.sessions)
     const parents = new Map(all.map((session) => [session.id, session.parentID] as const))
     const hidden = (id: string | undefined, depth = 0): boolean =>
       !!id && depth < 64 && (local.hidden[id] || hidden(parents.get(id), depth + 1))
