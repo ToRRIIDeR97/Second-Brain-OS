@@ -962,6 +962,11 @@ export function createServerSession(
     const sessionID = event.data.sessionID
     const eventType = event.type as string
     const eventData = event.data as typeof event.data & { assistantMessageID?: string; finish?: string }
+    // A withdrawn input is gone; a steered one joins the transcript at its session.next.prompted event.
+    if (eventType === "session.next.prompt.withdrawn" || eventType === "session.next.prompt.steered") {
+      const messageID = (event.data as { messageID?: string }).messageID
+      setData("session_queue", sessionID, (items) => items?.filter((item) => item.id !== messageID))
+    }
     if (eventType === "session.next.prompt.admitted" || eventType === "session.next.prompted") {
       const prompt = event.data as unknown as {
         messageID: string

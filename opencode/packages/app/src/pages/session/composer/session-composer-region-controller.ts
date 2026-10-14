@@ -9,6 +9,11 @@ import type { SessionComposerController } from "./session-composer-state"
 
 export type SessionComposerFollowupDock = {
   items: { id: string; text: string }[]
+  pending?: string
+  actions?: {
+    onRemove: (id: string) => void
+    onSend: (id: string) => void
+  }
 }
 
 export type SessionComposerRevertDock = {

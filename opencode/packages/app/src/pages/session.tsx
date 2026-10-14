@@ -95,6 +95,7 @@ import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { diffs as list } from "@/utils/diffs"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { createQueuedActions } from "@/pages/session/composer/queued-actions"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
 import type { HarnessSession } from "@/utils/session"
@@ -1721,6 +1722,18 @@ export default function Page() {
     }))
   })
 
+  const queuedActions = createQueuedActions({
+    remove: (messageID) => sdk().api.session.queuedRemove({ sessionID: params.id ?? "", messageID }),
+    send: (messageID) => sdk().api.session.queuedSteer({ sessionID: params.id ?? "", messageID }),
+    onError: fail,
+    onUnsupported: () =>
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: language.t("session.followupDock.unsupported"),
+      }),
+  })
+
   const halt = (sessionID: string) =>
     busy(sessionID)
       ? sdk()
@@ -2045,7 +2058,17 @@ export default function Page() {
               collapsed: () => view().todoCollapsed.get(),
               onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
             },
-            followup: () => (params.id && !isChildSession() ? { items: queuedDock() } : undefined),
+            followup: () =>
+              params.id && !isChildSession()
+                ? {
+                    items: queuedDock(),
+                    pending: queuedActions.state.pending,
+                    actions:
+                      queuedActions.state.unsupported || serverSDK().protocolKind() !== "v2"
+                        ? undefined
+                        : { onRemove: queuedActions.remove, onSend: queuedActions.send },
+                  }
+                : undefined,
             revert: () =>
               rolled().length > 0
                 ? {

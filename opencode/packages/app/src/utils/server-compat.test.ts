@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Harness } from "@opencode-ai/schema/harness"
 import { createApiForServer, createSdkForServer, createSessionForServer, promptSessionForServer } from "./server"
-import { createCompatibleApi } from "./server-compat"
+import { createCompatibleApi, QueuedActionsUnsupportedError } from "./server-compat"
 import { detectServerCapabilities } from "./server-protocol"
 
 function setup(
@@ -152,6 +152,53 @@ describe("createCompatibleApi", () => {
     await api.session.prompt({ sessionID: "ses_1", id: "msg_1", text: "hello", delivery: "queue" })
 
     expect(await requests[0]!.json()).toEqual({ id: "msg_1", prompt: { text: "hello" }, delivery: "queue" })
+  })
+
+  test("removes and steers queued messages on V2 servers", async () => {
+    const { api, requests } = setup("v2")
+    await api.session.queuedRemove({ sessionID: "ses_1", messageID: "msg_1" })
+    await api.session.queuedSteer({ sessionID: "ses_1", messageID: "msg_1" })
+
+    expect(requests.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
+      ["DELETE", "/api/session/ses_1/queued/msg_1"],
+      ["POST", "/api/session/ses_1/queued/msg_1/steer"],
+    ])
+  })
+
+  test("reports queued message actions as unsupported on V1 servers", async () => {
+    const { api, requests } = setup("v1")
+
+    await expect(api.session.queuedRemove({ sessionID: "ses_1", messageID: "msg_1" })).rejects.toBeInstanceOf(
+      QueuedActionsUnsupportedError,
+    )
+    await expect(api.session.queuedSteer({ sessionID: "ses_1", messageID: "msg_1" })).rejects.toBeInstanceOf(
+      QueuedActionsUnsupportedError,
+    )
+    await Bun.sleep(0)
+    expect(requests).toEqual([])
+  })
+
+  test("reports queued message actions as unsupported when a V2 server lacks the routes", async () => {
+    const server = { url: "http://localhost:4096" }
+    const fetcher = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) =>
+        new URL(new Request(input, init).url).pathname.endsWith("/steer")
+          ? Response.json({ _tag: "ConflictError", message: "Queued message already started: msg_1" }, { status: 409 })
+          : Response.json({ error: "Not Found" }, { status: 404 }),
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const api = createCompatibleApi({
+      protocol: Promise.resolve("v2"),
+      current: createApiForServer({ server, fetch: fetcher }),
+      legacy: (directory) => createSdkForServer({ server, fetch: fetcher, directory, throwOnError: true }),
+    })
+
+    await expect(api.session.queuedRemove({ sessionID: "ses_1", messageID: "msg_1" })).rejects.toBeInstanceOf(
+      QueuedActionsUnsupportedError,
+    )
+    await expect(api.session.queuedSteer({ sessionID: "ses_1", messageID: "msg_1" })).rejects.toThrow(
+      "Queued message already started: msg_1",
+    )
   })
 
   test("passes delivery through the harness prompt route", async () => {
