@@ -102,6 +102,41 @@ the legacy `models` field or as a `configOptions` select of category `model`.
 The driver switches models with `session/set_model` or
 `session/set_config_option` to match.
 
+### Harness handoff
+
+The `opencode` driver reads the Run's native messages, so it needs no
+handoff. Codex and ACP keep their own native thread or session, so
+`renderCodexPrompt` in `harness.ts` decides what text to send with each turn:
+
+- Each instance has its own continuation in the session's
+  `metadata.harnessContinuations[instanceID]`: `{ nativeID, lastSeenMessageID }`.
+  `HarnessContinuationSet` writes one entry and leaves the others alone, so
+  switching harnesses no longer discards another instance's thread. A new
+  `nativeID` clears `lastSeenMessageID`. After a turn ends without an error,
+  the driver records the ID of the user message it answered as
+  `lastSeenMessageID`.
+- A fresh thread, or one whose resume failed, gets the bounded full history.
+- A resumed thread gets only the messages after its `lastSeenMessageID`,
+  skipping its own reply to that message. If that message is no longer in the
+  request (for example after compaction), it gets the bounded full history.
+  If nothing new happened, it gets only the new user message.
+- History is bounded to 16,000 estimated tokens (`util/token.ts`, four
+  characters per token). The first user message and the latest user and
+  assistant messages are always kept, each clipped to a quarter of the budget.
+  Other messages fill newest to oldest. A message that doesn't fit is left out
+  whole, and the block states how many were left out. Tool calls and results
+  become one-line summaries (tool name, command or path, status, exit code).
+- The history sits inside `<handoff-history>` with a notice that it is context
+  only, not a new request, and carries no instructions. The new user message
+  follows after a `---` separator.
+
+`metadata.harnessRevision` still increases on every switch to a different
+instance. It keys the in-memory runtimes, so a harness that is switched back
+in reopens its thread and gets the delta. The old single-slot
+`metadata.harnessContinuation` is read only when it matches the current
+revision (resumed with no history, as before) and is dropped on the next
+`HarnessContinuationSet`. That event's `revision` field is now ignored.
+
 Users manage ACP harnesses in Settings → Harnesses. The page calls
 `/api/harness/settings`, `/api/harness/discover`, and
 `/api/harness/registry[/:id]`. Their thin handlers in

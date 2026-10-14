@@ -128,8 +128,69 @@ describe("SessionV2.create", () => {
         .get()
         .pipe(Effect.orDie)
       expect(row?.metadata).toMatchObject({
-        harnessContinuation: { instanceID: Harness.Codex, value: "thread_123", revision: 0 },
+        harnessContinuations: { [Harness.Codex]: { nativeID: "thread_123" } },
       })
+    }),
+  )
+
+  it.effect("keeps one continuation per harness across switches and replaces the legacy slot", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const created = yield* session.create({ location, harnessInstanceID: Harness.Codex })
+      const gemini = Harness.InstanceID.make("gemini")
+      const metadata = () =>
+        db
+          .select({ metadata: SessionTable.metadata })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, created.id))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => row?.metadata),
+          )
+      const set = (instanceID: Harness.InstanceID, continuation: string, lastSeenMessageID?: string) =>
+        Effect.gen(function* () {
+          yield* events.publish(SessionEvent.HarnessContinuationSet, {
+            sessionID: created.id,
+            timestamp: yield* DateTime.now,
+            instanceID,
+            continuation,
+            ...(lastSeenMessageID ? { lastSeenMessageID } : {}),
+          })
+        })
+      yield* db
+        .update(SessionTable)
+        .set({
+          metadata: {
+            ...(yield* metadata()),
+            harnessContinuation: { instanceID: Harness.Codex, value: "legacy", revision: 0 },
+          },
+        })
+        .where(eq(SessionTable.id, created.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* set(Harness.Codex, "thread-1")
+      yield* set(Harness.Codex, "thread-1", "msg-1")
+      yield* session.switchHarness({ sessionID: created.id, instanceID: gemini })
+      yield* set(gemini, "acp-1", "msg-2")
+      yield* set(Harness.Codex, "thread-1")
+
+      const stored = yield* metadata()
+      expect(stored).not.toHaveProperty("harnessContinuation")
+      expect(stored?.harnessContinuations).toEqual({
+        [Harness.Codex]: { nativeID: "thread-1", lastSeenMessageID: "msg-1" },
+        gemini: { nativeID: "acp-1", lastSeenMessageID: "msg-2" },
+      })
+
+      yield* set(Harness.Codex, "thread-2")
+      expect((yield* metadata())?.harnessContinuations).toMatchObject({
+        [Harness.Codex]: { nativeID: "thread-2" },
+        gemini: { nativeID: "acp-1" },
+      })
+      expect((yield* metadata())?.harnessContinuations).not.toHaveProperty([Harness.Codex, "lastSeenMessageID"])
     }),
   )
 
@@ -526,6 +587,7 @@ describe("SessionV2.fork", () => {
       expect(yield* sessions.context(original.id)).toHaveLength(2)
       const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, fork.id)).get().pipe(Effect.orDie)
       expect(row!.metadata).not.toHaveProperty("harnessContinuation")
+      expect(row!.metadata).not.toHaveProperty("harnessContinuations")
       expect((yield* sessions.history({ sessionID: fork.id, limit: 100 })).events).toMatchObject([
         { type: "session.next.message.imported" },
       ])

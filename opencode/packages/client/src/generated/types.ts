@@ -887,6 +887,7 @@ export type SessionsHistoryOutput = {
           readonly sessionID: string
           readonly instanceID: string
           readonly continuation: string
+          readonly lastSeenMessageID?: string
           readonly revision?: number
         }
       }
@@ -1564,6 +1565,7 @@ export type SessionsEventsOutput =
         readonly sessionID: string
         readonly instanceID: string
         readonly continuation: string
+        readonly lastSeenMessageID?: string
         readonly revision?: number
       }
     }
