@@ -261,6 +261,53 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.get("session.queued", "/api/session/:sessionID/queued", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(SessionInput.Admitted) }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.queued",
+            summary: "List queued messages",
+            description: "List admitted queue-delivery inputs that have not been promoted into the transcript yet.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.queuedRemove", "/api/session/:sessionID/queued/:messageID", {
+        params: { sessionID: Session.ID, messageID: SessionMessage.ID },
+        success: HttpApiSchema.NoContent,
+        error: [ConflictError, MessageNotFoundError, SessionNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.queuedRemove",
+            summary: "Remove queued message",
+            description:
+              "Withdraw a queued input before the runner promotes it. Fails with 409 when the input already started.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.queuedSteer", "/api/session/:sessionID/queued/:messageID/steer", {
+        params: { sessionID: Session.ID, messageID: SessionMessage.ID },
+        success: HttpApiSchema.NoContent,
+        error: [ConflictError, MessageNotFoundError, SessionNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.queuedSteer",
+            summary: "Send queued message now",
+            description:
+              "Deliver a queued input at the next steer point of the current run, or start a run when idle. Fails with 409 when the input already started.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,

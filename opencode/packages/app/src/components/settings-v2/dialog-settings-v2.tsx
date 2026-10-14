@@ -13,7 +13,7 @@ import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
 import { useServerSync } from "@/context/server-sync"
 
 export const DialogSettings: Component<{
@@ -24,16 +24,12 @@ export const DialogSettings: Component<{
   const platform = usePlatform()
   const dialog = useDialog()
   const layout = useLayout()
-  const tabs = useTabs()
+  const drafts = useDrafts()
   const serverSync = useServerSync()
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
   const directory = createMemo(() => {
     const route = layout.route()
-    if (route.type === "dir-new-sesssion") return route.dir
-    if (route.type === "draft") {
-      const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
-      return draft?.type === "draft" ? draft.directory : undefined
-    }
+    if (route.type === "draft") return drafts.get(route.draftID)?.directory
     if (route.type === "session") return serverSync().session.get(route.sessionId)?.directory
     return undefined
   })

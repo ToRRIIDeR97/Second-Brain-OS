@@ -29,6 +29,8 @@ export interface MockServerConfig {
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown | Promise<unknown>
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
+  /** Second Brain Projects with their thread directories (GET /second-brain/project-threads). */
+  projectThreads?: unknown[] | (() => unknown[])
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -77,6 +79,17 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return config.protocol === "v2" ? json(route, {}, undefined, 404) : json(route, { healthy: true })
     if (path === "/api/health" && config.protocol === "v2")
       return json(route, { healthy: true, version: "2.0.0", pid: 1 })
+    if (path.startsWith("/second-brain/")) {
+      const threads = (typeof config.projectThreads === "function" ? config.projectThreads() : config.projectThreads) ?? []
+      if (path === "/second-brain/project-threads") return json(route, threads)
+      if (path === "/second-brain/projects")
+        return json(
+          route,
+          threads.map((entry) => (entry as { project: unknown }).project),
+        )
+      if (path === "/second-brain/calendar") return json(route, { version: 2, revision: "e2e", events: [], tasks: [] })
+      if (path === "/second-brain/notes") return json(route, [])
+    }
     if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })
     if (path === "/provider")
       return json(route, typeof config.provider === "function" ? config.provider() : config.provider)

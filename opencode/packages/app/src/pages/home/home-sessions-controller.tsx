@@ -14,11 +14,12 @@ import {
 import type { LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
-import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
+import { sessionHref } from "@/utils/session-route"
+import { useNavigate } from "@solidjs/router"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { archiveHomeSession } from "../home-session-archive"
 import type { HomeController } from "./home-controller"
@@ -39,7 +40,7 @@ export type HomeSessionGroup = {
 export type OpenSessionOptions = { background?: boolean }
 
 export function createHomeSessionsController(home: HomeController) {
-  const tabs = useTabs()
+  const navigate = useNavigate()
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
@@ -152,10 +153,7 @@ export function createHomeSessionsController(home: HomeController) {
               const directory = entry.project?.worktree ?? entry.directory
               ctx.projects.open(directory)
               ctx.projects.touch(directory)
-              void startTransition(() => {
-                const tab = tabs.addSessionTab({ server, sessionId: sessionID })
-                tabs.select(tab)
-              })
+              void startTransition(() => navigate(sessionHref(server, sessionID)))
             }}
           />
         ))
@@ -178,7 +176,7 @@ export function createHomeSessionsController(home: HomeController) {
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
       create: home.project.openNewSession,
-      open: (session: Session, options?: OpenSessionOptions) => {
+      open: (session: Session, _options?: OpenSessionOptions) => {
         const directoryKey = pathKey(session.directory)
         const project =
           home.project
@@ -194,15 +192,8 @@ export function createHomeSessionsController(home: HomeController) {
         const ctx = home.server.focusedContext()
         if (!ctx) return
         ctx.projects.open(directory)
-        if (options?.background) {
-          tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
-          return
-        }
         ctx.projects.touch(directory)
-        void startTransition(() => {
-          const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
-          tabs.select(tab)
-        })
+        void startTransition(() => navigate(sessionHref(ServerConnection.key(conn), session.id)))
       },
       archive: async (session: Session) => {
         const conn = home.server.focused()
@@ -238,10 +229,6 @@ export function createHomeSessionsController(home: HomeController) {
             }),
         })
       },
-    },
-    tab: {
-      isOpen: (record: HomeSessionRecord) =>
-        sessionHasOpenTab(tabs.store, home.selection.value().server, record.session),
     },
   }
 }
@@ -307,8 +294,7 @@ export type HomeSessionsController = ReturnType<typeof createHomeSessionsControl
 export function HomeSessionStatusController(props: {
   server: Accessor<ServerConnection.Key>
   record: HomeSessionRecord
-  isOpenTab: (record: HomeSessionRecord) => boolean
-  render: (state: { unread: Accessor<boolean>; loading: Accessor<boolean>; open: Accessor<boolean> }) => JSX.Element
+  render: (state: { unread: Accessor<boolean>; loading: Accessor<boolean> }) => JSX.Element
 }) {
   const avatar = useSessionTabAvatarState(
     props.server,
@@ -318,6 +304,5 @@ export function HomeSessionStatusController(props: {
   return props.render({
     unread: avatar.unread,
     loading: avatar.loading,
-    open: () => props.isOpenTab(props.record),
   })
 }

@@ -84,10 +84,7 @@ export function homeSessionServerStatus(active: boolean, status: () => { working
   return status()
 }
 
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
-
-export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
-  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
+export function getProjectAvatarSource(_id?: string, icon?: { color?: string; url?: string; override?: string }) {
   if (icon?.override) return icon.override
   if (icon?.color) return undefined
   return icon?.url

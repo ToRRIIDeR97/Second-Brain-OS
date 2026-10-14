@@ -280,7 +280,12 @@ export type SessionsListOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string
@@ -393,7 +398,12 @@ export type SessionsCreateOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string
@@ -437,7 +447,12 @@ export type SessionsForkOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string
@@ -491,7 +506,12 @@ export type SessionsGetOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string
@@ -641,6 +661,47 @@ export type SessionsPromptOutput = {
     readonly promotedSeq?: number
   }
 }["data"]
+
+export type SessionsQueuedInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionsQueuedOutput = {
+  readonly data: ReadonlyArray<{
+    readonly admittedSeq: number
+    readonly id: string
+    readonly sessionID: string
+    readonly prompt: {
+      readonly text: string
+      readonly files?: ReadonlyArray<{
+        readonly uri: string
+        readonly mime: string
+        readonly name?: string
+        readonly description?: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+      readonly agents?: ReadonlyArray<{
+        readonly name: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    }
+    readonly delivery: "steer" | "queue"
+    readonly timeCreated: number
+    readonly promotedSeq?: number
+  }>
+}["data"]
+
+export type SessionsQueuedRemoveInput = {
+  readonly sessionID: { readonly sessionID: string; readonly messageID: string }["sessionID"]
+  readonly messageID: { readonly sessionID: string; readonly messageID: string }["messageID"]
+}
+
+export type SessionsQueuedRemoveOutput = void
+
+export type SessionsQueuedSteerInput = {
+  readonly sessionID: { readonly sessionID: string; readonly messageID: string }["sessionID"]
+  readonly messageID: { readonly sessionID: string; readonly messageID: string }["messageID"]
+}
+
+export type SessionsQueuedSteerOutput = void
 
 export type SessionsCompactInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
@@ -887,6 +948,7 @@ export type SessionsHistoryOutput = {
           readonly sessionID: string
           readonly instanceID: string
           readonly continuation: string
+          readonly lastSeenMessageID?: string
           readonly revision?: number
         }
       }
@@ -969,6 +1031,22 @@ export type SessionsHistoryOutput = {
           }
           readonly delivery: "steer" | "queue"
         }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.prompt.withdrawn"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.prompt.steered"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
       }
     | {
         readonly id: string
@@ -1564,6 +1642,7 @@ export type SessionsEventsOutput =
         readonly sessionID: string
         readonly instanceID: string
         readonly continuation: string
+        readonly lastSeenMessageID?: string
         readonly revision?: number
       }
     }
@@ -1646,6 +1725,22 @@ export type SessionsEventsOutput =
         }
         readonly delivery: "steer" | "queue"
       }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.prompt.withdrawn"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.prompt.steered"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
     }
   | {
       readonly id: string

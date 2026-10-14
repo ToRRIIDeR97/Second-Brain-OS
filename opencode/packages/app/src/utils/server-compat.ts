@@ -31,7 +31,11 @@ type CompatibleSessionApi = Omit<
   rename: (input: Parameters<SessionApi["rename"]>[0] & LegacyLocation) => ReturnType<SessionApi["rename"]>
   // archive: (input: Parameters<SessionApi["archive"]>[0] & LegacyLocation) => ReturnType<SessionApi["archive"]>
   remove: (input: Parameters<SessionApi["remove"]>[0] & LegacyLocation) => ReturnType<SessionApi["remove"]>
+  // The vendored client predates these routes, so they go through the workspace SDK.
+  queuedRemove: (input: QueuedActionInput) => Promise<void>
+  queuedSteer: (input: QueuedActionInput) => Promise<void>
 }
+type QueuedActionInput = { sessionID: string; messageID: string }
 type CompatiblePermissionApi = Omit<ServerApi["permission"], "reply"> & {
   reply: (
     input: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
@@ -57,6 +61,23 @@ type CompatibleInput = {
   promptSession?: (input: SessionPromptInput) => Promise<void>
   legacy: LegacyFor
   directory?: string
+}
+
+// Servers without queued-input actions (V1, and V2 before withdraw/steer) cannot change the server queue.
+export class QueuedActionsUnsupportedError extends Error {
+  constructor() {
+    super("This server cannot change queued messages")
+  }
+}
+
+// An unmatched API route answers with an untagged local 404, unlike the tagged errors of the real routes.
+// The SDK error interceptor keeps the response body and status on the thrown error's cause.
+function unsupportedRoute(error: unknown): never {
+  const cause = error instanceof Error ? (error.cause as { body?: unknown; status?: unknown } | undefined) : undefined
+  const body = cause?.body
+  if (cause?.status === 404 && typeof body === "object" && body !== null && !("_tag" in body))
+    throw new QueuedActionsUnsupportedError()
+  throw error
 }
 
 function mime(uri: string) {
@@ -114,6 +135,16 @@ export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
             return pendingUser(value)
           }
         : input.current.session.prompt,
+      queuedRemove: (value) =>
+        input
+          .legacy()
+          .v2.session.queuedRemove(value)
+          .then(() => undefined, unsupportedRoute),
+      queuedSteer: (value) =>
+        input
+          .legacy()
+          .v2.session.queuedSteer(value)
+          .then(() => undefined, unsupportedRoute),
     },
   }
   return lazyApi(
@@ -243,6 +274,8 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       async interrupt(value: Parameters<ServerApi["session"]["interrupt"]>[0]) {
         await legacy().session.abort(value)
       },
+      queuedRemove: () => Promise.reject(new QueuedActionsUnsupportedError()),
+      queuedSteer: () => Promise.reject(new QueuedActionsUnsupportedError()),
       async prompt(value: SessionPromptInput & LegacyPrompt) {
         if (value.harness && input.promptSession) {
           await input.promptSession(value)
@@ -278,7 +311,8 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
             })),
           ],
         })
-        return pendingUser(value)
+        // V1 ignores delivery and handles every follow-up as a steer.
+        return { ...pendingUser(value), delivery: "steer" as const }
       },
       async command(value: SessionCommandInput) {
         await legacy().session.command({
@@ -331,7 +365,9 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
       revert: {
         stage: async (value: Parameters<ServerApi["session"]["revert"]["stage"]>[0]) => {
-          await legacy().session.revert(value)
+          // V1 servers always restore files; refuse rather than silently changing them.
+          if (value.files === false) throw new Error("This server cannot rewind messages without restoring files")
+          await legacy().session.revert({ sessionID: value.sessionID, messageID: value.messageID })
           return { messageID: value.messageID }
         },
         clear: async (value: Parameters<ServerApi["session"]["revert"]["clear"]>[0]) => {

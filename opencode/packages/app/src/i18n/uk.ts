@@ -39,10 +39,6 @@ export const dict = {
   "desktop.menu.nextProject": "Наступний проєкт",
   "desktop.menu.minimize": "Згорнути",
   "desktop.menu.maximize": "Розгорнути",
-  "desktop.menu.documentation": "Документація OpenCode",
-  "desktop.menu.supportForum": "Форум підтримки",
-  "desktop.menu.shareFeedback": "Надіслати відгук",
-  "desktop.menu.reportBug": "Повідомити про помилку",
   "desktop.menu.ariaLabel": "Меню OpenCode",
 
   "desktop.updater.dialog.checkFailed.message": "Не вдалося перевірити наявність оновлень.",
@@ -80,7 +76,6 @@ export const dict = {
   "desktop.wsl.error.executeDistro": "Не вдалося виконати команди в дистрибутиві",
   "desktop.wsl.error.installWsl": "Не вдалося встановити WSL",
   "desktop.wsl.error.installDistro": "Не вдалося встановити дистрибутив: {{distro}}",
-  "desktop.wsl.error.installOpencode": "Не вдалося встановити OpenCode",
   "desktop.wsl.error.alreadyAdded": "{{distro}} уже додано",
   "desktop.wsl.error.opencodeMissing": "opencode не встановлено в цьому дистрибутиві",
   "desktop.wsl.error.opencodeCannotRun": "opencode встановлено, але його не вдалося запустити",
@@ -149,7 +144,6 @@ export const dict = {
   "command.session.new": "Нова сесія",
   "command.file.open": "Відкрити файл",
   "command.tab.close": "Закрити вкладку",
-  "command.tab.reopenClosed": "Повторно відкрити закриту вкладку",
   "command.context.addSelection": "Додати виділення до контексту",
   "command.context.addSelection.description": "Додати вибрані рядки з поточного файлу",
   "command.input.focus": "Фокус на полі введення",
@@ -188,10 +182,6 @@ export const dict = {
   "command.session.compact.description": "Підсумувати сесію, щоб зменшити розмір контексту",
   "command.session.fork": "Відгалузити від повідомлення",
   "command.session.fork.description": "Створити нову сесію з попереднього повідомлення",
-  "command.session.share": "Поділитися сесією",
-  "command.session.share.description": "Поділитися цією сесією та скопіювати URL у буфер обміну",
-  "command.session.unshare": "Припинити поширення сесії",
-  "command.session.unshare.description": "Припинити поширення цієї сесії",
 
   "command.session.export": "Експортувати сесію",
   "command.session.export.description": "Експортувати повну історію сесії у форматі JSON",
@@ -207,10 +197,6 @@ export const dict = {
   "dialog.provider.group.popular": "Популярні",
   "dialog.provider.group.other": "Інші",
   "dialog.provider.custom.label": "Користувацький провайдер, сумісний з OpenAI",
-  "dialog.provider.tag.recommended": "Рекомендовані",
-  "dialog.provider.opencode.note": "Відібрані моделі, включаючи Claude, GPT, Gemini та інші",
-  "dialog.provider.opencode.tagline": "Надійні оптимізовані моделі",
-  "dialog.provider.opencodeGo.tagline": "Недорога підписка для всіх",
   "dialog.provider.anthropic.note": "Прямий доступ до моделей Claude, включаючи Pro та Max",
   "dialog.provider.copilot.note": "Моделі ШІ для допомоги в кодуванні через GitHub Copilot",
   "dialog.provider.openai.note": "Моделі GPT для швидких і універсальних завдань ШІ",
@@ -245,13 +231,6 @@ export const dict = {
   "provider.connect.apiKey.label": "Ключ API {{provider}}",
   "provider.connect.apiKey.placeholder": "Ключ API",
   "provider.connect.apiKey.required": "Ключ API обов'язковий",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen надає доступ до відібраного набору надійних оптимізованих моделей для агентів кодування.",
-  "provider.connect.opencodeZen.line2":
-    "З одним ключем API ви отримаєте доступ до таких моделей, як Claude, GPT, Gemini, GLM та інших.",
-  "provider.connect.opencodeZen.visit.prefix": "Відвідайте ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": ", щоб отримати ключ API.",
   "provider.connect.oauth.code.visit.prefix": "Відвідайте ",
   "provider.connect.oauth.code.visit.link": "це посилання",
   "provider.connect.oauth.code.visit.suffix":
@@ -271,8 +250,6 @@ export const dict = {
   "provider.custom.title": "Користувацький провайдер",
   "provider.custom.unavailable": "Користувацькі провайдери недоступні на цьому сервері",
   "provider.custom.description.prefix": "Налаштуйте провайдера, сумісного з OpenAI. Перегляньте ",
-  "provider.custom.description.link": "документацію з налаштування провайдера",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID провайдера",
   "provider.custom.field.providerID.placeholder": "myprovider",
   "provider.custom.field.providerID.description": "Малі літери, цифри, дефіси або підкреслення",
@@ -482,7 +459,6 @@ export const dict = {
   "wsl.server.label": "WSL",
   "wsl.server.menu.label": "Сервер WSL",
   "wsl.server.retryStart": "Повторити запуск",
-  "wsl.server.updating": "Оновлення...",
   "wsl.onboarding.step.distro": "Вибрати дистрибутив",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Перевірка WSL...",
@@ -500,13 +476,9 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Виберіть дистрибутив або встановіть один із наведених нижче.",
   "wsl.onboarding.checkingOpencode": "Перевірка OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Перевірка OpenCode у {{distro}}...",
-  "wsl.onboarding.updatingOpencode": "Оновлення OpenCode...",
-  "wsl.onboarding.updatingOpencodeIn": "Оновлення OpenCode у {{distro}}...",
-  "wsl.onboarding.updateOpencodeIn": "Оновіть OpenCode у {{distro}}.",
   "wsl.onboarding.updateOpencode": "Оновити OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode готовий до роботи у {{distro}}.",
   "wsl.onboarding.opencodeReady": "OpenCode готовий до роботи.",
-  "wsl.onboarding.installOpencodeIn": "Встановіть OpenCode у {{distro}}.",
   "wsl.onboarding.installOpencode": "Встановити OpenCode",
   "wsl.onboarding.chooseDistroFirst": "Спочатку виберіть дистрибутив.",
   "wsl.onboarding.loadFailed": "Не вдалося завантажити стан WSL.",
@@ -547,21 +519,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Встановлена версія не відповідає версії десктопного застосунку.",
   "wsl.onboarding.adding": "Додавання...",
 
-  "help.tabs.toast.ariaLabel": "Представляємо вкладки. Упорядковуйте роботу й активні сесії за допомогою вкладок",
-  "help.tabs.toast.dismiss": "Закрити інформацію про вкладки",
-  "help.tabs.title": "Представляємо вкладки",
-  "help.tabs.description": "Упорядковуйте роботу й активні сесії за допомогою вкладок",
-  "help.tabs.date": "14 липня",
-  "help.tabs.introduction": "OpenCode Desktop тепер побудовано навколо вкладок.",
-  "help.tabs.sessions":
-    "Почніть нову сесію у вкладці або відкрийте наявну сесію з будь-якого свого проєкту. Відкривайте нову вкладку, коли починаєте щось нове, і закривайте її після завершення.",
-  "help.tabs.organize":
-    "Кілька відкритих вкладок полегшують упорядкування активних сесій. Якщо плануєте залишити вкладки відкритими, перейменуйте їх на щось пам'ятне.",
-  "help.tabs.home":
-    "Усі свої сесії та проєкти ви знайдете на новому екрані «Головна». Вибрана сесія відкриється у вкладці.",
-  "help.tabs.persistence": "Після повторного відкриття програми ваші вкладки залишаться відкритими.",
-  "help.tabs.worktrees":
-    "Новий дизайн поки не підтримує робочі дерева Git, але ця можливість незабаром з'явиться. Тож якщо ви бажаєте й надалі користуватися попереднім макетом, перемикатися між макетами можна в налаштуваннях. Зауважте, що за кілька тижнів новий макет стане постійним.",
   "server.row.noUsername": "без імені користувача",
 
   "dialog.project.edit.title": "Редагувати проєкт",
@@ -576,12 +533,7 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Виконується після створення нової робочої області (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "напр. bun install",
 
-  "dialog.releaseNotes.action.getStarted": "Розпочати",
-  "dialog.releaseNotes.action.next": "Далі",
-  "dialog.releaseNotes.action.hideFuture": "Не показувати це в майбутньому",
-  "dialog.releaseNotes.media.alt": "Попередній перегляд релізу",
 
-  "dialog.usageExceeded.dontShowAgain": "Більше не показувати",
 
   "context.breakdown.title": "Розподіл контексту",
   "context.breakdown.note":
@@ -664,16 +616,7 @@ export const dict = {
   "toast.context.noLineSelection.title": "Не вибрано рядків",
   "toast.context.noLineSelection.description": "Спочатку виберіть діапазон рядків у вкладці файлу.",
 
-  "toast.session.share.copyFailed.title": "Не вдалося скопіювати URL у буфер обміну",
-  "toast.session.share.success.title": "Сесію опубліковано",
-  "toast.session.share.success.description": "Посилання скопійовано в буфер обміну!",
-  "toast.session.share.failed.title": "Не вдалося опублікувати сесію",
-  "toast.session.share.failed.description": "Під час публікації сесії сталася помилка",
 
-  "toast.session.unshare.success.title": "Поширення сесії припинено",
-  "toast.session.unshare.success.description": "Поширення сесії успішно припинено!",
-  "toast.session.unshare.failed.title": "Не вдалося припинити поширення сесії",
-  "toast.session.unshare.failed.description": "Під час припинення поширення сесії сталася помилка",
 
   "toast.session.export.success.title": "Сесію експортовано",
   "toast.session.export.success.description": "Сесію збережено у файл {{filename}}",
@@ -700,8 +643,6 @@ export const dict = {
   "error.page.action.checkUpdates": "Перевірити оновлення",
   "error.page.action.updateTo": "Оновити до {{version}}",
   "error.page.circular": "[Циклічне]",
-  "error.page.report.prefix": "Будь ласка, повідомте про цю помилку команді OpenCode",
-  "error.page.report.discord": "у Discord",
   "error.page.version": "Версія: {{version}}",
 
   "error.dev.rootNotFound":
@@ -773,7 +714,6 @@ export const dict = {
   "session.tab.session": "Сесія",
   "session.tab.review": "Огляд",
   "session.tab.context": "Контекст",
-  "session.tab.unknown": "Невідома сесія",
   "session.panel.reviewAndFiles": "Огляд і файли",
   "session.error.notFound": "Цю сесію не знайдено",
   "session.error.notFound.description": "Ця вкладка посилається на сесію, якої більше немає на цьому сервері.",
@@ -882,19 +822,7 @@ export const dict = {
   "status.popover.tab.plugins": "Плагіни",
   "status.popover.action.manageServers": "Керувати серверами",
 
-  "session.share.popover.title": "Опублікувати в інтернеті",
-  "session.share.popover.description.shared":
-    "Ця сесія є публічною в інтернеті. Вона доступна будь-кому за посиланням.",
-  "session.share.popover.description.unshared":
-    "Опублікуйте сесію публічно в інтернеті. Вона буде доступна будь-кому за посиланням.",
-  "session.share.action.share": "Поділитися",
-  "session.share.action.publish": "Опублікувати",
-  "session.share.action.publishing": "Публікація...",
-  "session.share.action.unpublish": "Скасувати публікацію",
-  "session.share.action.unpublishing": "Скасування публікації...",
-  "session.share.action.view": "Переглянути",
   "session.share.copy.copied": "Скопійовано",
-  "session.share.copy.copyLink": "Копіювати посилання",
 
   "lsp.tooltip.none": "Немає серверів LSP",
   "lsp.label.connected": "{{count}} LSP",
@@ -920,7 +848,6 @@ export const dict = {
   "common.moreCountSuffix": " (ще {{count}})",
   "common.requestFailed": "Запит не виконано",
   "common.moreOptions": "Більше параметрів",
-  "common.learnMore": "Дізнатися більше",
   "common.rename": "Перейменувати",
   "common.export": "Експортувати",
   "common.reset": "Скинути",
@@ -954,7 +881,6 @@ export const dict = {
   "sidebar.menu.toggle": "Перемкнути меню",
   "sidebar.nav.projectsAndSessions": "Проєкти та сесії",
   "sidebar.settings": "Налаштування",
-  "sidebar.help": "Довідка",
   "sidebar.workspaces.enable": "Увімкнути робочі області",
   "sidebar.workspaces.disable": "Вимкнути робочі області",
   "sidebar.gettingStarted.title": "Початок роботи",
@@ -1066,13 +992,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
   "settings.general.row.editToolPartsExpanded.description":
     "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
-  "settings.general.row.newInterface.title": "Новий макет",
-  "settings.general.row.newInterface.badge": "Нове",
-  "settings.general.row.newInterface.description":
-    "Використовуйте нові вкладки та макет головної сторінки. Протягом обмеженого часу можна перемикатися між макетами.",
-  "settings.general.row.newInterfaceNotice.title": "Тепер ви використовуєте новий макет",
-  "settings.general.row.newInterfaceNotice.description": "Попередній макет більше недоступний",
-  "settings.general.row.newInterfaceNotice.dismiss": "Відхилити",
   "settings.general.row.pinchZoom.title": "Масштабування щипком",
   "settings.general.row.pinchZoom.description":
     "Дозволити масштабування жестом щипка на трекпаді та прокручуванням із Ctrl",
@@ -1082,8 +1001,6 @@ export const dict = {
   "settings.general.row.wayland.tooltip":
     "На Linux з моніторами з різною частотою оновлення нативний Wayland може бути більш стабільним.",
 
-  "settings.general.row.releaseNotes.title": "Нотатки до релізу",
-  "settings.general.row.releaseNotes.description": 'Показувати спливаючі вікна "Що нового" після оновлень',
 
   "settings.updates.row.startup.title": "Перевіряти оновлення під час запуску",
   "settings.updates.row.startup.description": "Автоматично перевіряти наявність оновлень під час запуску OpenCode",

@@ -1,0 +1,14 @@
+diff --git a/src/terminal.ts b/src/terminal.ts
+--- a/src/terminal.ts
++++ b/src/terminal.ts
+@@ -172,7 +172,9 @@ export class Terminal implements IPty {
+ 		if (this.handle < 0) throw new Error("PTY spawn failed");
+ 
+ 		this._pid = lib.symbols.bun_pty_get_pid(this.handle);
+-		this._startReadLoop();
++		// The first read runs synchronously, so a child that already wrote or exited
++		// would fire onData/onExit before the caller could subscribe. Defer one microtask.
++		queueMicrotask(() => this._startReadLoop());
+ 	}
+ 
+ 	/* ------------- accessors ------------- */

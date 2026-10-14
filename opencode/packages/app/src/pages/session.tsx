@@ -47,6 +47,7 @@ import { useCommand } from "@/context/command"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
+import { confirmEditFromHere, editFromHereFiles } from "@/pages/session/edit-from-here"
 import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
@@ -57,15 +58,12 @@ import { useServerSDK } from "@/context/server-sdk"
 import { ServerConnection, serverName, useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
-import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
-import { PromptInput } from "@/components/prompt-input"
 import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { createPromptHarnessController } from "@/components/prompt-input/harness-controller"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
-import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import {
   createPromptInputController,
   createSessionComposerController,
@@ -91,27 +89,20 @@ import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@/pages/session/v2/review-diff-kinds"
-import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
-import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
-import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { createQueuedActions } from "@/pages/session/composer/queued-actions"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { requireServerKey, sessionHref } from "@/utils/session-route"
 import type { HarnessSession } from "@/utils/session"
 import { switchHarnessForServer } from "@/utils/server"
-import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
-
-type FollowupItem = FollowupDraft & { id: string }
-type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
-const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -185,20 +176,15 @@ function TargetSessionSettingsCommand() {
 export function SessionRouteErrorBoundary(
   props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
 ) {
-  const settings = useSettings()
   return (
     <ErrorBoundary
-      fallback={(error) =>
-        settings.general.newLayoutDesigns() ? (
-          <SessionRouteFrame padded={props.padded}>
-            <SessionPanelFrame newLayout raised={!!props.sessionID}>
-              <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
-            </SessionPanelFrame>
-          </SessionRouteFrame>
-        ) : (
-          <ErrorPage error={error} />
-        )
-      }
+      fallback={(error) => (
+        <SessionRouteFrame padded={props.padded}>
+          <SessionPanelFrame raised={!!props.sessionID}>
+            <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+          </SessionPanelFrame>
+        </SessionRouteFrame>
+      )}
     >
       {props.children}
     </ErrorBoundary>
@@ -208,16 +194,13 @@ export function SessionRouteErrorBoundary(
 function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
   const language = useLanguage()
   const server = useServer()
-  const tabs = useTabs()
+  const navigate = useNavigate()
   const displayServer = createMemo(() => {
     const key = props.serverKey ?? server.key
     const conn = server.list.find((item) => ServerConnection.key(item) === key)
     return conn ? serverName(conn) : key
   })
-  const closeTab = () => {
-    if (!props.sessionID) return
-    tabs.removeSessionTab({ server: props.serverKey ?? server.key, sessionId: props.sessionID })
-  }
+  const closeTab = () => navigate("/")
   if (isCurrentSessionNotFoundError(props.error, props.sessionID)) {
     return (
       <div class="flex-1 min-h-0 overflow-hidden">
@@ -250,7 +233,6 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 
 function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
-  const tabs = useTabs()
   const sync = useServerSync()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const current = createSessionLineage(
@@ -259,15 +241,6 @@ function ResolvedTargetSessionRoute() {
   )
   const directory = createMemo(() => current()?.session.directory)
   const targetDirectory = () => directory()!
-
-  createEffect(() => {
-    const session = current()
-    if (!session) return
-    tabs.addSessionTab({
-      server: serverKey(),
-      sessionId: session.root.id,
-    })
-  })
 
   return (
     // Non-keyed: closes only while the target's directory is unknown (uncached
@@ -339,16 +312,11 @@ function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
   )
 }
 
-function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boolean }>) {
+function SessionPanelFrame(props: ParentProps<{ raised?: boolean }>) {
   return (
     <div
-      classList={{
-        "flex-1 min-h-0 flex flex-col": true,
-        "bg-v2-background-bg-base": props.newLayout,
-        "bg-background-stronger": !props.newLayout,
-        "rounded-[10px] overflow-hidden": props.newLayout,
-        "shadow-[var(--v2-elevation-raised)]": props.newLayout && props.raised,
-      }}
+      class="flex-1 min-h-0 flex flex-col bg-v2-background-bg-base rounded-[10px] overflow-hidden"
+      classList={{ "shadow-[var(--v2-elevation-raised)]": props.raised }}
     >
       {props.children}
     </div>
@@ -379,7 +347,6 @@ export default function Page() {
   const reviewMode = () => view().review.mode() ?? "git"
   const reviewFile = () => view().review.file()
   const sessionOwnership = createSessionOwnership(sessionKey)
-  const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -453,12 +420,10 @@ export default function Page() {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
+  const desktopV2ReviewOpen = createMemo(() => desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
-  const desktopInlineTerminalOnlyOpen = createMemo(
-    () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
-  )
+  const desktopInlineTerminalOnlyOpen = createMemo(() => desktopTerminalOpen() && !desktopV2ReviewOpen())
   const desktopFileTreeOpen = createMemo(
     () =>
       isDesktop() &&
@@ -467,9 +432,7 @@ export default function Page() {
         opened: layout.fileTree.opened(),
       }),
   )
-  const desktopSessionResizeOpen = createMemo(() =>
-    newSessionDesign() ? desktopV2ReviewOpen() || desktopTerminalOpen() : desktopReviewOpen(),
-  )
+  const desktopSessionResizeOpen = createMemo(() => desktopV2ReviewOpen() || desktopTerminalOpen())
   const desktopSidePanelOpen = createMemo(() => desktopSessionResizeOpen() || desktopFileTreeOpen())
   let panelRow: HTMLDivElement | undefined
   const [panelRowWidth, setPanelRowWidth] = createSignal<number>()
@@ -477,15 +440,13 @@ export default function Page() {
     () => panelRow,
     ({ width }) => setPanelRowWidth(width),
   )
-  const splitReview = createMemo(
-    () => (newSessionDesign() ? desktopV2ReviewOpen() : desktopReviewOpen()) && layout.review.diffStyle() === "split",
-  )
+  const splitReview = createMemo(() => desktopV2ReviewOpen() && layout.review.diffStyle() === "split")
   // The observer reports the content-box width, which already excludes the row
   // padding; only the flex gap between the panels remains to subtract.
   const sessionPanelAvailable = createMemo(() => {
     const width = panelRowWidth()
     if (width === undefined) return undefined
-    return width - (settings.general.newLayoutDesigns() ? 8 : 0)
+    return width - 8
   })
   const sessionPanelMax = createMemo(() => {
     const available = sessionPanelAvailable()
@@ -506,7 +467,7 @@ export default function Page() {
     if (desktopSessionResizeOpen()) return `${sessionPanelResizedWidth()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && (newSessionDesign() || !desktopReviewOpen()))
+  const centered = createMemo(() => isDesktop())
   const desktopV2PanelLayout = createMemo(() =>
     sessionPanelLayout({
       review: desktopV2ReviewOpen(),
@@ -652,21 +613,6 @@ export default function Page() {
     deferRender: false,
   })
 
-  const [followup, setFollowup] = persisted(
-    Persist.serverWorkspace(serverSDK().scope, sdk().directory, "followup", ["followup.v1"]),
-    createStore<{
-      items: Record<string, FollowupItem[] | undefined>
-      failed: Record<string, string | undefined>
-      paused: Record<string, boolean | undefined>
-      edit: Record<string, FollowupEdit | undefined>
-    }>({
-      items: {},
-      failed: {},
-      paused: {},
-      edit: {},
-    }),
-  )
-
   createComputed((prev) => {
     const key = sessionKey()
     if (key !== prev) {
@@ -717,8 +663,7 @@ export default function Page() {
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
-      ? desktopFileTreeOpen() ||
-        (desktopReviewOpen() && (activeTab() === "review" || (newSessionDesign() && !!activeFileTab())))
+      ? desktopFileTreeOpen() || (desktopReviewOpen() && (activeTab() === "review" || !!activeFileTab()))
       : store.mobileTab === "changes",
   )
   const turnQuery = createQuery(() => ({
@@ -1209,7 +1154,7 @@ export default function Page() {
     setActiveMessage,
     focusInput,
     review: reviewTab,
-    fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
+    fileBrowser: () => isDesktop() && !!params.id,
   })
   command.register("session-palette", () => [
     {
@@ -1433,25 +1378,6 @@ export default function Page() {
       <Show when={reviewPanelV2Rendered()}>
         <ReviewPanelV2 {...reviewPanelV2Props()} />
       </Show>
-    </div>
-  )
-
-  const reviewPanel = () => (
-    <div
-      classList={{
-        "flex flex-col h-full overflow-hidden contain-strict": true,
-        "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-        "bg-background-stronger": !settings.general.newLayoutDesigns(),
-      }}
-    >
-      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-        {reviewContent({
-          diffStyle: layout.review.diffStyle(),
-          onDiffStyleChange: layout.review.setDiffStyle,
-          loadingClass: "px-6 py-4 text-text-weak",
-          emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-        })}
-      </div>
     </div>
   )
 
@@ -1782,120 +1708,31 @@ export default function Page() {
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
 
-  const queuedFollowups = createMemo(() => {
+  // Queue-delivery messages the server holds until the agent goes idle (see docs/architecture/README.md).
+  const queuedDock = createMemo(() => {
     const id = params.id
-    if (!id) return emptyFollowups
-    return followup.items[id] ?? emptyFollowups
-  })
-
-  const editingFollowup = createMemo(() => {
-    const id = params.id
-    if (!id) return
-    return followup.edit[id]
-  })
-
-  const followupMutation = useMutation(() => ({
-    mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
-      const owner = sessionOwnership.capture()
-      const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
-      if (!item) return
-
-      if (input.manual) setFollowup("paused", input.sessionID, undefined)
-      setFollowup("failed", input.sessionID, undefined)
-
-      const ok = await sendFollowupDraft({
-        api: sdk().api.session,
-        sync: sync(),
-        serverSync: serverSync(),
-        draft: item,
-        optimisticBusy: item.sessionDirectory === sdk().directory,
-      }).catch((err) => {
-        setFollowup("failed", input.sessionID, input.id)
-        fail(err)
-        return false
-      })
-      if (!ok) return
-
-      setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
-      if (input.manual) owner.run(resumeScroll)
-    },
-  }))
-
-  const followupBusy = (sessionID: string) =>
-    followupMutation.isPending && followupMutation.variables?.sessionID === sessionID
-
-  const sendingFollowup = createMemo(() => {
-    const id = params.id
-    if (!id) return
-    if (!followupBusy(id)) return
-    return followupMutation.variables?.id
-  })
-
-  const queueEnabled = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
-  })
-
-  const followupText = (item: FollowupDraft) => {
-    const text = item.prompt
-      .map((part) => {
-        if (part.type === "image") return `[image:${part.filename}]`
-        if (part.type === "file") return `[file:${part.path}]`
-        if (part.type === "agent") return `@${part.name}`
-        return part.content
-      })
-      .join("")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => !!line)
-
-    if (text) return text
-    return `[${language.t("common.attachment")}]`
-  }
-
-  const queueFollowup = (draft: FollowupDraft) => {
-    setFollowup("items", draft.sessionID, (items) => [
-      ...(items ?? []),
-      { id: Identifier.ascending("message"), ...draft },
-    ])
-    setFollowup("failed", draft.sessionID, undefined)
-    setFollowup("paused", draft.sessionID, undefined)
-  }
-
-  const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
-
-  const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
-    if (sync().session.get(sessionID)?.parentID) return Promise.resolve()
-    const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
-    if (!item) return Promise.resolve()
-    if (followupBusy(sessionID)) return Promise.resolve()
-
-    return followupMutation.mutateAsync({ sessionID, id, manual: opts?.manual })
-  }
-
-  const editFollowup = (id: string) => {
-    const sessionID = params.id
-    if (!sessionID) return
-    if (followupBusy(sessionID)) return
-
-    const item = queuedFollowups().find((entry) => entry.id === id)
-    if (!item) return
-
-    setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
-    setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
-    setFollowup("edit", sessionID, {
+    if (!id) return []
+    return (serverSync().session.data.session_queue[id] ?? []).map((item) => ({
       id: item.id,
-      prompt: item.prompt,
-      context: item.context,
-    })
-  }
+      text:
+        item.text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .find((line) => !!line) ?? `[${language.t("common.attachment")}]`,
+    }))
+  })
 
-  const clearFollowupEdit = () => {
-    const id = params.id
-    if (!id) return
-    setFollowup("edit", id, undefined)
-  }
+  const queuedActions = createQueuedActions({
+    remove: (messageID) => sdk().api.session.queuedRemove({ sessionID: params.id ?? "", messageID }),
+    send: (messageID) => sdk().api.session.queuedSteer({ sessionID: params.id ?? "", messageID }),
+    onError: fail,
+    onUnsupported: () =>
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: language.t("secondBrain.followupDock.unsupported"),
+      }),
+  })
 
   const halt = (sessionID: string) =>
     busy(sessionID)
@@ -1905,7 +1742,7 @@ export default function Page() {
       : Promise.resolve()
 
   const revertMutation = useMutation(() => ({
-    mutationFn: async (input: { sessionID: string; messageID: string }) => {
+    mutationFn: async (input: { sessionID: string; messageID: string; files: boolean }) => {
       const session = sdk().api.session
       const target = sync()
       const last = target.session.get(input.sessionID)?.revert
@@ -1949,7 +1786,16 @@ export default function Page() {
         request: () =>
           !next
             ? halt(sessionID).then(() => session.revert.clear({ sessionID }))
-            : halt(sessionID).then(() => session.revert.stage({ sessionID, messageID: next.id }).then(() => undefined)),
+            : halt(sessionID).then(() =>
+                // keep a messages-only rewind from restoring files when moving the boundary forward
+                session.revert
+                  .stage({
+                    sessionID,
+                    messageID: next.id,
+                    files: last?.diff === undefined ? undefined : last.diff.length > 0,
+                  })
+                  .then(() => undefined),
+              ),
         complete: () => undefined,
         rollback: () => roll(sessionID, last, target),
         fail,
@@ -1960,8 +1806,21 @@ export default function Page() {
   const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
 
-  const revert = (input: { sessionID: string; messageID: string }) => {
+  // "Edit from here": with files, list what will be restored and ask before touching the workspace.
+  const revert = async (input: { sessionID: string; messageID: string; files: boolean }) => {
     if (reverting()) return
+    if (input.files) {
+      const files = await editFromHereFiles({
+        diff: (value) => sessionDiffForServer({ server: serverSDK().server.http, fetch: platform.fetch }, value),
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        userMessageIDs: userMessages().map((item) => item.id),
+      }).catch(() => undefined)
+      if (!files || files.length > 0) {
+        if (!(await confirmEditFromHere(dialog, files))) return
+      }
+      if (reverting()) return
+    }
     return revertMutation.mutateAsync(input)
   }
 
@@ -2004,22 +1863,6 @@ export default function Page() {
   }
 
   const actions = { revert, openAttachment }
-
-  createEffect(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-
-    const item = queuedFollowups()[0]
-    if (!item) return
-    if (followupBusy(sessionID)) return
-    if (followup.failed[sessionID] === item.id) return
-    if (followup.paused[sessionID]) return
-    if (isChildSession()) return
-    if (composer.blocked()) return
-    if (busy(sessionID)) return
-
-    void sendFollowup(sessionID, item.id)
-  })
 
   createResizeObserver(
     () => promptDock,
@@ -2092,8 +1935,6 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
-  useUsageExceededDialogs()
-
   const mobileTabs = (compact = false, bottom = false) => (
     <Tabs value={store.mobileTab} class="h-auto">
       <Tabs.List
@@ -2129,9 +1970,7 @@ export default function Page() {
       </Tabs.List>
     </Tabs>
   )
-  const mobileTabsBottom = createMemo(
-    () => !isDesktop() && settings.general.newLayoutDesigns() && settings.general.mobileTitlebarPosition() === "bottom",
-  )
+  const mobileTabsBottom = createMemo(() => !isDesktop() && settings.general.mobileTitlebarPosition() === "bottom")
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(sessionKey, reset, { defer: true }))
@@ -2141,9 +1980,7 @@ export default function Page() {
   const sessionPanelContent = () => (
     <>
       {sessionSync() ?? ""}
-      <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
-        {mobileTabs(true)}
-      </Show>
+      <Show when={!isDesktop() && !!params.id && !mobileTabsBottom()}>{mobileTabs(true)}</Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
           <Match when={params.id && mobileChanges()}>
@@ -2208,7 +2045,7 @@ export default function Page() {
         </Switch>
       </div>
 
-      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>
+      <Show when={params.id && !mobileChanges()}>
         {(_) => {
           const controller = createSessionComposerRegionController({
             state: composer,
@@ -2224,10 +2061,12 @@ export default function Page() {
             followup: () =>
               params.id && !isChildSession()
                 ? {
-                    items: followupDock(),
-                    sending: sendingFollowup(),
-                    onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
-                    onEdit: editFollowup,
+                    items: queuedDock(),
+                    pending: queuedActions.state.pending,
+                    actions:
+                      queuedActions.state.unsupported || serverSDK().protocolKind() !== "v2"
+                        ? undefined
+                        : { onRemove: queuedActions.remove, onSend: queuedActions.send },
                   }
                 : undefined,
             revert: () =>
@@ -2244,9 +2083,10 @@ export default function Page() {
               const id = info()?.parentID
               if (!id) return
               navigate(
-                params.serverKey
-                  ? sessionHref(requireServerKey(params.serverKey), id)
-                  : legacySessionHref(sdk().directory, id),
+                sessionHref(
+                  params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server),
+                  id,
+                ),
               )
             },
             setPromptRef: (el) => {
@@ -2256,73 +2096,33 @@ export default function Page() {
               promptDock = el
             },
           })
+          const promptController = usePromptInputV2Controller({
+            get controls() {
+              return inputController()
+            },
+            ref: (el) => {
+              inputRef = el
+            },
+            get newSessionWorktree() {
+              return newSessionWorktree()
+            },
+            onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
+            onSubmit: () => {
+              comments.clear()
+              resumeScroll()
+            },
+            get harnessDriver() {
+              return sessionHarness.driver()
+            },
+            get harnessChanging() {
+              return switchingHarness()
+            },
+          })
           return (
             <SessionComposerRegion
               controller={controller}
               promptInput={
-                <Show
-                  when={newSessionDesign()}
-                  fallback={
-                    <PromptInput
-                      controls={inputController()}
-                      ref={(el) => {
-                        inputRef = el
-                      }}
-                      newSessionWorktree={newSessionWorktree()}
-                      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-                      onSubmit={() => {
-                        comments.clear()
-                        resumeScroll()
-                      }}
-                      edit={editingFollowup()}
-                      onEditLoaded={clearFollowupEdit}
-                      shouldQueue={queueEnabled}
-                      onQueue={queueFollowup}
-                      onAbort={() => {
-                        const id = params.id
-                        if (!id) return
-                        setFollowup("paused", id, true)
-                      }}
-                    />
-                  }
-                >
-                  {(_) => {
-                    const controller = usePromptInputV2Controller({
-                      get controls() {
-                        return inputController()
-                      },
-                      ref: (el) => {
-                        inputRef = el
-                      },
-                      get newSessionWorktree() {
-                        return newSessionWorktree()
-                      },
-                      onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
-                      onSubmit: () => {
-                        comments.clear()
-                        resumeScroll()
-                      },
-                      get edit() {
-                        return editingFollowup()
-                      },
-                      onEditLoaded: clearFollowupEdit,
-                      shouldQueue: queueEnabled,
-                      onQueue: queueFollowup,
-                      onAbort: () => {
-                        const id = params.id
-                        if (!id) return
-                        setFollowup("paused", id, true)
-                      },
-                      get harnessDriver() {
-                        return sessionHarness.driver()
-                      },
-                      get harnessChanging() {
-                        return switchingHarness()
-                      },
-                    })
-                    return <PromptInputV2Composer controller={controller} harness={sessionHarness} borderUnderlay />
-                  }}
-                </Show>
+                <PromptInputV2Composer controller={promptController} harness={sessionHarness} borderUnderlay />
               }
             />
           )
@@ -2335,15 +2135,7 @@ export default function Page() {
   return (
     <SessionRouteFrame>
       <SessionHeader />
-      <div
-        ref={panelRow}
-        class="flex-1 min-h-0 flex flex-col md:flex-row"
-        classList={{
-          "gap-2 p-2": settings.general.newLayoutDesigns(),
-        }}
-      >
-        <Show when={!isDesktop() && !!params.id && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>
-
+      <div ref={panelRow} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 p-2">
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
@@ -2354,26 +2146,18 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          {settings.general.newLayoutDesigns() ? (
-            <Show when={sessionPanelKey()} keyed>
-              {(_) => (
-                <SessionPanelFrame newLayout raised={!!params.id}>
-                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
-                </SessionPanelFrame>
-              )}
-            </Show>
-          ) : (
-            <SessionPanelFrame newLayout={false} raised={!!params.id}>
-              {sessionPanelContent()}
-            </SessionPanelFrame>
-          )}
+          <Show when={sessionPanelKey()} keyed>
+            {(_) => (
+              <SessionPanelFrame raised={!!params.id}>
+                <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+              </SessionPanelFrame>
+            )}
+          </Show>
 
           <Show when={desktopSessionResizeOpen()}>
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
-                classList={{
-                  "-end-1": settings.general.newLayoutDesigns(),
-                }}
+                class="-end-1"
                 direction="horizontal"
                 size={sessionPanelResizedWidth()}
                 min={SESSION_PANEL_WIDTH_MIN}
@@ -2387,91 +2171,67 @@ export default function Page() {
           </Show>
         </div>
 
-        <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
-          <Suspense>
-            <SessionSidePanel
-              canReview={canReview}
-              diffs={reviewDiffs}
-              diffsReady={reviewReady}
-              empty={reviewEmptyText}
-              hasReview={hasReview}
-              reviewHasFocusableContent={hasReview}
-              reviewCount={reviewCount}
-              reviewPanel={reviewPanel}
-              activeDiff={activeReviewFile()}
-              focusReviewDiff={focusReviewDiff}
-              reviewSnap={ui.reviewSnap}
-              size={size}
-            />
-          </Suspense>
-        </Show>
-        <Show when={newSessionDesign()}>
-          <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
-            <div class="min-w-0 h-full flex flex-1 flex-col">
-              <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
-                <div class="min-h-0 flex-1">
-                  <Suspense>
-                    <SessionSidePanel
-                      canReview={canReview}
-                      diffs={reviewDiffs}
-                      diffsReady={reviewReady}
-                      empty={reviewEmptyText}
-                      hasReview={hasReview}
-                      reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
-                      reviewCount={reviewCount}
-                      reviewPanel={reviewPanelV2}
-                      reviewSidebarToggle={(disabled) => (
-                        <SessionReviewV2SidebarToggle
-                          opened={reviewV2State.sidebarOpened()}
-                          disabled={disabled}
-                          onToggle={reviewV2State.toggleSidebar}
-                        />
-                      )}
-                      fileBrowserState={reviewV2State}
-                      activeDiff={activeReviewFile()}
-                      focusReviewDiff={focusReviewDiff}
-                      reviewSnap={ui.reviewSnap}
-                      size={size}
-                      stacked={desktopV2PanelLayout().stacked}
-                    />
-                  </Suspense>
-                </div>
-              </Show>
-              <Show when={desktopV2PanelLayout().stacked}>
-                <div class="relative h-2 shrink-0" onPointerDown={() => size.start()}>
-                  <ResizeHandle
-                    class="!relative !inset-auto !h-full !w-full !transform-none"
-                    direction="vertical"
-                    size={layout.terminal.height()}
-                    min={100}
-                    max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-                    collapseThreshold={50}
-                    onResize={(height) => {
-                      size.touch()
-                      layout.terminal.resize(height)
-                    }}
-                    onCollapse={() => view().terminal.close()}
+        <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
+          <div class="min-w-0 h-full flex flex-1 flex-col">
+            <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
+              <div class="min-h-0 flex-1">
+                <Suspense>
+                  <SessionSidePanel
+                    canReview={canReview}
+                    diffs={reviewDiffs}
+                    diffsReady={reviewReady}
+                    empty={reviewEmptyText}
+                    hasReview={hasReview}
+                    reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
+                    reviewCount={reviewCount}
+                    reviewPanel={reviewPanelV2}
+                    reviewSidebarToggle={(disabled) => (
+                      <SessionReviewV2SidebarToggle
+                        opened={reviewV2State.sidebarOpened()}
+                        disabled={disabled}
+                        onToggle={reviewV2State.toggleSidebar}
+                      />
+                    )}
+                    fileBrowserState={reviewV2State}
+                    activeDiff={activeReviewFile()}
+                    focusReviewDiff={focusReviewDiff}
+                    reviewSnap={ui.reviewSnap}
+                    size={size}
+                    stacked={desktopV2PanelLayout().stacked}
                   />
-                </div>
-              </Show>
-              <Show when={terminalOpen()}>
-                <div
-                  classList={{
-                    "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
-                    "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                </Suspense>
+              </div>
+            </Show>
+            <Show when={desktopV2PanelLayout().stacked}>
+              <div class="relative h-2 shrink-0" onPointerDown={() => size.start()}>
+                <ResizeHandle
+                  class="!relative !inset-auto !h-full !w-full !transform-none"
+                  direction="vertical"
+                  size={layout.terminal.height()}
+                  min={100}
+                  max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
+                  collapseThreshold={50}
+                  onResize={(height) => {
+                    size.touch()
+                    layout.terminal.resize(height)
                   }}
-                >
-                  <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
-                </div>
-              </Show>
-            </div>
-          </Show>
+                  onCollapse={() => view().terminal.close()}
+                />
+              </div>
+            </Show>
+            <Show when={terminalOpen()}>
+              <div
+                classList={{
+                  "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
+                  "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                }}
+              >
+                <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
+              </div>
+            </Show>
+          </div>
         </Show>
       </div>
-
-      <Show when={!newSessionDesign()}>
-        <TerminalPanel />
-      </Show>
     </SessionRouteFrame>
   )
 }

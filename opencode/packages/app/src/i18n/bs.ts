@@ -39,10 +39,6 @@ export const dict = {
   "desktop.menu.nextProject": "Sljedeći projekat",
   "desktop.menu.minimize": "Minimiziraj",
   "desktop.menu.maximize": "Maksimiziraj",
-  "desktop.menu.documentation": "Dokumentacija za OpenCode",
-  "desktop.menu.supportForum": "Forum za podršku",
-  "desktop.menu.shareFeedback": "Pošalji povratne informacije",
-  "desktop.menu.reportBug": "Prijavi grešku",
   "desktop.menu.ariaLabel": "OpenCode meni",
 
   "desktop.updater.dialog.checkFailed.message": "Provjera ažuriranja nije uspjela.",
@@ -80,7 +76,6 @@ export const dict = {
   "desktop.wsl.error.executeDistro": "Nije moguće izvršiti komande u distribuciji",
   "desktop.wsl.error.installWsl": "Instalacija WSL-a nije uspjela",
   "desktop.wsl.error.installDistro": "Instalacija distribucije nije uspjela: {{distro}}",
-  "desktop.wsl.error.installOpencode": "Instalacija OpenCode-a nije uspjela",
   "desktop.wsl.error.alreadyAdded": "Distribucija {{distro}} je već dodana",
   "desktop.wsl.error.opencodeMissing": "opencode nije instaliran u ovoj distribuciji",
   "desktop.wsl.error.opencodeCannotRun": "opencode je instaliran, ali se ne može pokrenuti",
@@ -149,7 +144,6 @@ export const dict = {
   "command.session.new": "Nova sesija",
   "command.file.open": "Otvori datoteku",
   "command.tab.close": "Zatvori karticu",
-  "command.tab.reopenClosed": "Ponovo otvori zatvorenu karticu",
   "command.context.addSelection": "Dodaj odabir u kontekst",
   "command.context.addSelection.description": "Dodaj odabrane linije iz trenutne datoteke",
   "command.input.focus": "Fokusiraj polje za unos",
@@ -188,10 +182,6 @@ export const dict = {
   "command.session.compact.description": "Sažmi sesiju kako bi se smanjio kontekst",
   "command.session.fork": "Fork iz poruke",
   "command.session.fork.description": "Kreiraj novu sesiju iz prethodne poruke",
-  "command.session.share": "Podijeli sesiju",
-  "command.session.share.description": "Podijeli ovu sesiju i kopiraj URL u međuspremnik",
-  "command.session.unshare": "Ukini dijeljenje sesije",
-  "command.session.unshare.description": "Zaustavi dijeljenje ove sesije",
 
   "command.session.export": "Izvezi sesiju",
   "command.session.export.description": "Izvezi cijeli zapis sesije u JSON formatu",
@@ -207,10 +197,6 @@ export const dict = {
   "dialog.provider.group.popular": "Popularno",
   "dialog.provider.group.other": "Ostalo",
   "dialog.provider.custom.label": "Prilagođeni provajder kompatibilan s OpenAI-jem",
-  "dialog.provider.tag.recommended": "Preporučeno",
-  "dialog.provider.opencode.note": "Kurirani modeli uključujući Claude, GPT, Gemini i druge",
-  "dialog.provider.opencode.tagline": "Pouzdani optimizovani modeli",
-  "dialog.provider.opencodeGo.tagline": "Povoljna pretplata za sve",
   "dialog.provider.anthropic.note": "Direktan pristup Claude modelima, uključujući Pro i Max",
   "dialog.provider.copilot.note": "AI modeli za pomoć pri kodiranju putem GitHub Copilot",
   "dialog.provider.openai.note": "GPT modeli za brze, sposobne opšte AI zadatke",
@@ -245,13 +231,6 @@ export const dict = {
   "provider.connect.apiKey.label": "{{provider}} API ključ",
   "provider.connect.apiKey.placeholder": "API ključ",
   "provider.connect.apiKey.required": "API ključ je obavezan",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen ti daje pristup kuriranom skupu pouzdanih, optimizovanih modela za coding agente.",
-  "provider.connect.opencodeZen.line2":
-    "Sa jednim API ključem dobijaš pristup modelima kao što su Claude, GPT, Gemini, GLM i drugi.",
-  "provider.connect.opencodeZen.visit.prefix": "Posjeti ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " da preuzmeš svoj API ključ.",
   "provider.connect.oauth.code.visit.prefix": "Posjeti ",
   "provider.connect.oauth.code.visit.link": "ovaj link",
   "provider.connect.oauth.code.visit.suffix":
@@ -271,8 +250,6 @@ export const dict = {
   "provider.custom.title": "Prilagođeni provajder",
   "provider.custom.unavailable": "Prilagođeni provajderi nisu dostupni na ovom serveru",
   "provider.custom.description.prefix": "Konfiguriši OpenAI-kompatibilnog provajdera. Pogledaj ",
-  "provider.custom.description.link": "dokumentaciju za konfiguraciju provajdera",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID provajdera",
   "provider.custom.field.providerID.placeholder": "mojprovajder",
   "provider.custom.field.providerID.description": "Mala slova, brojevi, crtice ili donje crte",
@@ -475,7 +452,6 @@ export const dict = {
   "wsl.server.label": "WSL",
   "wsl.server.menu.label": "WSL server",
   "wsl.server.retryStart": "Ponovi pokretanje",
-  "wsl.server.updating": "Ažuriranje...",
   "wsl.onboarding.step.distro": "Odaberi distribuciju",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Provjera WSL-a...",
@@ -493,13 +469,9 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Odaberi distribuciju ili instaliraj jednu ispod.",
   "wsl.onboarding.checkingOpencode": "Provjera OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Provjera OpenCode u distribuciji {{distro}}...",
-  "wsl.onboarding.updatingOpencode": "Ažuriranje OpenCode...",
-  "wsl.onboarding.updatingOpencodeIn": "Ažuriranje OpenCode u distribuciji {{distro}}...",
-  "wsl.onboarding.updateOpencodeIn": "Ažuriraj OpenCode u distribuciji {{distro}}.",
   "wsl.onboarding.updateOpencode": "Ažuriraj OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode je spreman u distribuciji {{distro}}.",
   "wsl.onboarding.opencodeReady": "OpenCode je spreman.",
-  "wsl.onboarding.installOpencodeIn": "Instaliraj OpenCode u distribuciji {{distro}}.",
   "wsl.onboarding.installOpencode": "Instaliraj OpenCode",
   "wsl.onboarding.chooseDistroFirst": "Prvo odaberi distribuciju.",
   "wsl.onboarding.loadFailed": "Nije uspjelo učitavanje WSL stanja.",
@@ -540,22 +512,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Instalirana verzija ne odgovara verziji desktop aplikacije.",
   "wsl.onboarding.adding": "Dodavanje...",
 
-  "help.tabs.toast.ariaLabel": "Predstavljamo kartice. Organizuj svoj rad i aktivne sesije pomoću kartica",
-  "help.tabs.toast.dismiss": "Odbaci informacije o karticama",
-  "help.tabs.title": "Predstavljamo kartice",
-  "help.tabs.description": "Organizuj svoj rad i aktivne sesije pomoću kartica",
-  "help.tabs.date": "14. juli",
-  "help.tabs.introduction": "OpenCode Desktop sada je organizovan oko kartica.",
-  "help.tabs.sessions":
-    "Započni novu sesiju u kartici ili otvori postojeću sesiju iz bilo kojeg projekta. Otvori novu karticu kada započinješ nešto novo, a zatvori je kada završiš.",
-  "help.tabs.organize":
-    "Nekoliko otvorenih kartica olakšava organizovanje aktivnih sesija. Preimenuj kartice tako da ih možeš lako prepoznati ako ih namjeravaš zadržati.",
-  "help.tabs.home":
-    "Sve svoje sesije i projekte pronaći ćeš na novom početnom ekranu. Odabirom sesije ona se otvara u kartici.",
-  "help.tabs.persistence": "Kada ponovo otvoriš aplikaciju, tvoje kartice ostaju otvorene.",
-  "help.tabs.worktrees":
-    "Novi dizajn još ne podržava Git Worktrees, ali podrška stiže uskoro. Ako želiš nastaviti koristiti prethodni raspored, možeš mijenjati rasporede u Postavkama. Imaj na umu da će novi raspored za nekoliko sedmica postati trajan.",
-
   "dialog.project.edit.title": "Uredi projekat",
   "dialog.project.edit.name": "Naziv",
   "dialog.project.edit.icon": "Ikonica",
@@ -568,7 +524,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Pokreće se nakon kreiranja novog radnog prostora (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "npr. bun install",
 
-  "dialog.usageExceeded.dontShowAgain": "Nemoj više prikazivati",
 
   "context.breakdown.title": "Razlaganje konteksta",
   "context.breakdown.note":
@@ -651,16 +606,7 @@ export const dict = {
   "toast.context.noLineSelection.title": "Nema odabranih linija",
   "toast.context.noLineSelection.description": "Prvo odaberi raspon linija u kartici datoteke.",
 
-  "toast.session.share.copyFailed.title": "Neuspjelo kopiranje URL-a u međuspremnik",
-  "toast.session.share.success.title": "Sesija podijeljena",
-  "toast.session.share.success.description": "URL za dijeljenje je kopiran u međuspremnik!",
-  "toast.session.share.failed.title": "Neuspjelo dijeljenje sesije",
-  "toast.session.share.failed.description": "Došlo je do greške prilikom dijeljenja sesije",
 
-  "toast.session.unshare.success.title": "Dijeljenje sesije ukinuto",
-  "toast.session.unshare.success.description": "Dijeljenje sesije je uspješno ukinuto!",
-  "toast.session.unshare.failed.title": "Neuspjelo ukidanje dijeljenja",
-  "toast.session.unshare.failed.description": "Došlo je do greške prilikom ukidanja dijeljenja",
 
   "toast.session.export.success.title": "Sesija izvezena",
   "toast.session.export.success.description": "Sesija je sačuvana kao {{filename}}",
@@ -685,8 +631,6 @@ export const dict = {
   "error.page.action.checking": "Provjera...",
   "error.page.action.checkUpdates": "Provjeri ažuriranja",
   "error.page.action.updateTo": "Ažuriraj na {{version}}",
-  "error.page.report.prefix": "Molimo prijavi ovu grešku OpenCode timu",
-  "error.page.report.discord": "na Discordu",
   "error.page.version": "Verzija: {{version}}",
 
   "error.dev.rootNotFound":
@@ -750,7 +694,6 @@ export const dict = {
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",
   "session.tab.context": "Kontekst",
-  "session.tab.unknown": "Nepoznata sesija",
   "session.panel.reviewAndFiles": "Pregled i datoteke",
   "session.error.notFound": "Ova sesija nije pronađena",
   "session.error.notFound.description": "Ova kartica upućuje na sesiju koja više ne postoji na ovom serveru.",
@@ -832,17 +775,7 @@ export const dict = {
   "status.popover.tab.plugins": "Plugini",
   "status.popover.action.manageServers": "Upravljaj serverima",
 
-  "session.share.popover.title": "Objavi na webu",
-  "session.share.popover.description.shared": "Ova sesija je javna na webu. Dostupna je svima koji imaju link.",
-  "session.share.popover.description.unshared": "Podijeli sesiju javno na webu. Biće dostupna svima koji imaju link.",
-  "session.share.action.share": "Podijeli",
-  "session.share.action.publish": "Objavi",
-  "session.share.action.publishing": "Objavljivanje...",
-  "session.share.action.unpublish": "Poništi objavu",
-  "session.share.action.unpublishing": "Poništavanje objave...",
-  "session.share.action.view": "Prikaži",
   "session.share.copy.copied": "Kopirano",
-  "session.share.copy.copyLink": "Kopiraj link",
 
   "lsp.tooltip.none": "Nema LSP servera",
   "lsp.label.connected": "{{count}} LSP",
@@ -866,7 +799,6 @@ export const dict = {
   "common.dismiss": "Odbaci",
   "common.requestFailed": "Zahtjev nije uspio",
   "common.moreOptions": "Više opcija",
-  "common.learnMore": "Saznaj više",
   "common.rename": "Preimenuj",
   "common.export": "Izvezi",
   "common.reset": "Vrati na početno stanje",
@@ -880,7 +812,6 @@ export const dict = {
   "sidebar.menu.toggle": "Prikaži/sakrij meni",
   "sidebar.nav.projectsAndSessions": "Projekti i sesije",
   "sidebar.settings": "Postavke",
-  "sidebar.help": "Pomoć",
   "sidebar.workspaces.enable": "Omogući radne prostore",
   "sidebar.workspaces.disable": "Onemogući radne prostore",
   "sidebar.gettingStarted.title": "Početak",
@@ -958,13 +889,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
   "settings.general.row.editToolPartsExpanded.description":
     "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
-  "settings.general.row.newInterface.title": "Novi raspored",
-  "settings.general.row.newInterface.badge": "Novo",
-  "settings.general.row.newInterface.description":
-    "Koristi nove kartice i raspored početne stranice. Ograničeno vrijeme možeš se prebacivati između rasporeda.",
-  "settings.general.row.newInterfaceNotice.title": "Sada koristiš novi raspored",
-  "settings.general.row.newInterfaceNotice.description": "Prethodni raspored više nije dostupan",
-  "settings.general.row.newInterfaceNotice.dismiss": "Odbaci",
   "settings.general.row.pinchZoom.title": "Zumiranje štipanjem",
   "settings.general.row.pinchZoom.description":
     "Dozvoli zumiranje gestom štipanja na dodirnoj ploči i pomoću Ctrl-pomjeranja",
@@ -974,8 +898,6 @@ export const dict = {
   "settings.general.row.wayland.tooltip":
     "Na Linuxu sa monitorima miješanih stopa osvježavanja, nativni Wayland može biti stabilniji.",
 
-  "settings.general.row.releaseNotes.title": "Bilješke o izdanju",
-  "settings.general.row.releaseNotes.description": 'Prikaži iskačuće prozore "Šta je novo" nakon ažuriranja',
 
   "settings.updates.row.startup.title": "Provjeri ažuriranja pri pokretanju",
   "settings.updates.row.startup.description": "Automatski provjerava ažuriranja kada se OpenCode pokrene",
@@ -1155,10 +1077,6 @@ export const dict = {
   "workspace.reset.archived.many": "Biće arhivirano {{count}} sesija.",
   "workspace.reset.note": "Ovo će vratiti radni prostor na stanje podrazumijevane grane.",
   "common.open": "Otvori",
-  "dialog.releaseNotes.action.getStarted": "Započni",
-  "dialog.releaseNotes.action.next": "Sljedeće",
-  "dialog.releaseNotes.action.hideFuture": "Ne prikazuj ovo u budućnosti",
-  "dialog.releaseNotes.media.alt": "Pregled izdanja",
   "toast.project.reloadFailed.title": "Nije uspjelo ponovno učitavanje {{project}}",
   "error.server.invalidConfiguration": "Nevažeća konfiguracija",
   "common.moreCountSuffix": " (+{{count}} više)",

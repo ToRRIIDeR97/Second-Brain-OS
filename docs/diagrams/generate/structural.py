@@ -11,8 +11,8 @@ def component():
             "with HTTP API, Second Brain domains, location services and agent runtime, plus stores and external services.")
     s.heading("Component view", "UML 2.5.1 component diagram · paths relative to opencode/packages/")
     # left column
-    s.box(20, 70, 250, 160, "Solid renderer", ["app/src", "routes: Home, Notes, Calendar,", "Projects, Activity, sessions",
-          "ServerSDK + compat API (v1/v2)", "Second Brain client"], stereo="component")
+    s.box(20, 70, 250, 160, "Solid renderer", ["app/src", "sidebar: Home, Notes, Calendar,", "Activity, Projects + threads",
+          "ServerSDK + compat API (v1/v2)", "Second Brain client, drafts"], stereo="component")
     s.box(20, 280, 250, 64, "window.api", ["desktop/src/preload (contextBridge)"], stereo="interface")
     s.box(20, 390, 250, 170, "Electron main", ["desktop/src/main", "IPC registry (ipc.ts)", "windows + URL policy",
           "server launcher (server.ts)", "Google Calendar/Tasks service", "drafts, session export"], stereo="component")

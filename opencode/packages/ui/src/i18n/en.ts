@@ -73,14 +73,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 
-  "dialog.usageExceeded.freeTier.title": "Free limit reached",
-  "dialog.usageExceeded.freeTier.description":
-    "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Subscribe",
-  "dialog.usageExceeded.accountRateLimit.title": "Go limit reached",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Usage limit reached. To continue using this model now, enable usage from your available balance",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Open settings",
 
   "ui.sessionTurn.status.delegating": "Delegating work",
   "ui.sessionTurn.status.planning": "Planning next steps",
@@ -108,6 +100,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.search.other": "{{count}} searches",
   "ui.messagePart.context.list.one": "{{count}} list",
   "ui.messagePart.context.list.other": "{{count}} lists",
+  "secondBrain.messagePart.tools.title.one": "Ran {{count}} tool",
+  "secondBrain.messagePart.tools.title.other": "Ran {{count}} tools",
+  "secondBrain.messagePart.tools.command.one": "{{count}} command",
+  "secondBrain.messagePart.tools.command.other": "{{count}} commands",
+  "secondBrain.messagePart.tools.other.one": "{{count}} other",
+  "secondBrain.messagePart.tools.other.other": "{{count}} others",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
@@ -197,7 +195,9 @@ export const dict: Record<string, string> = {
   "ui.message.copy": "Copy",
   "ui.message.copyMessage": "Copy message",
   "ui.message.forkMessage": "Fork to new session",
-  "ui.message.revertMessage": "Revert message",
+  "ui.message.revertMessage": "Edit from here",
+  "secondBrain.message.editFromHere.messages": "Messages only",
+  "secondBrain.message.editFromHere.files": "Messages and files",
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
   "ui.message.duration.seconds": "{{count}}s",

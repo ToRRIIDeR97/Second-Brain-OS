@@ -32,6 +32,8 @@ export const SecondBrainPaths = {
   calendar: "/second-brain/calendar",
   projects: "/second-brain/projects",
   project: "/second-brain/project",
+  projectThreads: "/second-brain/project-threads",
+  projectWorkspace: "/second-brain/projects/workspace",
 } as const
 
 export const SecondBrainApi = HttpApi.make("secondBrain").add(
@@ -74,6 +76,17 @@ export const SecondBrainApi = HttpApi.make("secondBrain").add(
         payload: BrainProject.CreateInput,
         success: described(BrainProject.Info, "Project created"),
         error: [HttpApiError.BadRequest, SecondBrainConflictError],
+      }),
+      HttpApiEndpoint.get("listProjectThreads", SecondBrainPaths.projectThreads, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        success: described(Schema.Array(BrainProject.ThreadSummary), "Projects with thread directories"),
+        error: HttpApiError.BadRequest,
+      }),
+      HttpApiEndpoint.post("ensureWorkspaceProject", SecondBrainPaths.projectWorkspace, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        payload: BrainProject.EnsureWorkspaceInput,
+        success: described(BrainProject.Info, "Project linked to the Workspace"),
+        error: [HttpApiError.BadRequest, HttpApiError.NotFound, SecondBrainConflictError],
       }),
       HttpApiEndpoint.get("readProject", SecondBrainPaths.project, {
         query: ProjectQuery,

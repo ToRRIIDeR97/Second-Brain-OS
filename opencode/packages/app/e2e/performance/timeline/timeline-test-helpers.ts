@@ -9,7 +9,6 @@ export async function installTimelineSettings(page: Page) {
       "settings.v3",
       JSON.stringify({
         general: {
-          newLayoutDesigns: true,
           editToolPartsExpanded: true,
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,
@@ -48,6 +47,12 @@ export async function installStressSessionTabs(page: Page, input?: { draftID?: s
           lastProject: { local: directory },
         }),
       )
+      // Sidebar thread groups start expanded so benchmarks can click thread rows.
+      localStorage.setItem(
+        "opencode.window.browser.dat:sidebar",
+        JSON.stringify({ expanded: { __brain__: true, __other__: true } }),
+      )
+      // Legacy tab keys: unsent drafts are imported into the drafts store on startup.
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([

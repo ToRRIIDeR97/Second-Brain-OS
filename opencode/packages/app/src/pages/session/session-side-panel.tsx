@@ -288,48 +288,28 @@ export function SessionSidePanel(props: {
   })
 
   return (
-    <Show when={isDesktop() && !(settings.general.newLayoutDesigns() && !params.id)}>
+    <Show when={isDesktop() && !!params.id}>
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 flex overflow-hidden"
+        class="relative min-w-0 flex overflow-hidden bg-v2-background-bg-base rounded-[10px] shadow-[var(--v2-elevation-raised)]"
         classList={{
-          "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-          "bg-background-base": !settings.general.newLayoutDesigns(),
           "h-full shrink-0": !props.stacked,
           "h-full min-h-0": props.stacked,
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
-          "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": settings.general.newLayoutDesigns(),
           "flex-1": reviewOpen(),
         }}
         style={{ width: panelWidth() }}
       >
         <Show when={open()}>
-          <div
-            class="size-full flex"
-            classList={{
-              "border-l border-border-weaker-base": !settings.general.newLayoutDesigns(),
-            }}
-          >
+          <div class="size-full flex">
             <Show when={reviewOpen()}>
-              <div
-                class="relative min-w-0 h-full flex-1 overflow-hidden"
-                classList={{
-                  "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-                  "bg-background-base": !settings.general.newLayoutDesigns(),
-                }}
-              >
-                <div
-                  class="size-full min-w-0 h-full"
-                  classList={{
-                    "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-                    "bg-background-base": !settings.general.newLayoutDesigns(),
-                  }}
-                >
+              <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
+                <div class="size-full min-w-0 h-full bg-v2-background-bg-base">
                   <Show
                     when={props.fileBrowserState}
                     fallback={
@@ -435,13 +415,7 @@ export function SessionSidePanel(props: {
                                   )}
                                 </For>
                               </SortableProvider>
-                              <div
-                                class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3"
-                                classList={{
-                                  "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-                                  "bg-background-stronger": !settings.general.newLayoutDesigns(),
-                                }}
-                              >
+                              <div class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3 bg-v2-background-bg-base">
                                 <TooltipKeybind
                                   title={language.t("command.file.open")}
                                   keybind={command.keybind("file.open")}
@@ -654,13 +628,7 @@ export function SessionSidePanel(props: {
                                 </Show>
                               )}
                             </For>
-                            <div
-                              class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center"
-                              classList={{
-                                "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-                                "bg-background-stronger": !settings.general.newLayoutDesigns(),
-                              }}
-                            >
+                            <div class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
                               <TooltipV2
                                 value={
                                   <>
@@ -779,19 +747,7 @@ export function SessionSidePanel(props: {
                   >
                     <Tabs.List>
                       <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                        <Show
-                          when={settings.general.newLayoutDesigns()}
-                          fallback={
-                            <>
-                              {props.reviewCount()}{" "}
-                              {language.t(
-                                props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other",
-                              )}
-                            </>
-                          }
-                        >
-                          {language.t("session.review.filesChanged", { count: props.reviewCount() })}
-                        </Show>
+                        {language.t("session.review.filesChanged", { count: props.reviewCount() })}
                       </Tabs.Trigger>
                       <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                         {language.t("session.files.all")}

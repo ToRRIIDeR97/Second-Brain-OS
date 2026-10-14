@@ -428,6 +428,36 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "keeps Brain Project folder threads separate by directory and by project subpath",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const alpha = path.join(test.directory, "projects", "project_01ALPHA")
+        const beta = path.join(test.directory, "projects", "project_01BETA")
+        yield* Effect.promise(() => mkdir(alpha, { recursive: true }))
+        yield* Effect.promise(() => mkdir(beta, { recursive: true }))
+        const root = yield* createSession({ title: "brain root" })
+        const first = yield* createSession({ title: "alpha" }).pipe(provideInstanceEffect(alpha))
+        const second = yield* createSession({ title: "beta" }).pipe(provideInstanceEffect(beta))
+        expect(first.projectID).toBe(root.projectID)
+        expect(second.projectID).toBe(root.projectID)
+
+        const ids = (query: Record<string, string>) =>
+          requestJson<{ data: Session.Info[] }>(`/api/session?${new URLSearchParams(query)}`, { headers }).pipe(
+            Effect.map((body) => body.data.map((session) => session.id).toSorted()),
+          )
+
+        expect(yield* ids({ directory: alpha })).toEqual([first.id])
+        expect(yield* ids({ directory: beta })).toEqual([second.id])
+        expect(yield* ids({ project: root.projectID, subpath: "projects/project_01ALPHA" })).toEqual([first.id])
+        expect(yield* ids({ project: root.projectID, subpath: "projects/project_01BETA" })).toEqual([second.id])
+        expect(yield* ids({ project: root.projectID })).toEqual([root.id, first.id, second.id].toSorted())
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "returns v2 public request errors for cursor and workspace query failures",
     () =>
       Effect.gen(function* () {
@@ -637,6 +667,58 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "removes and sends queued v2 inputs",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "v2 queued actions" })
+        const enqueue = (id: string) =>
+          request(`/api/session/${session.id}/prompt`, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify({ id, prompt: { text: id }, delivery: "queue", resume: false }),
+          })
+        const queued = () =>
+          requestJson<{ data: { id: string }[] }>(`/api/session/${session.id}/queued`, { headers }).pipe(
+            Effect.map(({ data }) => data.map((item) => item.id)),
+          )
+        const remove = (id: string) => request(`/api/session/${session.id}/queued/${id}`, { method: "DELETE", headers })
+        const steer = (id: string) =>
+          request(`/api/session/${session.id}/queued/${id}/steer`, { method: "POST", headers })
+
+        yield* enqueue("msg_http_remove")
+        yield* enqueue("msg_http_steer")
+        expect(yield* queued()).toEqual(["msg_http_remove", "msg_http_steer"])
+
+        expect((yield* remove("msg_http_remove")).status).toBe(204)
+        expect((yield* remove("msg_http_remove")).status).toBe(204)
+        expect(yield* queued()).toEqual(["msg_http_steer"])
+        const missing = yield* steer("msg_http_remove")
+        expect(missing.status).toBe(404)
+        expect(yield* responseJson(missing)).toMatchObject({ _tag: "MessageNotFoundError" })
+
+        expect((yield* steer("msg_http_steer")).status).toBe(204)
+        expect(yield* queued()).toEqual([])
+        yield* pollWithTimeout(
+          requestJson<{ data: SessionMessage.Message[] }>(`/api/session/${session.id}/message`, { headers }).pipe(
+            Effect.map(({ data }) => data.find((message) => message.id === "msg_http_steer")),
+          ),
+          "Sent queued input was not promoted",
+          "10 seconds",
+        )
+        const started = yield* remove("msg_http_steer")
+        expect(started.status).toBe(409)
+        expect(yield* responseJson(started)).toEqual({
+          _tag: "ConflictError",
+          message: "Queued message already started: msg_http_steer",
+          resource: "msg_http_steer",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public unavailable errors for unfinished session mutations",
     () =>
       Effect.gen(function* () {
@@ -840,6 +922,56 @@ describe("session HttpApi", () => {
         })
         expect(response.status).toBe(200)
         expect((yield* json<Session.Info>(response)).time.archived).toBe(-1)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "unarchives and pins sessions through update",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "round trip", metadata: { keep: "yes" } })
+        const update = (body: unknown) =>
+          requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: session.id }), {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify(body),
+          })
+        const listed = () =>
+          requestJson<Session.Info[]>(SessionPaths.list, { headers }).pipe(
+            Effect.map((items) => items.find((item) => item.id === session.id)),
+          )
+        const row = () =>
+          Effect.gen(function* () {
+            const { db } = yield* Database.Service
+            return yield* db
+              .select({ archived: SessionTable.time_archived, metadata: SessionTable.metadata })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, session.id))
+              .get()
+              .pipe(Effect.orDie)
+          })
+
+        expect((yield* update({ time: { archived: 5 } })).time.archived).toBe(5)
+        expect((yield* listed())?.time.archived).toBe(5)
+
+        const unarchived = yield* update({ time: { archived: null } })
+        expect(unarchived.time.archived).toBeUndefined()
+        expect((yield* row())?.archived).toBeNull()
+        expect((yield* listed())?.time.archived).toBeUndefined()
+
+        const pinned = yield* update({ pinned: true })
+        expect(typeof pinned.metadata?.pinned).toBe("number")
+        expect(pinned.metadata?.keep).toBe("yes")
+        expect((yield* row())?.metadata?.pinned).toBe(pinned.metadata?.pinned)
+        expect((yield* listed())?.metadata?.pinned).toBe(pinned.metadata?.pinned)
+
+        const unpinned = yield* update({ pinned: false })
+        expect(unpinned.metadata).toEqual({ keep: "yes" })
+        expect((yield* row())?.metadata).toEqual({ keep: "yes" })
+        expect((yield* listed())?.metadata?.pinned).toBeUndefined()
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

@@ -427,6 +427,7 @@ export interface Interface {
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
+  readonly setPinned: (input: { sessionID: SessionID; pinned: boolean }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
   readonly setAgentModel: (input: {
     sessionID: SessionID
@@ -758,6 +759,15 @@ const layer: Layer.Layer<
       yield* patch(input.sessionID, { time: { archived: input.time } }).pipe(Effect.orDie)
     })
 
+    // Pins live in `metadata.pinned` (epoch ms) so they survive restarts without a schema migration.
+    const setPinned = Effect.fn("Session.setPinned")(function* (input: { sessionID: SessionID; pinned: boolean }) {
+      const current = yield* get(input.sessionID).pipe(Effect.orDie)
+      const { pinned: _, ...rest } = current.metadata ?? {}
+      yield* patch(input.sessionID, { metadata: input.pinned ? { ...rest, pinned: Date.now() } : rest }).pipe(
+        Effect.orDie,
+      )
+    })
+
     const setMetadata = Effect.fn("Session.setMetadata")(function* (input: typeof SetMetadataInput.Type) {
       yield* patch(input.sessionID, { metadata: input.metadata, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
@@ -912,6 +922,7 @@ const layer: Layer.Layer<
       get,
       setTitle,
       setArchived,
+      setPinned,
       setMetadata,
       setAgentModel,
       setPermission,

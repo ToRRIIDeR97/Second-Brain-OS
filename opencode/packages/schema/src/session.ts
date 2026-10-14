@@ -40,6 +40,8 @@ export const Info = Schema.Struct({
     created: DateTimeUtcFromMillis,
     updated: DateTimeUtcFromMillis,
     archived: DateTimeUtcFromMillis.pipe(optional),
+    // Derived from `metadata.pinned`; set through the session update endpoint.
+    pinned: DateTimeUtcFromMillis.pipe(optional),
   }),
   title: Schema.String,
   location: Location.Ref,

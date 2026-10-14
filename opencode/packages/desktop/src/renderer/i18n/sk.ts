@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Skontrolovať aktualizácie...",
-  "desktop.menu.installCli": "Inštalovať CLI...",
   "desktop.menu.reloadWebview": "Obnoviť webové zobrazenie",
   "desktop.menu.restart": "Reštartovať",
   "desktop.dialog.chooseFolder": "Vybrať priečinok",
@@ -17,11 +16,6 @@ export const dict = {
     "Verzia {{version}} OpenCode bola stiahnutá. Chcete ju nainštalovať a reštartovať?",
   "desktop.updater.installFailed.title": "Aktualizácia zlyhala",
   "desktop.updater.installFailed.message": "Nepodarilo sa nainštalovať aktualizáciu",
-  "desktop.cli.installed.title": "CLI nainštalované",
-  "desktop.cli.installed.message":
-    "CLI bolo nainštalované do {{path}}\n\nReštartujte terminál, aby ste mohli používať príkaz 'opencode'.",
-  "desktop.cli.failed.title": "Inštalácia zlyhala",
-  "desktop.cli.failed.message": "Nepodarilo sa nainštalovať CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Koreňový prvok sa nenašiel. Pridali ste ho do index.html? Alebo je atribút id napísaný nesprávne?",

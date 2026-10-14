@@ -3,12 +3,12 @@ import type { PartGroup } from "@opencode-ai/session-ui/message-part"
 import { reuseTimelineRows } from "./row-reconciliation"
 import { TimelineRow } from "./timeline-row"
 
-const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
+const context = (key: string, partIDs: string[], userMessageID = "user-1", type: "context" | "tools" = "context") =>
   new TimelineRow.AssistantPart({
     userMessageID,
     group: {
       key,
-      type: "context",
+      type,
       refs: partIDs.map((partID) => ({ messageID: "assistant-1", partID })),
     } satisfies PartGroup,
     previousAssistantPart: false,
@@ -84,6 +84,20 @@ describe("reuseTimelineRows", () => {
         "assistant-part:user-1:context:a",
         "assistant-part:user-1:context:c",
       ],
+      reused: [],
+    },
+    {
+      name: "keeps the row key when a context group grows into a tools group",
+      previous: [context("context:a", ["a", "b"])],
+      rows: [context("tools:a", ["a", "b", "c"], "user-1", "tools")],
+      expected: ["assistant-part:user-1:context:a"],
+      reused: [],
+    },
+    {
+      name: "keeps the row key when a tools group grows",
+      previous: [context("tools:a", ["a", "b"], "user-1", "tools")],
+      rows: [context("tools:a", ["a", "b", "c"], "user-1", "tools")],
+      expected: ["assistant-part:user-1:tools:a"],
       reused: [],
     },
   ])("$name", ({ previous, rows, expected, reused }) => {

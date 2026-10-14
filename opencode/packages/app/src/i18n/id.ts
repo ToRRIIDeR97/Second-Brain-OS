@@ -39,10 +39,6 @@ export const dict = {
   "desktop.menu.nextProject": "Proyek berikutnya",
   "desktop.menu.minimize": "Minimalkan",
   "desktop.menu.maximize": "Maksimalkan",
-  "desktop.menu.documentation": "Dokumentasi OpenCode",
-  "desktop.menu.supportForum": "Forum dukungan",
-  "desktop.menu.shareFeedback": "Bagikan umpan balik",
-  "desktop.menu.reportBug": "Laporkan bug",
   "desktop.menu.ariaLabel": "Menu OpenCode",
 
   "desktop.updater.dialog.checkFailed.message": "Pemeriksaan pembaruan gagal.",
@@ -80,7 +76,6 @@ export const dict = {
   "desktop.wsl.error.executeDistro": "Tidak dapat menjalankan perintah di distro",
   "desktop.wsl.error.installWsl": "Instalasi WSL gagal",
   "desktop.wsl.error.installDistro": "Gagal menginstal distro: {{distro}}",
-  "desktop.wsl.error.installOpencode": "Instalasi OpenCode gagal",
   "desktop.wsl.error.alreadyAdded": "{{distro}} sudah ditambahkan",
   "desktop.wsl.error.opencodeMissing": "opencode belum terinstal di distro ini",
   "desktop.wsl.error.opencodeCannotRun": "opencode telah terinstal, tetapi tidak dapat dijalankan",
@@ -149,7 +144,6 @@ export const dict = {
   "command.session.new": "Sesi baru",
   "command.file.open": "Buka berkas",
   "command.tab.close": "Tutup tab",
-  "command.tab.reopenClosed": "Buka kembali tab yang ditutup",
   "command.context.addSelection": "Tambahkan pilihan ke konteks",
   "command.context.addSelection.description": "Tambahkan baris yang dipilih dari berkas saat ini",
   "command.input.focus": "Fokuskan masukan",
@@ -188,10 +182,6 @@ export const dict = {
   "command.session.compact.description": "Ringkas sesi untuk mengurangi ukuran konteks",
   "command.session.fork": "Fork dari pesan",
   "command.session.fork.description": "Buat sesi baru dari pesan sebelumnya",
-  "command.session.share": "Bagikan sesi",
-  "command.session.share.description": "Bagikan sesi ini dan salin URL ke papan klip",
-  "command.session.unshare": "Hentikan berbagi",
-  "command.session.unshare.description": "Hentikan berbagi sesi ini",
 
   "command.session.export": "Ekspor sesi",
   "command.session.export.description": "Ekspor transkrip sesi lengkap sebagai JSON",
@@ -207,10 +197,6 @@ export const dict = {
   "dialog.provider.group.popular": "Populer",
   "dialog.provider.group.other": "Lainnya",
   "dialog.provider.custom.label": "Penyedia kustom yang kompatibel dengan OpenAI",
-  "dialog.provider.tag.recommended": "Direkomendasikan",
-  "dialog.provider.opencode.note": "Model pilihan, termasuk Claude, GPT, Gemini, dan lainnya",
-  "dialog.provider.opencode.tagline": "Model andal yang dioptimalkan",
-  "dialog.provider.opencodeGo.tagline": "Langganan terjangkau untuk semua orang",
   "dialog.provider.anthropic.note": "Akses langsung ke model Claude, termasuk Pro dan Max",
   "dialog.provider.copilot.note": "Model AI untuk bantuan pengodean melalui GitHub Copilot",
   "dialog.provider.openai.note": "Model GPT untuk tugas AI umum yang cepat dan mumpuni",
@@ -245,13 +231,6 @@ export const dict = {
   "provider.connect.apiKey.label": "Kunci API {{provider}}",
   "provider.connect.apiKey.placeholder": "Kunci API",
   "provider.connect.apiKey.required": "Kunci API diperlukan",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen memberi Anda akses ke serangkaian model andal yang dioptimalkan untuk agen pengodean.",
-  "provider.connect.opencodeZen.line2":
-    "Dengan satu kunci API, Anda akan mendapatkan akses ke model seperti Claude, GPT, Gemini, GLM dan lainnya.",
-  "provider.connect.opencodeZen.visit.prefix": "Kunjungi ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " untuk mendapatkan kunci API Anda.",
   "provider.connect.oauth.code.visit.prefix": "Kunjungi ",
   "provider.connect.oauth.code.visit.link": "tautan ini",
   "provider.connect.oauth.code.visit.suffix":
@@ -271,8 +250,6 @@ export const dict = {
   "provider.custom.title": "Penyedia kustom",
   "provider.custom.unavailable": "Penyedia kustom tidak tersedia di server ini",
   "provider.custom.description.prefix": "Konfigurasikan penyedia yang kompatibel dengan OpenAI. Lihat ",
-  "provider.custom.description.link": "dokumen konfigurasi penyedia",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID Penyedia",
   "provider.custom.field.providerID.placeholder": "penyediaku",
   "provider.custom.field.providerID.description": "Huruf kecil, angka, tanda hubung, atau garis bawah",
@@ -481,7 +458,6 @@ export const dict = {
   "wsl.server.label": "WSL",
   "wsl.server.menu.label": "Server WSL",
   "wsl.server.retryStart": "Coba mulai ulang",
-  "wsl.server.updating": "Memperbarui...",
   "wsl.onboarding.step.distro": "Pilih distro",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Memeriksa WSL...",
@@ -499,13 +475,9 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Pilih distro atau instal salah satu di bawah.",
   "wsl.onboarding.checkingOpencode": "Memeriksa OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Memeriksa OpenCode di {{distro}}...",
-  "wsl.onboarding.updatingOpencode": "Memperbarui OpenCode...",
-  "wsl.onboarding.updatingOpencodeIn": "Memperbarui OpenCode di {{distro}}...",
-  "wsl.onboarding.updateOpencodeIn": "Perbarui OpenCode di {{distro}}.",
   "wsl.onboarding.updateOpencode": "Perbarui OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode siap di {{distro}}.",
   "wsl.onboarding.opencodeReady": "OpenCode siap.",
-  "wsl.onboarding.installOpencodeIn": "Instal OpenCode di {{distro}}.",
   "wsl.onboarding.installOpencode": "Instal OpenCode",
   "wsl.onboarding.chooseDistroFirst": "Pilih distro terlebih dahulu.",
   "wsl.onboarding.loadFailed": "Gagal memuat keadaan WSL.",
@@ -546,20 +518,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Versi terinstal tidak cocok dengan versi aplikasi desktop.",
   "wsl.onboarding.adding": "Menambahkan...",
 
-  "help.tabs.toast.ariaLabel": "Memperkenalkan Tab. Atur pekerjaan dan sesi aktif Anda dengan tab",
-  "help.tabs.toast.dismiss": "Tutup informasi tentang Tab",
-  "help.tabs.title": "Memperkenalkan Tab",
-  "help.tabs.description": "Atur pekerjaan dan sesi aktif Anda dengan tab",
-  "help.tabs.date": "14 Juli",
-  "help.tabs.introduction": "OpenCode Desktop kini dirancang dengan tab sebagai pusatnya.",
-  "help.tabs.sessions":
-    "Mulai sesi baru di tab, atau buka sesi yang sudah ada dari proyek Anda. Buka tab baru saat Anda memulai sesuatu yang baru, lalu tutup setelah selesai.",
-  "help.tabs.organize":
-    "Membiarkan beberapa tab tetap terbuka memudahkan Anda mengatur sesi aktif. Ganti nama tab agar mudah diingat jika Anda berencana mempertahankannya.",
-  "help.tabs.home": "Semua sesi dan proyek Anda tersedia di layar Beranda baru. Memilih sesi akan membukanya di tab.",
-  "help.tabs.persistence": "Saat Anda membuka kembali aplikasi, tab Anda tetap terbuka.",
-  "help.tabs.worktrees":
-    "Desain baru belum mendukung Git Worktrees, tetapi dukungan tersebut akan segera hadir. Jika Anda ingin tetap menggunakan tata letak sebelumnya, Anda dapat beralih antartata letak di Pengaturan. Perlu diingat bahwa tata letak baru akan menjadi permanen dalam beberapa minggu.",
   "server.row.noUsername": "tanpa nama pengguna",
 
   "dialog.project.edit.title": "Sunting proyek",
@@ -574,12 +532,7 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Berjalan setelah membuat ruang kerja (worktree) baru.",
   "dialog.project.edit.worktree.startup.placeholder": "mis. bun install",
 
-  "dialog.releaseNotes.action.getStarted": "Mulai",
-  "dialog.releaseNotes.action.next": "Berikutnya",
-  "dialog.releaseNotes.action.hideFuture": "Jangan tampilkan ini di masa depan",
-  "dialog.releaseNotes.media.alt": "Pratinjau rilis",
 
-  "dialog.usageExceeded.dontShowAgain": "Jangan tampilkan lagi",
 
   "context.breakdown.title": "Rincian Konteks",
   "context.breakdown.note": 'Perkiraan rincian token masukan. "Lainnya" mencakup definisi alat dan beban tambahan.',
@@ -660,16 +613,7 @@ export const dict = {
   "toast.context.noLineSelection.title": "Tidak ada pilihan baris",
   "toast.context.noLineSelection.description": "Pilih rentang baris di tab berkas terlebih dahulu.",
 
-  "toast.session.share.copyFailed.title": "Gagal menyalin URL ke papan klip",
-  "toast.session.share.success.title": "Sesi dibagikan",
-  "toast.session.share.success.description": "URL berbagi disalin ke papan klip!",
-  "toast.session.share.failed.title": "Gagal membagikan sesi",
-  "toast.session.share.failed.description": "Terjadi kesalahan saat membagikan sesi",
 
-  "toast.session.unshare.success.title": "Berbagi sesi dihentikan",
-  "toast.session.unshare.success.description": "Berbagi sesi berhasil dihentikan!",
-  "toast.session.unshare.failed.title": "Gagal menghentikan berbagi sesi",
-  "toast.session.unshare.failed.description": "Terjadi kesalahan saat menghentikan berbagi sesi",
 
   "toast.session.export.success.title": "Sesi diekspor",
   "toast.session.export.success.description": "Sesi disimpan ke {{filename}}",
@@ -696,8 +640,6 @@ export const dict = {
   "error.page.action.checkUpdates": "Periksa pembaruan",
   "error.page.action.updateTo": "Perbarui ke {{version}}",
   "error.page.circular": "[Sirkular]",
-  "error.page.report.prefix": "Harap laporkan kesalahan ini ke tim OpenCode",
-  "error.page.report.discord": "di Discord",
   "error.page.version": "Versi: {{version}}",
 
   "error.dev.rootNotFound":
@@ -768,7 +710,6 @@ export const dict = {
   "session.tab.session": "Sesi",
   "session.tab.review": "Tinjauan",
   "session.tab.context": "Konteks",
-  "session.tab.unknown": "Sesi Tidak Dikenal",
   "session.panel.reviewAndFiles": "Tinjauan dan berkas",
   "session.error.notFound": "Sesi ini tidak dapat ditemukan",
   "session.error.notFound.description": "Tab ini mengarah ke sesi yang sudah tidak ada di server ini.",
@@ -872,18 +813,7 @@ export const dict = {
   "status.popover.tab.plugins": "Plugin",
   "status.popover.action.manageServers": "Kelola server",
 
-  "session.share.popover.title": "Publikasikan di web",
-  "session.share.popover.description.shared": "Sesi ini publik di web. Siapa pun dengan tautan dapat mengaksesnya.",
-  "session.share.popover.description.unshared":
-    "Bagikan sesi secara publik di web. Siapa pun dengan tautan dapat mengaksesnya.",
-  "session.share.action.share": "Bagikan",
-  "session.share.action.publish": "Publikasikan",
-  "session.share.action.publishing": "Mempublikasikan...",
-  "session.share.action.unpublish": "Batalkan publikasi",
-  "session.share.action.unpublishing": "Membatalkan publikasi...",
-  "session.share.action.view": "Lihat",
   "session.share.copy.copied": "Tersalin",
-  "session.share.copy.copyLink": "Salin tautan",
 
   "lsp.tooltip.none": "Tidak ada server LSP",
   "lsp.label.connected": "{{count}} LSP",
@@ -907,7 +837,6 @@ export const dict = {
   "common.moreCountSuffix": " (+{{count}} lainnya)",
   "common.requestFailed": "Permintaan gagal",
   "common.moreOptions": "Opsi lainnya",
-  "common.learnMore": "Pelajari lebih lanjut",
   "common.rename": "Ganti nama",
   "common.export": "Ekspor",
   "common.reset": "Atur ulang",
@@ -941,7 +870,6 @@ export const dict = {
   "sidebar.menu.toggle": "Alihkan menu",
   "sidebar.nav.projectsAndSessions": "Proyek dan sesi",
   "sidebar.settings": "Pengaturan",
-  "sidebar.help": "Bantuan",
   "sidebar.workspaces.enable": "Aktifkan ruang kerja",
   "sidebar.workspaces.disable": "Nonaktifkan ruang kerja",
   "sidebar.gettingStarted.title": "Memulai",
@@ -1050,13 +978,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Bentangkan bagian alat edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Tampilkan bagian alat edit, tulis, dan patch yang dibentangkan secara bawaan di linimasa",
-  "settings.general.row.newInterface.title": "Tata letak baru",
-  "settings.general.row.newInterface.badge": "Baru",
-  "settings.general.row.newInterface.description":
-    "Gunakan tab dan tata letak beranda baru. Beralihlah antartata letak untuk waktu terbatas.",
-  "settings.general.row.newInterfaceNotice.title": "Anda sekarang menggunakan tata letak baru",
-  "settings.general.row.newInterfaceNotice.description": "Tata letak sebelumnya sudah tidak tersedia",
-  "settings.general.row.newInterfaceNotice.dismiss": "Tutup",
   "settings.general.row.pinchZoom.title": "Cubit untuk zum",
   "settings.general.row.pinchZoom.description":
     "Izinkan gerakan cubit pada trackpad dan Ctrl-gulir untuk melakukan zum",
@@ -1066,8 +987,6 @@ export const dict = {
   "settings.general.row.wayland.tooltip":
     "Di Linux dengan monitor berlaju penyegaran berbeda, Wayland asli bisa lebih stabil.",
 
-  "settings.general.row.releaseNotes.title": "Catatan rilis",
-  "settings.general.row.releaseNotes.description": "Tampilkan pop-up Apa yang Baru setelah pembaruan",
 
   "settings.updates.row.startup.title": "Periksa pembaruan saat dimulai",
   "settings.updates.row.startup.description": "Secara otomatis memeriksa pembaruan saat OpenCode diluncurkan",

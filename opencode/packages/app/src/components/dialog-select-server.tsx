@@ -2,7 +2,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -16,10 +15,8 @@ import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
-import { detectServerProtocol } from "@/utils/server-protocol"
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
-import { useSettings } from "@/context/settings"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
 
 const DEFAULT_USERNAME = "opencode"
 
@@ -193,7 +190,7 @@ export function DialogSelectServer() {
 export function useServerManagementController(options: { onSelect?: () => void; navigateOnAdd?: boolean } = {}) {
   const navigate = useNavigate()
   const server = useServer()
-  const tabs = useTabs()
+  const drafts = useDrafts()
   const global = useGlobal()
   const platform = usePlatform()
   const language = useLanguage()
@@ -268,13 +265,6 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         setStore("addServer", { error: language.t("dialog.server.add.error") })
         return
       }
-      if (
-        !settings.general.newLayoutDesigns() &&
-        (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
-      ) {
-        setStore("addServer", { error: language.t("dialog.server.add.error") })
-        return
-      }
 
       resetAdd()
       if (options.navigateOnAdd === false) {
@@ -323,13 +313,6 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         setStore("editServer", { error: language.t("dialog.server.add.error") })
         return
       }
-      if (
-        !settings.general.newLayoutDesigns() &&
-        (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
-      ) {
-        setStore("editServer", { error: language.t("dialog.server.add.error") })
-        return
-      }
       if (normalized === input.original.http.url) {
         server.add(conn)
       } else {
@@ -343,7 +326,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   const replaceServer = (original: ServerConnection.Http, next: ServerConnection.Http) => {
     const originalKey = ServerConnection.key(original)
     const active = server.key
-    tabs.removeServer(originalKey)
+    drafts.removeServer(originalKey)
     const newConn = server.add(next)
     if (!newConn) return
     const nextActive = active === originalKey ? ServerConnection.key(newConn) : active
@@ -359,20 +342,9 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     return [current, ...list.filter((x) => x !== current)]
   })
 
-  const settings = useSettings()
-  const current = createMemo<ServerConnection.Any | undefined>(() =>
-    settings.general.newLayoutDesigns()
-      ? undefined
-      : (items().find((x) => ServerConnection.key(x) === server.key) ?? items()[0]),
-  )
-
   const sortedItems = createMemo(() => {
-    const raw = items()
-    const list = settings.general.newLayoutDesigns()
-      ? raw
-      : raw.filter((x) => global.ensureServerCtx(x).sdk.protocolKind() !== "v2")
+    const list = items()
     if (!list.length) return list
-    const active = current()
     const order = new Map(list.map((url, index) => [url, index] as const))
     const rank = (value?: ServerHealth) => {
       if (value?.healthy === true) return 0
@@ -380,8 +352,6 @@ export function useServerManagementController(options: { onSelect?: () => void; 
       return 1
     }
     return list.slice().sort((a, b) => {
-      if (a === active) return -1
-      if (b === active) return 1
       const diff =
         rank(global.servers.health[ServerConnection.key(a)]) - rank(global.servers.health[ServerConnection.key(b)])
       if (diff !== 0) return diff
@@ -538,7 +508,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   async function handleRemove(key: ServerConnection.Key) {
     try {
       if (key.startsWith("wsl:")) await platform.wslServers?.removeServer(key)
-      tabs.removeServer(key)
+      drafts.removeServer(key)
       server.remove(key)
       if ((await platform.getDefaultServer?.()) === key) {
         await setDefault(null)
@@ -551,7 +521,6 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   return {
     defaultKey,
     canDefault,
-    current,
     sortedItems,
     status: () => global.servers.health,
     isFormMode,
@@ -580,7 +549,6 @@ export function useServerManagementController(options: { onSelect?: () => void; 
 
 export function ServerConnectionList(props: { controller: ReturnType<typeof useServerManagementController> }) {
   const language = useLanguage()
-  const settings = useSettings()
 
   return (
     <div class="flex flex-1 min-h-0 flex-col gap-4">
@@ -594,9 +562,6 @@ export function ServerConnectionList(props: { controller: ReturnType<typeof useS
         emptyMessage={language.t("dialog.server.empty")}
         items={props.controller.sortedItems}
         key={(x) => x.http.url}
-        onSelect={(x) => {
-          if (x && !settings.general.newLayoutDesigns()) void props.controller.select(x)
-        }}
         divider={true}
       >
         {(i) => {
@@ -621,10 +586,6 @@ export function ServerConnectionList(props: { controller: ReturnType<typeof useS
                 showCredentials
               />
               <div class="flex items-center justify-center gap-4 pl-4">
-                <Show when={props.controller.current() && ServerConnection.key(props.controller.current()!) === key}>
-                  <Icon name="check" class="h-6" />
-                </Show>
-
                 <Show when={i.type === "http"}>
                   <DropdownMenu>
                     <DropdownMenu.Trigger

@@ -67,14 +67,6 @@ export const dict = {
   "ui.sessionTurn.retry.geminiHot": "Gemini ҳоло хеле гарм аст",
   "ui.sessionTurn.error.freeUsageExceeded": "Истифодаи ройгон аз ҳад зиёд",
   "ui.sessionTurn.error.addCredits": "Илова кардани кредитҳо",
-  "dialog.usageExceeded.freeTier.title": "Ба ҳадди ройгон расид",
-  "dialog.usageExceeded.freeTier.description":
-    "Ба OpenCode Go обуна шавед, то дастрасии боэътимод ба беҳтарин моделҳои кушодаасос аз $5 дар як моҳ оғоз шавад.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Обуна шавед",
-  "dialog.usageExceeded.accountRateLimit.title": "Ба маҳдудияти рафтан расид",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Ба ҳадди ниҳоии истифода расид. Барои идома додани истифодаи ин модел ҳоло, истифода аз тавозуни дастрасатонро фаъол созед",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Танзимотро кушоед",
   "ui.sessionTurn.status.delegating": "Супоридани кор",
   "ui.sessionTurn.status.planning": "Банақшагирии қадамҳои оянда",
   "ui.sessionTurn.status.gatheringContext": "Таҳқиқ кардан",

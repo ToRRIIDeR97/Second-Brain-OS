@@ -18,10 +18,15 @@ export type Event =
   | EventMessagePartRemoved
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
+  | EventSessionNextHarnessContinuationSet
+  | EventSessionNextHarnessSwitched
   | EventSessionNextMoved
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
+  | EventSessionNextPromptWithdrawn
+  | EventSessionNextPromptSteered
   | EventSessionNextContextUpdated
+  | EventSessionNextMessageImported
   | EventSessionNextSynthetic
   | EventSessionNextShellStarted
   | EventSessionNextShellEnded
@@ -840,6 +845,28 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.harness.continuation.set"
+        properties: {
+          timestamp: number
+          sessionID: string
+          instanceID: HarnessInstanceId
+          continuation: string
+          lastSeenMessageID?: string
+          revision?: number
+        }
+      }
+    | {
+        id: string
+        type: "session.next.harness.switched"
+        properties: {
+          timestamp: number
+          sessionID: string
+          instanceID: HarnessInstanceId
+          model?: HarnessModelSelection
+        }
+      }
+    | {
+        id: string
         type: "session.next.moved"
         properties: {
           timestamp: number
@@ -872,12 +899,39 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.prompt.withdrawn"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.prompt.steered"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.context.updated"
         properties: {
           timestamp: number
           sessionID: string
           messageID: string
           text: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.message.imported"
+        properties: {
+          timestamp: number
+          sessionID: string
+          message: SessionMessage
         }
       }
     | {
@@ -920,6 +974,8 @@ export type GlobalEvent = {
           assistantMessageID: string
           agent: string
           model: ModelRef
+          harnessInstanceID?: HarnessInstanceId
+          harnessModel?: HarnessModelSelection
           snapshot?: string
         }
       }
@@ -1610,10 +1666,15 @@ export type GlobalEvent = {
     | SyncEventMessagePartRemoved
     | SyncEventSessionNextAgentSwitched
     | SyncEventSessionNextModelSwitched
+    | SyncEventSessionNextHarnessContinuationSet
+    | SyncEventSessionNextHarnessSwitched
     | SyncEventSessionNextMoved
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
+    | SyncEventSessionNextPromptWithdrawn
+    | SyncEventSessionNextPromptSteered
     | SyncEventSessionNextContextUpdated
+    | SyncEventSessionNextMessageImported
     | SyncEventSessionNextSynthetic
     | SyncEventSessionNextShellStarted
     | SyncEventSessionNextShellEnded
@@ -2601,6 +2662,13 @@ export type SessionBusyError = {
   message: string
 }
 
+export type SecondBrainConflictError = {
+  name: "SecondBrainConflictError"
+  data: {
+    message: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -2699,10 +2767,29 @@ export type SessionActive = {
   type: "running"
 }
 
+export type MessageNotFoundError = {
+  _tag: "MessageNotFoundError"
+  sessionID: string
+  messageID: string
+  message: string
+}
+
 export type SessionNotFoundError = {
   _tag: "SessionNotFoundError"
   sessionID: string
   message: string
+}
+
+export type UnknownError1 = {
+  _tag: "UnknownError"
+  message: string
+  ref?: string
+}
+
+export type ServiceUnavailableError = {
+  _tag: "ServiceUnavailableError"
+  message: string
+  service?: string
 }
 
 export type PromptInput = {
@@ -2717,32 +2804,18 @@ export type ConflictError = {
   resource?: string
 }
 
-export type ServiceUnavailableError = {
-  _tag: "ServiceUnavailableError"
-  message: string
-  service?: string
-}
-
-export type MessageNotFoundError = {
-  _tag: "MessageNotFoundError"
-  sessionID: string
-  messageID: string
-  message: string
-}
-
-export type UnknownError1 = {
-  _tag: "UnknownError"
-  message: string
-  ref?: string
-}
-
 export type SessionDurableEvent =
   | SessionNextAgentSwitched
   | SessionNextModelSwitched
+  | SessionNextHarnessContinuationSet
+  | SessionNextHarnessSwitched
   | SessionNextMoved
   | SessionNextPrompted
   | SessionNextPromptAdmitted
+  | SessionNextPromptWithdrawn
+  | SessionNextPromptSteered
   | SessionNextContextUpdated
+  | SessionNextMessageImported
   | SessionNextSynthetic
   | SessionNextShellStarted
   | SessionNextShellEnded
@@ -2784,6 +2857,30 @@ export type SessionMessagesResponse = {
 export type ProviderNotFoundError = {
   _tag: "ProviderNotFoundError"
   providerID: string
+  message: string
+}
+
+export type HarnessSettingsInvalidError = {
+  _tag: "HarnessSettingsInvalidError"
+  reason: string
+  message: string
+}
+
+export type HarnessSettingsNotFoundError = {
+  _tag: "HarnessSettingsNotFoundError"
+  reason: string
+  message: string
+}
+
+export type HarnessSettingsExistsError = {
+  _tag: "HarnessSettingsExistsError"
+  reason: string
+  message: string
+}
+
+export type HarnessSettingsWriteError = {
+  _tag: "HarnessSettingsWriteError"
+  reason: string
   message: string
 }
 
@@ -2866,10 +2963,15 @@ export type V2Event =
   | MessagePartRemoved
   | SessionNextAgentSwitched
   | SessionNextModelSwitched
+  | SessionNextHarnessContinuationSet
+  | SessionNextHarnessSwitched
   | SessionNextMoved
   | SessionNextPrompted
   | SessionNextPromptAdmitted
+  | SessionNextPromptWithdrawn
+  | SessionNextPromptSteered
   | SessionNextContextUpdated
+  | SessionNextMessageImported
   | SessionNextSynthetic
   | SessionNextShellStarted
   | SessionNextShellEnded
@@ -3041,6 +3143,14 @@ export type ModelRef = {
   variant?: string
 }
 
+export type HarnessInstanceId = string
+
+export type HarnessModelSelection = {
+  id: string
+  reasoningEffort?: string
+  serviceTier?: string
+}
+
 export type LocationRef = {
   directory: string
   workspaceID?: string
@@ -3065,15 +3175,110 @@ export type PromptAgentAttachment = {
   source?: PromptSource
 }
 
-export type SessionErrorUnknown = {
-  type: "unknown"
-  message: string
+export type SessionMessageAgentSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "agent-switched"
+  agent: string
+}
+
+export type SessionMessageModelSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "model-switched"
+  model: ModelRef
+}
+
+export type SessionMessageUser = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  type: "user"
+}
+
+export type SessionMessageSynthetic = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  sessionID: string
+  text: string
+  type: "synthetic"
+}
+
+export type SessionMessageSystem = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "system"
+  text: string
+}
+
+export type SessionMessageShell = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    completed?: number
+  }
+  type: "shell"
+  callID: string
+  command: string
+  output: string
+}
+
+export type SessionMessageAssistantText = {
+  type: "text"
+  id: string
+  text: string
 }
 
 export type LlmProviderMetadata = {
   [key: string]: {
     [key: string]: unknown
   }
+}
+
+export type SessionMessageAssistantReasoning = {
+  type: "reasoning"
+  id: string
+  text: string
+  providerMetadata?: LlmProviderMetadata
+  time?: {
+    created: number
+    completed?: number
+  }
+}
+
+export type SessionMessageToolStatePending = {
+  status: "pending"
+  input: string
 }
 
 export type ToolTextContent = {
@@ -3089,6 +3294,129 @@ export type ToolFileContent = {
 }
 
 export type LlmToolContent = ToolTextContent | ToolFileContent
+
+export type SessionMessageToolStateRunning = {
+  status: "running"
+  input: {
+    [key: string]: unknown
+  }
+  structured: {
+    [key: string]: unknown
+  }
+  content: Array<LlmToolContent>
+}
+
+export type SessionMessageToolStateCompleted = {
+  status: "completed"
+  input: {
+    [key: string]: unknown
+  }
+  attachments?: Array<PromptFileAttachment>
+  content: Array<LlmToolContent>
+  outputPaths?: Array<string>
+  structured: {
+    [key: string]: unknown
+  }
+  result?: unknown
+}
+
+export type SessionErrorUnknown = {
+  type: "unknown"
+  message: string
+}
+
+export type SessionMessageToolStateError = {
+  status: "error"
+  input: {
+    [key: string]: unknown
+  }
+  content: Array<LlmToolContent>
+  structured: {
+    [key: string]: unknown
+  }
+  error: SessionErrorUnknown
+  result?: unknown
+}
+
+export type SessionMessageAssistantTool = {
+  type: "tool"
+  id: string
+  name: string
+  provider?: {
+    executed: boolean
+    metadata?: LlmProviderMetadata
+    resultMetadata?: LlmProviderMetadata
+  }
+  state:
+    | SessionMessageToolStatePending
+    | SessionMessageToolStateRunning
+    | SessionMessageToolStateCompleted
+    | SessionMessageToolStateError
+  time: {
+    created: number
+    ran?: number
+    completed?: number
+    pruned?: number
+  }
+}
+
+export type SessionMessageAssistant = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    completed?: number
+  }
+  type: "assistant"
+  agent: string
+  model: ModelRef
+  harnessInstanceID?: HarnessInstanceId
+  harnessModel?: HarnessModelSelection
+  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  snapshot?: {
+    start?: string
+    end?: string
+    files?: Array<string>
+  }
+  finish?: string
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  error?: SessionErrorUnknown
+}
+
+export type SessionMessageCompaction = {
+  type: "compaction"
+  reason: "auto" | "manual"
+  summary: string
+  recent: string
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+}
+
+export type SessionMessage =
+  | SessionMessageAgentSwitched
+  | SessionMessageModelSwitched
+  | SessionMessageUser
+  | SessionMessageSynthetic
+  | SessionMessageSystem
+  | SessionMessageShell
+  | SessionMessageAssistant
+  | SessionMessageCompaction
 
 export type SessionNextRetryError = {
   message: string
@@ -3332,6 +3660,42 @@ export type SyncEventSessionNextModelSwitched = {
   }
 }
 
+export type SyncEventSessionNextHarnessContinuationSet = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.harness.continuation.set.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      instanceID: HarnessInstanceId
+      continuation: string
+      lastSeenMessageID?: string
+      revision?: number
+    }
+  }
+}
+
+export type SyncEventSessionNextHarnessSwitched = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.harness.switched.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      instanceID: HarnessInstanceId
+      model?: HarnessModelSelection
+    }
+  }
+}
+
 export type SyncEventSessionNextMoved = {
   type: "sync"
   id: string
@@ -3385,6 +3749,38 @@ export type SyncEventSessionNextPromptAdmitted = {
   }
 }
 
+export type SyncEventSessionNextPromptWithdrawn = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.prompt.withdrawn.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+    }
+  }
+}
+
+export type SyncEventSessionNextPromptSteered = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.prompt.steered.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+    }
+  }
+}
+
 export type SyncEventSessionNextContextUpdated = {
   type: "sync"
   id: string
@@ -3398,6 +3794,22 @@ export type SyncEventSessionNextContextUpdated = {
       sessionID: string
       messageID: string
       text: string
+    }
+  }
+}
+
+export type SyncEventSessionNextMessageImported = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.message.imported.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      message: SessionMessage
     }
   }
 }
@@ -3468,6 +3880,8 @@ export type SyncEventSessionNextStepStarted = {
       assistantMessageID: string
       agent: string
       model: ModelRef
+      harnessInstanceID?: HarnessInstanceId
+      harnessModel?: HarnessModelSelection
       snapshot?: string
     }
   }
@@ -3906,6 +4320,9 @@ export type SessionV2Info = {
   id: string
   parentID?: string
   projectID: string
+  harnessInstanceID: HarnessInstanceId
+  harnessModel?: HarnessModelSelection
+  harnessRevision?: number
   agent?: string
   model?: ModelRef
   cost: number
@@ -3922,6 +4339,7 @@ export type SessionV2Info = {
     created: number
     updated: number
     archived?: number
+    pinned?: number
   }
   title: string
   location: LocationRef
@@ -3945,222 +4363,6 @@ export type SessionInputAdmitted = {
   timeCreated: number
   promotedSeq?: number
 }
-
-export type SessionMessageAgentSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "agent-switched"
-  agent: string
-}
-
-export type SessionMessageModelSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "model-switched"
-  model: ModelRef
-}
-
-export type SessionMessageUser = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  text: string
-  files?: Array<PromptFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-  type: "user"
-}
-
-export type SessionMessageSynthetic = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  sessionID: string
-  text: string
-  type: "synthetic"
-}
-
-export type SessionMessageSystem = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "system"
-  text: string
-}
-
-export type SessionMessageShell = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    completed?: number
-  }
-  type: "shell"
-  callID: string
-  command: string
-  output: string
-}
-
-export type SessionMessageAssistantText = {
-  type: "text"
-  id: string
-  text: string
-}
-
-export type SessionMessageAssistantReasoning = {
-  type: "reasoning"
-  id: string
-  text: string
-  providerMetadata?: LlmProviderMetadata
-  time?: {
-    created: number
-    completed?: number
-  }
-}
-
-export type SessionMessageToolStatePending = {
-  status: "pending"
-  input: string
-}
-
-export type SessionMessageToolStateRunning = {
-  status: "running"
-  input: {
-    [key: string]: unknown
-  }
-  structured: {
-    [key: string]: unknown
-  }
-  content: Array<LlmToolContent>
-}
-
-export type SessionMessageToolStateCompleted = {
-  status: "completed"
-  input: {
-    [key: string]: unknown
-  }
-  attachments?: Array<PromptFileAttachment>
-  content: Array<LlmToolContent>
-  outputPaths?: Array<string>
-  structured: {
-    [key: string]: unknown
-  }
-  result?: unknown
-}
-
-export type SessionMessageToolStateError = {
-  status: "error"
-  input: {
-    [key: string]: unknown
-  }
-  content: Array<LlmToolContent>
-  structured: {
-    [key: string]: unknown
-  }
-  error: SessionErrorUnknown
-  result?: unknown
-}
-
-export type SessionMessageAssistantTool = {
-  type: "tool"
-  id: string
-  name: string
-  provider?: {
-    executed: boolean
-    metadata?: LlmProviderMetadata
-    resultMetadata?: LlmProviderMetadata
-  }
-  state:
-    | SessionMessageToolStatePending
-    | SessionMessageToolStateRunning
-    | SessionMessageToolStateCompleted
-    | SessionMessageToolStateError
-  time: {
-    created: number
-    ran?: number
-    completed?: number
-    pruned?: number
-  }
-}
-
-export type SessionMessageAssistant = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    completed?: number
-  }
-  type: "assistant"
-  agent: string
-  model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
-  snapshot?: {
-    start?: string
-    end?: string
-    files?: Array<string>
-  }
-  finish?: string
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  error?: SessionErrorUnknown
-}
-
-export type SessionMessageCompaction = {
-  type: "compaction"
-  reason: "auto" | "manual"
-  summary: string
-  recent: string
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-}
-
-export type SessionMessage =
-  | SessionMessageAgentSwitched
-  | SessionMessageModelSwitched
-  | SessionMessageUser
-  | SessionMessageSynthetic
-  | SessionMessageSystem
-  | SessionMessageShell
-  | SessionMessageAssistant
-  | SessionMessageCompaction
 
 export type SessionNextAgentSwitched = {
   id: string
@@ -4199,6 +4401,48 @@ export type SessionNextModelSwitched = {
     sessionID: string
     messageID: string
     model: ModelRef
+  }
+}
+
+export type SessionNextHarnessContinuationSet = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.harness.continuation.set"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    instanceID: HarnessInstanceId
+    continuation: string
+    lastSeenMessageID?: string
+    revision?: number
+  }
+}
+
+export type SessionNextHarnessSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.harness.switched"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    instanceID: HarnessInstanceId
+    model?: HarnessModelSelection
   }
 }
 
@@ -4264,6 +4508,44 @@ export type SessionNextPromptAdmitted = {
   }
 }
 
+export type SessionNextPromptWithdrawn = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompt.withdrawn"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type SessionNextPromptSteered = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompt.steered"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
 export type SessionNextContextUpdated = {
   id: string
   metadata?: {
@@ -4281,6 +4563,25 @@ export type SessionNextContextUpdated = {
     sessionID: string
     messageID: string
     text: string
+  }
+}
+
+export type SessionNextMessageImported = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.message.imported"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    message: SessionMessage
   }
 }
 
@@ -4363,6 +4664,8 @@ export type SessionNextStepStarted = {
     assistantMessageID: string
     agent: string
     model: ModelRef
+    harnessInstanceID?: HarnessInstanceId
+    harnessModel?: HarnessModelSelection
     snapshot?: string
   }
 }
@@ -4873,6 +5176,83 @@ export type ProviderV2Info = {
   disabled?: boolean
   api: ProviderApi
   request: ProviderRequest
+}
+
+export type HarnessDriverKind = string
+
+export type HarnessModel = {
+  id: string
+  name: string
+  description?: string
+  reasoningEfforts: Array<string>
+  serviceTiers: Array<{
+    id: string
+    name: string
+    description?: string
+  }>
+  defaultReasoningEffort?: string
+  defaultServiceTier?: string
+  isDefault: boolean
+}
+
+export type HarnessInstance = {
+  id: HarnessInstanceId
+  driver: HarnessDriverKind
+  name: string
+  status: "available" | "unavailable"
+  version?: string
+  authenticated?: boolean
+  error?: string
+  models: Array<HarnessModel>
+}
+
+export type HarnessSettingsEntry = {
+  id: HarnessInstanceId
+  driver: HarnessDriverKind
+  name: string
+  enabled: boolean
+  source: "built-in" | "registry" | "config"
+  editable: boolean
+  command?: string
+  args?: Array<string>
+  models?: Array<string>
+}
+
+export type HarnessDiscoverInput = {
+  command: string
+  args?: Array<string>
+}
+
+export type HarnessDiscovery = {
+  command: string
+  args: Array<string>
+  agentName?: string
+  version?: string
+  models: Array<HarnessModel>
+}
+
+export type HarnessVerifyInput = {
+  command: string
+  args?: Array<string>
+  model?: string
+}
+
+export type HarnessVerification = {
+  command: string
+  args: Array<string>
+  agentName?: string
+  version?: string
+  models: Array<HarnessModel>
+  reply: string
+  ok: boolean
+}
+
+export type HarnessSettingsInput = {
+  id: string
+  name?: string
+  command: string
+  args?: Array<string>
+  models?: Array<string>
 }
 
 export type IntegrationWhen = {
@@ -6270,6 +6650,30 @@ export type EventSessionNextModelSwitched = {
   }
 }
 
+export type EventSessionNextHarnessContinuationSet = {
+  id: string
+  type: "session.next.harness.continuation.set"
+  properties: {
+    timestamp: number
+    sessionID: string
+    instanceID: HarnessInstanceId
+    continuation: string
+    lastSeenMessageID?: string
+    revision?: number
+  }
+}
+
+export type EventSessionNextHarnessSwitched = {
+  id: string
+  type: "session.next.harness.switched"
+  properties: {
+    timestamp: number
+    sessionID: string
+    instanceID: HarnessInstanceId
+    model?: HarnessModelSelection
+  }
+}
+
 export type EventSessionNextMoved = {
   id: string
   type: "session.next.moved"
@@ -6305,6 +6709,26 @@ export type EventSessionNextPromptAdmitted = {
   }
 }
 
+export type EventSessionNextPromptWithdrawn = {
+  id: string
+  type: "session.next.prompt.withdrawn"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type EventSessionNextPromptSteered = {
+  id: string
+  type: "session.next.prompt.steered"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
 export type EventSessionNextContextUpdated = {
   id: string
   type: "session.next.context.updated"
@@ -6313,6 +6737,16 @@ export type EventSessionNextContextUpdated = {
     sessionID: string
     messageID: string
     text: string
+  }
+}
+
+export type EventSessionNextMessageImported = {
+  id: string
+  type: "session.next.message.imported"
+  properties: {
+    timestamp: number
+    sessionID: string
+    message: SessionMessage
   }
 }
 
@@ -6359,6 +6793,8 @@ export type EventSessionNextStepStarted = {
     assistantMessageID: string
     agent: string
     model: ModelRef
+    harnessInstanceID?: HarnessInstanceId
+    harnessModel?: HarnessModelSelection
     snapshot?: string
   }
 }
@@ -9617,8 +10053,9 @@ export type SessionUpdateData = {
       [key: string]: unknown
     }
     permission?: PermissionRuleset
+    pinned?: boolean
     time?: {
-      archived?: number
+      archived?: number | null
     }
   }
   path: {
@@ -10475,6 +10912,682 @@ export type PartUpdateResponses = {
 }
 
 export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
+
+export type SecondBrainListNotesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    search?: string
+  }
+  url: "/second-brain/notes"
+}
+
+export type SecondBrainListNotesErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SecondBrainListNotesError = SecondBrainListNotesErrors[keyof SecondBrainListNotesErrors]
+
+export type SecondBrainListNotesResponses = {
+  /**
+   * Notes
+   */
+  200: Array<{
+    path: string
+    title: string
+    projectIds: Array<string>
+    tags: Array<string>
+    links: Array<string>
+    updatedAt: string
+  }>
+}
+
+export type SecondBrainListNotesResponse = SecondBrainListNotesResponses[keyof SecondBrainListNotesResponses]
+
+export type SecondBrainReadNoteData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/second-brain/note"
+}
+
+export type SecondBrainReadNoteErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SecondBrainReadNoteError = SecondBrainReadNoteErrors[keyof SecondBrainReadNoteErrors]
+
+export type SecondBrainReadNoteResponses = {
+  /**
+   * Note
+   */
+  200: {
+    info: {
+      path: string
+      title: string
+      projectIds: Array<string>
+      tags: Array<string>
+      links: Array<string>
+      updatedAt: string
+    }
+    body: string
+    revision: string
+  }
+}
+
+export type SecondBrainReadNoteResponse = SecondBrainReadNoteResponses[keyof SecondBrainReadNoteResponses]
+
+export type SecondBrainWriteNoteData = {
+  body?: {
+    body: string
+    expectedRevision?: string
+    title?: string
+    projectIds?: Array<string>
+    tags?: Array<string>
+    create?: boolean
+  }
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/second-brain/note"
+}
+
+export type SecondBrainWriteNoteErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+}
+
+export type SecondBrainWriteNoteError = SecondBrainWriteNoteErrors[keyof SecondBrainWriteNoteErrors]
+
+export type SecondBrainWriteNoteResponses = {
+  /**
+   * Note saved
+   */
+  200: {
+    info: {
+      path: string
+      title: string
+      projectIds: Array<string>
+      tags: Array<string>
+      links: Array<string>
+      updatedAt: string
+    }
+    body: string
+    revision: string
+  }
+}
+
+export type SecondBrainWriteNoteResponse = SecondBrainWriteNoteResponses[keyof SecondBrainWriteNoteResponses]
+
+export type SecondBrainReadCalendarData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/second-brain/calendar"
+}
+
+export type SecondBrainReadCalendarErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SecondBrainReadCalendarError = SecondBrainReadCalendarErrors[keyof SecondBrainReadCalendarErrors]
+
+export type SecondBrainReadCalendarResponses = {
+  /**
+   * Calendar
+   */
+  200: {
+    version: 2
+    revision: string
+    events: Array<{
+      id: string
+      title: string
+      date: string
+      endDate?: string
+      start?: string
+      end?: string
+      details?: string
+      projectId?: string
+      providerId?: string
+      calendarId?: string
+      etag?: string
+      timezone?: string
+      allDay?: boolean
+      recurringSeriesId?: string
+      participantCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      outboxKind?: "create" | "update" | "delete"
+      outboxKey?: string
+      source: "local" | "google"
+      syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+    }>
+    tasks: Array<{
+      id: string
+      title: string
+      notes?: string
+      projectId?: string
+      dueDate?: string
+      scheduledDate?: string
+      start?: string
+      end?: string
+      completedAt?: string
+      providerId?: string
+      taskListId?: string
+      taskListTitle?: string
+      etag?: string
+      outboxKind?: "create" | "update" | "delete"
+      outboxKey?: string
+      createdAt: string
+      updatedAt: string
+      source: "local" | "google"
+      syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+    }>
+  }
+}
+
+export type SecondBrainReadCalendarResponse = SecondBrainReadCalendarResponses[keyof SecondBrainReadCalendarResponses]
+
+export type SecondBrainWriteCalendarData = {
+  body?: {
+    expectedRevision?: string
+    events: Array<{
+      id: string
+      title: string
+      date: string
+      endDate?: string
+      start?: string
+      end?: string
+      details?: string
+      projectId?: string
+      providerId?: string
+      calendarId?: string
+      etag?: string
+      timezone?: string
+      allDay?: boolean
+      recurringSeriesId?: string
+      participantCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      outboxKind?: "create" | "update" | "delete"
+      outboxKey?: string
+      source: "local" | "google"
+      syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+    }>
+    tasks: Array<{
+      id: string
+      title: string
+      notes?: string
+      projectId?: string
+      dueDate?: string
+      scheduledDate?: string
+      start?: string
+      end?: string
+      completedAt?: string
+      providerId?: string
+      taskListId?: string
+      taskListTitle?: string
+      etag?: string
+      outboxKind?: "create" | "update" | "delete"
+      outboxKey?: string
+      createdAt: string
+      updatedAt: string
+      source: "local" | "google"
+      syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/second-brain/calendar"
+}
+
+export type SecondBrainWriteCalendarErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+}
+
+export type SecondBrainWriteCalendarError = SecondBrainWriteCalendarErrors[keyof SecondBrainWriteCalendarErrors]
+
+export type SecondBrainWriteCalendarResponses = {
+  /**
+   * Calendar saved
+   */
+  200: {
+    version: 2
+    revision: string
+    events: Array<{
+      id: string
+      title: string
+      date: string
+      endDate?: string
+      start?: string
+      end?: string
+      details?: string
+      projectId?: string
+      providerId?: string
+      calendarId?: string
+      etag?: string
+      timezone?: string
+      allDay?: boolean
+      recurringSeriesId?: string
+      participantCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      outboxKind?: "create" | "update" | "delete"
+      outboxKey?: string
+      source: "local" | "google"
+      syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+    }>
+    tasks: Array<{
+      id: string
+      title: string
+      notes?: string
+      projectId?: string
+      dueDate?: string
+      scheduledDate?: string
+      start?: string
+      end?: string
+      completedAt?: string
+      providerId?: string
+      taskListId?: string
+      taskListTitle?: string
+      etag?: string
+      outboxKind?: "create" | "update" | "delete"
+      outboxKey?: string
+      createdAt: string
+      updatedAt: string
+      source: "local" | "google"
+      syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+    }>
+  }
+}
+
+export type SecondBrainWriteCalendarResponse =
+  SecondBrainWriteCalendarResponses[keyof SecondBrainWriteCalendarResponses]
+
+export type SecondBrainListProjectsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/second-brain/projects"
+}
+
+export type SecondBrainListProjectsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SecondBrainListProjectsError = SecondBrainListProjectsErrors[keyof SecondBrainListProjectsErrors]
+
+export type SecondBrainListProjectsResponses = {
+  /**
+   * Projects
+   */
+  200: Array<{
+    id: string
+    folder: string
+    name: string
+    outcome: string
+    templateId?: string
+    instructions: string
+    status: "active" | "paused" | "archived"
+    progressPercent: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    nextMilestone?: string
+    blocker?: string
+    tags: Array<string>
+    location?: {
+      workspaceId: string
+      displayPath: string
+    }
+    createdAt: string
+    updatedAt: string
+  }>
+}
+
+export type SecondBrainListProjectsResponse = SecondBrainListProjectsResponses[keyof SecondBrainListProjectsResponses]
+
+export type SecondBrainCreateProjectData = {
+  body?: {
+    name: string
+    outcome: string
+    templateId?: string
+    instructions?: string
+    tags?: Array<string>
+    location?: {
+      workspaceId: string
+      displayPath: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/second-brain/projects"
+}
+
+export type SecondBrainCreateProjectErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+}
+
+export type SecondBrainCreateProjectError = SecondBrainCreateProjectErrors[keyof SecondBrainCreateProjectErrors]
+
+export type SecondBrainCreateProjectResponses = {
+  /**
+   * Project created
+   */
+  200: {
+    id: string
+    folder: string
+    name: string
+    outcome: string
+    templateId?: string
+    instructions: string
+    status: "active" | "paused" | "archived"
+    progressPercent: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    nextMilestone?: string
+    blocker?: string
+    tags: Array<string>
+    location?: {
+      workspaceId: string
+      displayPath: string
+    }
+    createdAt: string
+    updatedAt: string
+  }
+}
+
+export type SecondBrainCreateProjectResponse =
+  SecondBrainCreateProjectResponses[keyof SecondBrainCreateProjectResponses]
+
+export type SecondBrainListProjectThreadsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/second-brain/project-threads"
+}
+
+export type SecondBrainListProjectThreadsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SecondBrainListProjectThreadsError =
+  SecondBrainListProjectThreadsErrors[keyof SecondBrainListProjectThreadsErrors]
+
+export type SecondBrainListProjectThreadsResponses = {
+  /**
+   * Projects with thread directories
+   */
+  200: Array<{
+    project: {
+      id: string
+      folder: string
+      name: string
+      outcome: string
+      templateId?: string
+      instructions: string
+      status: "active" | "paused" | "archived"
+      progressPercent: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      nextMilestone?: string
+      blocker?: string
+      tags: Array<string>
+      location?: {
+        workspaceId: string
+        displayPath: string
+      }
+      createdAt: string
+      updatedAt: string
+    }
+    threadDirectory: string
+    threadDirectoryKind: "workspace" | "folder"
+    workspace: {
+      id: string
+      worktree: string
+      name?: string
+    }
+    rootSessionCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    lastActivityAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
+export type SecondBrainListProjectThreadsResponse =
+  SecondBrainListProjectThreadsResponses[keyof SecondBrainListProjectThreadsResponses]
+
+export type SecondBrainEnsureWorkspaceProjectData = {
+  body?: {
+    workspaceId: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/second-brain/projects/workspace"
+}
+
+export type SecondBrainEnsureWorkspaceProjectErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+}
+
+export type SecondBrainEnsureWorkspaceProjectError =
+  SecondBrainEnsureWorkspaceProjectErrors[keyof SecondBrainEnsureWorkspaceProjectErrors]
+
+export type SecondBrainEnsureWorkspaceProjectResponses = {
+  /**
+   * Project linked to the Workspace
+   */
+  200: {
+    id: string
+    folder: string
+    name: string
+    outcome: string
+    templateId?: string
+    instructions: string
+    status: "active" | "paused" | "archived"
+    progressPercent: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    nextMilestone?: string
+    blocker?: string
+    tags: Array<string>
+    location?: {
+      workspaceId: string
+      displayPath: string
+    }
+    createdAt: string
+    updatedAt: string
+  }
+}
+
+export type SecondBrainEnsureWorkspaceProjectResponse =
+  SecondBrainEnsureWorkspaceProjectResponses[keyof SecondBrainEnsureWorkspaceProjectResponses]
+
+export type SecondBrainReadProjectData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    id: string
+  }
+  url: "/second-brain/project"
+}
+
+export type SecondBrainReadProjectErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SecondBrainReadProjectError = SecondBrainReadProjectErrors[keyof SecondBrainReadProjectErrors]
+
+export type SecondBrainReadProjectResponses = {
+  /**
+   * Project
+   */
+  200: {
+    id: string
+    folder: string
+    name: string
+    outcome: string
+    templateId?: string
+    instructions: string
+    status: "active" | "paused" | "archived"
+    progressPercent: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    nextMilestone?: string
+    blocker?: string
+    tags: Array<string>
+    location?: {
+      workspaceId: string
+      displayPath: string
+    }
+    createdAt: string
+    updatedAt: string
+  }
+}
+
+export type SecondBrainReadProjectResponse = SecondBrainReadProjectResponses[keyof SecondBrainReadProjectResponses]
+
+export type SecondBrainUpdateProjectData = {
+  body?: {
+    expectedUpdatedAt?: string
+    name?: string
+    outcome?: string
+    templateId?: string
+    instructions?: string
+    status?: "active" | "paused" | "archived"
+    progressPercent?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    nextMilestone?: string
+    blocker?: string
+    tags?: Array<string>
+    location?: {
+      workspaceId: string
+      displayPath: string
+    }
+  }
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    id: string
+  }
+  url: "/second-brain/project"
+}
+
+export type SecondBrainUpdateProjectErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+}
+
+export type SecondBrainUpdateProjectError = SecondBrainUpdateProjectErrors[keyof SecondBrainUpdateProjectErrors]
+
+export type SecondBrainUpdateProjectResponses = {
+  /**
+   * Project updated
+   */
+  200: {
+    id: string
+    folder: string
+    name: string
+    outcome: string
+    templateId?: string
+    instructions: string
+    status: "active" | "paused" | "archived"
+    progressPercent: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    nextMilestone?: string
+    blocker?: string
+    tags: Array<string>
+    location?: {
+      workspaceId: string
+      displayPath: string
+    }
+    createdAt: string
+    updatedAt: string
+  }
+}
+
+export type SecondBrainUpdateProjectResponse =
+  SecondBrainUpdateProjectResponses[keyof SecondBrainUpdateProjectResponses]
 
 export type SyncStartData = {
   body?: never
@@ -11373,6 +12486,8 @@ export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListRe
 export type V2SessionCreateData = {
   body: {
     id?: string
+    harnessInstanceID?: HarnessInstanceId
+    harnessModel?: HarnessModelSelection
     agent?: string
     model?: ModelRef
     location?: LocationRef
@@ -11438,6 +12553,94 @@ export type V2SessionActiveResponses = {
 }
 
 export type V2SessionActiveResponse = V2SessionActiveResponses[keyof V2SessionActiveResponses]
+
+export type ServerSessionSessionForkData = {
+  body: {
+    messageID?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/fork"
+}
+
+export type ServerSessionSessionForkErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | MessageNotFoundError
+   */
+  404: MessageNotFoundError | SessionNotFoundError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type ServerSessionSessionForkError = ServerSessionSessionForkErrors[keyof ServerSessionSessionForkErrors]
+
+export type ServerSessionSessionForkResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionV2Info
+  }
+}
+
+export type ServerSessionSessionForkResponse =
+  ServerSessionSessionForkResponses[keyof ServerSessionSessionForkResponses]
+
+export type ServerSessionSessionDiffData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    messageID?: string
+  }
+  url: "/api/session/{sessionID}/diff"
+}
+
+export type ServerSessionSessionDiffErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type ServerSessionSessionDiffError = ServerSessionSessionDiffErrors[keyof ServerSessionSessionDiffErrors]
+
+export type ServerSessionSessionDiffResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<FileDiff>
+  }
+}
+
+export type ServerSessionSessionDiffResponse =
+  ServerSessionSessionDiffResponses[keyof ServerSessionSessionDiffResponses]
 
 export type V2SessionGetData = {
   body?: never
@@ -11550,6 +12753,48 @@ export type V2SessionSwitchModelResponses = {
 
 export type V2SessionSwitchModelResponse = V2SessionSwitchModelResponses[keyof V2SessionSwitchModelResponses]
 
+export type V2SessionSwitchHarnessData = {
+  body: {
+    instanceID: HarnessInstanceId
+    model?: HarnessModelSelection
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/harness"
+}
+
+export type V2SessionSwitchHarnessErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
+}
+
+export type V2SessionSwitchHarnessError = V2SessionSwitchHarnessErrors[keyof V2SessionSwitchHarnessErrors]
+
+export type V2SessionSwitchHarnessResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionSwitchHarnessResponse = V2SessionSwitchHarnessResponses[keyof V2SessionSwitchHarnessResponses]
+
 export type V2SessionPromptData = {
   body: {
     id?: string
@@ -11595,6 +12840,123 @@ export type V2SessionPromptResponses = {
 }
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
+
+export type V2SessionQueuedData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/queued"
+}
+
+export type V2SessionQueuedErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionQueuedError = V2SessionQueuedErrors[keyof V2SessionQueuedErrors]
+
+export type V2SessionQueuedResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<SessionInputAdmitted>
+  }
+}
+
+export type V2SessionQueuedResponse = V2SessionQueuedResponses[keyof V2SessionQueuedResponses]
+
+export type V2SessionQueuedRemoveData = {
+  body?: never
+  path: {
+    sessionID: string
+    messageID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/queued/{messageID}"
+}
+
+export type V2SessionQueuedRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * MessageNotFoundError | SessionNotFoundError
+   */
+  404: MessageNotFoundError | SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type V2SessionQueuedRemoveError = V2SessionQueuedRemoveErrors[keyof V2SessionQueuedRemoveErrors]
+
+export type V2SessionQueuedRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionQueuedRemoveResponse = V2SessionQueuedRemoveResponses[keyof V2SessionQueuedRemoveResponses]
+
+export type V2SessionQueuedSteerData = {
+  body?: never
+  path: {
+    sessionID: string
+    messageID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/queued/{messageID}/steer"
+}
+
+export type V2SessionQueuedSteerErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * MessageNotFoundError | SessionNotFoundError
+   */
+  404: MessageNotFoundError | SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type V2SessionQueuedSteerError = V2SessionQueuedSteerErrors[keyof V2SessionQueuedSteerErrors]
+
+export type V2SessionQueuedSteerResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionQueuedSteerResponse = V2SessionQueuedSteerResponses[keyof V2SessionQueuedSteerResponses]
 
 export type V2SessionCompactData = {
   body?: never
@@ -12159,6 +13521,374 @@ export type V2ProviderGetResponses = {
 }
 
 export type V2ProviderGetResponse = V2ProviderGetResponses[keyof V2ProviderGetResponses]
+
+export type V2HarnessListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness"
+}
+
+export type V2HarnessListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2HarnessListError = V2HarnessListErrors[keyof V2HarnessListErrors]
+
+export type V2HarnessListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<HarnessInstance>
+  }
+}
+
+export type V2HarnessListResponse = V2HarnessListResponses[keyof V2HarnessListResponses]
+
+export type V2HarnessSettingsData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/settings"
+}
+
+export type V2HarnessSettingsErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2HarnessSettingsError = V2HarnessSettingsErrors[keyof V2HarnessSettingsErrors]
+
+export type V2HarnessSettingsResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<HarnessSettingsEntry>
+  }
+}
+
+export type V2HarnessSettingsResponse = V2HarnessSettingsResponses[keyof V2HarnessSettingsResponses]
+
+export type V2HarnessDiscoverData = {
+  body: HarnessDiscoverInput
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/discover"
+}
+
+export type V2HarnessDiscoverErrors = {
+  /**
+   * HarnessSettingsInvalidError | InvalidRequestError
+   */
+  400: HarnessSettingsInvalidError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * HarnessSettingsNotFoundError
+   */
+  404: HarnessSettingsNotFoundError
+  /**
+   * HarnessSettingsExistsError
+   */
+  409: HarnessSettingsExistsError
+  /**
+   * HarnessSettingsWriteError
+   */
+  500: HarnessSettingsWriteError
+}
+
+export type V2HarnessDiscoverError = V2HarnessDiscoverErrors[keyof V2HarnessDiscoverErrors]
+
+export type V2HarnessDiscoverResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: HarnessDiscovery
+  }
+}
+
+export type V2HarnessDiscoverResponse = V2HarnessDiscoverResponses[keyof V2HarnessDiscoverResponses]
+
+export type V2HarnessAssistantDirectoryData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/assistant-directory"
+}
+
+export type V2HarnessAssistantDirectoryErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2HarnessAssistantDirectoryError =
+  V2HarnessAssistantDirectoryErrors[keyof V2HarnessAssistantDirectoryErrors]
+
+export type V2HarnessAssistantDirectoryResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      directory: string
+    }
+  }
+}
+
+export type V2HarnessAssistantDirectoryResponse =
+  V2HarnessAssistantDirectoryResponses[keyof V2HarnessAssistantDirectoryResponses]
+
+export type V2HarnessVerifyData = {
+  body: HarnessVerifyInput
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/verify"
+}
+
+export type V2HarnessVerifyErrors = {
+  /**
+   * HarnessSettingsInvalidError | InvalidRequestError
+   */
+  400: HarnessSettingsInvalidError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * HarnessSettingsNotFoundError
+   */
+  404: HarnessSettingsNotFoundError
+  /**
+   * HarnessSettingsExistsError
+   */
+  409: HarnessSettingsExistsError
+  /**
+   * HarnessSettingsWriteError
+   */
+  500: HarnessSettingsWriteError
+}
+
+export type V2HarnessVerifyError = V2HarnessVerifyErrors[keyof V2HarnessVerifyErrors]
+
+export type V2HarnessVerifyResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: HarnessVerification
+  }
+}
+
+export type V2HarnessVerifyResponse = V2HarnessVerifyResponses[keyof V2HarnessVerifyResponses]
+
+export type V2HarnessAddData = {
+  body: HarnessSettingsInput
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/registry"
+}
+
+export type V2HarnessAddErrors = {
+  /**
+   * HarnessSettingsInvalidError | InvalidRequestError
+   */
+  400: HarnessSettingsInvalidError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * HarnessSettingsNotFoundError
+   */
+  404: HarnessSettingsNotFoundError
+  /**
+   * HarnessSettingsExistsError
+   */
+  409: HarnessSettingsExistsError
+  /**
+   * HarnessSettingsWriteError
+   */
+  500: HarnessSettingsWriteError
+}
+
+export type V2HarnessAddError = V2HarnessAddErrors[keyof V2HarnessAddErrors]
+
+export type V2HarnessAddResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: HarnessSettingsEntry
+  }
+}
+
+export type V2HarnessAddResponse = V2HarnessAddResponses[keyof V2HarnessAddResponses]
+
+export type V2HarnessRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/registry/{id}"
+}
+
+export type V2HarnessRemoveErrors = {
+  /**
+   * HarnessSettingsInvalidError | InvalidRequestError
+   */
+  400: HarnessSettingsInvalidError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * HarnessSettingsNotFoundError
+   */
+  404: HarnessSettingsNotFoundError
+  /**
+   * HarnessSettingsExistsError
+   */
+  409: HarnessSettingsExistsError
+  /**
+   * HarnessSettingsWriteError
+   */
+  500: HarnessSettingsWriteError
+}
+
+export type V2HarnessRemoveError = V2HarnessRemoveErrors[keyof V2HarnessRemoveErrors]
+
+export type V2HarnessRemoveResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      id: string
+    }
+  }
+}
+
+export type V2HarnessRemoveResponse = V2HarnessRemoveResponses[keyof V2HarnessRemoveResponses]
+
+export type V2HarnessUpdateData = {
+  body: {
+    enabled: boolean
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/registry/{id}"
+}
+
+export type V2HarnessUpdateErrors = {
+  /**
+   * HarnessSettingsInvalidError | InvalidRequestError
+   */
+  400: HarnessSettingsInvalidError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * HarnessSettingsNotFoundError
+   */
+  404: HarnessSettingsNotFoundError
+  /**
+   * HarnessSettingsExistsError
+   */
+  409: HarnessSettingsExistsError
+  /**
+   * HarnessSettingsWriteError
+   */
+  500: HarnessSettingsWriteError
+}
+
+export type V2HarnessUpdateError = V2HarnessUpdateErrors[keyof V2HarnessUpdateErrors]
+
+export type V2HarnessUpdateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: HarnessSettingsEntry
+  }
+}
+
+export type V2HarnessUpdateResponse = V2HarnessUpdateResponses[keyof V2HarnessUpdateResponses]
 
 export type V2IntegrationListData = {
   body?: never

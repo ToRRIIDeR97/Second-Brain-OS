@@ -464,7 +464,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
             "X-Source": "opencode",
           },
@@ -475,7 +474,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
           },
         },
@@ -485,7 +483,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: provider.source === "config",
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
             "X-BILLING-INVOKE-ORIGIN": "OpenCode",
           },
@@ -496,7 +493,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: false,
         options: {
           headers: {
-            "http-referer": "https://opencode.ai/",
             "x-title": "opencode",
           },
         },
@@ -601,7 +597,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
           },
         },
@@ -871,7 +866,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
           },
         },

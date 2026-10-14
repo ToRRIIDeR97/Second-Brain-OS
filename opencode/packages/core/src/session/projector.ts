@@ -71,7 +71,8 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
-    time_archived: info.time.archived,
+    // Updated events carry the full Session, so a missing timestamp clears the column (unarchive).
+    time_archived: info.time.archived ?? null,
   }
 }
 
@@ -386,15 +387,25 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!row) return yield* Effect.die(`Session not found while projecting continuation: ${event.data.sessionID}`)
+        // One entry per harness instance, so switching away and back keeps each native session.
+        // The legacy single slot is dropped: any slot it held was invalidated by the switch that led here.
+        const { harnessContinuation: _legacy, ...metadata } = row.metadata ?? {}
+        const continuations = isRecord(metadata.harnessContinuations) ? metadata.harnessContinuations : {}
+        const previous = continuations[event.data.instanceID]
+        const lastSeenMessageID =
+          event.data.lastSeenMessageID ??
+          (isRecord(previous) && previous.nativeID === event.data.continuation ? previous.lastSeenMessageID : undefined)
         yield* db
           .update(SessionTable)
           .set({
             metadata: {
-              ...row.metadata,
-              harnessContinuation: {
-                instanceID: event.data.instanceID,
-                value: event.data.continuation,
-                revision: event.data.revision ?? 0,
+              ...metadata,
+              harnessContinuations: {
+                ...continuations,
+                [event.data.instanceID]: {
+                  nativeID: event.data.continuation,
+                  ...(typeof lastSeenMessageID === "string" ? { lastSeenMessageID } : {}),
+                },
               },
             },
             time_updated: DateTime.toEpochMillis(event.data.timestamp),
@@ -430,6 +441,19 @@ const layer = Layer.effectDiscard(
           timeCreated: event.data.timestamp,
         })
       }),
+    )
+    yield* events.project(SessionEvent.PromptWithdrawn, (event) =>
+      Effect.gen(function* () {
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        yield* SessionInput.projectWithdrawn(db, {
+          id: event.data.messageID,
+          sessionID: event.data.sessionID,
+          withdrawnSeq: event.durable.seq,
+        })
+      }),
+    )
+    yield* events.project(SessionEvent.PromptSteered, (event) =>
+      SessionInput.projectSteered(db, { id: event.data.messageID, sessionID: event.data.sessionID }),
     )
     yield* events.project(SessionEvent.MessageImported, (event) => run(db, event))
     yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))
@@ -513,3 +537,7 @@ const layer = Layer.effectDiscard(
 )
 
 export const node = makeGlobalNode({ name: "session-projector", layer, deps: [EventV2.node, Database.node] })
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}

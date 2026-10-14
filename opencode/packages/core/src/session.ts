@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, like, lt, or, sql, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -110,6 +110,11 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+// The runner already promoted the queued input, so it can no longer be withdrawn or steered.
+export class InputStartedError extends Schema.TaggedErrorClass<InputStartedError>()("Session.InputStartedError", {
+  sessionID: SessionSchema.ID,
+  messageID: SessionMessage.ID,
+}) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
@@ -169,6 +174,15 @@ export interface Interface {
     delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  readonly queued: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInput.Admitted[], NotFoundError>
+  readonly withdrawQueued: (input: {
+    sessionID: SessionSchema.ID
+    messageID: SessionMessage.ID
+  }) => Effect.Effect<void, NotFoundError | MessageNotFoundError | InputStartedError>
+  readonly steerQueued: (input: {
+    sessionID: SessionSchema.ID
+    messageID: SessionMessage.ID
+  }) => Effect.Effect<void, NotFoundError | MessageNotFoundError | InputStartedError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -350,6 +364,16 @@ const layer = Layer.effect(
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
+        if ("project" in input && input.subpath) {
+          // Exact folder or its descendants. substr avoids LIKE wildcards in ids such as `project_…`.
+          const subpath = input.subpath.replaceAll("\\", "/").replace(/\/+$/, "")
+          conditions.push(
+            or(
+              eq(SessionTable.path, subpath),
+              sql`substr(${SessionTable.path}, 1, ${subpath.length + 1}) = ${subpath + "/"}`,
+            )!,
+          )
+        }
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.anchor) {
           conditions.push(
@@ -460,6 +484,24 @@ const layer = Layer.effect(
           }),
         ),
       ),
+      queued: Effect.fn("V2Session.queued")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionInput.listQueued(db, sessionID)
+      }),
+      withdrawQueued: Effect.fn("V2Session.withdrawQueued")(function* (input) {
+        yield* result.get(input.sessionID)
+        const state = yield* SessionInput.withdraw(db, events, { sessionID: input.sessionID, id: input.messageID })
+        if (state === "withdrawn") return
+        if (state === "missing") return yield* new MessageNotFoundError(input)
+        return yield* new InputStartedError(input)
+      }),
+      steerQueued: Effect.fn("V2Session.steerQueued")(function* (input) {
+        yield* result.get(input.sessionID)
+        const state = yield* SessionInput.steer(db, events, { sessionID: input.sessionID, id: input.messageID })
+        if (state === "started") return yield* new InputStartedError(input)
+        if (state !== "steer") return yield* new MessageNotFoundError(input)
+        yield* execution.wake(input.sessionID)
+      }),
       shell: Effect.fn("V2Session.shell")(function* () {
         return yield* new OperationUnavailableError({ operation: "shell" })
       }),

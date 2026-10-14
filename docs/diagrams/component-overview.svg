@@ -64,10 +64,10 @@
 <text x="30" y="88" text-anchor="start" class="s">«component»</text>
 <text x="30" y="104" text-anchor="start" class="t">Solid renderer</text>
 <text x="30" y="120" text-anchor="start" class="s">app/src</text>
-<text x="30" y="136" text-anchor="start" class="s">routes: Home, Notes, Calendar,</text>
-<text x="30" y="152" text-anchor="start" class="s">Projects, Activity, sessions</text>
+<text x="30" y="136" text-anchor="start" class="s">sidebar: Home, Notes, Calendar,</text>
+<text x="30" y="152" text-anchor="start" class="s">Activity, Projects + threads</text>
 <text x="30" y="168" text-anchor="start" class="s">ServerSDK + compat API (v1/v2)</text>
-<text x="30" y="184" text-anchor="start" class="s">Second Brain client</text>
+<text x="30" y="184" text-anchor="start" class="s">Second Brain client, drafts</text>
 <rect class="box" x="20" y="280" width="250" height="64" rx="6"/>
 <text x="30" y="298" text-anchor="start" class="s">«interface»</text>
 <text x="30" y="314" text-anchor="start" class="t">window.api</text>

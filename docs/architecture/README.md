@@ -1,9 +1,10 @@
 # Architecture
 
-Second Brain OS is an OpenCode fork. The Solid renderer, Electron host, and
-managed local OpenCode server remain the base application. New product domains
-are added inside the existing OpenCode application rather than replacing its
-shell or agent runtime.
+Second Brain OS is an OpenCode fork. OpenCode is the runtime base: the
+Electron host, the managed local OpenCode server and the session runtime. The
+app shell and navigation are Second Brain's own: a sidebar of Home, Notes,
+Calendar, Activity and Projects with their threads. New product domains are
+added inside the existing OpenCode application rather than beside it.
 
 The previous React/Tauri and Rust implementation is retired. Its database
 schemas and remaining migration gaps are recorded in
@@ -36,27 +37,87 @@ Brain files through the server's location services. See
 
 ## Product entry points and persistence
 
-`opencode/packages/app/src/app.tsx` owns routing. The current layout exposes
-Home, Workspaces, Notes, Calendar, Projects, Activity, and agent sessions.
-Settings, model/provider selection, file panels, and terminals are shared
-dialogs or session panels rather than standalone routes.
+`opencode/packages/app/src/app.tsx` owns routing: `/`, `/notes`,
+`/calendar`, `/activity`, `/projects`, the draft route
+`/new-thread?project=<id>&draftId=<id>` and server-scoped threads at
+`/server/<server>/session/<id>`. Old `/workspaces`, `/brain`, `/new-session`
+and `/<dir>/session[/<id>]` URLs redirect. Settings, model/provider
+selection, file panels, and terminals are shared dialogs or session panels
+rather than standalone routes. The
+[navigation map](../product/NAVIGATION-MAP-V1.md) describes the sidebar,
+routes and shortcuts.
+
+`pages/layout-new.tsx` is the only shell: the titlebar (window chrome, back
+and forward) and `components/second-brain-sidebar.tsx`. The sidebar's
+controller (`components/sidebar/sidebar-controller.ts`) reads
+`GET /second-brain/project-threads`, loads each Project's threads with
+`serverSync().project.loadSessions(threadDirectory)` (kept live by
+`session.created/updated/deleted` events), adds the recent-session index for
+threads outside any Project, and groups them with
+`features/second-brain/sidebar-threads.ts` into Projects, Brain and Other
+threads. The active Project is derived from the route's thread or draft
+directory. Sidebar actions (archive, unarchive, pin through `PATCH /session/:id`;
+rename; delete through `session.remove`) apply the server's reply to every
+loaded directory list and to the recent-session index at once, then offer a
+5-second undo from `utils/undo-action.ts` (in memory only; a deferred delete
+that has not run when the app closes is dropped). The renderer has one
+QueryClient (from `AppBaseProviders`); the router shell does not create its
+own. `serverSync().homeSessions` applies every session event to the
+recent-session index in that client, and both the sidebar and Home read it,
+so a thread created, archived, unarchived or pinned anywhere, including in a
+Project that is not open, updates both lists without a reload. A directory
+list contributes only threads that run in that directory, because events
+reach only their own directory's list. `context/drafts.tsx` holds unsent drafts per window and keeps prompt
+state alive across route changes; it replaced the tab store.
 
 | Data                       | Owner and persistence                                                                                                 |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Notes                      | `packages/opencode/src/knowledge/note.ts`; workspace Markdown files                                                   |
 | Project records            | `packages/opencode/src/project/brain.ts`; workspace `projects/` Markdown cards and project folders                    |
+| Project thread directories | Derived, not stored: linked Workspace worktree, else `projects/<id>/`; thread counts read from `opencode.db`          |
 | Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in the XDG data directory                   |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
+| Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
 | Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
 
 Package paths in this table are relative to `opencode/`. Workspace files are
 the source of truth for notes, project records, and local planning. Do not
 assume the session or draft databases can be reconstructed from those files.
 
+### Projects and thread directories
+
+Every thread belongs to a Project. `BrainProject.threadDirectory` resolves a
+Project's directory: the worktree of the OpenCode project named by
+`location.workspaceId`, otherwise the Project folder `projects/<id>/` in the
+Brain directory. Sessions keep their exact `directory`, so
+`GET /api/session?directory=<threadDirectory>` (or `project` plus `subpath`)
+returns only that Project's threads; sibling Project folders in the same Brain
+repository do not mix.
+
+Entry points (legacy instance routes, scoped to the Brain directory through
+workspace routing):
+
+- `GET /second-brain/project-threads` lists Projects with `threadDirectory`,
+  `threadDirectoryKind` (`workspace` or `folder`), the linked Workspace, and
+  root thread count and last activity. The first call per Brain directory in a
+  server process runs the Workspace migration: every OpenCode project with
+  root threads, other than `global` and the Brain itself, gets a Project
+  through `BrainProject.ensureForWorkspace`. It only creates Markdown cards,
+  never moves files, and logs counts only. The server has no other way to
+  know which Workspace is the Brain, so the migration does not run at
+  bootstrap.
+- `POST /second-brain/projects/workspace` with `{ workspaceId }` returns the
+  Project linked to that OpenCode project id, creating one named after the
+  folder when none exists. The renderer calls it from `context/layout.tsx`
+  for folders opened during the app session, and from the sidebar's
+  open-folder flow (`mod+shift+n`, Home's Open Workspace, and
+  `opencode://open-project` deep links).
+
 ## Home navigation
 
-Home renders its shell independently of dashboard requests. Panel content,
+Home is the sidebar's first item and the fallback for unknown routes. Its
+Open Workspace buttons run the sidebar's open-folder flow. Home renders its shell independently of dashboard requests. Panel content,
 metrics, and the harness selector have local loading boundaries. Harness
 availability uses the renderer query cache, keyed by server and workspace
 directory, with 30 seconds of freshness and background refresh on stale
@@ -76,10 +137,14 @@ re-entry. Projects and calendar data still reload on each visit.
 4. Notes, projects, and local calendar requests resolve the selected location
    before reading or mutating files. Google operations use the desktop bridge.
 
-The packaged desktop disables embedded web UI fallback. Missing `/api` routes
-return a local error rather than fetching the hosted OpenCode website. The
+The packaged desktop disables embedded web UI fallback. The server serves only
+a UI bundled into its binary; without one, and for missing `/api` routes, it
+returns a local 404. There is no hosted UI proxy. The
 optional upstream CLI is a separate runtime from the fork's bundled server;
-see [release operations](../release-operations.md).
+see [release operations](../release-operations.md). The fork has no terminal
+UI. `packages/opencode/src/index.ts` is a headless developer CLI (`serve`,
+`generate`, and inspection commands) that runs from source and isn't
+shipped.
 
 ## Harness drivers and registration
 
@@ -101,6 +166,41 @@ receive no Second Brain system prompt. An agent reports its models either in
 the legacy `models` field or as a `configOptions` select of category `model`.
 The driver switches models with `session/set_model` or
 `session/set_config_option` to match.
+
+### Harness handoff
+
+The `opencode` driver reads the Run's native messages, so it needs no
+handoff. Codex and ACP keep their own native thread or session, so
+`renderCodexPrompt` in `harness.ts` decides what text to send with each turn:
+
+- Each instance has its own continuation in the session's
+  `metadata.harnessContinuations[instanceID]`: `{ nativeID, lastSeenMessageID }`.
+  `HarnessContinuationSet` writes one entry and leaves the others alone, so
+  switching harnesses no longer discards another instance's thread. A new
+  `nativeID` clears `lastSeenMessageID`. After a turn ends without an error,
+  the driver records the ID of the user message it answered as
+  `lastSeenMessageID`.
+- A fresh thread, or one whose resume failed, gets the bounded full history.
+- A resumed thread gets only the messages after its `lastSeenMessageID`,
+  skipping its own reply to that message. If that message is no longer in the
+  request (for example after compaction), it gets the bounded full history.
+  If nothing new happened, it gets only the new user message.
+- History is bounded to 16,000 estimated tokens (`util/token.ts`, four
+  characters per token). The first user message and the latest user and
+  assistant messages are always kept, each clipped to a quarter of the budget.
+  Other messages fill newest to oldest. A message that doesn't fit is left out
+  whole, and the block states how many were left out. Tool calls and results
+  become one-line summaries (tool name, command or path, status, exit code).
+- The history sits inside `<handoff-history>` with a notice that it is context
+  only, not a new request, and carries no instructions. The new user message
+  follows after a `---` separator.
+
+`metadata.harnessRevision` still increases on every switch to a different
+instance. It keys the in-memory runtimes, so a harness that is switched back
+in reopens its thread and gets the delta. The old single-slot
+`metadata.harnessContinuation` is read only when it matches the current
+revision (resumed with no history, as before) and is dropped on the next
+`HarnessContinuationSet`. That event's `revision` field is now ignored.
 
 Users manage ACP harnesses in Settings → Harnesses. The page calls
 `/api/harness/settings`, `/api/harness/discover`, and
@@ -140,6 +240,18 @@ than assuming that every operation uses one API generation. PTY sockets use
 short-lived tickets from the legacy connection endpoint on managed servers
 and the native `/api/pty` endpoints on servers using only the current API.
 
+Archive, unarchive, and pin go through the legacy
+`PATCH /session/:sessionID` route. `time.archived: <ms>` archives and
+`time.archived: null` clears the `time_archived` column. `pinned: true`
+stores the pin time as `metadata.pinned` (epoch ms) and `pinned: false`
+removes that key, leaving other metadata intact, so pins need no migration.
+Legacy session info returns `metadata.pinned`; native `SessionV2.Info`
+derives `time.pinned` from it. Each change publishes `session.updated`, and
+the renderer reducer drops archived sessions and re-inserts unarchived ones.
+The renderer helpers are `unarchiveSession` and `setSessionPinned` in
+`app/src/pages/session/session-archive.ts` and `sessionPinnedAt` in
+`app/src/utils/session.ts`.
+
 Native forks copy the selected history into a new session through durable
 `session.next.message.imported` events. Forks receive new message IDs and do
 not inherit provider continuation handles or filesystem snapshots. The
@@ -152,6 +264,86 @@ Snapshot capture discovers Git initialized after a workspace is already open.
 Renderer Last turn review uses this endpoint; working-tree and branch review
 use the managed server's legacy Git routes. File search refreshes the
 ripgrep fallback on each query so newly written files are discoverable.
+
+"Edit from here" on a user message stages a revert at that message
+(`POST /api/session/:sessionID/revert/stage`) and loads the message into the
+composer. The user picks "Messages only" (`files: false`, workspace files
+untouched) or "Messages and files". For the second choice the renderer first
+unions `GET /api/session/:sessionID/diff` across the selected turn and every
+later turn, and asks for confirmation with that file list before staging.
+Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
+files, so the compatibility layer rejects `files: false` for them.
+
+### Composer delivery, background send and stash
+
+While a thread is working, the composer sends each message with a `delivery`
+from Settings → General ("While the agent is working, new messages"): `steer`
+(default) joins the current drain at its next provider-turn boundary, and
+`queue` waits until the session would otherwise go idle. `mod+Enter` sends one
+message with the opposite delivery. Idle sessions send without `delivery`
+(server default `steer`). The renderer passes `delivery` through
+`POST /api/session/:sessionID/prompt` and the harness prompt route. V1 servers
+have no durable inbox: the compatibility layer drops `delivery` and reports
+every V1 prompt as a steer.
+
+Queued inputs stay out of the transcript. The renderer reducer skips
+`session.next.prompt.admitted` events whose `delivery` is `queue` and appends
+the message on `session.next.prompted`. `serverSync.session.data.session_queue`
+holds the pending list: it is loaded from `GET /api/session/:sessionID/queued`
+(unpromoted `queue` rows of `session_input`, oldest first) when a thread syncs,
+then kept current from the same two events. The follow-up dock above the
+composer lists these items, each with "Send now" and "Remove":
+
+- Remove calls `DELETE /api/session/:sessionID/queued/:messageID`. The server
+  publishes durable `session.next.prompt.withdrawn`
+  (`{ sessionID, messageID, timestamp }`); the projector settles the
+  `session_input` row by setting `promoted_seq` to the withdrawal sequence
+  without a transcript message. Repeating it is a no-op.
+- Send now calls `POST /api/session/:sessionID/queued/:messageID/steer`. The
+  server publishes durable `session.next.prompt.steered` (same fields); the
+  projector switches the row's delivery to `steer` and the session is woken, so
+  the input joins the current drain at its next steer point or starts a run
+  when idle.
+- Both projectors update only a row that is still unpromoted with `queue`
+  delivery, inside the event transaction. If the runner promoted it first, the
+  event is not stored and the route answers 409 `ConflictError` ("Queued
+  message already started"); an unknown or withdrawn input answers 404
+  `MessageNotFoundError`. A runner that selected an input before it was
+  withdrawn skips it (its `session.next.prompted` projection conflicts and is
+  dropped, and a queue turn that promoted nothing ends without a model call);
+  one steered after selection is still promoted once.
+
+The renderer drops an item from `session_queue` on either event. The actions
+go through the workspace SDK (`client.v2.session.queuedRemove/queuedSteer`)
+in `utils/server-compat.ts`: V1 servers, and V2 servers whose unmatched-route
+404 shows the routes are missing, raise `QueuedActionsUnsupportedError`, and
+the dock then hides the buttons for that thread with a toast. One action runs
+at a time (`pages/session/composer/queued-actions.ts`); other failures show an
+error toast. Servers without the list route (V1 and older V2) report an empty
+queue. The earlier client-side
+queue (`followup.v1` per-workspace store) is removed; any items still in that
+key are no longer read.
+
+`mod+alt+Enter` sends in the background. From a new-thread draft it creates the
+thread through the normal new-session path, sends, and keeps the user on the
+same, now empty draft instead of promoting it. From an existing thread it sends
+the message into a new thread in the same Project (same directory and Harness)
+and leaves the current thread untouched. The new thread is seeded into the
+sidebar with an optimistic busy status, and a toast offers "Open".
+
+`mod+S` in the composer stashes the prompt (text, mentions and image
+attachments; comment context stays in the composer) into the global
+`prompt-stash` key (newest first, at most 20) and clears the composer. The
+stash menu in the composer toolbar restores an entry (the current unsent prompt
+is stashed in its place) or deletes it. Composer keys are handled in the
+editor's keydown (`session-ui/src/v2/components/prompt-input/machine.ts`,
+`promptInputV2KeyIntent`), not as global commands, because the global command
+listener runs in capture phase. Settings → Shortcuts lists them read-only.
+
+The session timeline collapses runs of two or more completed tool calls into
+one "Ran N tools" summary row (`session-ui/src/components/part-group.ts`).
+File edits, questions, subagent tasks, errored tools and running tools stay as
+their own rows. Read-only runs keep the "Explored" context group.
 
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the

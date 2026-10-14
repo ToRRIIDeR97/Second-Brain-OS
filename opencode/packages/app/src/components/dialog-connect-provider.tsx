@@ -1,13 +1,10 @@
 import type { IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { List, type ListRef } from "@opencode-ai/ui/list"
+import { List } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { Tag } from "@opencode-ai/ui/tag"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
@@ -33,8 +30,7 @@ import { ExternalLink } from "@/components/external-link"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
-import { useSettings } from "@/context/settings"
-import { popularProviders, useProviders } from "@/hooks/use-providers"
+import { useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
 
@@ -59,8 +55,6 @@ export const DialogConnectProvider: Component<{
   const fallback = useProviderConnectController()
   const controller = props.controller ?? fallback
   const language = useLanguage()
-  const settings = useSettings()
-  const newLayout = settings.general.newLayoutDesigns
   const reset = controller.back
   const back = { current: reset }
   let focusHost: HTMLDivElement | undefined
@@ -74,7 +68,7 @@ export const DialogConnectProvider: Component<{
     return (
       <Switch>
         <Match when={controller.selected() === CUSTOM_ID}>
-          <CustomProviderForm autofocus={!newLayout()} />
+          <CustomProviderForm autofocus={false} />
         </Match>
         <Match when={controller.selected() && controller.selected() !== CUSTOM_ID ? controller.selected() : undefined}>
           {(provider) => (
@@ -87,140 +81,38 @@ export const DialogConnectProvider: Component<{
           )}
         </Match>
         <Match when={true}>
-          <ProviderPicker
-            directory={props.directory}
-            onSelect={select}
-            onPrepare={newLayout() ? holdFocus : undefined}
-          />
+          <ProviderPickerV2 directory={props.directory} onSelect={select} onPrepare={holdFocus} />
         </Match>
       </Switch>
     )
   }
 
   return (
-    <Show
-      when={newLayout()}
-      fallback={
-        <Dialog
-          class="h-full"
-          transition
-          title={
-            <Show when={controller.selected()} fallback={language.t("command.provider.connect")}>
-              <IconButton
-                tabIndex={-1}
-                icon="arrow-left"
-                variant="ghost"
-                onClick={() => back.current()}
-                aria-label={language.t("common.goBack")}
-              />
-            </Show>
-          }
+    <DialogV2
+      containerClass="!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
+      class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
+    >
+      <DialogHeader closeLabel={language.t("common.close")}>
+        <Show
+          when={controller.selected()}
+          fallback={<DialogTitle>{language.t("command.provider.connect")}</DialogTitle>}
         >
-          <Content />
-        </Dialog>
-      }
-    >
-      <DialogV2
-        containerClass="!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
-        class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
-      >
-        <DialogHeader closeLabel={language.t("common.close")}>
-          <Show
-            when={controller.selected()}
-            fallback={<DialogTitle>{language.t("command.provider.connect")}</DialogTitle>}
+          <button
+            type="button"
+            class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+            onClick={() => back.current()}
+            aria-label={language.t("common.goBack")}
           >
-            <button
-              type="button"
-              class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-              onClick={() => back.current()}
-              aria-label={language.t("common.goBack")}
-            >
-              <Icon name="arrow-left" size="small" />
-            </button>
-          </Show>
-        </DialogHeader>
-        <DialogBody class="min-h-0 flex-1 overflow-hidden px-2 pb-2">
-          <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
-            <Content />
-          </div>
-        </DialogBody>
-      </DialogV2>
-    </Show>
-  )
-}
-
-function ProviderPicker(props: {
-  directory?: Accessor<string | undefined>
-  onSelect: (provider: string) => void
-  onPrepare?: () => void
-}) {
-  const settings = useSettings()
-  if (settings.general.newLayoutDesigns())
-    return <ProviderPickerV2 directory={props.directory} onSelect={props.onSelect} onPrepare={props.onPrepare} />
-  const providers = useProviders(() => props.directory?.())
-  const language = useLanguage()
-  const popularGroup = () => language.t("dialog.provider.group.popular")
-  const otherGroup = () => language.t("dialog.provider.group.other")
-  const customLabel = () => language.t("settings.providers.tag.custom")
-  const note = (id: string) => {
-    if (id === "anthropic") return language.t("dialog.provider.anthropic.note")
-    if (id === "openai") return language.t("dialog.provider.openai.note")
-    if (id.startsWith("github-copilot")) return language.t("dialog.provider.copilot.note")
-    if (id === "opencode-go") return language.t("dialog.provider.opencodeGo.tagline")
-    return undefined
-  }
-
-  return (
-    <List
-      class="px-3"
-      search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
-      emptyMessage={language.t("dialog.provider.empty")}
-      activeIcon="plus-small"
-      key={(x) => x?.id}
-      items={() => {
-        language.locale()
-        return [{ id: CUSTOM_ID, name: customLabel() }, ...providers.all().values()]
-      }}
-      filterKeys={["id", "name"]}
-      groupBy={(x) => (popularProviders.includes(x.id) ? popularGroup() : otherGroup())}
-      sortBy={(a, b) => {
-        if (a.id === CUSTOM_ID) return -1
-        if (b.id === CUSTOM_ID) return 1
-        if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
-          return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
-        return a.name.localeCompare(b.name)
-      }}
-      sortGroupsBy={(a, b) => {
-        const popular = popularGroup()
-        if (a.category === popular && b.category !== popular) return -1
-        if (b.category === popular && a.category !== popular) return 1
-        return 0
-      }}
-      onSelect={(x) => {
-        if (!x) return
-        props.onSelect(x.id)
-      }}
-    >
-      {(i) => (
-        <div class="px-1.25 w-full flex items-center gap-x-3">
-          <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
-          <span>{i.name}</span>
-          <Show when={i.id === "opencode"}>
-            <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
-          </Show>
-          <Show when={i.id === CUSTOM_ID}>
-            <Tag>{language.t("settings.providers.tag.custom")}</Tag>
-          </Show>
-          <Show when={i.id === "opencode"}>
-            <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
-          </Show>
-          <Show when={note(i.id)}>{(value) => <div class="text-14-regular text-text-weak">{value()}</div>}</Show>
-          <Show when={i.id === "opencode-go"}>
-            <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
-          </Show>
+            <Icon name="arrow-left" size="small" />
+          </button>
+        </Show>
+      </DialogHeader>
+      <DialogBody class="min-h-0 flex-1 overflow-hidden px-2 pb-2">
+        <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
+          <Content />
         </div>
-      )}
-    </List>
+      </DialogBody>
+    </DialogV2>
   )
 }
 
@@ -236,7 +128,7 @@ function ProviderPickerV2(props: {
     active: undefined as string | undefined,
     connecting: undefined as string | undefined,
   })
-  const featured = ["opencode", "opencode-go", "anthropic", "openai", "google", "openrouter", "vercel"]
+  const featured = ["anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
   const all = createMemo(() => {
     language.locale()
@@ -333,18 +225,6 @@ function ProviderPickerV2(props: {
                       >
                         <ProviderIcon id={provider.id} class="size-4 shrink-0 text-v2-icon-icon-base" />
                         <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{provider.name}</span>
-                        <Show when={provider.id === "opencode" || provider.id === "opencode-go"}>
-                          <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
-                            {language.t(
-                              provider.id === "opencode"
-                                ? "dialog.provider.opencode.tagline"
-                                : "dialog.provider.opencodeGo.tagline",
-                            )}
-                          </span>
-                          <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
-                            {language.t("dialog.provider.tag.recommended")}
-                          </span>
-                        </Show>
                         <Show when={provider.id === CUSTOM_ID}>
                           <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
                             {language.t("settings.providers.tag.custom")}
@@ -386,8 +266,6 @@ function ProviderConnection(props: {
   const serverSDK = useServerSDK()
   const params = useParams()
   const language = useLanguage()
-  const settings = useSettings()
-  const newLayout = settings.general.newLayoutDesigns
   const providers = useProviders(() => props.directory?.())
   const directory = () => props.directory?.() ?? decode64(params.dir)
   const location = () => {
@@ -689,15 +567,6 @@ function ProviderConnection(props: {
     )
   }
 
-  let listRef: ListRef | undefined
-  function handleKey(e: KeyboardEvent) {
-    if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
-      return
-    }
-    if (e.key === "Escape") return
-    listRef?.onKeyDown(e)
-  }
-
   let auto = false
   createEffect(() => {
     if (auto) return
@@ -732,66 +601,34 @@ function ProviderConnection(props: {
   props.setBack(goBack)
 
   function MethodSelection() {
-    if (newLayout())
-      return (
-        <div class="flex flex-col gap-2">
-          <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-            {language.t("provider.connect.selectMethod", { provider: provider().name })}
-          </div>
-          <div class="flex flex-col">
-            <For each={methods()}>
-              {(item, index) => {
-                const details = () => methodDetails(item)
-                return (
-                  <button
-                    type="button"
-                    class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-                    onClick={() => void selectMethod(index())}
-                  >
-                    <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
-                      <span class="hidden h-0.5 w-2.5 bg-v2-icon-icon-base group-hover:block group-focus-visible:block" />
-                    </span>
-                    <span class="font-[530] text-v2-text-text-base">{details().label}</span>
-                    <Show when={details().hint}>
-                      {(hint) => <span class="font-[440] text-v2-text-text-muted">{hint()}</span>}
-                    </Show>
-                  </button>
-                )
-              }}
-            </For>
-          </div>
-        </div>
-      )
-
     return (
-      <>
-        <div class="text-14-regular text-text-base">
+      <div class="flex flex-col gap-2">
+        <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
           {language.t("provider.connect.selectMethod", { provider: provider().name })}
         </div>
-        <div>
-          <List
-            class="px-3"
-            ref={(ref) => {
-              listRef = ref
+        <div class="flex flex-col">
+          <For each={methods()}>
+            {(item, index) => {
+              const details = () => methodDetails(item)
+              return (
+                <button
+                  type="button"
+                  class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+                  onClick={() => void selectMethod(index())}
+                >
+                  <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
+                    <span class="hidden h-0.5 w-2.5 bg-v2-icon-icon-base group-hover:block group-focus-visible:block" />
+                  </span>
+                  <span class="font-[530] text-v2-text-text-base">{details().label}</span>
+                  <Show when={details().hint}>
+                    {(hint) => <span class="font-[440] text-v2-text-text-muted">{hint()}</span>}
+                  </Show>
+                </button>
+              )
             }}
-            items={methods}
-            key={(m) => m?.label ?? m?.type}
-            onSelect={async (selected, index) => {
-              if (!selected) return
-              void selectMethod(index)
-            }}
-          >
-            {(i) => (
-              <div class="w-full flex items-center gap-x-2">
-                <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
-                  <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
-                </div>
-                <span>{methodLabel(i)}</span>
-              </div>
-            )}
-          </List>
+          </For>
         </div>
-      </>
+      </div>
     )
   }
 
@@ -804,7 +641,6 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      if (!newLayout()) return
       apiKey?.focus({ preventScroll: true })
     })
 
@@ -829,97 +665,36 @@ function ProviderConnection(props: {
       await complete()
     }
 
-    if (newLayout())
-      return (
-        <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-          <Show
-            when={provider().id === "opencode"}
-            fallback={language.t("provider.connect.apiKey.description", { provider: provider().name })}
-          >
-            <div class="flex flex-col gap-5">
-              <div>{language.t("provider.connect.opencodeZen.line1")}</div>
-              <div>{language.t("provider.connect.opencodeZen.line2")}</div>
-              <div>
-                {language.t("provider.connect.opencodeZen.visit.prefix")}
-                <ExternalLink
-                  href="https://opencode.ai/zen"
-                  class="text-v2-text-text-base focus-visible:rounded-xs focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
-                >
-                  {language.t("provider.connect.opencodeZen.visit.link")}
-                </ExternalLink>
-                {language.t("provider.connect.opencodeZen.visit.suffix")}
-              </div>
-            </div>
-          </Show>
-          <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
-            <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
-              {language.t("provider.connect.apiKey.label", { provider: provider().name })}
-              <TextInputV2
-                ref={apiKey}
-                class="!w-full"
-                name="apiKey"
-                data-input="provider-api-key"
-                placeholder={language.t("provider.connect.apiKey.placeholder")}
-                value={formStore.value}
-                invalid={formStore.error !== undefined}
-                aria-describedby={formStore.error ? errorID : undefined}
-                autocomplete="off"
-                spellcheck={false}
-                onInput={(event) => setFormStore("value", event.currentTarget.value)}
-              />
-            </label>
-            <Show when={formStore.error}>
-              {(error) => (
-                <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
-                  {error()}
-                </div>
-              )}
-            </Show>
-            <ButtonV2 type="submit" variant="contrast" data-action="provider-connect-submit">
-              {language.t("common.continue")}
-            </ButtonV2>
-          </form>
-        </div>
-      )
-
     return (
-      <div class="flex flex-col gap-6">
-        <Switch>
-          <Match when={provider().id === "opencode"}>
-            <div class="flex flex-col gap-4">
-              <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line1")}</div>
-              <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line2")}</div>
-              <div class="text-14-regular text-text-base">
-                {language.t("provider.connect.opencodeZen.visit.prefix")}
-                <ExternalLink href="https://opencode.ai/zen" tabIndex={-1}>
-                  {language.t("provider.connect.opencodeZen.visit.link")}
-                </ExternalLink>
-                {language.t("provider.connect.opencodeZen.visit.suffix")}
+      <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+        {language.t("provider.connect.apiKey.description", { provider: provider().name })}
+        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
+          <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
+            {language.t("provider.connect.apiKey.label", { provider: provider().name })}
+            <TextInputV2
+              ref={apiKey}
+              class="!w-full"
+              name="apiKey"
+              data-input="provider-api-key"
+              placeholder={language.t("provider.connect.apiKey.placeholder")}
+              value={formStore.value}
+              invalid={formStore.error !== undefined}
+              aria-describedby={formStore.error ? errorID : undefined}
+              autocomplete="off"
+              spellcheck={false}
+              onInput={(event) => setFormStore("value", event.currentTarget.value)}
+            />
+          </label>
+          <Show when={formStore.error}>
+            {(error) => (
+              <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
+                {error()}
               </div>
-            </div>
-          </Match>
-          <Match when={true}>
-            <div class="text-14-regular text-text-base">
-              {language.t("provider.connect.apiKey.description", { provider: provider().name })}
-            </div>
-          </Match>
-        </Switch>
-        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-          <TextField
-            autofocus={!newLayout()}
-            ref={apiKey}
-            type="text"
-            label={language.t("provider.connect.apiKey.label", { provider: provider().name })}
-            placeholder={language.t("provider.connect.apiKey.placeholder")}
-            name="apiKey"
-            value={formStore.value}
-            onChange={(v) => setFormStore("value", v)}
-            validationState={formStore.error ? "invalid" : undefined}
-            error={formStore.error}
-          />
-          <Button class="w-auto" type="submit" size="large" variant="primary">
+            )}
+          </Show>
+          <ButtonV2 type="submit" variant="contrast" data-action="provider-connect-submit">
             {language.t("common.continue")}
-          </Button>
+          </ButtonV2>
         </form>
       </div>
     )
@@ -934,7 +709,6 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      if (!newLayout()) return
       codeInput?.focus({ preventScroll: true })
     })
 
@@ -967,71 +741,41 @@ function ProviderConnection(props: {
       setFormStore("error", formatError(result.error, language.t("provider.connect.oauth.code.invalid")))
     }
 
-    if (newLayout())
-      return (
-        <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-          <div>
-            {language.t("provider.connect.oauth.code.visit.prefix")}
-            <ExternalLink href={store.authorization!.url} class="text-v2-text-text-base">
-              {language.t("provider.connect.oauth.code.visit.link")}
-            </ExternalLink>
-            {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
-          </div>
-          <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
-            <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
-              {language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
-              <TextInputV2
-                ref={codeInput}
-                class="!w-full"
-                name="code"
-                placeholder={language.t("provider.connect.oauth.code.placeholder")}
-                value={formStore.value}
-                invalid={formStore.error !== undefined}
-                aria-describedby={formStore.error ? errorID : undefined}
-                autocomplete="off"
-                spellcheck={false}
-                onInput={(event) => setFormStore("value", event.currentTarget.value)}
-              />
-            </label>
-            <Show when={formStore.error}>
-              {(error) => (
-                <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
-                  {error()}
-                </div>
-              )}
-            </Show>
-            <ButtonV2 type="submit" variant="contrast">
-              {language.t("common.continue")}
-            </ButtonV2>
-          </form>
-        </div>
-      )
-
     return (
-      <div class="flex flex-col gap-6">
-        <div class="text-14-regular text-text-base">
+      <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+        <div>
           {language.t("provider.connect.oauth.code.visit.prefix")}
-          <ExternalLink href={store.authorization!.url}>
+          <ExternalLink href={store.authorization!.url} class="text-v2-text-text-base">
             {language.t("provider.connect.oauth.code.visit.link")}
           </ExternalLink>
           {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
         </div>
-        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-          <TextField
-            autofocus={!newLayout()}
-            ref={codeInput}
-            type="text"
-            label={language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
-            placeholder={language.t("provider.connect.oauth.code.placeholder")}
-            name="code"
-            value={formStore.value}
-            onChange={(v) => setFormStore("value", v)}
-            validationState={formStore.error ? "invalid" : undefined}
-            error={formStore.error}
-          />
-          <Button class="w-auto" type="submit" size="large" variant="primary">
+        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
+          <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
+            {language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
+            <TextInputV2
+              ref={codeInput}
+              class="!w-full"
+              name="code"
+              placeholder={language.t("provider.connect.oauth.code.placeholder")}
+              value={formStore.value}
+              invalid={formStore.error !== undefined}
+              aria-describedby={formStore.error ? errorID : undefined}
+              autocomplete="off"
+              spellcheck={false}
+              onInput={(event) => setFormStore("value", event.currentTarget.value)}
+            />
+          </label>
+          <Show when={formStore.error}>
+            {(error) => (
+              <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
+                {error()}
+              </div>
+            )}
+          </Show>
+          <ButtonV2 type="submit" variant="contrast">
             {language.t("common.continue")}
-          </Button>
+          </ButtonV2>
         </form>
       </div>
     )
@@ -1105,19 +849,10 @@ function ProviderConnection(props: {
   }
 
   return (
-    <div class={newLayout() ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-3"}>
-      <div class={newLayout() ? "flex h-10 shrink-0 items-start gap-2 px-3" : "flex items-center gap-4 px-2.5"}>
-        <ProviderIcon
-          id={props.provider}
-          class={newLayout() ? "mt-0.5 size-4 shrink-0 text-v2-icon-icon-base" : "size-5 shrink-0 icon-strong-base"}
-        />
-        <div
-          class={
-            newLayout()
-              ? "text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base"
-              : "text-16-medium text-text-strong"
-          }
-        >
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div class="flex h-10 shrink-0 items-start gap-2 px-3">
+        <ProviderIcon id={props.provider} class="mt-0.5 size-4 shrink-0 text-v2-icon-icon-base" />
+        <div class="text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base">
           <Switch>
             <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
               {language.t("provider.connect.title.anthropicProMax")}
@@ -1126,12 +861,8 @@ function ProviderConnection(props: {
           </Switch>
         </div>
       </div>
-      <div class={newLayout() ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-10"}>
-        <div
-          onKeyDown={handleKey}
-          tabIndex={newLayout() ? undefined : 0}
-          autofocus={!newLayout() && store.methodIndex === undefined ? true : undefined}
-        >
+      <div class="flex min-h-0 flex-1 flex-col">
+        <div>
           <Switch>
             <Match when={loading()}>
               <div class="text-14-regular text-text-base">

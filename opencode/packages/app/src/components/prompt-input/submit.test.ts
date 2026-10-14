@@ -36,6 +36,8 @@ const promptInputs: unknown[] = []
 const sentCommands: unknown[] = []
 const commands: Array<{ name: string }> = []
 let serverSessionSyncs = 0
+const toasts: Array<{ title?: string; actions?: Array<{ label: string; onClick: "dismiss" | (() => void) }> }> = []
+const navigations: string[] = []
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
@@ -130,7 +132,9 @@ beforeAll(async () => {
   const rootClient = clientFor("/repo/main")
 
   mock.module("@solidjs/router", () => ({
-    useNavigate: () => () => undefined,
+    useNavigate: () => (href: string) => {
+      navigations.push(href)
+    },
     useParams: () => params,
     useLocation: () => ({}),
     useSearchParams: () => [search, () => undefined],
@@ -145,7 +149,10 @@ beforeAll(async () => {
 
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
-    showToast: () => 0,
+    showToast: (options: (typeof toasts)[number]) => {
+      toasts.push(options)
+      return 0
+    },
     toaster: {},
   }))
 
@@ -180,15 +187,17 @@ beforeAll(async () => {
     return { usePermission: () => ({ currentServerState: () => state(permissionServer) }) }
   })
 
+  const { ServerConnection } = await import("@/context/server")
   mock.module("@/context/server", () => ({
+    ServerConnection,
     useServer: () => ({ key: "server-key" }),
   }))
 
-  mock.module("@/context/tabs", () => ({
-    useTabs: () => ({
-      draft: () => ({ server: "project-server" }),
-      promoteDraft: (draftID: string, session: { server: string; sessionId: string }) => {
-        promotedDrafts.push({ draftID, ...session })
+  mock.module("@/context/drafts", () => ({
+    useDrafts: () => ({
+      get: (draftID?: string) => (draftID ? { server: "project-server" } : undefined),
+      promote: (draftID: string, session: { server: string; sessionID: string }) => {
+        promotedDrafts.push({ draftID, server: session.server, sessionId: session.sessionID })
       },
     }),
   }))
@@ -314,6 +323,8 @@ beforeEach(() => {
   permissionServer = "server-a"
   createSessionGate = undefined
   serverSessionSyncs = 0
+  toasts.length = 0
+  navigations.length = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
@@ -674,5 +685,94 @@ describe("prompt submit worktree selection", () => {
     expect(storedSessions["/repo/worktree-a"]).toHaveLength(1)
     expect(storedSessions["/repo/worktree-a"]?.[0]).toMatchObject({ id: "session-1", title: "New session 1" })
     expect(optimisticSeeded).toEqual([true])
+  })
+})
+
+describe("prompt submit delivery and background send", () => {
+  const create = (input: { id?: string; working?: boolean; followup?: "steer" | "queue" }) =>
+    createPromptSubmit({
+      prompt,
+      info: () => (input.id ? { id: input.id } : undefined),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => input.working ?? false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      followup: input.followup ? () => input.followup! : undefined,
+      onSubmit: () => undefined,
+    })
+  const event = { preventDefault: () => undefined } as unknown as Event
+  const delivery = (index = 0) => (promptInputs[index] as { delivery?: string }).delivery
+
+  test("steers by default while the agent is working", async () => {
+    params = { id: "session-1" }
+    await create({ id: "session-1", working: true }).handleSubmit(event)
+    await Bun.sleep(0)
+
+    expect(delivery()).toBe("steer")
+    expect(optimistic).toHaveLength(1)
+  })
+
+  test("mod+Enter queues one message instead and keeps it out of the optimistic transcript", async () => {
+    params = { id: "session-1" }
+    await create({ id: "session-1", working: true }).handleSubmit(event, { opposite: true })
+    await Bun.sleep(0)
+
+    expect(delivery()).toBe("queue")
+    expect(optimistic).toHaveLength(0)
+  })
+
+  test("follows the queue preference and flips it for one message", async () => {
+    params = { id: "session-1" }
+    const submit = create({ id: "session-1", working: true, followup: "queue" })
+    await submit.handleSubmit(event)
+    await submit.handleSubmit(event, { opposite: true })
+    await Bun.sleep(0)
+
+    expect([delivery(0), delivery(1)]).toEqual(["queue", "steer"])
+  })
+
+  test("sends idle sessions without a delivery override", async () => {
+    params = { id: "session-1" }
+    await create({ id: "session-1", working: false, followup: "queue" }).handleSubmit(event, { opposite: true })
+    await Bun.sleep(0)
+
+    expect(delivery()).toBeUndefined()
+    expect(optimistic).toHaveLength(1)
+  })
+
+  test("background send from a draft keeps the draft route and offers to open the thread", async () => {
+    search = { draftId: "draft-1" }
+    await create({}).handleSubmit(event, { background: true })
+    await Bun.sleep(0)
+
+    expect(createdSessions).toHaveLength(1)
+    expect(promotedDrafts).toEqual([])
+    expect(navigations).toEqual([])
+    expect(promptInputs[0]).toMatchObject({ sessionID: "session-1", text: "ls" })
+    expect(toasts.at(-1)?.title).toBe("secondBrain.composer.background.sent")
+
+    const open = toasts.at(-1)?.actions?.[0]?.onClick
+    if (typeof open === "function") open()
+    expect(navigations).toEqual(["/server/project-server/session/session-1"])
+  })
+
+  test("background send from a working thread starts a new thread without steering the current one", async () => {
+    params = { id: "current" }
+    await create({ id: "current", working: true }).handleSubmit(event, { background: true })
+    await Bun.sleep(0)
+
+    expect(createdSessions).toEqual(["/repo/main"])
+    expect(promptInputs).toHaveLength(1)
+    expect(promptInputs[0]).toMatchObject({ sessionID: "session-1" })
+    expect(delivery()).toBeUndefined()
+    expect(navigations).toEqual([])
   })
 })

@@ -18,6 +18,21 @@ Detailed permission and request flows are in
 | Server to workspace files  | Second Brain handlers run in an instance location context. Note and project code resolves targets through `LocationMutation` before reading or writing files. See `opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `opencode/packages/opencode/src/knowledge/note.ts`, and `opencode/packages/opencode/src/project/brain.ts`. |
 | Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service encrypts its client secret and refresh token with Electron `safeStorage` and disables connection when secure storage is unavailable. See `opencode/packages/desktop/src/main/google-calendar.ts`.                                                                                  |
 
+`POST /second-brain/projects/workspace` takes only an OpenCode project id. The
+server looks the id up in its own project table and rejects `global` and the
+Brain directory itself; it never accepts a renderer path. The resulting card
+stores that Workspace's worktree as `location.displayPath`, and
+`GET /second-brain/project-threads` returns absolute thread directories the
+same way session responses already return `directory`.
+
+`opencode://open-project` and `opencode://new-session` deep links are handled
+by the app shell's sidebar controller
+(`opencode/packages/app/src/components/sidebar/sidebar-controller.ts`) and
+only on a local server. A deep link can open a folder, link it to a Project
+and start an unsent draft (a `new-session` prompt is placed in the composer,
+never sent). It never runs `git init`; only a folder the user picks in the
+folder dialog is initialized when empty.
+
 Workspace notes, projects, calendar files, session data, provider tokens, and
 agent tool permissions are sensitive. Treat note contents, provider responses,
 workspace files, URL input, and IPC arguments as untrusted. Keep file access
@@ -45,6 +60,37 @@ Workspace validation and agent tool permissions are different controls.
 Keep the existing permission checks on tool execution; a user opening a note
 does not authorize instructions embedded inside it. Destructive recovery must
 preserve both canonical workspace files and session/draft profile state.
+
+## Outbound network endpoints
+
+The shipped app, desktop, and server code no longer contacts `opencode.ai`
+on its own. Removed in the T3 parity Phase 1 cleanup:
+
+- the hosted UI proxy to `app.opencode.ai` (`server/shared/ui.ts`); without
+  a bundled UI the server returns a local 404,
+- the release-notes feed (`opencode.ai/changelog.json`),
+- remote notification icons and the upstream project avatar (bundled
+  `favicon-96x96-v3.png` is used instead),
+- upgrade checks and installs in `installation/index.ts` (the service is
+  inert; the desktop app owns updates),
+- the WSL `curl https://opencode.ai/install | bash` path,
+- Go/Zen upsell links in retry actions and the upsell dialogs,
+- the `HTTP-Referer: https://opencode.ai/` header sent to providers,
+- Help menu, sidebar, and error-page links to docs, Discord, and feedback.
+
+Still outbound: the configured LLM providers (including the `opencode` Zen
+provider when the user selects it), the `models.dev` catalog, Google APIs,
+and links the user opens. `$schema` URLs in config files are identifiers, not
+fetches. Known remaining references: upstream agent prompts that point the
+model at `opencode.ai/docs`, the MCP OAuth `client_uri` metadata value, and
+two help-text links printed by the developer-only `providers login` command.
+
+Phase 8 removed the TUI and the upstream CLI commands that reached GitHub,
+the OpenCode console, and share or install endpoints (`github`, `pr`,
+`account`, `upgrade`, `uninstall`, `web`, `acp`, `attach`, `stats`, `plug`,
+`export`, `import`). The remaining CLI in `packages/opencode/src/index.ts`
+runs only from source for development (`serve`, `generate`, `mcp`, `debug`,
+`providers`, `agent`, `models`, `session`, `db`) and isn't shipped.
 
 ## Harness registration
 
@@ -93,6 +139,28 @@ locale, temp and terminal variables, `XDG_*`, Windows system variables) plus the
 the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.
+
+### Harness handoff text
+
+When a Codex or ACP harness takes over a Run, or returns to one, it gets earlier
+messages as text (`renderCodexPrompt` in `packages/core/src/harness.ts`). That
+text can include workspace content, other harnesses' output and tool results,
+so it is treated as untrusted data:
+
+- It sits inside a `<handoff-history>` block that says it is context only, not
+  a new request, and carries no instructions. The new user message comes after
+  the block. Any `</handoff-history>` inside a message is escaped so the
+  content can't close the block early.
+- It is bounded to 16,000 estimated tokens. Messages that don't fit are left
+  out whole and counted.
+- Tool calls and results become one-line summaries (name, command or path,
+  status, exit code). Raw tool input and output, which may hold file contents
+  or command output, aren't forwarded.
+- A returning harness gets only the messages since it last took part.
+
+The wrapper is a prompt-level signal, not an enforcement boundary. A model may
+still act on instructions in the history, so the permission checks on its
+tools remain the control.
 
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so

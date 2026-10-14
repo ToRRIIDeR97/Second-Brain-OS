@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Kiểm tra cập nhật...",
-  "desktop.menu.installCli": "Cài đặt CLI...",
   "desktop.menu.reloadWebview": "Tải lại Webview",
   "desktop.menu.restart": "Khởi động lại",
   "desktop.dialog.chooseFolder": "Chọn một thư mục",
@@ -17,10 +16,6 @@ export const dict = {
     "Phiên bản {{version}} của OpenCode đã được tải xuống, bạn có muốn cài đặt và khởi chạy lại không?",
   "desktop.updater.installFailed.title": "Cập nhật không thành công",
   "desktop.updater.installFailed.message": "Không cài đặt được bản cập nhật",
-  "desktop.cli.installed.title": "Đã cài đặt CLI",
-  "desktop.cli.installed.message": "Đã cài đặt CLI vào {{path}}\n\nKhởi động lại terminal để sử dụng lệnh 'opencode'.",
-  "desktop.cli.failed.title": "Cài đặt không thành công",
-  "desktop.cli.failed.message": "Không cài đặt được CLI: {{error}}",
 
   "desktop.error.dev.rootNotFound":
     "Không tìm thấy phần tử gốc. Bạn đã quên thêm nó vào index.html của mình? Hoặc có thể thuộc tính id bị sai chính tả?",

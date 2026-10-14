@@ -61,8 +61,8 @@ test("opens and searches project files inline", async ({ page }) => {
     pageMessages: () => ({ items: [] }),
   })
   await page.addInitScript(
-    ({ directory, server, sessionID }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    ({ directory }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: {} }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -78,12 +78,8 @@ test("opens and searches project files inline", async ({ page }) => {
         "opencode.global.dat:review-panel-v2",
         JSON.stringify({ sidebarOpened: false, sidebarWidth: 240, expandMode: "collapse" }),
       )
-      localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
-        JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
-      )
     },
-    { directory, server, sessionID },
+    { directory },
   )
 
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)

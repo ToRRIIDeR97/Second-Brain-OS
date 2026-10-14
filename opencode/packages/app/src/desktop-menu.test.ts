@@ -11,6 +11,12 @@ describe("desktop menu", () => {
     expect(items.every((item) => item.type === "item" && item.command === "logs.export" && !item.action)).toBe(true)
   })
 
+  test("links to no external sites", () => {
+    const links = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).filter((item) => item.type === "item" && item.href)
+
+    expect(links).toEqual([])
+  })
+
   test("provides translated labels for role-backed entries", () => {
     const windowMenu = DESKTOP_MENU.find((menu) => menu.role === "windowMenu")
     const roleItems = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).filter(

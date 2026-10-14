@@ -7,10 +7,9 @@
 
 ## Development server
 
-- Running `bun dev` from `packages/opencode` starts the live interactive TUI. Do not run it as a blocking foreground command when you need to inspect the result.
-- Start it in `tmux` instead: `tmux new-session -d -s opencode-dev 'bun dev'`.
-- Capture the current TUI output with: `tmux capture-pane -pt opencode-dev`.
-- Stop the session explicitly when done: `tmux kill-session -t opencode-dev`.
+- There is no TUI. `bun dev <command>` from `packages/opencode` runs the headless developer CLI (`serve`, `generate`, `mcp`, `debug`, `providers`, `agent`, `models`, `session`, `db`).
+- `bun dev serve` starts a long-lived server; run it in the background or in `tmux` when you need to inspect it.
+- The desktop app runs the server from the Node bundle built by `script/build-node.ts`, not from this CLI.
 
 # Module shape
 

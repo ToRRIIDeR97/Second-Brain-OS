@@ -48,7 +48,6 @@ export const dict = {
   "command.session.new": "Ny session",
   "command.file.open": "Åbn fil",
   "command.tab.close": "Luk fane",
-  "command.tab.reopenClosed": "Åbn lukket fane igen",
   "command.context.addSelection": "Tilføj markering til kontekst",
   "command.context.addSelection.description": "Tilføj markerede linjer fra den aktuelle fil",
   "command.input.focus": "Fokuser inputfelt",
@@ -87,10 +86,6 @@ export const dict = {
   "command.session.compact.description": "Opsummer sessionen for at reducere kontekststørrelsen",
   "command.session.fork": "Forgren fra besked",
   "command.session.fork.description": "Opret en ny session fra en tidligere besked",
-  "command.session.share": "Del session",
-  "command.session.share.description": "Del denne session og kopier URL'en til udklipsholderen",
-  "command.session.unshare": "Stop deling af session",
-  "command.session.unshare.description": "Stop med at dele denne session",
 
   "command.session.export": "Eksportér session",
   "command.session.export.description": "Eksportér hele sessionsudskriften som JSON",
@@ -106,10 +101,6 @@ export const dict = {
   "dialog.provider.group.popular": "Populære",
   "dialog.provider.group.other": "Andre",
   "dialog.provider.custom.label": "Brugerdefineret OpenAI-kompatibel udbyder",
-  "dialog.provider.tag.recommended": "Anbefalet",
-  "dialog.provider.opencode.note": "Udvalgte modeller inklusive Claude, GPT, Gemini og flere",
-  "dialog.provider.opencode.tagline": "Pålidelige optimerede modeller",
-  "dialog.provider.opencodeGo.tagline": "Billigt abonnement for alle",
   "dialog.provider.anthropic.note": "Direkte adgang til Claude-modeller, inklusive Pro og Max",
   "dialog.provider.copilot.note": "AI-modeller til kodningsassistance via GitHub Copilot",
   "dialog.provider.openai.note": "GPT-modeller til hurtige, kompetente generelle AI-opgaver",
@@ -144,13 +135,6 @@ export const dict = {
   "provider.connect.apiKey.label": "API-nøgle til {{provider}}",
   "provider.connect.apiKey.placeholder": "API-nøgle",
   "provider.connect.apiKey.required": "API-nøgle er påkrævet",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen giver dig adgang til et udvalg af pålidelige optimerede modeller til kodningsagenter.",
-  "provider.connect.opencodeZen.line2":
-    "Med en enkelt API-nøgle får du adgang til modeller som Claude, GPT, Gemini, GLM og flere.",
-  "provider.connect.opencodeZen.visit.prefix": "Besøg ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " for at hente din API-nøgle.",
   "provider.connect.oauth.code.visit.prefix": "Besøg ",
   "provider.connect.oauth.code.visit.link": "dette link",
   "provider.connect.oauth.code.visit.suffix":
@@ -170,8 +154,6 @@ export const dict = {
   "provider.custom.title": "Brugerdefineret udbyder",
   "provider.custom.unavailable": "Brugerdefinerede udbydere er ikke tilgængelige på denne server",
   "provider.custom.description.prefix": "Konfigurer en OpenAI-kompatibel udbyder. Se ",
-  "provider.custom.description.link": "dokumentation for udbyderkonfiguration",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "Udbyder-ID",
   "provider.custom.field.providerID.placeholder": "minudbyder",
   "provider.custom.field.providerID.description": "Små bogstaver, tal, bindestreger eller understregninger",
@@ -372,7 +354,6 @@ export const dict = {
   "wsl.server.label": "WSL",
   "wsl.server.menu.label": "WSL-server",
   "wsl.server.retryStart": "Prøv at starte igen",
-  "wsl.server.updating": "Opdaterer...",
   "wsl.onboarding.step.distro": "Vælg distribution",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Tjekker WSL...",
@@ -390,13 +371,9 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Vælg en distribution, eller installer en nedenfor.",
   "wsl.onboarding.checkingOpencode": "Tjekker OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Tjekker OpenCode i {{distro}}...",
-  "wsl.onboarding.updatingOpencode": "Opdaterer OpenCode...",
-  "wsl.onboarding.updatingOpencodeIn": "Opdaterer OpenCode i {{distro}}...",
-  "wsl.onboarding.updateOpencodeIn": "Opdater OpenCode i {{distro}}.",
   "wsl.onboarding.updateOpencode": "Opdater OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode er klar i {{distro}}.",
   "wsl.onboarding.opencodeReady": "OpenCode er klar.",
-  "wsl.onboarding.installOpencodeIn": "Installer OpenCode i {{distro}}.",
   "wsl.onboarding.installOpencode": "Installer OpenCode",
   "wsl.onboarding.chooseDistroFirst": "Vælg først en distribution.",
   "wsl.onboarding.loadFailed": "Kunne ikke indlæse WSL-status.",
@@ -449,7 +426,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Opstartsscript for arbejdsområde",
   "dialog.project.edit.worktree.startup.description": "Køres efter oprettelse af et nyt arbejdsområde (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
-  "dialog.usageExceeded.dontShowAgain": "Vis ikke igen",
 
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note":
@@ -531,16 +507,7 @@ export const dict = {
   "toast.file.listFailed.title": "Kunne ikke liste filer",
   "toast.context.noLineSelection.title": "Ingen linjevalg",
   "toast.context.noLineSelection.description": "Vælg først et linjeinterval i en filfane.",
-  "toast.session.share.copyFailed.title": "Kunne ikke kopiere URL til udklipsholder",
-  "toast.session.share.success.title": "Session delt",
-  "toast.session.share.success.description": "Delings-URL kopieret til udklipsholder!",
-  "toast.session.share.failed.title": "Kunne ikke dele session",
-  "toast.session.share.failed.description": "Der opstod en fejl under deling af sessionen",
 
-  "toast.session.unshare.success.title": "Deling af session stoppet",
-  "toast.session.unshare.success.description": "Deling af session blev stoppet!",
-  "toast.session.unshare.failed.title": "Kunne ikke stoppe deling af session",
-  "toast.session.unshare.failed.description": "Der opstod en fejl under stop af sessionsdeling",
 
   "toast.session.export.success.title": "Session eksporteret",
   "toast.session.export.success.description": "Sessionen blev gemt i {{filename}}",
@@ -565,8 +532,6 @@ export const dict = {
   "error.page.action.checking": "Tjekker...",
   "error.page.action.checkUpdates": "Tjek for opdateringer",
   "error.page.action.updateTo": "Opdater til {{version}}",
-  "error.page.report.prefix": "Rapporter venligst denne fejl til OpenCode-teamet",
-  "error.page.report.discord": "på Discord",
   "error.page.version": "Version: {{version}}",
 
   "error.dev.rootNotFound":
@@ -630,7 +595,6 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Gennemgang",
   "session.tab.context": "Kontekst",
-  "session.tab.unknown": "Ukendt session",
   "session.panel.reviewAndFiles": "Gennemgang og filer",
   "session.error.notFound": "Denne session kan ikke findes",
   "session.error.notFound.description": "Denne fane henviser til en session, der ikke længere findes på denne server.",
@@ -707,19 +671,7 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrer servere",
 
-  "session.share.popover.title": "Udgiv på nettet",
-  "session.share.popover.description.shared":
-    "Denne session er offentlig på nettet. Den er tilgængelig for alle med linket.",
-  "session.share.popover.description.unshared":
-    "Del session offentligt på nettet. Den vil være tilgængelig for alle med linket.",
-  "session.share.action.share": "Del",
-  "session.share.action.publish": "Udgiv",
-  "session.share.action.publishing": "Udgiver...",
-  "session.share.action.unpublish": "Afpublicer",
-  "session.share.action.unpublishing": "Afpublicerer...",
-  "session.share.action.view": "Vis",
   "session.share.copy.copied": "Kopieret",
-  "session.share.copy.copyLink": "Kopier link",
 
   "lsp.tooltip.none": "Ingen LSP-servere",
   "lsp.label.connected": "{{count}} LSP",
@@ -743,7 +695,6 @@ export const dict = {
   "common.dismiss": "Afvis",
   "common.requestFailed": "Forespørgsel mislykkedes",
   "common.moreOptions": "Flere muligheder",
-  "common.learnMore": "Lær mere",
   "common.rename": "Omdøb",
   "common.export": "Eksportér",
   "common.reset": "Nulstil",
@@ -757,7 +708,6 @@ export const dict = {
   "sidebar.menu.toggle": "Skift menu",
   "sidebar.nav.projectsAndSessions": "Projekter og sessioner",
   "sidebar.settings": "Indstillinger",
-  "sidebar.help": "Hjælp",
   "sidebar.workspaces.enable": "Aktiver arbejdsområder",
   "sidebar.workspaces.disable": "Deaktiver arbejdsområder",
   "sidebar.gettingStarted.title": "Kom i gang",
@@ -834,13 +784,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
-  "settings.general.row.newInterface.title": "Nyt layout",
-  "settings.general.row.newInterface.badge": "Ny",
-  "settings.general.row.newInterface.description":
-    "Brug de nye faner og startsidens layout. Du kan skifte mellem layoutene i en begrænset periode.",
-  "settings.general.row.newInterfaceNotice.title": "Du bruger nu det nye layout",
-  "settings.general.row.newInterfaceNotice.description": "Det tidligere layout er ikke længere tilgængeligt",
-  "settings.general.row.newInterfaceNotice.dismiss": "Afvis",
   "settings.general.row.pinchZoom.title": "Knib for at zoome",
   "settings.general.row.pinchZoom.description": "Tillad knibebevægelser på pegefeltet og Ctrl-rulning for at zoome",
   "settings.general.row.wayland.title": "Brug indbygget Wayland",
@@ -848,8 +791,6 @@ export const dict = {
   "settings.general.row.wayland.tooltip":
     "På Linux med skærme med forskellige opdateringshastigheder kan indbygget Wayland være mere stabilt.",
 
-  "settings.general.row.releaseNotes.title": "Udgivelsesnoter",
-  "settings.general.row.releaseNotes.description": 'Vis pop op-vinduer med "Hvad er nyt" efter opdateringer',
 
   "settings.updates.row.startup.title": "Tjek for opdateringer ved opstart",
   "settings.updates.row.startup.description": "Tjek automatisk for opdateringer, når OpenCode starter",
@@ -1029,10 +970,6 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} sessioner vil blive arkiveret.",
   "workspace.reset.note": "Dette vil nulstille arbejdsområdet til at matche hovedgrenen.",
   "common.open": "Åbn",
-  "dialog.releaseNotes.action.getStarted": "Kom i gang",
-  "dialog.releaseNotes.action.next": "Næste",
-  "dialog.releaseNotes.action.hideFuture": "Vis ikke disse i fremtiden",
-  "dialog.releaseNotes.media.alt": "Forhåndsvisning af udgivelse",
   "toast.project.reloadFailed.title": "Kunne ikke genindlæse {{project}}",
   "error.server.invalidConfiguration": "Ugyldig konfiguration",
   "common.moreCountSuffix": " (+{{count}} mere)",
@@ -1169,10 +1106,6 @@ export const dict = {
   "desktop.menu.nextProject": "Næste projekt",
   "desktop.menu.minimize": "Minimer",
   "desktop.menu.maximize": "Maksimer",
-  "desktop.menu.documentation": "OpenCode-dokumentation",
-  "desktop.menu.supportForum": "Supportforum",
-  "desktop.menu.shareFeedback": "Giv feedback",
-  "desktop.menu.reportBug": "Rapportér en fejl",
   "desktop.menu.ariaLabel": "OpenCode-menu",
 
   "desktop.updater.dialog.checkFailed.message": "Søgningen efter opdateringer mislykkedes.",
@@ -1209,7 +1142,6 @@ export const dict = {
   "desktop.wsl.error.executeDistro": "Kan ikke udføre kommandoer i distributionen",
   "desktop.wsl.error.installWsl": "Installationen af WSL mislykkedes",
   "desktop.wsl.error.installDistro": "Kunne ikke installere distributionen: {{distro}}",
-  "desktop.wsl.error.installOpencode": "Installationen af OpenCode mislykkedes",
   "desktop.wsl.error.alreadyAdded": "{{distro}} er allerede tilføjet",
   "desktop.wsl.error.opencodeMissing": "opencode er ikke installeret i denne distribution",
   "desktop.wsl.error.opencodeCannotRun": "opencode er installeret, men kunne ikke køre",
@@ -1230,19 +1162,4 @@ export const dict = {
 
   "command.logs.export": "Eksportér logfiler",
 
-  "help.tabs.toast.ariaLabel": "Introduktion til faner. Organiser dit arbejde og dine aktive sessioner med faner",
-  "help.tabs.toast.dismiss": "Luk oplysninger om faner",
-  "help.tabs.title": "Introduktion til faner",
-  "help.tabs.description": "Organiser dit arbejde og dine aktive sessioner med faner",
-  "help.tabs.date": "14. juli",
-  "help.tabs.introduction": "OpenCode Desktop er nu bygget op omkring faner.",
-  "help.tabs.sessions":
-    "Start en ny session i en fane, eller åbn en eksisterende session fra et af dine projekter. Åbn en ny fane, når du går i gang med noget nyt, og luk den, når du er færdig.",
-  "help.tabs.organize":
-    "Når du holder nogle få faner åbne, er det nemmere at organisere dine aktive sessioner. Giv fanerne navne, der er nemme at huske, hvis du vil beholde dem.",
-  "help.tabs.home":
-    "Du finder alle dine sessioner og projekter på den nye startskærm. Når du vælger en session, åbnes den i en fane.",
-  "help.tabs.persistence": "Dine faner er stadig åbne, når du åbner appen igen.",
-  "help.tabs.worktrees":
-    "Det nye design understøtter endnu ikke Git Worktrees, men understøttelsen kommer snart. Hvis du foretrækker at fortsætte med det tidligere layout, kan du skifte mellem layoutene under Indstillinger. Bemærk, at det nye layout bliver permanent om nogle få uger.",
 }

@@ -12,7 +12,6 @@ const updaterHandler = (_: unknown, state: UpdaterState) => {
 
 const api: ElectronAPI = {
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
-  installCli: () => ipcRenderer.invoke("install-cli"),
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
   wslServers: {
     getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
@@ -30,7 +29,6 @@ const api: ElectronAPI = {
     installWsl: () => ipcRenderer.invoke("wsl-servers-install-wsl"),
     installDistro: (name) => ipcRenderer.invoke("wsl-servers-install-distro", name),
     probeAddable: (distros) => ipcRenderer.invoke("wsl-servers-probe-addable", distros),
-    installOpencode: (name) => ipcRenderer.invoke("wsl-servers-install-opencode", name),
     openTerminal: (name) => ipcRenderer.invoke("wsl-servers-open-terminal", name),
     addServer: (distro) => ipcRenderer.invoke("wsl-servers-add", distro),
     removeServer: (id) => ipcRenderer.invoke("wsl-servers-remove", id),

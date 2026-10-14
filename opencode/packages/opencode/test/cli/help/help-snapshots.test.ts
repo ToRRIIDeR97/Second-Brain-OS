@@ -8,8 +8,8 @@
 // diff tells you exactly which command(s) changed.
 //
 // Snapshots are taken at COLUMNS=120 so wrapping is stable across
-// terminal sizes. The default opencode tui command is excluded —
-// `opencode --help` includes an ASCII banner that pulls in the install
+// terminal sizes. Top-level `opencode --help` is only checked for exit status —
+// it includes an ASCII banner that pulls in the install
 // version (changes per release), so we'd snapshot a moving target.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
@@ -43,25 +43,13 @@ function normalize(text: string): string {
 // `completion` is intentionally excluded — it's a yargs built-in that emits
 // top-level help on `--help` and exits 1; not a real opencode command.
 const TOP_LEVEL = [
-  "acp",
   "mcp",
-  "attach",
-  "run",
   "debug",
   "providers", // aliased to `auth`
   "agent",
-  "upgrade",
-  "uninstall",
   "serve",
-  "web",
   "models",
-  "stats",
-  "export",
-  "import",
-  "github",
-  "pr",
   "session",
-  "plugin",
   "db",
 ] as const
 
@@ -80,8 +68,6 @@ const SUBCOMMANDS = [
   ["agent", "list"],
   ["session", "list"],
   ["session", "delete"],
-  ["github", "install"],
-  ["github", "run"],
   ["db", "path"],
 ] as const
 
@@ -101,10 +87,6 @@ describe("opencode CLI help-text snapshots", () => {
         const topLevel = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
         expect(topLevel.exitCode).toBe(0)
         expect(topLevel.stderr.endsWith("\n")).toBe(true)
-        expect(topLevel.stderr).toContain("--mini")
-        expect(topLevel.stderr).not.toContain("--thinking")
-        expect(topLevel.stderr).not.toContain("--variant")
-        expect(topLevel.stderr).not.toContain("--demo")
 
         const argvs: Array<readonly string[]> = [...TOP_LEVEL.map((c) => [c] as const), ...SUBCOMMANDS]
 

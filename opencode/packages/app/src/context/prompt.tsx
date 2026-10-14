@@ -5,9 +5,8 @@ import { createMemo, createResource, createRoot, getOwner, onCleanup } from "sol
 import { requireServerKey } from "@/utils/session-route"
 import { ServerConnection } from "./server"
 import { useServerSDK } from "./server-sdk"
-import { useSettings } from "./settings"
 import { useSDK } from "./sdk"
-import { useTabs, type Tab } from "./tabs"
+import { draftStateKey, sessionStateKey, useDrafts } from "./drafts"
 import {
   createPromptReady,
   createPromptSession,
@@ -45,13 +44,11 @@ export type {
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
-export function selectPromptTab(tabs: Tab[], scope: PromptScope, server: ServerConnection.Key) {
-  if ("draftID" in scope) return tabs.find((tab) => tab.type === "draft" && tab.draftID === scope.draftID)
+/** Memory key that keeps a prompt alive across route remounts, or undefined for workspace prompts. */
+export function promptStateKey(scope: PromptScope, server: ServerConnection.Key) {
+  if ("draftID" in scope) return draftStateKey(scope.draftID)
   if (!scope.id) return
-  return (
-    tabs.find((tab) => tab.type === "session" && tab.server === server && tab.sessionId === scope.id) ??
-    ({ type: "session", server, sessionId: scope.id } satisfies Tab)
-  )
+  return sessionStateKey(server, scope.id)
 }
 
 function scopeKey(scope: PromptScope) {
@@ -64,11 +61,11 @@ type PromptCacheEntry = {
   dispose: VoidFunction
 }
 
-export const createTabPromptState = (
-  tabs: ReturnType<typeof useTabs>,
-  tab: Tab,
+export const createRememberedPromptState = (
+  drafts: ReturnType<typeof useDrafts>,
+  key: string,
   ...args: Parameters<typeof createPromptSession>
-) => tabs.state(tab, "prompt", () => createPromptSession(...args))
+) => drafts.state(key, "prompt", () => createPromptSession(...args))
 
 export const { use: usePrompt, provider: PromptProvider } = createSimpleContext({
   name: "Prompt",
@@ -78,8 +75,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
-    const tabs = useTabs()
-    const settings = useSettings()
+    const drafts = useDrafts()
     const cache = new Map<string, PromptCacheEntry>()
 
     const disposeAll = () => {
@@ -105,8 +101,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const scope = (): PromptScope =>
       search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
     const load = (scope: PromptScope) => {
-      const current = settings.general.newLayoutDesigns() ? selectPromptTab(tabs.store, scope, serverKey()) : undefined
-      if (current) return createTabPromptState(tabs, current, serverSDK().scope, scope)
+      const remembered = promptStateKey(scope, serverKey())
+      if (remembered) return createRememberedPromptState(drafts, remembered, serverSDK().scope, scope)
 
       const key = scopeKey(scope)
       const existing = cache.get(key)

@@ -59,12 +59,18 @@ reading of the code, not a runtime trace, except where a step says it was run.
 
 Notes on the class view:
 
-- A session's harness binding (instance, model, revision and continuation)
-  lives in the session's `metadata` JSON. It has no separate table.
+- A session's harness binding (instance, model and revision) and its
+  per-instance continuations (`harnessContinuations[instanceID]` =
+  `{ nativeID, lastSeenMessageID }`) live in the session's `metadata` JSON.
+  They have no separate table.
 - Permission requests exist only in memory. Saved permission rows are allow
   rules, scoped to a project.
 - `BrainProject` and `KnowledgeNote` are Markdown files. `CalendarSnapshot` is
   one JSON file per location. None of them is stored in SQLite.
+- `BrainProject.location.workspaceId` is an OpenCode `Project.id`. A
+  BrainProject's thread directory is that Project's worktree, or
+  `projects/<id>/` when it is unlinked. Sessions belong to it by exact
+  `directory`, not by a stored foreign key.
 
 ## Behavioral views
 
@@ -120,28 +126,48 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 `turn/interrupt`) instead of ACP. Its approvals come from
 `item/*/requestApproval` requests.
 
+Handoff text in the first prompt of a runtime (not drawn in the diagram):
+
+1. Read `harnessContinuations[instanceID]`. If there is no entry, open a new
+   thread or session.
+2. If the resume succeeded and the entry has a `lastSeenMessageID`, send the
+   messages after it inside `<handoff-history>`, then the user message. If
+   nothing new happened, send only the user message.
+3. If the resume failed, or the thread is new, send the bounded full history
+   inside `<handoff-history>`, then the user message.
+4. When a turn ends without an error, publish `HarnessContinuationSet` with the
+   answered user message as `lastSeenMessageID`.
+
+Later turns in the same runtime send only the user message. See
+[Harness handoff](README.md#harness-handoff) for the budget and wrapper.
+
 ## Coverage index
 
 | Subject | Kind | Views | Source |
 | --- | --- | --- | --- |
 | Renderer routing and server connection | Subsystem | Component, Deployment, Sequence: startup | `app/src/app.tsx`, `app/src/utils/server-protocol.ts` |
+| Sidebar navigation (Projects, Brain, Other threads) and drafts | Subsystem | Component; text in [README](README.md#product-entry-points-and-persistence) and the [navigation map](../product/NAVIGATION-MAP-V1.md) | `app/src/components/second-brain-sidebar.tsx`, `app/src/components/sidebar/sidebar-controller.ts`, `app/src/features/second-brain/sidebar-threads.ts`, `app/src/context/global-sync/home-session-index.ts` (recent-session index shared with Home), `app/src/context/drafts.tsx`, `app/src/components/sidebar/dialog-archived-threads.tsx` |
 | Preload and IPC | Subsystem | Component, Sequence: startup | `desktop/src/preload/index.ts`, `desktop/src/main/ipc.ts` |
 | Server launch and lifecycle | Subsystem | Deployment, State: sidecar, Sequence: startup | `desktop/src/main/server.ts`, `desktop/src/main/sidecar.ts` |
 | Second Brain notes, projects, calendar | Subsystem | Component, Class, Activity: write, State: project status | `opencode/src/knowledge/`, `opencode/src/project/brain.ts`, `opencode/src/planner/calendar.ts` |
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
 | Harness drivers and registry | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `server/src/handlers/harness.ts` |
+| Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `continuationFor`), `core/src/session/projector.ts` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |
 | Workspace files | Shared store | Component, Deployment, Activity: write | `notes/`, `projects/`, `.second-brain/calendar-v1.json` |
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |
 | Snapshot repository | Shared store | Component, Class, Activity: prompt run | `core/src/snapshot.ts` |
 | `harnesses.json` | Shared store | Component, Deployment | `core/src/harness/registry.ts` (written only from Settings → Harnesses through `/api/harness/registry`) |
-| `drafts.sqlite`, electron-store files | Shared store | Component, Deployment | `desktop/src/main/draft-store.ts`, `desktop/src/main/store.ts` |
+| `drafts.sqlite`, electron-store files | Shared store | Component, Deployment | `desktop/src/main/draft-store.ts`, `desktop/src/main/store.ts`; per-window `drafts` and `sidebar` keys from `app/src/context/drafts.tsx` and the sidebar controller |
 | Google Calendar and Tasks | External integration | Component, Deployment, State: outbox | `desktop/src/main/google-calendar.ts` |
 | LLM providers | External integration | Component, Deployment | `core/src/harness.ts` (`opencode` driver) |
 | Codex app-server, ACP agents | External integration | Component, Deployment, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts` |
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
+| Project thread directories and Workspace migration | Critical workflow | Class | `opencode/src/project/brain.ts` (`ensureForWorkspace`, `threadDirectory`, `migrateWorkspaces`), `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `app/src/features/second-brain/workspace-projects.ts` |
+| Session archive, unarchive, pin, sidebar undo | Critical workflow | Text only ([README](README.md#session-compatibility-and-review), [navigation map](../product/NAVIGATION-MAP-V1.md#undo)): `time_archived` set or NULL, `metadata.pinned`; 5-second in-memory undo, deferred delete | `opencode/src/server/routes/instance/httpapi/handlers/session.ts`, `opencode/src/session/session.ts`, `core/src/session/projector.ts`, `app/src/context/global-sync/event-reducer.ts`, `app/src/utils/undo-action.ts` |
+| Composer delivery (steer or queue), queued list with remove and send now, background send, prompt stash | Critical workflow | Activity: prompt run (server side); client text only ([README](README.md#composer-delivery-background-send-and-stash)) | `app/src/components/prompt-input/submit.ts`, `app/src/components/prompt-input/stash-store.ts`, `app/src/context/server-session.ts`, `app/src/pages/session/composer/queued-actions.ts`, `app/src/utils/server-compat.ts`, `session-ui/src/v2/components/prompt-input/machine.ts`, `core/src/session/input.ts` (`listQueued`, `withdraw`, `steer`), `core/src/session/projector.ts`, `server/src/handlers/session.ts` |
 | Desktop startup | Critical workflow | Sequence: startup | `desktop/src/main/index.ts` |
 | Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
 

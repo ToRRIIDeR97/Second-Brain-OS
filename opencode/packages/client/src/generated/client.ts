@@ -23,6 +23,12 @@ import type {
   SessionsSwitchHarnessOutput,
   SessionsPromptInput,
   SessionsPromptOutput,
+  SessionsQueuedInput,
+  SessionsQueuedOutput,
+  SessionsQueuedRemoveInput,
+  SessionsQueuedRemoveOutput,
+  SessionsQueuedSteerInput,
+  SessionsQueuedSteerOutput,
   SessionsCompactInput,
   SessionsCompactOutput,
   SessionsWaitInput,
@@ -439,6 +445,39 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      queued: (input: SessionsQueuedInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsQueuedOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/queued`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      queuedRemove: (input: SessionsQueuedRemoveInput, requestOptions?: RequestOptions) =>
+        request<SessionsQueuedRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/queued/${encodeURIComponent(input.messageID)}`,
+            successStatus: 204,
+            declaredStatuses: [409, 404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      queuedSteer: (input: SessionsQueuedSteerInput, requestOptions?: RequestOptions) =>
+        request<SessionsQueuedSteerOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/queued/${encodeURIComponent(input.messageID)}/steer`,
+            successStatus: 204,
+            declaredStatuses: [409, 404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
       compact: (input: SessionsCompactInput, requestOptions?: RequestOptions) =>
         request<SessionsCompactOutput>(
           {

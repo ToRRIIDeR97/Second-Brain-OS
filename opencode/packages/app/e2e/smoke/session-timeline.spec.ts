@@ -3,7 +3,8 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { fixture, pageMessages } from "./session-timeline.fixture"
 import { trackPageErrors, expectNoSmokeErrors } from "../utils/errors"
 import { mockOpenCodeServer } from "../utils/mock-server"
-import { APP_READY_TIMEOUT, expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { expandSidebarThreadGroups, openSidebarThread } from "../utils/sidebar"
 
 const forbiddenText = ["Load details", "Show earlier steps"]
 
@@ -124,26 +125,11 @@ test.describe("smoke: session timeline", () => {
       pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
     })
     await configureSmokePage(page, fixture.directory)
-    await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
-        localStorage.setItem(
-          "opencode.window.browser.dat:tabs",
-          JSON.stringify(
-            [sourceID, targetID].map((sessionId) => ({
-              type: "session",
-              server: "http://127.0.0.1:4096",
-              dirBase64,
-              sessionId,
-            })),
-          ),
-        )
-      },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
-    )
+    await expandSidebarThreadGroups(page)
 
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.targetID}`)
     await expectSessionTitle(page, fixture.expected.targetTitle)
-    await switchTitlebarSession(page, fixture.sourceID, fixture.expected.sourceTitle)
+    await switchSidebarSession(page, fixture.sourceID, fixture.expected.sourceTitle)
 
     const destination = fixture.messages[fixture.targetID].map((message) => message.info.id)
     const last = fixture.expected.targetMessageIDs.at(-1)!
@@ -216,7 +202,7 @@ test.describe("smoke: session timeline", () => {
       { destination, last },
     )
 
-    await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
+    await switchSidebarSession(page, fixture.targetID, fixture.expected.targetTitle)
     await page.waitForFunction(() =>
       (
         window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }> } }
@@ -250,22 +236,7 @@ test.describe("smoke: session timeline", () => {
       pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
     })
     await configureSmokePage(page, fixture.directory)
-    await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
-        localStorage.setItem(
-          "opencode.window.browser.dat:tabs",
-          JSON.stringify(
-            [sourceID, targetID].map((sessionId) => ({
-              type: "session",
-              server: "http://127.0.0.1:4096",
-              dirBase64,
-              sessionId,
-            })),
-          ),
-        )
-      },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
-    )
+    await expandSidebarThreadGroups(page)
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.sourceID}`)
     await expectSessionTitle(page, fixture.expected.sourceTitle)
     const last = fixture.expected.targetMessageIDs.at(-1)!
@@ -301,7 +272,7 @@ test.describe("smoke: session timeline", () => {
       { destination, last },
     )
 
-    await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
+    await switchSidebarSession(page, fixture.targetID, fixture.expected.targetTitle)
     await page.waitForFunction(() =>
       (window as Window & { __coldTabSamples?: Array<{ destination: boolean }> }).__coldTabSamples?.some(
         (sample) => sample.destination,
@@ -330,7 +301,7 @@ test.describe("smoke: session timeline", () => {
     })
     await configureSmokePage(page, fixture.directory)
 
-    await selectHomeProject(page, fixture.project.name)
+    await openHome(page)
     await navigateToSession(page, fixture.directory, fixture.sourceID, fixture.expected.sourceTitle)
     await expectSessionReady(page)
     await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
@@ -710,16 +681,9 @@ function expectCompleteScroll(
   expect(expectedPartIDs.length).toBe(331)
 }
 
-async function selectHomeProject(page: Page, projectName: string) {
-  await page.goto("/workspaces")
-  const row = page
-    .locator('[data-component="home-project-row"]')
-    .filter({ hasText: new RegExp(projectName, "i") })
-    .first()
-  await expectAppVisible(row)
-  await row.click()
-  await expect(row).toHaveAttribute("data-selected", "", { timeout: APP_READY_TIMEOUT })
-  await expect(page).toHaveURL(/\/workspaces$/)
+async function openHome(page: Page) {
+  await page.goto("/")
+  await expectAppVisible(page.getByRole("heading", { name: "Home", exact: true }))
 }
 
 async function navigateToSession(page: Page, directory: string, sessionId: string, expectedTitle: string) {
@@ -727,11 +691,8 @@ async function navigateToSession(page: Page, directory: string, sessionId: strin
   await expectSessionTitle(page, expectedTitle)
 }
 
-async function switchTitlebarSession(page: Page, sessionID: string, title: string) {
-  const href = `/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
-  await expect(tab).toBeVisible()
-  await tab.click()
+async function switchSidebarSession(page: Page, sessionID: string, title: string) {
+  await openSidebarThread(page, sessionID)
   await expectSessionTitle(page, title)
 }
 

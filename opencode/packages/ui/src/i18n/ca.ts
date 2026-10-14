@@ -68,14 +68,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.retry.geminiHot": "Gemini està massa saturat ara mateix",
   "ui.sessionTurn.error.freeUsageExceeded": "S'ha superat l'ús gratuït",
   "ui.sessionTurn.error.addCredits": "Afegeix crèdits",
-  "dialog.usageExceeded.freeTier.title": "S'ha arribat al límit gratuït",
-  "dialog.usageExceeded.freeTier.description":
-    "Subscriviu-vos a OpenCode Go per obtenir accés fiable als millors models de codi obert, a partir de 5 dòlars al mes.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Subscriu-te",
-  "dialog.usageExceeded.accountRateLimit.title": "S'ha assolit el límit de Go",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "S'ha arribat al límit d'ús. Per continuar utilitzant aquest model ara, activeu l'ús des del vostre saldo disponible",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Obre la configuració",
   "ui.sessionTurn.status.delegating": "Delegació de feina",
   "ui.sessionTurn.status.planning": "Planificant els propers passos",
   "ui.sessionTurn.status.gatheringContext": "Explorant",

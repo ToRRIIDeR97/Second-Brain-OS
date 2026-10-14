@@ -1,15 +1,10 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { normalizeSessionMessages } from "@/utils/session-message"
 
 mock.module("@opencode-ai/session-ui/message-part", () => ({
   renderable: () => true,
-  groupParts: (refs: Array<{ messageID: string; part: { id: string } }>) =>
-    refs.map((ref) => ({
-      type: "part" as const,
-      key: ref.part.id,
-      ref: { messageID: ref.messageID, partID: ref.part.id },
-    })),
 }))
 
 const { Timeline, TimelineRow } = await import("./rows")
@@ -52,10 +47,10 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_1",
-      "assistant-part:msg_1:msg_2:text:0",
+      "assistant-part:msg_1:part:msg_2:msg_2:text:0",
       "turn-gap:msg_3",
       "user-message:msg_3",
-      "assistant-part:msg_3:msg_4:reasoning:0",
+      "assistant-part:msg_3:part:msg_4:msg_4:reasoning:0",
     ])
   })
 
@@ -88,7 +83,7 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_shell")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_shell",
-      "assistant-part:msg_shell:msg_shell:tool",
+      "assistant-part:msg_shell:part:msg_shell:assistant:msg_shell:tool",
     ])
   })
 
@@ -128,10 +123,10 @@ describe("current session timeline rows", () => {
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user_1",
-      "assistant-part:msg_user_1:msg_assistant_1:text:0",
+      "assistant-part:msg_user_1:part:msg_assistant_1:msg_assistant_1:text:0",
       "turn-gap:msg_user_2",
       "user-message:msg_user_2",
-      "assistant-part:msg_user_2:msg_assistant_2:text:0",
+      "assistant-part:msg_user_2:part:msg_assistant_2:msg_assistant_2:text:0",
     ])
   })
 
@@ -203,5 +198,30 @@ describe("current session timeline rows", () => {
     )
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+  })
+
+  test("collapses completed tool runs but keeps edits and running tools as their own rows", () => {
+    const tool = (id: string, name: string, status: string) =>
+      ({ id, messageID: "msg_a", sessionID: "ses_1", type: "tool", callID: id, tool: name, state: { status } }) as Part
+    const user = { id: "msg_u", sessionID: "ses_1", role: "user", time: { created: 1 } } as UserMessage
+    const assistant = { id: "msg_a", sessionID: "ses_1", role: "assistant", time: { created: 2 } } as AssistantMessage
+    const parts = [
+      tool("t1", "read", "completed"),
+      tool("t2", "bash", "completed"),
+      tool("t3", "edit", "completed"),
+      tool("t4", "bash", "completed"),
+      tool("t5", "grep", "completed"),
+      tool("t6", "bash", "running"),
+    ]
+
+    const rows = Timeline.constructMessageRows(user, () => parts, [assistant], 0, true, "busy", true, true)
+
+    expect(rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_u",
+      "assistant-part:msg_u:tools:t1",
+      "assistant-part:msg_u:part:msg_a:t3",
+      "assistant-part:msg_u:tools:t4",
+      "assistant-part:msg_u:part:msg_a:t6",
+    ])
   })
 })

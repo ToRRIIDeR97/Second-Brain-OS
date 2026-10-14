@@ -67,6 +67,7 @@ const appLocales = [
 const desktopLocales = appLocales
 // New Second Brain and harness surfaces intentionally use English until translations are commissioned.
 // The runtime merges that base into every locale before localized values, so these keys never render raw IDs.
+// Their plural families only need English "one"/"other"; other categories fall back to "other".
 const englishFallbackPrefixes = ["secondBrain.", "harness."]
 const pluralCategories = new Map(
   appLocales.map(
@@ -227,6 +228,7 @@ function pluralFamilies(dictionary: Record<string, string>) {
   return Object.keys(dictionary)
     .filter(
       (key) =>
+        !englishFallbackPrefixes.some((prefix) => key.startsWith(prefix)) &&
         key.endsWith(".one") &&
         dictionary[key].includes("{{count}}") &&
         dictionary[`${key.slice(0, -4)}.other`]?.includes("{{count}}"),

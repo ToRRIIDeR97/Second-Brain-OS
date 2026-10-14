@@ -5,11 +5,15 @@ import { DockTray } from "@opencode-ai/ui/dock-surface"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useLanguage } from "@/context/language"
 
+// Lists messages the server holds with queue delivery. Items leave when the runner promotes them, or
+// when the user removes one or sends it now (steer). Actions are absent when the server cannot do either.
 export function SessionFollowupDock(props: {
   items: { id: string; text: string }[]
-  sending?: string
-  onSend: (id: string) => void
-  onEdit: (id: string) => void
+  pending?: string
+  actions?: {
+    onRemove: (id: string) => void
+    onSend: (id: string) => void
+  }
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({
@@ -75,26 +79,33 @@ export function SessionFollowupDock(props: {
         <div class="px-3 pb-7 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
           <For each={props.items}>
             {(item) => (
-              <div class="flex items-center gap-2 min-w-0 py-1">
+              <div class="flex items-center gap-2 min-w-0 py-1" data-queued-id={item.id}>
                 <span class="min-w-0 flex-1 truncate text-13-regular text-text-strong">{item.text}</span>
-                <Button
-                  size="small"
-                  variant="secondary"
-                  class="shrink-0"
-                  disabled={!!props.sending}
-                  onClick={() => props.onSend(item.id)}
-                >
-                  {language.t("session.followupDock.sendNow")}
-                </Button>
-                <Button
-                  size="small"
-                  variant="ghost"
-                  class="shrink-0"
-                  disabled={!!props.sending}
-                  onClick={() => props.onEdit(item.id)}
-                >
-                  {language.t("session.followupDock.edit")}
-                </Button>
+                <Show when={props.actions}>
+                  {(actions) => (
+                    <>
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        class="shrink-0"
+                        disabled={!!props.pending}
+                        data-pending={props.pending === item.id ? "true" : undefined}
+                        onClick={() => actions().onSend(item.id)}
+                      >
+                        {language.t("session.followupDock.sendNow")}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        class="shrink-0"
+                        disabled={!!props.pending}
+                        onClick={() => actions().onRemove(item.id)}
+                      >
+                        {language.t("secondBrain.followupDock.remove")}
+                      </Button>
+                    </>
+                  )}
+                </Show>
               </div>
             )}
           </For>

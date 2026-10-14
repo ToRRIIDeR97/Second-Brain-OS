@@ -180,10 +180,9 @@ function parentMessages() {
 }
 
 async function configurePage(page: Page) {
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await page.addInitScript(
-    ({ directory, server, sessionId }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    ({ directory }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: {} }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -191,9 +190,8 @@ async function configurePage(page: Page) {
           lastProject: { local: directory },
         }),
       )
-      localStorage.setItem("opencode.window.browser.dat:tabs", JSON.stringify([{ type: "session", server, sessionId }]))
     },
-    { directory, server, sessionId: parentID },
+    { directory },
   )
 }
 

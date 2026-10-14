@@ -81,6 +81,9 @@ export const HarnessContinuationSet = Event.define({
     ...Base,
     instanceID: Harness.InstanceID,
     continuation: Schema.String,
+    /** Last canonical message this native session saw; set after a successful turn. */
+    lastSeenMessageID: Schema.String.pipe(optional),
+    /** Legacy single-slot revision; ignored by per-instance continuations. */
     revision: Schema.Finite.pipe(optional),
   },
 })
@@ -121,6 +124,22 @@ export const PromptAdmitted = Event.define({
   schema: PromptFields,
 })
 export type PromptAdmitted = typeof PromptAdmitted.Type
+
+// A queued input left the inbox before the runner promoted it.
+export const PromptWithdrawn = Event.define({
+  type: "session.next.prompt.withdrawn",
+  ...options,
+  schema: { ...Base, messageID: SessionMessage.ID },
+})
+export type PromptWithdrawn = typeof PromptWithdrawn.Type
+
+// A queued input now waits for the next steer point instead of the session going idle.
+export const PromptSteered = Event.define({
+  type: "session.next.prompt.steered",
+  ...options,
+  schema: { ...Base, messageID: SessionMessage.ID },
+})
+export type PromptSteered = typeof PromptSteered.Type
 
 export const MessageImported = Event.define({
   type: "session.next.message.imported",
@@ -486,6 +505,8 @@ export const DurableDefinitions = Event.inventory(
   Moved,
   Prompted,
   PromptAdmitted,
+  PromptWithdrawn,
+  PromptSteered,
   ContextUpdated,
   MessageImported,
   Synthetic,
@@ -520,6 +541,8 @@ export const Definitions = Event.inventory(
   Moved,
   Prompted,
   PromptAdmitted,
+  PromptWithdrawn,
+  PromptSteered,
   ContextUpdated,
   MessageImported,
   Synthetic,

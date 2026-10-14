@@ -88,6 +88,11 @@ import type {
   GlobalHealthResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
+  HarnessDiscoverInput,
+  HarnessInstanceId,
+  HarnessModelSelection,
+  HarnessSettingsInput,
+  HarnessVerifyInput,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
   LocationRef,
@@ -175,6 +180,32 @@ import type {
   QuestionReplyErrors,
   QuestionReplyResponses,
   QuestionV2Reply,
+  SecondBrainCreateProjectErrors,
+  SecondBrainCreateProjectResponses,
+  SecondBrainEnsureWorkspaceProjectErrors,
+  SecondBrainEnsureWorkspaceProjectResponses,
+  SecondBrainListNotesErrors,
+  SecondBrainListNotesResponses,
+  SecondBrainListProjectsErrors,
+  SecondBrainListProjectsResponses,
+  SecondBrainListProjectThreadsErrors,
+  SecondBrainListProjectThreadsResponses,
+  SecondBrainReadCalendarErrors,
+  SecondBrainReadCalendarResponses,
+  SecondBrainReadNoteErrors,
+  SecondBrainReadNoteResponses,
+  SecondBrainReadProjectErrors,
+  SecondBrainReadProjectResponses,
+  SecondBrainUpdateProjectErrors,
+  SecondBrainUpdateProjectResponses,
+  SecondBrainWriteCalendarErrors,
+  SecondBrainWriteCalendarResponses,
+  SecondBrainWriteNoteErrors,
+  SecondBrainWriteNoteResponses,
+  ServerSessionSessionDiffErrors,
+  ServerSessionSessionDiffResponses,
+  ServerSessionSessionForkErrors,
+  ServerSessionSessionForkResponses,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -279,6 +310,22 @@ import type {
   V2FsListResponses,
   V2FsReadErrors,
   V2FsReadResponses,
+  V2HarnessAddErrors,
+  V2HarnessAddResponses,
+  V2HarnessAssistantDirectoryErrors,
+  V2HarnessAssistantDirectoryResponses,
+  V2HarnessDiscoverErrors,
+  V2HarnessDiscoverResponses,
+  V2HarnessListErrors,
+  V2HarnessListResponses,
+  V2HarnessRemoveErrors,
+  V2HarnessRemoveResponses,
+  V2HarnessSettingsErrors,
+  V2HarnessSettingsResponses,
+  V2HarnessUpdateErrors,
+  V2HarnessUpdateResponses,
+  V2HarnessVerifyErrors,
+  V2HarnessVerifyResponses,
   V2HealthGetErrors,
   V2HealthGetResponses,
   V2IntegrationAttemptCancelErrors,
@@ -371,6 +418,12 @@ import type {
   V2SessionQuestionRejectResponses,
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
+  V2SessionQueuedErrors,
+  V2SessionQueuedRemoveErrors,
+  V2SessionQueuedRemoveResponses,
+  V2SessionQueuedResponses,
+  V2SessionQueuedSteerErrors,
+  V2SessionQueuedSteerResponses,
   V2SessionRevertClearErrors,
   V2SessionRevertClearResponses,
   V2SessionRevertCommitErrors,
@@ -379,6 +432,8 @@ import type {
   V2SessionRevertStageResponses,
   V2SessionSwitchAgentErrors,
   V2SessionSwitchAgentResponses,
+  V2SessionSwitchHarnessErrors,
+  V2SessionSwitchHarnessResponses,
   V2SessionSwitchModelErrors,
   V2SessionSwitchModelResponses,
   V2SessionWaitErrors,
@@ -3566,8 +3621,9 @@ export class Session2 extends HeyApiClient {
         [key: string]: unknown
       }
       permission?: PermissionRuleset
+      pinned?: boolean
       time?: {
-        archived?: number
+        archived?: number | null
       }
     },
     options?: Options<never, ThrowOnError>,
@@ -3583,6 +3639,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "title" },
             { in: "body", key: "metadata" },
             { in: "body", key: "permission" },
+            { in: "body", key: "pinned" },
             { in: "body", key: "time" },
           ],
         },
@@ -4393,6 +4450,458 @@ export class Part extends HeyApiClient {
     )
     return (options?.client ?? this.client).patch<PartUpdateResponses, PartUpdateErrors, ThrowOnError>({
       url: "/session/{sessionID}/message/{messageID}/part/{partID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class SecondBrain extends HeyApiClient {
+  public listNotes<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      search?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "search" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SecondBrainListNotesResponses,
+      SecondBrainListNotesErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/notes",
+      ...options,
+      ...params,
+    })
+  }
+
+  public readNote<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SecondBrainReadNoteResponses, SecondBrainReadNoteErrors, ThrowOnError>({
+      url: "/second-brain/note",
+      ...options,
+      ...params,
+    })
+  }
+
+  public writeNote<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+      body?: string
+      expectedRevision?: string
+      title?: string
+      projectIds?: Array<string>
+      tags?: Array<string>
+      create?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+            { in: "body", key: "body" },
+            { in: "body", key: "expectedRevision" },
+            { in: "body", key: "title" },
+            { in: "body", key: "projectIds" },
+            { in: "body", key: "tags" },
+            { in: "body", key: "create" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      SecondBrainWriteNoteResponses,
+      SecondBrainWriteNoteErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/note",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public readCalendar<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SecondBrainReadCalendarResponses,
+      SecondBrainReadCalendarErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/calendar",
+      ...options,
+      ...params,
+    })
+  }
+
+  public writeCalendar<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      expectedRevision?: string
+      events?: Array<{
+        id: string
+        title: string
+        date: string
+        endDate?: string
+        start?: string
+        end?: string
+        details?: string
+        projectId?: string
+        providerId?: string
+        calendarId?: string
+        etag?: string
+        timezone?: string
+        allDay?: boolean
+        recurringSeriesId?: string
+        participantCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        outboxKind?: "create" | "update" | "delete"
+        outboxKey?: string
+        source: "local" | "google"
+        syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+      }>
+      tasks?: Array<{
+        id: string
+        title: string
+        notes?: string
+        projectId?: string
+        dueDate?: string
+        scheduledDate?: string
+        start?: string
+        end?: string
+        completedAt?: string
+        providerId?: string
+        taskListId?: string
+        taskListTitle?: string
+        etag?: string
+        outboxKind?: "create" | "update" | "delete"
+        outboxKey?: string
+        createdAt: string
+        updatedAt: string
+        source: "local" | "google"
+        syncState: "local" | "pending" | "synced" | "offline" | "stale" | "conflict" | "failed"
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "expectedRevision" },
+            { in: "body", key: "events" },
+            { in: "body", key: "tasks" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      SecondBrainWriteCalendarResponses,
+      SecondBrainWriteCalendarErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/calendar",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public listProjects<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SecondBrainListProjectsResponses,
+      SecondBrainListProjectsErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/projects",
+      ...options,
+      ...params,
+    })
+  }
+
+  public createProject<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      name?: string
+      outcome?: string
+      templateId?: string
+      instructions?: string
+      tags?: Array<string>
+      location?: {
+        workspaceId: string
+        displayPath: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "outcome" },
+            { in: "body", key: "templateId" },
+            { in: "body", key: "instructions" },
+            { in: "body", key: "tags" },
+            { in: "body", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SecondBrainCreateProjectResponses,
+      SecondBrainCreateProjectErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/projects",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public listProjectThreads<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SecondBrainListProjectThreadsResponses,
+      SecondBrainListProjectThreadsErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/project-threads",
+      ...options,
+      ...params,
+    })
+  }
+
+  public ensureWorkspaceProject<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      workspaceId?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "workspaceId" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SecondBrainEnsureWorkspaceProjectResponses,
+      SecondBrainEnsureWorkspaceProjectErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/projects/workspace",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public readProject<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SecondBrainReadProjectResponses,
+      SecondBrainReadProjectErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/project",
+      ...options,
+      ...params,
+    })
+  }
+
+  public updateProject<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      id: string
+      expectedUpdatedAt?: string
+      name?: string
+      outcome?: string
+      templateId?: string
+      instructions?: string
+      status?: "active" | "paused" | "archived"
+      progressPercent?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      nextMilestone?: string
+      blocker?: string
+      tags?: Array<string>
+      location?: {
+        workspaceId: string
+        displayPath: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "id" },
+            { in: "body", key: "expectedUpdatedAt" },
+            { in: "body", key: "name" },
+            { in: "body", key: "outcome" },
+            { in: "body", key: "templateId" },
+            { in: "body", key: "instructions" },
+            { in: "body", key: "status" },
+            { in: "body", key: "progressPercent" },
+            { in: "body", key: "nextMilestone" },
+            { in: "body", key: "blocker" },
+            { in: "body", key: "tags" },
+            { in: "body", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      SecondBrainUpdateProjectResponses,
+      SecondBrainUpdateProjectErrors,
+      ThrowOnError
+    >({
+      url: "/second-brain/project",
       ...options,
       ...params,
       headers: {
@@ -5474,6 +5983,8 @@ export class Session3 extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       id?: string
+      harnessInstanceID?: HarnessInstanceId
+      harnessModel?: HarnessModelSelection
       agent?: string
       model?: ModelRef
       location?: LocationRef
@@ -5486,6 +5997,8 @@ export class Session3 extends HeyApiClient {
         {
           args: [
             { in: "body", key: "id" },
+            { in: "body", key: "harnessInstanceID" },
+            { in: "body", key: "harnessModel" },
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
             { in: "body", key: "location" },
@@ -5615,6 +6128,47 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Switch session harness
+   *
+   * Switch the Harness used by subsequent turns in an idle session.
+   */
+  public switchHarness<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      instanceID?: HarnessInstanceId
+      model?: HarnessModelSelection
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "instanceID" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionSwitchHarnessResponses,
+      V2SessionSwitchHarnessErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/harness",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Send message
    *
    * Durably admit one session input and schedule agent-loop execution unless resume is false.
@@ -5652,6 +6206,93 @@ export class Session3 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List queued messages
+   *
+   * List admitted queue-delivery inputs that have not been promoted into the transcript yet.
+   */
+  public queued<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionQueuedResponses, V2SessionQueuedErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/queued",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove queued message
+   *
+   * Withdraw a queued input before the runner promotes it. Fails with 409 when the input already started.
+   */
+  public queuedRemove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      V2SessionQueuedRemoveResponses,
+      V2SessionQueuedRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/queued/{messageID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send queued message now
+   *
+   * Deliver a queued input at the next steer point of the current run, or start a run when idle. Fails with 409 when the input already started.
+   */
+  public queuedSteer<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionQueuedSteerResponses,
+      V2SessionQueuedSteerErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/queued/{messageID}/steer",
+      ...options,
+      ...params,
     })
   }
 
@@ -5950,6 +6591,265 @@ export class Provider2 extends HeyApiClient {
       url: "/api/provider/{providerID}",
       ...options,
       ...params,
+    })
+  }
+}
+
+export class Harness extends HeyApiClient {
+  /**
+   * List harnesses
+   *
+   * Probe configured harness instances and list their available models.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2HarnessListResponses, V2HarnessListErrors, ThrowOnError>({
+      url: "/api/harness",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List harness settings
+   *
+   * List harnesses with their source and editability.
+   */
+  public settings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2HarnessSettingsResponses, V2HarnessSettingsErrors, ThrowOnError>({
+      url: "/api/harness/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Test an ACP command
+   *
+   * Run the ACP handshake for a command and list the agent's models without saving it.
+   */
+  public discover<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      harnessDiscoverInput: HarnessDiscoverInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { key: "harnessDiscoverInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2HarnessDiscoverResponses, V2HarnessDiscoverErrors, ThrowOnError>({
+      url: "/api/harness/discover",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Setup assistant folder
+   *
+   * Return the folder where harness setup-assistant sessions run.
+   */
+  public assistantDirectory<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<
+      V2HarnessAssistantDirectoryResponses,
+      V2HarnessAssistantDirectoryErrors,
+      ThrowOnError
+    >({
+      url: "/api/harness/assistant-directory",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Run a functional test
+   *
+   * Open a session with an ACP command and send one short prompt to check that it answers.
+   */
+  public verify<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      harnessVerifyInput: HarnessVerifyInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { key: "harnessVerifyInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2HarnessVerifyResponses, V2HarnessVerifyErrors, ThrowOnError>({
+      url: "/api/harness/verify",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Add harness
+   *
+   * Check an ACP command and save it to harnesses.json.
+   */
+  public add<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      harnessSettingsInput: HarnessSettingsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { key: "harnessSettingsInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2HarnessAddResponses, V2HarnessAddErrors, ThrowOnError>({
+      url: "/api/harness/registry",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove harness
+   *
+   * Remove a saved harness from harnesses.json.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<V2HarnessRemoveResponses, V2HarnessRemoveErrors, ThrowOnError>({
+      url: "/api/harness/registry/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Enable or disable harness
+   *
+   * Enable or disable a saved harness.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      enabled?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "location" },
+            { in: "body", key: "enabled" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<V2HarnessUpdateResponses, V2HarnessUpdateErrors, ThrowOnError>({
+      url: "/api/harness/registry/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -7018,6 +7918,11 @@ export class V2 extends HeyApiClient {
     return (this._provider ??= new Provider2({ client: this.client }))
   }
 
+  private _harness?: Harness
+  get harness(): Harness {
+    return (this._harness ??= new Harness({ client: this.client }))
+  }
+
   private _integration?: Integration
   get integration(): Integration {
     return (this._integration ??= new Integration({ client: this.client }))
@@ -7071,6 +7976,85 @@ export class V2 extends HeyApiClient {
   private _projectCopy?: ProjectCopy2
   get projectCopy(): ProjectCopy2 {
     return (this._projectCopy ??= new ProjectCopy2({ client: this.client }))
+  }
+}
+
+export class Session4 extends HeyApiClient {
+  public fork<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ServerSessionSessionForkResponses,
+      ServerSessionSessionForkErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/fork",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public diff<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ServerSessionSessionDiffResponses,
+      ServerSessionSessionDiffErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/diff",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Session5 extends HeyApiClient {
+  private _session?: Session4
+  get session(): Session4 {
+    return (this._session ??= new Session4({ client: this.client }))
+  }
+}
+
+export class Server extends HeyApiClient {
+  private _session?: Session5
+  get session(): Session5 {
+    return (this._session ??= new Session5({ client: this.client }))
   }
 }
 
@@ -7202,6 +8186,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._part ??= new Part({ client: this.client }))
   }
 
+  private _secondBrain?: SecondBrain
+  get secondBrain(): SecondBrain {
+    return (this._secondBrain ??= new SecondBrain({ client: this.client }))
+  }
+
   private _sync?: Sync
   get sync(): Sync {
     return (this._sync ??= new Sync({ client: this.client }))
@@ -7215,5 +8204,10 @@ export class OpencodeClient extends HeyApiClient {
   private _v2?: V2
   get v2(): V2 {
     return (this._v2 ??= new V2({ client: this.client }))
+  }
+
+  private _server?: Server
+  get server(): Server {
+    return (this._server ??= new Server({ client: this.client }))
   }
 }

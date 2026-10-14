@@ -4,7 +4,9 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { batch, startTransition, type Accessor } from "solid-js"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
+import { useServer } from "@/context/server"
+import { sessionHref } from "@/utils/session-route"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -32,6 +34,18 @@ type PendingPrompt = {
 
 const pending = new Map<string, PendingPrompt>()
 
+export type PromptDelivery = "steer" | "queue"
+
+/** Per-submit overrides: `opposite` flips the delivery preference, `background` sends into a new thread without leaving the current view. */
+export type PromptSubmitOptions = { opposite?: boolean; background?: boolean }
+
+/** Delivery for a message sent to a working agent; idle sessions take the server default. */
+export function promptDelivery(input: { working: boolean; preference: PromptDelivery; opposite?: boolean }) {
+  if (!input.working) return undefined
+  if (!input.opposite) return input.preference
+  return input.preference === "queue" ? "steer" : "queue"
+}
+
 export type FollowupDraft = {
   sessionID: string
   sessionDirectory: string
@@ -41,6 +55,7 @@ export type FollowupDraft = {
   model: { providerID: string; modelID: string }
   harness?: boolean
   variant?: string
+  delivery?: PromptDelivery
 }
 
 type FollowupSendInput = {
@@ -153,23 +168,28 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
     })
 
-  batch(() => {
-    setBusy()
-    add()
-  })
+  // Queued messages render in the follow-up dock from server state, not as optimistic transcript entries.
+  const queued = input.draft.delivery === "queue"
+  if (!queued)
+    batch(() => {
+      setBusy()
+      add()
+    })
 
   try {
     if (!(await wait())) {
-      batch(() => {
-        setIdle()
-        remove()
-      })
+      if (!queued)
+        batch(() => {
+          setIdle()
+          remove()
+        })
       return false
     }
 
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
+      delivery: input.draft.delivery,
       agent: input.draft.agent,
       model: input.draft.model,
       variant: input.draft.variant,
@@ -202,10 +222,11 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     })
     return true
   } catch (err) {
-    batch(() => {
-      setIdle()
-      remove()
-    })
+    if (!queued)
+      batch(() => {
+        setIdle()
+        remove()
+      })
     throw err
   }
 }
@@ -231,8 +252,7 @@ type PromptSubmitInput = {
   harnessDriver?: Accessor<Harness.DriverKind | undefined>
   harnessChanging?: Accessor<boolean | undefined>
   onNewSessionWorktreeReset?: () => void
-  shouldQueue?: Accessor<boolean>
-  onQueue?: (draft: FollowupDraft) => void
+  followup?: Accessor<PromptDelivery>
   onAbort?: () => void
   onSubmit?: () => void
   model?: ModelSelection
@@ -250,7 +270,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const language = useLanguage()
   const params = useParams()
   const [search] = useSearchParams<{ draftId?: string }>()
-  const tabs = useTabs()
+  const drafts = useDrafts()
+  const server = useServer()
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk().scope, sessionID)
   let creatingSession = false
 
@@ -304,12 +325,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
   }
 
-  const clearContext = (target: ReturnType<ReturnType<typeof usePrompt>["capture"]>) => {
-    for (const item of target.context.items()) {
-      target.context.remove(item.key)
-    }
-  }
-
   const seed = (dir: string, info: Session) => {
     serverSync().session.remember(info)
     const [, setStore] = serverSync().child(dir)
@@ -325,7 +340,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
-  const handleSubmit = async (event: Event) => {
+  const handleSubmit = async (event: Event, options: PromptSubmitOptions = {}) => {
     event.preventDefault()
 
     if (input.harnessChanging?.()) {
@@ -349,11 +364,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const mode = input.mode()
 
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
-      if (input.working()) void abort()
+      if (input.working() && !options.background) void abort()
       return
     }
 
-    const isNewSession = !params.id
+    // A background send always starts a new thread in the current Project and leaves the view unchanged.
+    const background = !!options.background
+    const isNewSession = !params.id || background
     const currentInfo = input.info() as
       | { id: string; harnessInstanceID?: Harness.InstanceID; harnessModel?: Harness.ModelSelection }
       | undefined
@@ -423,14 +440,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       input.onNewSessionWorktreeReset?.()
     }
 
-    let session = input.info()
+    let session = background ? undefined : input.info()
     if (!session && isNewSession) {
       if (creatingSession) return
       creatingSession = true
       const created = await sdk()
         .api.session.create({
-          harnessInstanceID: input.newSessionHarness?.(),
-          harnessModel: input.newSessionHarnessModel?.(),
+          harnessInstanceID: input.newSessionHarness?.() ?? (background ? currentInfo?.harnessInstanceID : undefined),
+          harnessModel: input.newSessionHarnessModel?.() ?? (background ? currentInfo?.harnessModel : undefined),
           agent: usesHostModel ? currentAgent?.name : undefined,
           model:
             usesHostModel && currentModel
@@ -463,9 +480,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             variant: variant ?? null,
           })
           layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
+          if (background) return
           const draftID = search.draftId
-          if (draftID) tabs.promoteDraft(draftID, { server: tabs.draft(draftID).server, sessionId: session.id })
-          else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+          const sessionServer = drafts.get(draftID)?.server ?? server.key
+          if (draftID) drafts.promote(draftID, { server: sessionServer, sessionID: session.id })
+          else navigate(sessionHref(sessionServer, session.id))
           submission.retarget(prompt.capture({ dir: base64Encode(sessionDirectory), id: session.id }))
         })
       }
@@ -491,6 +510,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       model,
       harness: !usesHostModel,
       variant,
+      delivery: promptDelivery({
+        working: !isNewSession && input.working(),
+        preference: input.followup?.() ?? "steer",
+        opposite: options.opposite,
+      }),
     }
 
     const clearInput = () => {
@@ -514,13 +538,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         input.queueScroll()
       })
       return true
-    }
-
-    if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
-      input.onQueue?.(draft)
-      clearContext(submission.target())
-      clearInput()
-      return
     }
 
     input.onSubmit?.()
@@ -651,6 +668,21 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)
       return true
+    }
+
+    if (background) {
+      const sessionServer = drafts.get(search.draftId)?.server ?? server.key
+      const sessionID = session.id
+      showToast({
+        title: language.t("secondBrain.composer.background.sent"),
+        description: text.trim().split(/\r?\n/)[0],
+        actions: [
+          {
+            label: language.t("secondBrain.composer.background.open"),
+            onClick: () => navigate(sessionHref(sessionServer, sessionID)),
+          },
+        ],
+      })
     }
 
     void sendFollowupDraft({

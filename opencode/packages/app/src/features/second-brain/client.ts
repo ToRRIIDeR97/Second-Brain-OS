@@ -104,6 +104,17 @@ export type ProjectUpdate = Partial<
   >
 > & { expectedUpdatedAt?: string }
 
+export type ProjectWorkspace = { id: string; worktree: string; name?: string }
+export type ProjectThreads = {
+  project: ProjectRecord
+  /** Absolute directory where the Project's threads run; use it verbatim as the session directory. */
+  threadDirectory: string
+  threadDirectoryKind: "workspace" | "folder"
+  workspace: ProjectWorkspace | null
+  rootSessionCount: number
+  lastActivityAt: number | null
+}
+
 type Target = { directory?: string; workspace?: string }
 type Client = {
   server: ServerConnection.Any
@@ -194,4 +205,14 @@ export const updateProject = (client: Client, id: string, input: ProjectUpdate) 
   request<ProjectRecord>(client, `/second-brain/project?id=${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  })
+
+/** Projects with their resolved thread directory and root thread stats. Runs the one-shot Workspace migration. */
+export const listProjectThreads = (client: Client) => request<ProjectThreads[]>(client, "/second-brain/project-threads")
+
+/** Return the Project linked to an OpenCode project (Workspace) id, creating it when none links to it. */
+export const ensureWorkspaceProject = (client: Client, workspaceId: string) =>
+  request<ProjectRecord>(client, "/second-brain/projects/workspace", {
+    method: "POST",
+    body: JSON.stringify({ workspaceId }),
   })
