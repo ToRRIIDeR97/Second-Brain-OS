@@ -94,7 +94,7 @@
 <text x="28" y="297" text-anchor="start" class="s">directory, parentID?</text>
 <text x="28" y="312" text-anchor="start" class="s">harnessInstanceID, harnessModel?</text>
 <text x="28" y="327" text-anchor="start" class="s">harnessRevision</text>
-<text x="28" y="342" text-anchor="start" class="s">harnessContinuation?</text>
+<text x="28" y="342" text-anchor="start" class="s">harnessContinuations[instance]?</text>
 <rect class="box" x="280" y="240" width="230" height="110" rx="3"/>
 <text x="395.0" y="258" text-anchor="middle" class="s">«union»</text>
 <text x="395.0" y="272" text-anchor="middle" class="t">SessionMessage</text>

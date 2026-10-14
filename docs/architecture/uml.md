@@ -59,8 +59,10 @@ reading of the code, not a runtime trace, except where a step says it was run.
 
 Notes on the class view:
 
-- A session's harness binding (instance, model, revision and continuation)
-  lives in the session's `metadata` JSON. It has no separate table.
+- A session's harness binding (instance, model and revision) and its
+  per-instance continuations (`harnessContinuations[instanceID]` =
+  `{ nativeID, lastSeenMessageID }`) live in the session's `metadata` JSON.
+  They have no separate table.
 - Permission requests exist only in memory. Saved permission rows are allow
   rules, scoped to a project.
 - `BrainProject` and `KnowledgeNote` are Markdown files. `CalendarSnapshot` is
@@ -120,6 +122,21 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 `turn/interrupt`) instead of ACP. Its approvals come from
 `item/*/requestApproval` requests.
 
+Handoff text in the first prompt of a runtime (not drawn in the diagram):
+
+1. Read `harnessContinuations[instanceID]`. If there is no entry, open a new
+   thread or session.
+2. If the resume succeeded and the entry has a `lastSeenMessageID`, send the
+   messages after it inside `<handoff-history>`, then the user message. If
+   nothing new happened, send only the user message.
+3. If the resume failed, or the thread is new, send the bounded full history
+   inside `<handoff-history>`, then the user message.
+4. When a turn ends without an error, publish `HarnessContinuationSet` with the
+   answered user message as `lastSeenMessageID`.
+
+Later turns in the same runtime send only the user message. See
+[Harness handoff](README.md#harness-handoff) for the budget and wrapper.
+
 ## Coverage index
 
 | Subject | Kind | Views | Source |
@@ -131,6 +148,7 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
 | Harness drivers and registry | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `server/src/handlers/harness.ts` |
+| Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `continuationFor`), `core/src/session/projector.ts` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |
 | Workspace files | Shared store | Component, Deployment, Activity: write | `notes/`, `projects/`, `.second-brain/calendar-v1.json` |
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |

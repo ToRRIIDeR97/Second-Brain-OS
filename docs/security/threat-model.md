@@ -94,6 +94,28 @@ the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.
 
+### Harness handoff text
+
+When a Codex or ACP harness takes over a Run, or returns to one, it gets earlier
+messages as text (`renderCodexPrompt` in `packages/core/src/harness.ts`). That
+text can include workspace content, other harnesses' output and tool results,
+so it is treated as untrusted data:
+
+- It sits inside a `<handoff-history>` block that says it is context only, not
+  a new request, and carries no instructions. The new user message comes after
+  the block. Any `</handoff-history>` inside a message is escaped so the
+  content can't close the block early.
+- It is bounded to 16,000 estimated tokens. Messages that don't fit are left
+  out whole and counted.
+- Tool calls and results become one-line summaries (name, command or path,
+  status, exit code). Raw tool input and output, which may hold file contents
+  or command output, aren't forwarded.
+- A returning harness gets only the messages since it last took part.
+
+The wrapper is a prompt-level signal, not an enforcement boundary. A model may
+still act on instructions in the history, so the permission checks on its
+tools remain the control.
+
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
 picker refreshes don't relaunch every agent.
