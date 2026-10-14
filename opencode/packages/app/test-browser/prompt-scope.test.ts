@@ -1,14 +1,11 @@
 import { expect, test } from "bun:test"
 import { ServerConnection } from "@/context/server"
-import { selectPromptTab } from "@/context/prompt"
-import type { Tab } from "@/context/tabs"
+import { promptStateKey } from "@/context/prompt"
 
-test("selects the explicitly scoped session tab instead of the active tab", () => {
+test("keys remembered prompts by the explicitly scoped thread or draft", () => {
   const server = ServerConnection.Key.make("local")
-  const tabs: Tab[] = [
-    { type: "session", server, sessionId: "A" },
-    { type: "session", server, sessionId: "B" },
-  ]
 
-  expect(selectPromptTab(tabs, { dir: "repo", id: "B" }, server)).toBe(tabs[1])
+  expect(promptStateKey({ dir: "repo", id: "B" }, server)).toBe("session:local\nB")
+  expect(promptStateKey({ draftID: "d1" }, server)).toBe("draft:d1")
+  expect(promptStateKey({ dir: "repo" }, server)).toBeUndefined()
 })

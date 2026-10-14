@@ -4,7 +4,9 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { batch, startTransition, type Accessor } from "solid-js"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
+import { useServer } from "@/context/server"
+import { sessionHref } from "@/utils/session-route"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -250,7 +252,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const language = useLanguage()
   const params = useParams()
   const [search] = useSearchParams<{ draftId?: string }>()
-  const tabs = useTabs()
+  const drafts = useDrafts()
+  const server = useServer()
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk().scope, sessionID)
   let creatingSession = false
 
@@ -464,8 +467,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
           const draftID = search.draftId
-          if (draftID) tabs.promoteDraft(draftID, { server: tabs.draft(draftID).server, sessionId: session.id })
-          else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+          const sessionServer = drafts.get(draftID)?.server ?? server.key
+          if (draftID) drafts.promote(draftID, { server: sessionServer, sessionID: session.id })
+          else navigate(sessionHref(sessionServer, session.id))
           submission.retarget(prompt.capture({ dir: base64Encode(sessionDirectory), id: session.id }))
         })
       }

@@ -14,7 +14,7 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
 import {
   createProject,
   listNotes,
@@ -60,7 +60,7 @@ export default function ProjectsPage() {
   const navigate = useNavigate()
   const server = useServer()
   const serverSDK = useServerSDK()
-  const tabs = useTabs()
+  const drafts = useDrafts()
   const [search] = useSearchParams<{ project?: string }>()
   const [state, setState] = createStore<PageState>({
     brainDirectory: "",
@@ -343,7 +343,10 @@ export default function ProjectsPage() {
               const startWork = () => {
                 const location = selectedLocation()
                 if (!location) return
-                void tabs.newDraft({ server: server.key, directory: location.worktree }, projectWorkPrompt(project))
+                void drafts.create(
+                  { server: server.key, directory: location.worktree, projectID: project.id },
+                  projectWorkPrompt(project),
+                )
               }
               const openNotes = () => navigate(`/notes?project=${encodeURIComponent(project.id)}`)
               const openCalendar = () => navigate(`/calendar?project=${encodeURIComponent(project.id)}`)
@@ -354,8 +357,9 @@ export default function ProjectsPage() {
               }
               const openWorkspace = () => {
                 const location = selectedLocation()
-                if (location) layout.home.setSelection({ server: server.key, directory: location.worktree })
-                navigate("/workspaces")
+                if (!location) return
+                layout.projects.open(location.worktree)
+                void drafts.create({ server: server.key, directory: location.worktree, projectID: project.id })
               }
               return (
                 <div class="flex min-h-0 flex-1 flex-col gap-2">

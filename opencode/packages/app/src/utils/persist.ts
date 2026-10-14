@@ -537,6 +537,11 @@ function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget
   }
 }
 
+/** Delete a per-window key from this window's storage. */
+export function removeWindowPersisted(key: string, platform: Platform) {
+  removePersisted(resolveTarget(Persist.window(key), platform), platform)
+}
+
 export function removePersisted(
   target: { draft?: boolean; storage?: string; legacyStorageNames?: string[]; key: string },
   platform?: Platform,

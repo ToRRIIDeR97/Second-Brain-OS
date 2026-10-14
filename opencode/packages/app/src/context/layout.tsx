@@ -19,7 +19,7 @@ import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
-import { type DraftTab, useTabs } from "./tabs"
+import { NEW_THREAD_PATH, useDrafts } from "./drafts"
 import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
 import { ensureWorkspaceProject } from "@/features/second-brain/client"
 import { createWorkspaceProjectTracker } from "@/features/second-brain/workspace-projects"
@@ -94,7 +94,6 @@ export type ReviewPanelSource = "context-button" | "other"
 export type LayoutRoute =
   | { type: "home" }
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
-  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
   | { type: "session"; sessionId: string; server?: ServerConnection.Key }
 
 const sessionPath = (key: string) => {
@@ -133,7 +132,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
 
-  if (parts[0] === "new-session") {
+  if (`/${parts[0]}` === NEW_THREAD_PATH) {
     const draftID = new URLSearchParams(search).get("draftId")
     if (!draftID) return { type: "home" }
     return { type: "draft", draftID }
@@ -147,15 +146,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
     }
   }
 
-  const dirBase64 = parts[0]
-  const dir = decode64(dirBase64)
-  if (!dir) return { type: "home" }
-
-  if (parts[1] !== "session") return { type: "home" }
-
-  const id = parts[2]
-  if (id) return { type: "session", sessionId: id }
-  return { type: "dir-new-sesssion", dir, dirBase64 }
+  return { type: "home" }
 }
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
@@ -165,7 +156,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const serverSdk = useServerSDK()
     const serverSync = useServerSync()
     const server = useServer()
-    const tabs = useTabs()
+    const drafts = useDrafts()
     const platform = usePlatform()
     const location = useLocation()
     const route = createMemo(() => {
@@ -173,7 +164,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       if (value.type === "home") return value
       if (value.server) return value
       if (value.type === "draft") {
-        const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === value.draftID)
+        const draft = drafts.get(value.draftID)
         if (draft) return { ...value, server: draft.server }
       }
       return { ...value, server: server.key }

@@ -8,13 +8,12 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
-import { type DraftTab, useTabs } from "./tabs"
+import { useDrafts } from "./drafts"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
 
@@ -113,11 +112,11 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
   name: "Notification",
   gate: false,
   init: () => {
-    const params = useParams<{ serverKey?: string; dir?: string; id?: string }>()
+    const params = useParams<{ serverKey?: string; id?: string }>()
     const [search] = useSearchParams<{ draftId?: string }>()
     const global = useGlobal()
     const server = useServer()
-    const tabs = useTabs()
+    const drafts = useDrafts()
     const navigate = useNavigate()
     const platform = usePlatform()
     const settings = useSettings()
@@ -128,12 +127,13 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const activeServer = createMemo(() => {
       if (params.serverKey) return requireServerKey(params.serverKey)
       if (search.draftId) {
-        const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
+        const draft = drafts.get(search.draftId)
         if (draft) return draft.server
       }
       return server.key
     })
-    const activeDirectory = createMemo(() => decode64(params.dir))
+    // Session routes are server-scoped; the session ID alone identifies what is on screen.
+    const activeDirectory = () => undefined
     const activeSession = createMemo(() => params.id)
 
     const ensure = (key: ServerConnection.Key) => {

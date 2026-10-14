@@ -2,7 +2,7 @@ import { useGlobal } from "@/context/global"
 import { type HomeProjectSelection, useLayout } from "@/context/layout"
 import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
-import { useTabs } from "@/context/tabs"
+import { useDrafts } from "@/context/drafts"
 import { toggleHomeProjectSelection } from "@/pages/layout/helpers"
 import { createEffect, createMemo } from "solid-js"
 
@@ -11,7 +11,7 @@ export function createHomeController() {
   const layout = useLayout()
   const server = useServer()
   const global = useGlobal()
-  const tabs = useTabs()
+  const drafts = useDrafts()
   const selection = layout.home.selection
   const focusedServer = createMemo(
     () => global.servers.list().find((conn) => ServerConnection.key(conn) === selection().server) ?? server.current,
@@ -50,7 +50,7 @@ export function createHomeController() {
     const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
-    void tabs.newDraft({ server: ServerConnection.key(conn), directory })
+    void drafts.create({ server: ServerConnection.key(conn), directory })
   }
 
   return {
