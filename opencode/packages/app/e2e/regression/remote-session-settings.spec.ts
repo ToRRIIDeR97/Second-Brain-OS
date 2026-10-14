@@ -51,10 +51,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     retry: 20,
   })
   await mockServers(page, permissionRequests, permissionResponses)
-  await configureServers(page, [
-    { type: "session", server: serverA, sessionId: sessionA.id },
-    { type: "session", server: serverB, sessionId: sessionB.id },
-  ])
+  await configureServers(page)
 
   const hrefB = `/server/${base64Encode(serverB)}/session/${sessionB.id}`
   await page.goto(`/server/${base64Encode(serverA)}/session/${sessionA.id}`)
@@ -73,7 +70,15 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     .toBe(true)
   await page.keyboard.press("Escape")
 
-  await page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefB}"])`).click()
+  // Threads on another server have no sidebar row; open one through an in-app link (client-side navigation).
+  await page.evaluate((href) => {
+    const link = document.createElement("a")
+    link.href = href
+    link.dataset.e2eLink = ""
+    link.textContent = "Open server B thread"
+    document.body.append(link)
+  }, hrefB)
+  await page.locator("[data-e2e-link]").click()
   await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
   await expect(page.getByText(sessionB.title).first()).toBeVisible()
   await transport.waitForConnection()
@@ -150,14 +155,13 @@ type PermissionResponse = {
   body: unknown
 }
 
-async function configureServers(page: Page, tabs: { type: "session"; server: string; sessionId: string }[] = []) {
+async function configureServers(page: Page) {
   await page.addInitScript(
-    ({ serverB, tabs }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    ({ serverB }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: {} }))
       localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
-      localStorage.setItem("opencode.window.browser.dat:tabs", JSON.stringify(tabs))
     },
-    { serverB, tabs },
+    { serverB },
   )
 }
 

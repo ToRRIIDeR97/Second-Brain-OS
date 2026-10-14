@@ -64,6 +64,7 @@ export function SecondBrainSidebar() {
       <Show when={layout.sidebar.opened()}>
         <div data-sidebar-section="projects" class="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2 pt-3">
           <SectionHeader
+            id="projects"
             label={language.t("secondBrain.sidebar.projectsSection")}
             onLabel={() => navigate("/projects")}
             labelTitle={language.t("secondBrain.sidebar.manageProjects")}
@@ -150,6 +151,7 @@ function NavRow(props: {
 }
 
 function SectionHeader(props: {
+  id?: string
   label: string
   labelTitle?: string
   onLabel?: () => void
@@ -159,6 +161,7 @@ function SectionHeader(props: {
     <div class="flex h-7 shrink-0 items-center gap-1 pl-2 pr-0.5">
       <button
         type="button"
+        data-sidebar-item={props.id}
         class="min-w-0 flex-1 truncate text-left text-[11px] uppercase tracking-[0.04em] text-v2-text-text-faint [font-weight:530] hover:text-v2-text-text-muted focus-visible:outline-none"
         title={props.labelTitle}
         onClick={() => props.onLabel?.()}
@@ -365,6 +368,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
             <button
               type="button"
               class="flex h-8 min-w-0 items-center gap-1.5 pl-2 text-left focus-visible:outline-none"
+              data-sidebar-thread-open
               aria-current={active() ? "page" : undefined}
               onClick={() => props.ctrl.openThread(session())}
               onDblClick={() => {

@@ -8,11 +8,12 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
+  createEffect,
   createMemo,
   createRenderEffect,
   createResource,
@@ -49,6 +50,7 @@ import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { requireServerKey, sessionHref } from "./utils/session-route"
+import { decode64 } from "./utils/base64"
 
 import { TargetSessionRouteContent } from "@/pages/session"
 
@@ -487,6 +489,7 @@ function Routes() {
       <Route path={NEW_THREAD_PATH} component={DraftRoute} />
       <Route path="/new-session" component={LegacyDraftRedirect} />
       <Route path="/:dir/session/:id" component={LegacySessionRedirect} />
+      <Route path="/:dir/session" component={LegacyNewSessionRedirect} />
       <Route path="*" component={() => <Navigate href="/" />} />
     </>
   )
@@ -503,4 +506,19 @@ function LegacySessionRedirect() {
   const server = useServer()
   const params = useParams<{ id: string }>()
   return <Navigate href={sessionHref(server.key, params.id)} />
+}
+
+// Old new-session URLs (/:dir/session) open a draft in that folder.
+function LegacyNewSessionRedirect() {
+  const server = useServer()
+  const drafts = useDrafts()
+  const navigate = useNavigate()
+  const params = useParams<{ dir: string }>()
+  createEffect(() => {
+    if (!drafts.ready()) return
+    const directory = decode64(params.dir)
+    if (!directory) return navigate("/", { replace: true })
+    void drafts.create({ server: server.key, directory })
+  })
+  return null
 }

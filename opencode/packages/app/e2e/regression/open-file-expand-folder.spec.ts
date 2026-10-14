@@ -80,10 +80,10 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
   })
 
   await page.addInitScript(
-    ({ directory, server, sessionID }) => {
+    ({ directory }) => {
       localStorage.setItem(
         "settings.v3",
-        JSON.stringify({ general: { newLayoutDesigns: true, shouldDisplayTabsToast: false } }),
+        JSON.stringify({ general: { shouldDisplayTabsToast: false } }),
       )
       localStorage.setItem(
         "opencode.global.dat:server",
@@ -100,12 +100,8 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
         "opencode.global.dat:review-panel-v2",
         JSON.stringify({ sidebarOpened: true, sidebarWidth: 240, expandMode: "collapse" }),
       )
-      localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
-        JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
-      )
     },
-    { directory, server, sessionID },
+    { directory },
   )
 
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)

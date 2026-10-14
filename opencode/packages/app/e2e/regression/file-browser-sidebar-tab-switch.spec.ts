@@ -160,8 +160,8 @@ async function setup(
   })
 
   await page.addInitScript(
-    ({ directory, server, sessionID }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    ({ directory }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: {} }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -177,11 +177,7 @@ async function setup(
         "opencode.global.dat:review-panel-v2",
         JSON.stringify({ sidebarOpened: true, sidebarWidth: 240, expandMode: "collapse" }),
       )
-      localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
-        JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
-      )
     },
-    { directory, server, sessionID },
+    { directory },
   )
 }

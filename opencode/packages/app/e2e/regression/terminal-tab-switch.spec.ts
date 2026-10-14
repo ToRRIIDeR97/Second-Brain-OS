@@ -2,6 +2,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
+import { openSidebarThreadByTitle } from "../utils/sidebar"
 
 const directory = "C:/OpenCode/TerminalTabSwitch"
 const projectID = "proj_terminal_tab_switch"
@@ -61,7 +62,7 @@ for (const mixed of [true, false]) {
 type Probed = HTMLElement & { __e2eProbe?: string }
 
 async function switchTab(page: Page, title: string) {
-  await page.locator("[data-titlebar-tab-slot]", { hasText: title }).click()
+  await openSidebarThreadByTitle(page, title)
 }
 
 async function writeProbe(page: Page) {
@@ -140,8 +141,8 @@ async function setup(page: Page, mixed = true) {
   })
 
   await page.addInitScript(
-    ({ directory, server, sessions }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    ({ directory }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: {} }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -150,11 +151,11 @@ async function setup(page: Page, mixed = true) {
         }),
       )
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
-        JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
+        "opencode.window.browser.dat:sidebar",
+        JSON.stringify({ expanded: { __brain__: true, __other__: true } }),
       )
     },
-    { directory, server, sessions: [sessionA, sessionB] },
+    { directory },
   )
   return connections
 }

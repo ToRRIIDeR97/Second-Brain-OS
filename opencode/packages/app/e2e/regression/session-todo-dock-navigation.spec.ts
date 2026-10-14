@@ -2,6 +2,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
+import { openSidebarThread } from "../utils/sidebar"
 
 const directory = "C:/OpenCode/TodoDockNavigation"
 const projectID = "proj_todo_dock_navigation"
@@ -137,10 +138,9 @@ function todoEvent(sessionID: string, next: typeof activeTodos): EventPayload {
 }
 
 async function configurePage(page: Page) {
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await page.addInitScript(
-    ({ directory, dirBase64, server, sessionIDs }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    ({ directory }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: {} }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -149,11 +149,11 @@ async function configurePage(page: Page) {
         }),
       )
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
-        JSON.stringify(sessionIDs.map((sessionId) => ({ type: "session", server, dirBase64, sessionId }))),
+        "opencode.window.browser.dat:sidebar",
+        JSON.stringify({ expanded: { __brain__: true, __other__: true } }),
       )
     },
-    { directory, dirBase64: base64Encode(directory), server, sessionIDs: [sourceID, otherID] },
+    { directory },
   )
 }
 
@@ -163,10 +163,7 @@ function sessionHref(sessionID: string) {
 }
 
 async function switchSession(page: Page, sessionID: string, title: string) {
-  const href = sessionHref(sessionID)
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
-  await expect(tab).toBeVisible()
-  await tab.click()
+  await openSidebarThread(page, sessionID)
   await expectSessionTitle(page, title)
 }
 
