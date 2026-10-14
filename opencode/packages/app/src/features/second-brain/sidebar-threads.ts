@@ -89,6 +89,23 @@ export function groupSidebarThreads<P extends SidebarProject, S extends SidebarS
   }
 }
 
+/**
+ * Combine the loaded directory lists with the recent-session index. A directory list
+ * contributes only threads that run in that directory: server events for a thread
+ * reach only its own directory's list, so a copy held by another list (e.g. the Brain
+ * folder's list of its whole OpenCode project) can be stale and must not win.
+ */
+export function mergeSidebarSessions<S extends SidebarSession>(
+  lists: ReadonlyArray<{ directory: string; sessions: readonly S[] }>,
+  index: readonly S[],
+): S[] {
+  const owned = lists.flatMap((list) => {
+    const key = pathKey(list.directory)
+    return list.sessions.filter((session) => pathKey(session.directory) === key)
+  })
+  return [...owned, ...index]
+}
+
 /** Visible threads in sidebar order, for previous/next thread navigation. */
 export function flattenThreads<S extends SidebarSession>(nodes: readonly ThreadNode<S>[]): S[] {
   return nodes.flatMap((node) => [node.session, ...flattenThreads(node.children)])
