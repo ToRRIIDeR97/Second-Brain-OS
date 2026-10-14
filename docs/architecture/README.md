@@ -263,6 +263,46 @@ later turn, and asks for confirmation with that file list before staging.
 Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
 files, so the compatibility layer rejects `files: false` for them.
 
+### Composer delivery, background send and stash
+
+While a thread is working, the composer sends each message with a `delivery`
+from Settings → General ("While the agent is working, new messages"): `steer`
+(default) joins the current drain at its next provider-turn boundary, and
+`queue` waits until the session would otherwise go idle. `mod+Enter` sends one
+message with the opposite delivery. Idle sessions send without `delivery`
+(server default `steer`). The renderer passes `delivery` through
+`POST /api/session/:sessionID/prompt` and the harness prompt route. V1 servers
+have no durable inbox: the compatibility layer drops `delivery` and reports
+every V1 prompt as a steer.
+
+Queued inputs stay out of the transcript. The renderer reducer skips
+`session.next.prompt.admitted` events whose `delivery` is `queue` and appends
+the message on `session.next.prompted`. `serverSync.session.data.session_queue`
+holds the pending list: it is loaded from `GET /api/session/:sessionID/queued`
+(unpromoted `queue` rows of `session_input`, oldest first) when a thread syncs,
+then kept current from the same two events. The follow-up dock above the
+composer lists these items. It is read-only because the server has no
+operation to withdraw a queued input or promote it to a steer. Servers without
+the route (V1 and older V2) report an empty queue. The earlier client-side
+queue (`followup.v1` per-workspace store) is removed; any items still in that
+key are no longer read.
+
+`mod+alt+Enter` sends in the background. From a new-thread draft it creates the
+thread through the normal new-session path, sends, and keeps the user on the
+same, now empty draft instead of promoting it. From an existing thread it sends
+the message into a new thread in the same Project (same directory and Harness)
+and leaves the current thread untouched. The new thread is seeded into the
+sidebar with an optimistic busy status, and a toast offers "Open".
+
+`mod+S` in the composer stashes the prompt (text, mentions and image
+attachments; comment context stays in the composer) into the global
+`prompt-stash` key (newest first, at most 20) and clears the composer. The
+stash menu in the composer toolbar restores an entry (the current unsent prompt
+is stashed in its place) or deletes it. Composer keys are handled in the
+editor's keydown (`session-ui/src/v2/components/prompt-input/machine.ts`,
+`promptInputV2KeyIntent`), not as global commands, because the global command
+listener runs in capture phase. Settings → Shortcuts lists them read-only.
+
 The session timeline collapses runs of two or more completed tool calls into
 one "Ran N tools" summary row (`session-ui/src/components/part-group.ts`).
 File edits, questions, subagent tasks, errored tools and running tools stay as
