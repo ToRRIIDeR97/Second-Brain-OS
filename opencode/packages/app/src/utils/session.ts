@@ -19,7 +19,9 @@ export function normalizeSessionInfo(input: SessionInfo | Session): HarnessSessi
       harnessRevision: current.harnessRevision,
     }
   }
+  // The vendored client predates these fields; `time.pinned` mirrors `metadata.pinned` on the legacy shape.
   const current = input as SessionInfo & {
+    time: SessionInfo["time"] & { pinned?: number }
     harnessInstanceID?: string
     harnessModel?: Harness.ModelSelection
     harnessRevision?: number
@@ -44,12 +46,19 @@ export function normalizeSessionInfo(input: SessionInfo | Session): HarnessSessi
     harnessRevision: current.harnessRevision,
     version: "",
     time: input.time,
+    metadata: current.time.pinned === undefined ? undefined : { pinned: current.time.pinned },
     revert: input.revert && {
       messageID: input.revert.messageID,
       partID: input.revert.partID,
       snapshot: input.revert.snapshot,
     },
   } as HarnessSession
+}
+
+// Pin time in epoch ms, stored by the server in `metadata.pinned`.
+export function sessionPinnedAt(session: Pick<Session, "metadata">) {
+  const pinned = session.metadata?.pinned
+  return typeof pinned === "number" ? pinned : undefined
 }
 
 export async function listAllSessions(api: Pick<SessionApi, "list">, input: Omit<SessionListInput, "cursor">) {
