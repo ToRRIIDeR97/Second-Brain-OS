@@ -335,7 +335,7 @@ describe("session.retry.retryable", () => {
     expect(retryable).toEqual({ message: "Response decompression failed" })
   })
 
-  test("maps free limits to Go upsell action", () => {
+  test("keeps hosted usage-limit errors generic without upsell actions", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({
         message: "Free usage exceeded",
@@ -348,82 +348,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error, "opencode")).toEqual({
-      message: SessionRetry.GO_UPSELL_MESSAGE,
-      action: {
-        reason: "free_tier_limit",
-        provider: "opencode",
-        title: "Free limit reached",
-        message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
-        label: "subscribe",
-        link: SessionRetry.GO_UPSELL_URL,
-      },
-    })
-  })
-
-  test("maps Go subscription limits to workspace PAYG upsell", () => {
-    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
-      new SessionV1.APIError({
-        message: "Subscription quota exceeded. You can continue using free models.",
-        isRetryable: true,
-        statusCode: 429,
-        responseHeaders: {
-          "retry-after": "19380",
-        },
-        responseBody: JSON.stringify({
-          type: "error",
-          error: {
-            type: "GoUsageLimitError",
-            message: "Subscription quota exceeded. You can continue using free models.",
-          },
-          metadata: {
-            workspace: "wrk_01K6XGM22R6FM8JVABE9XDQXGH",
-            limitName: "5 hour",
-          },
-        }),
-      }).toObject(),
-    )
-
-    expect(SessionRetry.retryable(error, "opencode-go")).toEqual({
-      message:
-        "5 hour usage limit reached. It will reset in 5 hours 23 minutes. To continue using this model now, enable usage from your available balance - https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
-      action: {
-        reason: "account_rate_limit",
-        provider: "opencode-go",
-        title: "Go limit reached",
-        message:
-          "5 hour usage limit reached. It will reset in 5 hours 23 minutes. To continue using this model now, enable usage from your available balance",
-        label: "open settings",
-        link: "https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
-      },
-    })
-  })
-
-  test("maps Go subscription limits without limit metadata", () => {
-    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
-      new SessionV1.APIError({
-        message: "Subscription quota exceeded. You can continue using free models.",
-        isRetryable: true,
-        statusCode: 429,
-        responseHeaders: {
-          "retry-after": "900",
-        },
-        responseBody: JSON.stringify({
-          type: "error",
-          error: {
-            type: "GoUsageLimitError",
-            message: "Subscription quota exceeded. You can continue using free models.",
-          },
-          metadata: {
-            workspace: "wrk_01K6XGM22R6FM8JVABE9XDQXGH",
-          },
-        }),
-      }).toObject(),
-    )
-
-    expect(SessionRetry.retryable(error, "opencode-go")?.action?.message).toBe(
-      "Usage limit reached. It will reset in 15 minutes. To continue using this model now, enable usage from your available balance",
-    )
+    expect(SessionRetry.retryable(error, "opencode")).toEqual({ message: "Free usage exceeded" })
   })
 })
 

@@ -6,7 +6,6 @@ import {
   autoProbePlan,
   createProbeFailureGate,
   runAddableProbePlan,
-  wslOpencodeAction,
   wslRuntimeRetryable,
 } from "./settings-model"
 import type { WslServersState } from "./types"
@@ -35,40 +34,6 @@ describe("WSL server settings presentation", () => {
     )
     expect(wslRuntimeRetryable({ kind: "failed", message: "boom" })).toBe(true)
     expect(wslRuntimeRetryable({ kind: "stopped" })).toBe(true)
-  })
-
-  test("offers install and update only when OpenCode needs attention", () => {
-    expect(wslOpencodeAction(undefined)).toBeUndefined()
-    expect(
-      wslOpencodeAction({
-        distro: "Debian",
-        resolvedPath: null,
-        version: null,
-        expectedVersion: "1.2.3",
-        matchesDesktop: null,
-        error: null,
-      }),
-    ).toBe("wsl.onboarding.installOpencode")
-    expect(
-      wslOpencodeAction({
-        distro: "Debian",
-        resolvedPath: "/usr/local/bin/opencode",
-        version: "1.2.2",
-        expectedVersion: "1.2.3",
-        matchesDesktop: false,
-        error: null,
-      }),
-    ).toBe("wsl.onboarding.updateOpencode")
-    expect(
-      wslOpencodeAction({
-        distro: "Debian",
-        resolvedPath: "/usr/local/bin/opencode",
-        version: "1.2.3",
-        expectedVersion: "1.2.3",
-        matchesDesktop: true,
-        error: null,
-      }),
-    ).toBeUndefined()
   })
 
   test("plans addable distro probes with the selected distro first", () => {
@@ -211,7 +176,8 @@ describe("WSL server settings presentation", () => {
       label: { key: "wsl.onboarding.installOpencode" },
       tone: "warning",
     })
-    expect(model.primaryButton.action).toBe("install-opencode")
+    expect(model.primaryButton.action).toBeNull()
+    expect(model.primaryButton.disabled).toBe(true)
   })
 
   test("delegates addable probe plans to one batch command", async () => {
