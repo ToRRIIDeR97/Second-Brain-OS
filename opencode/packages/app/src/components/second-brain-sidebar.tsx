@@ -5,6 +5,7 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettingsDialog } from "@/components/settings-dialog"
@@ -15,7 +16,9 @@ import {
   type SidebarController,
   type SidebarProjectItem,
 } from "@/components/sidebar/sidebar-controller"
+import { DialogArchivedThreads } from "@/components/sidebar/dialog-archived-threads"
 import type { ThreadNode } from "@/features/second-brain/sidebar-threads"
+import { sessionPinnedAt } from "@/utils/session"
 import { sessionTitle } from "@/utils/session-title"
 
 const rowClass =
@@ -199,6 +202,7 @@ function Chevron(props: { open: boolean }) {
 
 function ProjectGroup(props: { ctrl: SidebarController; project: SidebarProjectItem; threads: ThreadNode<Session>[] }) {
   const language = useLanguage()
+  const dialog = useDialog()
   const open = () => props.ctrl.expanded(props.project.id)
   return (
     <div data-sidebar-project={props.project.id} class="flex flex-col">
@@ -246,6 +250,13 @@ function ProjectGroup(props: { ctrl: SidebarController; project: SidebarProjectI
                 </MenuV2.Item>
                 <MenuV2.Item onSelect={() => props.ctrl.openProjectCard(props.project)}>
                   {language.t("secondBrain.sidebar.openProjectCard")}
+                </MenuV2.Item>
+                <MenuV2.Item
+                  onSelect={() =>
+                    dialog.show(() => <DialogArchivedThreads ctrl={props.ctrl} project={props.project} />)
+                  }
+                >
+                  {language.t("secondBrain.sidebar.archivedThreads")}
                 </MenuV2.Item>
                 <MenuV2.Separator />
                 <MenuV2.Item onSelect={() => void props.ctrl.archiveProject(props.project)}>
@@ -344,6 +355,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
   const session = () => props.node.session
   const active = () => props.ctrl.activeSessionID() === session().id
   const title = () => sessionTitle(session().title) || session().id
+  const pinned = () => sessionPinnedAt(session()) !== undefined
   // Child threads show while their parent's lineage is on screen.
   const showChildren = () => props.node.children.length > 0 && containsSession(props.node, props.ctrl.activeSessionID())
   let saved = false
@@ -377,6 +389,16 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
               }}
             >
               <span class="min-w-0 flex-1 truncate">{title()}</span>
+              <Show when={pinned()}>
+                <span
+                  data-sidebar-pinned
+                  class="flex shrink-0 items-center text-v2-icon-icon-muted"
+                  role="img"
+                  aria-label={language.t("secondBrain.sidebar.pinned")}
+                >
+                  <Icon name="pin" size="small" />
+                </span>
+              </Show>
               <Show when={props.ctrl.working(session().id)}>
                 <span
                   data-sidebar-running
@@ -420,12 +442,18 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
                 >
                   {language.t("common.rename")}
                 </MenuV2.Item>
+                <MenuV2.Item onSelect={() => void props.ctrl.setThreadPinned(session(), !pinned())}>
+                  {language.t(pinned() ? "secondBrain.sidebar.unpin" : "secondBrain.sidebar.pin")}
+                </MenuV2.Item>
                 <MenuV2.Item onSelect={() => void props.ctrl.forkThread(session())}>
                   {language.t("secondBrain.sidebar.fork")}
                 </MenuV2.Item>
                 <MenuV2.Separator />
                 <MenuV2.Item onSelect={() => void props.ctrl.archiveThread(session())}>
                   {language.t("common.archive")}
+                </MenuV2.Item>
+                <MenuV2.Item onSelect={() => props.ctrl.deleteThread(session())}>
+                  {language.t("common.delete")}
                 </MenuV2.Item>
               </MenuV2.Content>
             </MenuV2.Portal>

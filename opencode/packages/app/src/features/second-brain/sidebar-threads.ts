@@ -1,10 +1,13 @@
 import { pathKey } from "@/utils/path-key"
+import { sessionPinnedAt } from "@/utils/session"
 
 export type SidebarSession = {
   id: string
   parentID?: string
   directory: string
   time: { created: number; updated?: number; archived?: number }
+  /** `metadata.pinned` holds the pin time in epoch ms. */
+  metadata?: { [key: string]: unknown }
 }
 
 export type SidebarProject = { id: string; threadDirectory: string }
@@ -21,8 +24,12 @@ export type SidebarGroups<P extends SidebarProject, S extends SidebarSession> = 
 
 const recent = (session: SidebarSession) => session.time.updated ?? session.time.created
 
+/** Pinned roots first (latest pin first), then the rest by last update. */
+const compareRoots = (a: SidebarSession, b: SidebarSession) =>
+  (sessionPinnedAt(b) ?? 0) - (sessionPinnedAt(a) ?? 0) || recent(b) - recent(a)
+
 /**
- * Nest child threads under their parent. Roots are newest first; children oldest first.
+ * Nest child threads under their parent. Pinned roots come first, then the newest; children oldest first.
  * A child whose parent is not in the list is shown as a root so it never disappears.
  */
 export function buildThreadTree<S extends SidebarSession>(sessions: readonly S[]): ThreadNode<S>[] {
@@ -39,7 +46,7 @@ export function buildThreadTree<S extends SidebarSession>(sessions: readonly S[]
     node.children.forEach(sortChildren)
   }
   roots.forEach(sortChildren)
-  return roots.sort((a, b) => recent(b.session) - recent(a.session))
+  return roots.sort((a, b) => compareRoots(a.session, b.session))
 }
 
 /** The Project whose thread directory is exactly `directory`. */

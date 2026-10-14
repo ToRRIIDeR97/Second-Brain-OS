@@ -134,7 +134,6 @@ export const dict = {
   "command.session.new": "Naujas seansas",
   "command.file.open": "Atidaryti failą",
   "command.tab.close": "Uždaryti skirtuką",
-  "command.tab.reopenClosed": "Iš naujo atidaryti uždarytą skirtuką",
   "command.context.addSelection": "Pridėkite pasirinkimą prie konteksto",
   "command.context.addSelection.description": "Pridėkite pasirinktas eilutes iš dabartinio failo",
   "command.input.focus": "Fokusuoti įvesties lauką",
@@ -487,21 +486,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "darbalaukis {{version}}",
   "wsl.onboarding.versionMismatch": "Įdiegta versija neatitinka darbalaukio programos versijos.",
   "wsl.onboarding.adding": "Pridedama...",
-  "help.tabs.toast.ariaLabel": "Pristatome Tab. Tvarkykite savo darbą ir aktyvias sesijas naudodami skirtukus",
-  "help.tabs.toast.dismiss": "Atsisakyti Tabs informacijos",
-  "help.tabs.title": "Pristatome Tab",
-  "help.tabs.description": "Tvarkykite savo darbą ir aktyvias sesijas naudodami skirtukus",
-  "help.tabs.date": "liepos 14 d",
-  "help.tabs.introduction": "OpenCode Desktop dabar sukurtas iš skirtukų.",
-  "help.tabs.sessions":
-    "Pradėkite naują seansą skirtuke arba atidarykite esamą seansą iš bet kurio savo projekto. Atidarykite naują skirtuką, kai pradedate ką nors naujo, ir uždarykite, kai baigsite.",
-  "help.tabs.organize":
-    "Jei atidarysite kelis skirtukus, bus lengviau organizuoti aktyvias sesijas. Pervardykite skirtukus į kažką įsimintino, jei planuojate juos palikti.",
-  "help.tabs.home":
-    "Visas savo sesijas ir projektus rasite naujajame Home ekrane. Pasirinkus sesiją, ji atidaroma skirtuke.",
-  "help.tabs.persistence": "Kai iš naujo atidarote programą, skirtukai vis dar yra atidaryti.",
-  "help.tabs.worktrees":
-    "Naujasis dizainas dar nepalaiko Git Worktrees, jis pasirodys netrukus. Taigi, jei norite ir toliau naudoti ankstesnį išdėstymą, galite perjungti išdėstymus nustatymuose. Tiesiog nepamirškite, kad naujasis išdėstymas taps nuolatinis po kelių savaičių.",
   "server.row.noUsername": "jokio vartotojo vardo",
   "dialog.project.edit.title": "Redaguoti projektą",
   "dialog.project.edit.name": "Vardas",
@@ -668,7 +652,6 @@ export const dict = {
   "session.tab.session": "Seansas",
   "session.tab.review": "Apžvalga",
   "session.tab.context": "Kontekstas",
-  "session.tab.unknown": "Nežinomas seansas",
   "session.panel.reviewAndFiles": "Apžvalga ir failai",
   "session.error.notFound": "Šios sesijos rasti nepavyko",
   "session.error.notFound.description": "Šis skirtukas nurodo seansą, kurio šiame serveryje nebėra.",
@@ -929,13 +912,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Išplėskite redagavimo įrankio dalis",
   "settings.general.row.editToolPartsExpanded.description":
     "Rodyti pagal numatytuosius nustatymus laiko juostoje išplėstas redagavimo, rašymo ir pataisymo įrankio dalis",
-  "settings.general.row.newInterface.title": "Naujas išdėstymas",
-  "settings.general.row.newInterface.badge": "Nauja",
-  "settings.general.row.newInterface.description":
-    "Naudokite naujus skirtukus ir pagrindinio puslapio išdėstymą. Perjungti išdėstymą ribotą laiką.",
-  "settings.general.row.newInterfaceNotice.title": "Dabar naudojate naują išdėstymą",
-  "settings.general.row.newInterfaceNotice.description": "Ankstesnis išdėstymas nebepasiekiamas",
-  "settings.general.row.newInterfaceNotice.dismiss": "Atsisakyti",
   "settings.general.row.pinchZoom.title": "Suimkite, kad padidintumėte mastelį",
   "settings.general.row.pinchZoom.description": "Leiskite priartinti valdiklį ir Ctrl slinkimo gestus",
   "settings.general.row.wayland.title": "Naudokite vietinį Wayland",

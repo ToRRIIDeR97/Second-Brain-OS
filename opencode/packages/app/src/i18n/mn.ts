@@ -132,7 +132,6 @@ export const dict = {
   "command.session.new": "Шинэ сесс",
   "command.file.open": "Файлыг нээх",
   "command.tab.close": "Табыг хаах",
-  "command.tab.reopenClosed": "Хаагдсан табыг дахин нээнэ үү",
   "command.context.addSelection": "Контекст сонголт нэмэх",
   "command.context.addSelection.description": "Одоогийн файлаас сонгосон мөрүүдийг нэмнэ үү",
   "command.input.focus": "Фокус оруулах",
@@ -485,21 +484,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ширээний компьютер {{version}}",
   "wsl.onboarding.versionMismatch": "Суулгасан хувилбар нь ширээний програмын хувилбартай таарахгүй байна.",
   "wsl.onboarding.adding": "Нэмэж байна...",
-  "help.tabs.toast.ariaLabel": "Табуудыг танилцуулж байна. Таб ашиглан ажил болон идэвхтэй сешнүүдийг зохион байгуул",
-  "help.tabs.toast.dismiss": "Табын мэдээллийг хаах",
-  "help.tabs.title": "Табуудыг танилцуулж байна",
-  "help.tabs.description": "Таб ашиглан ажил болон идэвхтэй сешнүүдийг зохион байгуул",
-  "help.tabs.date": "Долдугаар сарын 14",
-  "help.tabs.introduction": "OpenCode Desktop одоо табуудыг тойрон бүтээгдсэн.",
-  "help.tabs.sessions":
-    "Таб дээрээс шинэ сесс эхлүүлэх эсвэл аль нэг төслөөсөө одоо байгаа сессийг нээнэ үү. Шинэ зүйл эхлүүлж байхдаа шинэ таб нээж, хийж дуусаад хаа.",
-  "help.tabs.organize":
-    "Цөөн хэдэн табыг нээлттэй байлгах нь идэвхтэй сешнүүдийг зохион байгуулахад хялбар болгодог. Хэрэв та тэдгээрийг эргэн тойронд байлгахаар төлөвлөж байгаа бол табуудыг мартагдашгүй зүйл болгон өөрчил.",
-  "help.tabs.home":
-    "Та бүх сесс болон төслүүдээ шинэ үндсэн нүүрэн дээрээс олох болно. Сешн сонгох нь таб дээр нээгдэнэ.",
-  "help.tabs.persistence": "Таныг програмыг дахин нээхэд таны таб нээлттэй хэвээр байна.",
-  "help.tabs.worktrees":
-    'Шинэ загвар нь одоохондоо Git Worktrees-г дэмждэггүй, удахгүй гарах болно. Хэрэв та өмнөх бүдүүвчийг үргэлжлүүлэн ашиглахыг хүсвэл "Тохиргоо" хэсэгт байрлуулалт хооронд сэлгэх боломжтой. Хэдэн долоо хоногийн дараа шинэ зохион байгуулалт байнгын болно гэдгийг санаарай.',
   "server.row.noUsername": "хэрэглэгчийн нэр байхгүй",
   "dialog.project.edit.title": "Төслийг засварлах",
   "dialog.project.edit.name": "Нэр",
@@ -667,7 +651,6 @@ export const dict = {
   "session.tab.session": "Сесс",
   "session.tab.review": "Хяналт",
   "session.tab.context": "Контекст",
-  "session.tab.unknown": "Үл мэдэгдэх сесс",
   "session.panel.reviewAndFiles": "Хяналт ба файлууд",
   "session.error.notFound": "Энэ сесс олдохгүй байна",
   "session.error.notFound.description": "Энэ таб нь энэ сервер дээр байхгүй сессийг заадаг.",
@@ -923,13 +906,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Засварлах хэрэгслийн хэсгүүдийг өргөжүүлэх",
   "settings.general.row.editToolPartsExpanded.description":
     "Он цагийн хэлхээс дээр анхдагчаар өргөтгөсөн засварлах, бичих, засварлах хэрэгслийн хэсгүүдийг харуул",
-  "settings.general.row.newInterface.title": "Шинэ зохион байгуулалт",
-  "settings.general.row.newInterface.badge": "Шинэ",
-  "settings.general.row.newInterface.description":
-    "Шинэ таб болон гэрийн байршлыг ашиглана уу. Хязгаарлагдмал хугацаанд бүдүүвч хооронд шилжих.",
-  "settings.general.row.newInterfaceNotice.title": "Та одоо шинэ бүдүүвч ашиглаж байна",
-  "settings.general.row.newInterfaceNotice.description": "Өмнөх загвар байхгүй болсон",
-  "settings.general.row.newInterfaceNotice.dismiss": "Хаах",
   "settings.general.row.pinchZoom.title": "Томруулахын тулд чимхээрэй",
   "settings.general.row.pinchZoom.description":
     "Trackpad чимхэх, Ctrl-г гүйлгэх дохиог ашиглан томруулахыг зөвшөөрнө үү",

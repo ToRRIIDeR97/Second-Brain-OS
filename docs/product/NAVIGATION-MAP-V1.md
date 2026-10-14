@@ -39,8 +39,9 @@ From top to bottom:
 2. **Projects** section. The heading opens `/projects`, the card management
    page. The folder button opens a folder as a Project.
    - One row per active Project, sorted by name, expandable. Expanding shows
-     **New thread** and the Project's root threads, newest first. A running
-     thread shows an accent dot. Child threads (`parentID`) nest under their
+     **New thread** and the Project's root threads: pinned threads first (most
+     recently pinned first, with a pin icon), then the rest newest first. A
+     running thread shows an accent dot. Child threads (`parentID`) nest under their
      parent while that parent or one of its children is open.
    - **Brain**: threads that run in the Brain folder itself and belong to no
      Project.
@@ -53,8 +54,28 @@ Row actions:
 
 | Row | Actions |
 |---|---|
-| Project | New thread, open project card (`/projects?project=<id>`), archive project |
-| Thread | Rename (also double-click), fork, archive |
+| Project | New thread, open project card (`/projects?project=<id>`), archived threads, archive project |
+| Thread | Rename (also double-click), pin / unpin, fork, archive, delete |
+
+Pins are stored on the thread (`metadata.pinned`, the pin time) so they survive
+restarts. Pinned threads sort first inside their own group (Project, Brain or
+Other threads); pinning a child thread does not move it out of its parent.
+
+**Archived threads** opens a dialog listing the Project's archived threads
+(threads in its thread directory, up to the 500 most recently updated), each
+with **Unarchive**.
+
+### Undo
+
+Archive thread, rename thread, delete thread and archive Project show a toast
+with **Undo** for 5 seconds. While such a toast is open, `mod+z` undoes the most
+recent one, unless focus is in a text field or editor, which keeps its own undo.
+
+- Archive and rename happen at once; undo unarchives the thread or restores
+  the previous title. Archive Project undo restores the previous status.
+- Delete is deferred: the row (and its child threads) hides at once, and the
+  hard delete (`session.remove`) runs only when the toast expires. If the app
+  closes before then, the thread is not deleted.
 
 The sidebar collapses to an icon rail (`mod+b` or the titlebar button). The
 Projects section is hidden while collapsed. The current Project and the
@@ -100,6 +121,7 @@ deleted.
 | `mod+shift+[` / `mod+shift+]` | Previous / next Project |
 | `mod+[` / `mod+]` | Back / forward |
 | `mod+k` | Command palette |
+| `mod+z` | Undo the last sidebar action while its undo toast is open (not in text fields) |
 
 The desktop File menu uses `Cmd+N` for a new thread, `Cmd+Shift+N` to open a
 folder as a Project and `Cmd+Alt+N` for a new window. `mod+t`, `mod+shift+t`

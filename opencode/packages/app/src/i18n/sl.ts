@@ -130,7 +130,6 @@ export const dict = {
   "command.session.new": "Nova seja",
   "command.file.open": "Odpri datoteko",
   "command.tab.close": "Zapri zavihek",
-  "command.tab.reopenClosed": "Ponovno odpri zaprt zavihek",
   "command.context.addSelection": "Dodaj izbor v kontekst",
   "command.context.addSelection.description": "Dodaj izbrane vrstice iz trenutne datoteke",
   "command.input.focus": "Vnos fokusa",
@@ -481,21 +480,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "namizje {{version}}",
   "wsl.onboarding.versionMismatch": "Nameščena različica se ne ujema z različico namizne aplikacije.",
   "wsl.onboarding.adding": "Dodajanje ...",
-  "help.tabs.toast.ariaLabel": "Predstavljamo zavihke. Organizirajte svoje delo in aktivne seje z zavihki",
-  "help.tabs.toast.dismiss": "Opusti informacije o zavihkih",
-  "help.tabs.title": "Predstavljamo zavihke",
-  "help.tabs.description": "Organizirajte svoje delo in aktivne seje z zavihki",
-  "help.tabs.date": "14. julij",
-  "help.tabs.introduction": "OpenCode Desktop je zdaj zgrajen okoli zavihkov.",
-  "help.tabs.sessions":
-    "Začnite novo sejo na zavihku ali odprite obstoječo sejo iz katerega koli od svojih projektov. Odprite nov zavihek, ko začnete nekaj novega, in ga zaprite, ko končate.",
-  "help.tabs.organize":
-    "Če imate nekaj odprtih zavihkov, lažje organizirate svoje aktivne seje. Preimenujte zavihke v nekaj nepozabnega, če jih nameravate obdržati.",
-  "help.tabs.home":
-    "Vse svoje seje in projekte boste našli na novem zaslonu Home. Če izberete sejo, jo odprete v zavihku.",
-  "help.tabs.persistence": "Ko znova odprete aplikacijo, so vaši zavihki še vedno odprti.",
-  "help.tabs.worktrees":
-    "Nova oblika še ne podpira Git Worktrees, kmalu bo na voljo. Če bi torej raje še naprej uporabljali prejšnjo postavitev, lahko preklapljate med postavitvami v nastavitvah. Ne pozabite le, da bo nova postavitev v nekaj tednih postala trajna.",
   "server.row.noUsername": "brez uporabniškega imena",
   "dialog.project.edit.title": "Uredi projekt",
   "dialog.project.edit.name": "Ime",
@@ -662,7 +646,6 @@ export const dict = {
   "session.tab.session": "Seja",
   "session.tab.review": "Pregled",
   "session.tab.context": "Kontekst",
-  "session.tab.unknown": "Neznana seja",
   "session.panel.reviewAndFiles": "Pregled in datoteke",
   "session.error.notFound": "Te seje ni mogoče najti",
   "session.error.notFound.description": "Ta zavihek kaže na sejo, ki ne obstaja več na tem strežniku.",
@@ -920,13 +903,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Razširite urejanje delov orodja",
   "settings.general.row.editToolPartsExpanded.description":
     "Prikaži privzeto razširjene dele orodja za urejanje, pisanje in popravljanje na časovnici",
-  "settings.general.row.newInterface.title": "Nova postavitev",
-  "settings.general.row.newInterface.badge": "Novo",
-  "settings.general.row.newInterface.description":
-    "Uporabite nove zavihke in domačo postavitev. Za omejen čas preklapljajte med postavitvami.",
-  "settings.general.row.newInterfaceNotice.title": "Zdaj uporabljate novo postavitev",
-  "settings.general.row.newInterfaceNotice.description": "Prejšnja postavitev ni več na voljo",
-  "settings.general.row.newInterfaceNotice.dismiss": "Odpusti",
   "settings.general.row.pinchZoom.title": "Stisnite za povečavo",
   "settings.general.row.pinchZoom.description":
     "Omogočite ščipanje sledilne ploščice in Ctrl poteze drsenja za povečavo",

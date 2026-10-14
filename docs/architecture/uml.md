@@ -146,7 +146,7 @@ Later turns in the same runtime send only the user message. See
 | Subject | Kind | Views | Source |
 | --- | --- | --- | --- |
 | Renderer routing and server connection | Subsystem | Component, Deployment, Sequence: startup | `app/src/app.tsx`, `app/src/utils/server-protocol.ts` |
-| Sidebar navigation (Projects, Brain, Other threads) and drafts | Subsystem | Component; text in [README](README.md#product-entry-points-and-persistence) and the [navigation map](../product/NAVIGATION-MAP-V1.md) | `app/src/components/second-brain-sidebar.tsx`, `app/src/components/sidebar/sidebar-controller.ts`, `app/src/features/second-brain/sidebar-threads.ts`, `app/src/context/drafts.tsx` |
+| Sidebar navigation (Projects, Brain, Other threads) and drafts | Subsystem | Component; text in [README](README.md#product-entry-points-and-persistence) and the [navigation map](../product/NAVIGATION-MAP-V1.md) | `app/src/components/second-brain-sidebar.tsx`, `app/src/components/sidebar/sidebar-controller.ts`, `app/src/features/second-brain/sidebar-threads.ts`, `app/src/context/drafts.tsx`, `app/src/components/sidebar/dialog-archived-threads.tsx` |
 | Preload and IPC | Subsystem | Component, Sequence: startup | `desktop/src/preload/index.ts`, `desktop/src/main/ipc.ts` |
 | Server launch and lifecycle | Subsystem | Deployment, State: sidecar, Sequence: startup | `desktop/src/main/server.ts`, `desktop/src/main/sidecar.ts` |
 | Second Brain notes, projects, calendar | Subsystem | Component, Class, Activity: write, State: project status | `opencode/src/knowledge/`, `opencode/src/project/brain.ts`, `opencode/src/planner/calendar.ts` |
@@ -166,7 +166,7 @@ Later turns in the same runtime send only the user message. See
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
 | Project thread directories and Workspace migration | Critical workflow | Class | `opencode/src/project/brain.ts` (`ensureForWorkspace`, `threadDirectory`, `migrateWorkspaces`), `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `app/src/features/second-brain/workspace-projects.ts` |
-| Session archive, unarchive, pin | Critical workflow | Text only ([README](README.md#session-compatibility-and-review)): `time_archived` set or NULL, `metadata.pinned` | `opencode/src/server/routes/instance/httpapi/handlers/session.ts`, `opencode/src/session/session.ts`, `core/src/session/projector.ts`, `app/src/context/global-sync/event-reducer.ts` |
+| Session archive, unarchive, pin, sidebar undo | Critical workflow | Text only ([README](README.md#session-compatibility-and-review), [navigation map](../product/NAVIGATION-MAP-V1.md#undo)): `time_archived` set or NULL, `metadata.pinned`; 5-second in-memory undo, deferred delete | `opencode/src/server/routes/instance/httpapi/handlers/session.ts`, `opencode/src/session/session.ts`, `core/src/session/projector.ts`, `app/src/context/global-sync/event-reducer.ts`, `app/src/utils/undo-action.ts` |
 | Desktop startup | Critical workflow | Sequence: startup | `desktop/src/main/index.ts` |
 | Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
 

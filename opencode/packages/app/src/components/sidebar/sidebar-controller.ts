@@ -1,17 +1,22 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, createResource, onMount } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useDirectoryPicker } from "@/components/directory-picker"
-import { useCommand } from "@/context/command"
+import { outsideEditable, useCommand } from "@/context/command"
 import { useDrafts } from "@/context/drafts"
-import { loadHomeSessionIndex, retainHomeSessions, type HomeSessionEvents } from "@/context/global-sync/home-session-index"
+import {
+  createHomeSessionIndexCache,
+  loadHomeSessionIndex,
+  retainHomeSessions,
+  type HomeSessionEvents,
+} from "@/context/global-sync/home-session-index"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import {
@@ -37,7 +42,9 @@ import { pathKey } from "@/utils/path-key"
 import { Persist, persisted } from "@/utils/persist"
 import { sessionHref } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
-import { showToast } from "@/utils/toast"
+import { sessionTitle } from "@/utils/session-title"
+import { dismissToast, showToast } from "@/utils/toast"
+import { createUndoQueue } from "@/utils/undo-action"
 
 export type SidebarProjectItem = {
   id: string
@@ -50,6 +57,7 @@ export const BRAIN_GROUP = "__brain__"
 export const OTHER_GROUP = "__other__"
 const OTHER_THREAD_LIMIT = 50
 const HOME_SESSION_LIMIT = 64
+const ARCHIVED_THREAD_LIMIT = 500
 
 export const projectThreadsQueryKey = (server: string, brain: string | undefined) =>
   ["second-brain", "project-threads", server, brain ?? ""] as const
@@ -116,7 +124,11 @@ export function createSidebarController() {
   )
 
   // Recent threads across every folder, so threads outside any Project still show.
-  const homeSessions = () => serverSync().homeSessions
+  // Bound to this subtree's QueryClient: `serverSync().homeSessions` writes to the outer
+  // GlobalProvider client, so its updates never reach the query below.
+  const homeSessions = createMemo(() =>
+    createHomeSessionIndexCache(queryClient, ServerConnection.key(serverSDK().server)),
+  )
   const sessionEvents = useQuery(() => ({
     queryKey: homeSessions().eventsKey,
     queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
@@ -145,9 +157,21 @@ export function createSidebarController() {
     retainHomeSessions(homeSessions().sessions(sessionIndex.data, sessionEvents.data), HOME_SESSION_LIMIT, Date.now()),
   )
 
-  const sessions = createMemo<Session[]>(() => [...directorySessions(), ...indexSessions()])
+  // `hidden` holds threads whose delete waits for its undo window to close; their children hide too.
+  const [local, setLocal] = createStore({ hidden: {} as Record<string, boolean>, undoPending: 0 })
+  const sessions = createMemo<Session[]>(() => {
+    const all = [...directorySessions(), ...indexSessions()]
+    const parents = new Map(all.map((session) => [session.id, session.parentID] as const))
+    const hidden = (id: string | undefined, depth = 0): boolean =>
+      !!id && depth < 64 && (local.hidden[id] || hidden(parents.get(id), depth + 1))
+    return all.filter((session) => !hidden(session.id))
+  })
   const groups = createMemo(() => {
-    const grouped = groupSidebarThreads({ projects: projects(), brainDirectory: brainDirectory(), sessions: sessions() })
+    const grouped = groupSidebarThreads({
+      projects: projects(),
+      brainDirectory: brainDirectory(),
+      sessions: sessions(),
+    })
     return { ...grouped, other: grouped.other.slice(0, OTHER_THREAD_LIMIT) }
   })
 
@@ -241,45 +265,147 @@ export function createSidebarController() {
       description: errorMessage(cause, language.t("common.requestFailed")),
     })
 
-  const renameThread = async (session: Session, title: string) => {
-    const next = title.trim()
-    if (!next || next === session.title) return
-    const [, setStore] = serverSync().child(session.directory, { bootstrap: false })
-    const update = (value: string) =>
-      setStore(
-        "session",
-        (item) => item.id === session.id,
-        produce((item) => {
-          item.title = value
-        }),
-      )
-    update(next)
-    await serverSDK()
-      .api.session.rename({ sessionID: session.id, title: next })
-      .catch((cause: unknown) => {
-        update(session.title)
-        requestFailed(cause)
-      })
+  const undo = createUndoQueue({
+    show: (action, run) =>
+      showToast({
+        title: action.title,
+        description: action.description,
+        persistent: true,
+        actions: [{ label: language.t("secondBrain.sidebar.undo"), onClick: run }],
+      }),
+    dismiss: dismissToast,
+    onChange: (pending) => setLocal("undoPending", pending),
+    onError: requestFailed,
+  })
+  onCleanup(() => undo.flush())
+
+  const threadLabel = (session: Session) => sessionTitle(session.title) || session.id
+
+  // A directory's list holds every thread of its OpenCode project, so a thread can sit in
+  // several loaded lists (e.g. the Brain folder and a `projects/<id>/` folder). Update them all.
+  const loadedStores = () => directories().map((directory) => serverSync().child(directory, { bootstrap: false }))
+  const dropSession = (sessionID: string) => {
+    for (const [, setStore] of loadedStores())
+      setStore("session", (items) => items.filter((item) => item.id !== sessionID))
   }
 
-  const archiveThread = async (session: Session) => {
+  // Apply the server's copy right away; the later session.updated event is idempotent.
+  const applySession = (info: Session) => {
+    homeSessions().apply({ type: "session.updated", properties: { sessionID: info.id, info } })
+    if (info.time.archived) return dropSession(info.id)
+    for (const [store, setStore] of loadedStores()) {
+      const index = store.session.findIndex((item) => item.id === info.id)
+      if (index !== -1) setStore("session", index, info)
+    }
+    if (!directories().some((directory) => pathKey(directory) === pathKey(info.directory))) return
+    const [own, setOwn] = serverSync().child(info.directory, { bootstrap: false })
+    if (own.session.some((item) => item.id === info.id)) return
+    setOwn("session", (items) => [...items, info].sort((a, b) => a.id.localeCompare(b.id)))
+  }
+
+  // Move off a thread that is about to leave the sidebar: to its parent, a neighbour, or Home.
+  const leaveThread = (session: Session) => {
+    if (activeSessionID() !== session.id) return
     const order = visibleThreads()
     const index = order.findIndex((item) => item.id === session.id)
     const next = order[index + 1] ?? order[index - 1]
+    if (session.parentID) openThread({ id: session.parentID })
+    else if (next && next.id !== session.id) openThread(next)
+    else navigate("/")
+  }
+
+  const rename = async (session: Session, title: string, previous: string) => {
+    const update = (value: string) => {
+      for (const [, setStore] of loadedStores())
+        setStore(
+          "session",
+          (item) => item.id === session.id,
+          produce((item) => {
+            item.title = value
+          }),
+        )
+    }
+    update(title)
     await serverSDK()
-      .client.session.update({ sessionID: session.id, directory: session.directory, time: { archived: Date.now() } })
+      .api.session.rename({ sessionID: session.id, title, directory: session.directory })
+      .catch((cause: unknown) => {
+        update(previous)
+        throw cause
+      })
+  }
+
+  const renameThread = async (session: Session, title: string) => {
+    const next = title.trim()
+    const previous = session.title
+    if (!next || next === previous) return
+    await rename(session, next, previous)
+      .then(() =>
+        undo.push({
+          title: language.t("secondBrain.sidebar.threadRenamed"),
+          description: next,
+          undo: () => rename(session, previous, next),
+        }),
+      )
+      .catch(requestFailed)
+  }
+
+  const archiveThread = async (session: Session) => {
+    await serverSDK()
+      .client.session.update(
+        { sessionID: session.id, directory: session.directory, time: { archived: Date.now() } },
+        { throwOnError: true },
+      )
       .then((result) => {
-        const [, setStore] = serverSync().child(session.directory, { bootstrap: false })
-        setStore("session", (items) => items.filter((item) => item.id !== session.id))
-        if (result.data)
-          homeSessions().apply({ type: "session.updated", properties: { sessionID: session.id, info: result.data } })
-        if (activeSessionID() !== session.id) return
-        if (session.parentID) openThread({ id: session.parentID })
-        else if (next && next.id !== session.id) openThread(next)
-        else navigate("/")
+        leaveThread(session)
+        applySession(result.data)
+        undo.push({
+          title: language.t("secondBrain.sidebar.threadArchived"),
+          description: threadLabel(session),
+          undo: () => unarchiveThread(session),
+        })
       })
       .catch(requestFailed)
   }
+
+  const unarchiveThread = (session: Pick<Session, "id" | "directory">) =>
+    serverSDK()
+      .client.session.update(
+        { sessionID: session.id, directory: session.directory, time: { archived: null } },
+        { throwOnError: true },
+      )
+      .then((result) => applySession(result.data))
+
+  /**
+   * Delete is deferred: the row hides now and `session.remove` (a hard delete) runs when the
+   * undo window closes. If the app quits first, the thread is simply not deleted.
+   */
+  const deleteThread = (session: Session) => {
+    leaveThread(session)
+    setLocal("hidden", session.id, true)
+    const restore = () => setLocal("hidden", session.id, false)
+    undo.push({
+      title: language.t("secondBrain.sidebar.threadDeleted"),
+      description: threadLabel(session),
+      undo: restore,
+      commit: () =>
+        serverSDK()
+          .api.session.remove({ sessionID: session.id, directory: session.directory })
+          .then(() => {
+            dropSession(session.id)
+            homeSessions().apply({ type: "session.deleted", properties: { sessionID: session.id, info: session } })
+          })
+          .catch((cause: unknown) => {
+            restore()
+            throw cause
+          }),
+    })
+  }
+
+  const setThreadPinned = (session: Session, pinned: boolean) =>
+    serverSDK()
+      .client.session.update({ sessionID: session.id, directory: session.directory, pinned }, { throwOnError: true })
+      .then((result) => applySession(result.data))
+      .catch(requestFailed)
 
   const forkThread = async (session: Session) => {
     await serverSDK()
@@ -294,13 +420,33 @@ export function createSidebarController() {
   const archiveProject = async (project: SidebarProjectItem) => {
     const brain = brainDirectory()
     if (!brain) return
+    const previous = project.entry.project.status
     await updateProject(client(brain), project.id, {
       status: "archived",
       expectedUpdatedAt: project.entry.project.updatedAt,
     })
-      .then(refreshProjects)
+      .then(async (archived) => {
+        await refreshProjects()
+        undo.push({
+          title: language.t("secondBrain.sidebar.projectArchived"),
+          description: project.name,
+          undo: () =>
+            updateProject(client(brain), project.id, { status: previous, expectedUpdatedAt: archived.updatedAt }).then(
+              refreshProjects,
+            ),
+        })
+      })
       .catch(requestFailed)
   }
+
+  /** Archived threads in a Project's thread folder, newest first, within the list limit. */
+  const listArchivedThreads = (project: SidebarProjectItem) =>
+    serverSDK()
+      .client.experimental.session.list(
+        { directory: project.threadDirectory, archived: true, limit: ARCHIVED_THREAD_LIMIT },
+        { throwOnError: true },
+      )
+      .then((result) => result.data.filter((session) => !!session.time.archived) as Session[])
 
   /**
    * Open a folder and make sure a Project links to it (Phase 3 merged Project model).
@@ -362,6 +508,16 @@ export function createSidebarController() {
   }
 
   command.register("sidebar", () => [
+    {
+      id: "sidebar.undo",
+      title: language.t("secondBrain.command.undo"),
+      category: language.t("command.category.view"),
+      keybind: "mod+z",
+      // Only while an undo toast is open, and never in place of a text field's own undo.
+      disabled: local.undoPending === 0,
+      when: outsideEditable,
+      onSelect: () => undo.undoLatest(),
+    },
     {
       id: "session.new",
       title: language.t("command.session.new"),
@@ -453,6 +609,10 @@ export function createSidebarController() {
     newBrainThread,
     renameThread,
     archiveThread,
+    unarchiveThread,
+    deleteThread,
+    setThreadPinned,
+    listArchivedThreads,
     forkThread,
     openProjectCard,
     archiveProject,

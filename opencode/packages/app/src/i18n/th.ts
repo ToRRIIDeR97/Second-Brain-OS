@@ -142,7 +142,6 @@ export const dict = {
   "command.session.new": "เซสชันใหม่",
   "command.file.open": "เปิดไฟล์",
   "command.tab.close": "ปิดแท็บ",
-  "command.tab.reopenClosed": "เปิดแท็บที่ปิดไปอีกครั้ง",
   "command.context.addSelection": "เพิ่มส่วนที่เลือกไปยังบริบท",
   "command.context.addSelection.description": "เพิ่มบรรทัดที่เลือกจากไฟล์ปัจจุบัน",
   "command.input.focus": "โฟกัสช่องป้อนข้อมูล",
@@ -510,21 +509,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "เวอร์ชันที่ติดตั้งไม่ตรงกับเวอร์ชันของแอปเดสก์ท็อป",
   "wsl.onboarding.adding": "กำลังเพิ่ม...",
 
-  "help.tabs.toast.ariaLabel": "ขอแนะนำแท็บ จัดระเบียบงานและเซสชันที่ใช้งานอยู่ด้วยแท็บ",
-  "help.tabs.toast.dismiss": "ปิดข้อมูลเกี่ยวกับแท็บ",
-  "help.tabs.title": "ขอแนะนำแท็บ",
-  "help.tabs.description": "จัดระเบียบงานและเซสชันที่ใช้งานอยู่ด้วยแท็บ",
-  "help.tabs.date": "14 กรกฎาคม",
-  "help.tabs.introduction": "ตอนนี้ OpenCode Desktop สร้างขึ้นโดยใช้แท็บเป็นหลัก",
-  "help.tabs.sessions":
-    "เริ่มเซสชันใหม่ในแท็บ หรือเปิดเซสชันที่มีอยู่จากโปรเจกต์ใดก็ได้ เปิดแท็บใหม่เมื่อเริ่มงานใหม่ และปิดเมื่อทำงานเสร็จ",
-  "help.tabs.organize":
-    "การเปิดแท็บไว้สองสามแท็บช่วยให้จัดระเบียบเซสชันที่ใช้งานอยู่ได้ง่ายขึ้น เปลี่ยนชื่อแท็บให้จดจำได้ง่ายหากต้องการเก็บแท็บไว้",
-  "help.tabs.home": "คุณจะพบเซสชันและโปรเจกต์ทั้งหมดในหน้าจอหน้าหลักแบบใหม่ เมื่อเลือกเซสชัน เซสชันนั้นจะเปิดในแท็บ",
-  "help.tabs.persistence": "เมื่อเปิดแอปอีกครั้ง แท็บของคุณจะยังคงเปิดอยู่",
-  "help.tabs.worktrees":
-    "การออกแบบใหม่ยังไม่รองรับ Git Worktrees แต่จะรองรับเร็ว ๆ นี้ ดังนั้น หากต้องการใช้เค้าโครงก่อนหน้าต่อ คุณสามารถสลับเค้าโครงได้ในการตั้งค่า โปรดทราบว่าเค้าโครงใหม่จะกลายเป็นเค้าโครงถาวรภายในอีกไม่กี่สัปดาห์",
-
   "dialog.project.edit.title": "แก้ไขโปรเจกต์",
   "dialog.project.edit.name": "ชื่อ",
   "dialog.project.edit.icon": "ไอคอน",
@@ -703,7 +687,6 @@ export const dict = {
   "session.tab.session": "เซสชัน",
   "session.tab.review": "ตรวจสอบ",
   "session.tab.context": "บริบท",
-  "session.tab.unknown": "เซสชันที่ไม่รู้จัก",
   "session.panel.reviewAndFiles": "ตรวจสอบและไฟล์",
   "session.error.notFound": "ไม่พบเซสชันนี้",
   "session.error.notFound.description": "แท็บนี้อ้างถึงเซสชันที่ไม่มีอยู่บนเซิร์ฟเวอร์นี้แล้ว",
@@ -892,13 +875,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "ขยายส่วนเครื่องมือ edit",
   "settings.general.row.editToolPartsExpanded.description":
     "แสดงส่วนเครื่องมือ edit, write และ patch แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
-  "settings.general.row.newInterface.title": "เลย์เอาต์ใหม่",
-  "settings.general.row.newInterface.badge": "ใหม่",
-  "settings.general.row.newInterface.description":
-    "ใช้แท็บใหม่และเลย์เอาต์หน้าแรก คุณสามารถสลับระหว่างเลย์เอาต์ได้ในช่วงเวลาจำกัด",
-  "settings.general.row.newInterfaceNotice.title": "ขณะนี้คุณกำลังใช้เลย์เอาต์ใหม่",
-  "settings.general.row.newInterfaceNotice.description": "เลย์เอาต์ก่อนหน้าไม่พร้อมใช้งานอีกต่อไป",
-  "settings.general.row.newInterfaceNotice.dismiss": "ปิด",
   "settings.general.row.pinchZoom.title": "บีบนิ้วเพื่อซูม",
   "settings.general.row.pinchZoom.description": "อนุญาตให้ใช้ท่าบีบนิ้วบนแทร็คแพดและ Ctrl-scroll เพื่อซูม",
   "settings.general.row.wayland.title": "ใช้ Wayland แบบเนทีฟ",

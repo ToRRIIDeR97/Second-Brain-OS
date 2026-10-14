@@ -131,7 +131,6 @@ export const dict = {
   "command.session.new": "Täze sessiýa",
   "command.file.open": "Faýl açyň",
   "command.tab.close": "Salgy ýapyň",
-  "command.tab.reopenClosed": "Closedapyk goýmany açyň",
   "command.context.addSelection": "Kontekste saýlama goşuň",
   "command.context.addSelection.description": "Häzirki faýldan saýlanan setirleri goşuň",
   "command.input.focus": "Giriş fokus",
@@ -481,22 +480,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "iş stoly {{version}}",
   "wsl.onboarding.versionMismatch": "Gurlan wersiýa iş stoly programma wersiýasyna gabat gelenok.",
   "wsl.onboarding.adding": "Goşmak ...",
-  "help.tabs.toast.ariaLabel":
-    "Salgylar bilen tanyşdyrmak. Işleriňizi we işjeň sessiýalaryňyzy bellikler bilen tertipläň",
-  "help.tabs.toast.dismiss": "Salgylar baradaky maglumatlary aýyryň",
-  "help.tabs.title": "Salgylar bilen tanyşdyrmak",
-  "help.tabs.description": "Işleriňizi we işjeň sessiýalaryňyzy bellikler bilen tertipläň",
-  "help.tabs.date": "14-nji iýul",
-  "help.tabs.introduction": "OpenCode Desktop indi goýmalaryň töwereginde guruldy.",
-  "help.tabs.sessions":
-    "Salgyda täze sessiýa başlaň ýa-da islendik taslamaňyzdan bar bolan sessiýany açyň. Täze bir zat başlanyňyzda täze tab açyň we gutaranyňyzdan soň ýapyň.",
-  "help.tabs.organize":
-    "Birnäçe goýmany açyk saklamak, işjeň sessiýalaryňyzy tertipleşdirmegi aňsatlaşdyrýar. Tablisalary ýatda saklamagy meýilleşdirýän bolsaňyz, ýatdan çykmajak bir zadyň adyny üýtgediň.",
-  "help.tabs.home":
-    "Xhli sessiýalaryňyzy we taslamalaryňyzy täze Home ekranynda tapyp bilersiňiz. Sessiýany saýlamak ony goýmada açýar.",
-  "help.tabs.persistence": "Programmany açanyňyzda, goýmalar henizem açyk.",
-  "help.tabs.worktrees":
-    "Täze dizaýn entek Git Worktrees-i goldamaýar, ýakyn wagtda çykar. Şonuň üçin öňki tertibi ulanmagy dowam etdirmek isleseňiz, Sazlamalardaky düzülişleriň arasynda geçip bilersiňiz. Täze düzülişiň birnäçe hepdeden hemişelik boljakdygyny ýadyňyzdan çykarmaň.",
   "server.row.noUsername": "ulanyjy ady ýok",
   "dialog.project.edit.title": "Taslamany redaktirläň",
   "dialog.project.edit.name": "Ady",
@@ -661,7 +644,6 @@ export const dict = {
   "session.tab.session": "Sessiýa",
   "session.tab.review": "Syn",
   "session.tab.context": "Kontekst",
-  "session.tab.unknown": "Näbelli sessiýa",
   "session.panel.reviewAndFiles": "Gözden geçiriň we faýllary",
   "session.error.notFound": "Bu sessiýany tapyp bolmaýar",
   "session.error.notFound.description": "Bu goýma, bu serwerde ýok bolan sessiýany görkezýär.",
@@ -916,13 +898,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Redaktirleme gurallarynyň böleklerini giňeltmek",
   "settings.general.row.editToolPartsExpanded.description":
     "Wagt tertibinde tertip boýunça giňeldilen redaktirlemegi, ýazmagy we patch gurallaryny görkeziň",
-  "settings.general.row.newInterface.title": "Täze düzüliş",
-  "settings.general.row.newInterface.badge": "Täze",
-  "settings.general.row.newInterface.description":
-    "Täze goýmalary we öý tertibini ulanyň. Çäkli wagt üçin düzülişleriň arasynda geçiň.",
-  "settings.general.row.newInterfaceNotice.title": "Indi täze düzülişi ulanýarsyňyz",
-  "settings.general.row.newInterfaceNotice.description": "Öňki düzüliş indi elýeterli däl",
-  "settings.general.row.newInterfaceNotice.dismiss": "Işden aýyrmak",
   "settings.general.row.pinchZoom.title": "Ulaltmak üçin çümmük",
   "settings.general.row.pinchZoom.description": "Trackpad çümmüklerine we Ctrl-aýlaw hereketlerine ýakynlaşdyryň",
   "settings.general.row.wayland.title": "Nativeerli Wayland ulanyň",

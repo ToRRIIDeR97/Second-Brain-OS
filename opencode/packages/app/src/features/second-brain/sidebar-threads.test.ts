@@ -1,11 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import { buildThreadTree, flattenThreads, groupSidebarThreads, projectForDirectory } from "./sidebar-threads"
 
-const session = (id: string, directory: string, created: number, extra: { parentID?: string; updated?: number; archived?: number } = {}) => ({
+const session = (
+  id: string,
+  directory: string,
+  created: number,
+  extra: { parentID?: string; updated?: number; archived?: number; pinned?: number } = {},
+) => ({
   id,
   directory,
   parentID: extra.parentID,
   time: { created, updated: extra.updated, archived: extra.archived },
+  metadata: extra.pinned === undefined ? undefined : { pinned: extra.pinned },
 })
 
 const projects = [
@@ -84,6 +90,36 @@ describe("thread nesting", () => {
     expect(tree[0]?.children.map((node) => node.session.id)).toEqual(["child-1", "child-2"])
     expect(tree[0]?.children[0]?.children.map((node) => node.session.id)).toEqual(["grandchild"])
     expect(flattenThreads(tree).map((item) => item.id)).toEqual(["new", "child-1", "grandchild", "child-2", "old"])
+  })
+
+  test("puts pinned roots first by pin time, then the rest by last update", () => {
+    const tree = buildThreadTree([
+      session("recent", "/w", 1, { updated: 50 }),
+      session("pinned-old", "/w", 2, { pinned: 10 }),
+      session("pinned-new", "/w", 3, { pinned: 20 }),
+      session("older", "/w", 4, { updated: 40 }),
+      session("pinned-child", "/w", 5, { parentID: "older", pinned: 99 }),
+    ])
+    expect(tree.map((node) => node.session.id)).toEqual(["pinned-new", "pinned-old", "recent", "older"])
+    expect(tree[3]?.children.map((node) => node.session.id)).toEqual(["pinned-child"])
+  })
+
+  test("sorts pins within each group", () => {
+    const groups = groupSidebarThreads({
+      projects,
+      brainDirectory: "/brain",
+      sessions: [
+        session("a", "/work/repo", 1, { updated: 9 }),
+        session("b", "/work/repo", 2, { pinned: 5 }),
+        session("c", "/brain", 3, { updated: 9 }),
+        session("d", "/brain", 4, { pinned: 5 }),
+        session("e", "/tmp", 5, { updated: 9 }),
+        session("f", "/tmp", 6, { pinned: 5 }),
+      ],
+    })
+    expect(groups.projects[0]?.threads.map((node) => node.session.id)).toEqual(["b", "a"])
+    expect(groups.brain.map((node) => node.session.id)).toEqual(["d", "c"])
+    expect(groups.other.map((node) => node.session.id)).toEqual(["f", "e"])
   })
 
   test("keeps a child whose parent is not loaded as a root", () => {

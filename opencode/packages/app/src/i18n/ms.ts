@@ -130,7 +130,6 @@ export const dict = {
   "command.session.new": "Sesi baharu",
   "command.file.open": "Buka fail",
   "command.tab.close": "Tutup tab",
-  "command.tab.reopenClosed": "Buka semula tab tertutup",
   "command.context.addSelection": "Tambah pilihan ke konteks",
   "command.context.addSelection.description": "Tambah baris terpilih dari fail semasa",
   "command.input.focus": "Fokus pada input",
@@ -482,21 +481,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Versi yang dipasang tidak sepadan dengan versi aplikasi desktop.",
   "wsl.onboarding.adding": "Sedang menambah...",
-  "help.tabs.toast.ariaLabel": "Pengenalan Tab. Susun kerja dan sesi aktif anda dengan tab",
-  "help.tabs.toast.dismiss": "Tutup maklumat Tab",
-  "help.tabs.title": "Pengenalan Tab",
-  "help.tabs.description": "Susun kerja dan sesi aktif anda dengan tab",
-  "help.tabs.date": "14 Julai",
-  "help.tabs.introduction": "OpenCode Desktop kini dibina berasaskan tab.",
-  "help.tabs.sessions":
-    "Mulakan sesi baharu dalam tab, atau buka sesi sedia ada daripada mana-mana projek anda. Buka tab baharu apabila anda memulakan sesuatu yang baru, dan tutup apabila selesai.",
-  "help.tabs.organize":
-    "Membuka beberapa tab memudahkan anda menyusun sesi aktif. Namakan semula tab kepada sesuatu yang mudah diingati jika anda ingin menyimpannya.",
-  "help.tabs.home":
-    "Anda akan menemui semua sesi dan projek anda di skrin Laman Utama yang baharu. Memilih sesi akan membukanya dalam tab.",
-  "help.tabs.persistence": "Apabila anda membuka semula aplikasi, tab anda masih terbuka.",
-  "help.tabs.worktrees":
-    "Reka bentuk baharu belum menyokong Git Worktrees, ia akan hadir tidak lama lagi. Jika anda ingin terus menggunakan susun atur sebelum ini, anda boleh bertukar antara susun atur dalam Tetapan. Harap maklum bahawa susun atur baharu akan menjadi kekal dalam beberapa minggu lagi.",
   "server.row.noUsername": "tiada nama pengguna",
   "dialog.project.edit.title": "Edit projek",
   "dialog.project.edit.name": "Nama",
@@ -660,7 +644,6 @@ export const dict = {
   "session.tab.session": "Sesi",
   "session.tab.review": "Semak",
   "session.tab.context": "Konteks",
-  "session.tab.unknown": "Sesi Tidak Diketahui",
   "session.panel.reviewAndFiles": "Semak dan fail",
   "session.error.notFound": "Sesi ini tidak dapat ditemui",
   "session.error.notFound.description": "Tab ini merujuk kepada sesi yang tidak lagi wujud pada pelayan ini.",
@@ -913,13 +896,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Kembangkan bahagian alat suntingan",
   "settings.general.row.editToolPartsExpanded.description":
     "Papar bahagian alat sunting, tulis, dan tampal dikembangkan secara lalai dalam garis masa",
-  "settings.general.row.newInterface.title": "Susun atur baharu",
-  "settings.general.row.newInterface.badge": "Baharu",
-  "settings.general.row.newInterface.description":
-    "Guna tab dan susun atur Laman Utama yang baharu. Tukar antara susun atur untuk masa terhad.",
-  "settings.general.row.newInterfaceNotice.title": "Anda kini menggunakan susun atur baharu",
-  "settings.general.row.newInterfaceNotice.description": "Susun atur sebelum ini tidak lagi tersedia",
-  "settings.general.row.newInterfaceNotice.dismiss": "Tutup",
   "settings.general.row.pinchZoom.title": "Cubit untuk zum",
   "settings.general.row.pinchZoom.description": "Benarkan gerak isyarat cubit pada pad jejak dan Ctrl-tatal untuk zum",
   "settings.general.row.wayland.title": "Guna Wayland asli",

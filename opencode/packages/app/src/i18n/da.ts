@@ -48,7 +48,6 @@ export const dict = {
   "command.session.new": "Ny session",
   "command.file.open": "Åbn fil",
   "command.tab.close": "Luk fane",
-  "command.tab.reopenClosed": "Åbn lukket fane igen",
   "command.context.addSelection": "Tilføj markering til kontekst",
   "command.context.addSelection.description": "Tilføj markerede linjer fra den aktuelle fil",
   "command.input.focus": "Fokuser inputfelt",
@@ -596,7 +595,6 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Gennemgang",
   "session.tab.context": "Kontekst",
-  "session.tab.unknown": "Ukendt session",
   "session.panel.reviewAndFiles": "Gennemgang og filer",
   "session.error.notFound": "Denne session kan ikke findes",
   "session.error.notFound.description": "Denne fane henviser til en session, der ikke længere findes på denne server.",
@@ -786,13 +784,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
-  "settings.general.row.newInterface.title": "Nyt layout",
-  "settings.general.row.newInterface.badge": "Ny",
-  "settings.general.row.newInterface.description":
-    "Brug de nye faner og startsidens layout. Du kan skifte mellem layoutene i en begrænset periode.",
-  "settings.general.row.newInterfaceNotice.title": "Du bruger nu det nye layout",
-  "settings.general.row.newInterfaceNotice.description": "Det tidligere layout er ikke længere tilgængeligt",
-  "settings.general.row.newInterfaceNotice.dismiss": "Afvis",
   "settings.general.row.pinchZoom.title": "Knib for at zoome",
   "settings.general.row.pinchZoom.description": "Tillad knibebevægelser på pegefeltet og Ctrl-rulning for at zoome",
   "settings.general.row.wayland.title": "Brug indbygget Wayland",
@@ -1171,19 +1162,4 @@ export const dict = {
 
   "command.logs.export": "Eksportér logfiler",
 
-  "help.tabs.toast.ariaLabel": "Introduktion til faner. Organiser dit arbejde og dine aktive sessioner med faner",
-  "help.tabs.toast.dismiss": "Luk oplysninger om faner",
-  "help.tabs.title": "Introduktion til faner",
-  "help.tabs.description": "Organiser dit arbejde og dine aktive sessioner med faner",
-  "help.tabs.date": "14. juli",
-  "help.tabs.introduction": "OpenCode Desktop er nu bygget op omkring faner.",
-  "help.tabs.sessions":
-    "Start en ny session i en fane, eller åbn en eksisterende session fra et af dine projekter. Åbn en ny fane, når du går i gang med noget nyt, og luk den, når du er færdig.",
-  "help.tabs.organize":
-    "Når du holder nogle få faner åbne, er det nemmere at organisere dine aktive sessioner. Giv fanerne navne, der er nemme at huske, hvis du vil beholde dem.",
-  "help.tabs.home":
-    "Du finder alle dine sessioner og projekter på den nye startskærm. Når du vælger en session, åbnes den i en fane.",
-  "help.tabs.persistence": "Dine faner er stadig åbne, når du åbner appen igen.",
-  "help.tabs.worktrees":
-    "Det nye design understøtter endnu ikke Git Worktrees, men understøttelsen kommer snart. Hvis du foretrækker at fortsætte med det tidligere layout, kan du skifte mellem layoutene under Indstillinger. Bemærk, at det nye layout bliver permanent om nogle få uger.",
 }
