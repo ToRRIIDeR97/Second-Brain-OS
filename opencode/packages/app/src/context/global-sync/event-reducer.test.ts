@@ -244,6 +244,28 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
+  test("re-inserts a session when an update clears its archive time", () => {
+    const [store, setStore] = createStore(
+      baseState({ session: [rootSession({ id: "ses_1" }), rootSession({ id: "ses_2" })], sessionTotal: 2 }),
+    )
+    const update = (info: Session) =>
+      applyDirectoryEvent({
+        event: { type: "session.updated", properties: { info } },
+        store,
+        setStore,
+        push() {},
+        directory: "/tmp",
+        loadLsp() {},
+      })
+
+    update(rootSession({ id: "ses_1", archived: 10 }))
+    expect(store.session.map((x) => x.id)).toEqual(["ses_2"])
+
+    update(rootSession({ id: "ses_1" }))
+    expect(store.session.map((x) => x.id)).toEqual(["ses_1", "ses_2"])
+    expect(store.session[0]!.time.archived).toBeUndefined()
+  })
+
   test("ignores an archived session absent from a passive directory store", () => {
     const [store, setStore] = createStore(baseState({ session: [], sessionTotal: 0 }))
 

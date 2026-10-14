@@ -70,5 +70,19 @@ export function useSessionArchive() {
       })
   }
 
-  return { archive, navigateAfterRemoval }
+  // The legacy update route owns archive and pin state; the session.updated event re-adds or refreshes the row.
+  const legacyUpdate = async (body: { pinned?: boolean; time?: { archived: null } }, sessionID: string) => {
+    if ((await sdk().protocol) !== "v1" && !(await sdk().legacyProjectsAndMcp)) {
+      throw new Error(language.t("common.requestFailed"))
+    }
+    return sdk()
+      .client.session.update({ sessionID, directory: sdk().directory, ...body })
+      .then((result) => result.data)
+  }
+
+  const unarchiveSession = (sessionID: string) => legacyUpdate({ time: { archived: null } }, sessionID)
+
+  const setSessionPinned = (sessionID: string, pinned: boolean) => legacyUpdate({ pinned }, sessionID)
+
+  return { archive, unarchiveSession, setSessionPinned, navigateAfterRemoval }
 }

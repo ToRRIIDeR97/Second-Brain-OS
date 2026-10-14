@@ -50,9 +50,12 @@ export const UpdatePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
   metadata: Schema.optional(Session.Metadata),
   permission: Schema.optional(PermissionV1.Ruleset),
+  // true stores the pin time in `metadata.pinned`; false removes it.
+  pinned: Schema.optional(Schema.Boolean),
   time: Schema.optional(
     Schema.Struct({
-      archived: Schema.optional(Session.ArchivedTimestamp),
+      // null clears the archive timestamp (unarchive).
+      archived: Schema.optional(Schema.NullOr(Session.ArchivedTimestamp)),
     }),
   ),
 })

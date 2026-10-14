@@ -280,7 +280,12 @@ export type SessionsListOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string
@@ -393,7 +398,12 @@ export type SessionsCreateOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string
@@ -437,7 +447,12 @@ export type SessionsForkOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string
@@ -491,7 +506,12 @@ export type SessionsGetOutput = {
       readonly reasoning: number
       readonly cache: { readonly read: number; readonly write: number }
     }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+    readonly time: {
+      readonly created: number
+      readonly updated: number
+      readonly archived?: number
+      readonly pinned?: number
+    }
     readonly title: string
     readonly location: { readonly directory: string; readonly workspaceID?: string }
     readonly subpath?: string

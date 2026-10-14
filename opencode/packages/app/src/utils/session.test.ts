@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
 import { Harness } from "@opencode-ai/schema/harness"
-import { listAllSessions, normalizeSessionInfo } from "./session"
+import { listAllSessions, normalizeSessionInfo, sessionPinnedAt } from "./session"
 
 describe("normalizeSessionInfo", () => {
   test("adapts a current session to the app session shape", () => {
@@ -39,6 +39,13 @@ describe("normalizeSessionInfo", () => {
       time: { created: 1, updated: 1 },
       revert: { messageID: "message-1", partID: "part-1", snapshot: "snapshot" },
     })
+  })
+
+  test("maps the current pin time onto legacy metadata", () => {
+    const pinned = { ...currentSession("session-1"), time: { created: 1, updated: 1, pinned: 7 } } as SessionInfo
+    expect(sessionPinnedAt(normalizeSessionInfo(pinned))).toBe(7)
+    expect(sessionPinnedAt(normalizeSessionInfo(currentSession("session-2")))).toBeUndefined()
+    expect(sessionPinnedAt({ metadata: { pinned: true } })).toBeUndefined()
   })
 
   test("supplies timestamped titles for untitled current sessions", () => {

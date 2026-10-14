@@ -207,6 +207,18 @@ than assuming that every operation uses one API generation. PTY sockets use
 short-lived tickets from the legacy connection endpoint on managed servers
 and the native `/api/pty` endpoints on servers using only the current API.
 
+Archive, unarchive, and pin go through the legacy
+`PATCH /session/:sessionID` route. `time.archived: <ms>` archives and
+`time.archived: null` clears the `time_archived` column. `pinned: true`
+stores the pin time as `metadata.pinned` (epoch ms) and `pinned: false`
+removes that key, leaving other metadata intact, so pins need no migration.
+Legacy session info returns `metadata.pinned`; native `SessionV2.Info`
+derives `time.pinned` from it. Each change publishes `session.updated`, and
+the renderer reducer drops archived sessions and re-inserts unarchived ones.
+The renderer helpers are `unarchiveSession` and `setSessionPinned` in
+`app/src/pages/session/session-archive.ts` and `sessionPinnedAt` in
+`app/src/utils/session.ts`.
+
 Native forks copy the selected history into a new session through durable
 `session.next.message.imported` events. Forks receive new message IDs and do
 not inherit provider continuation handles or filesystem snapshots. The

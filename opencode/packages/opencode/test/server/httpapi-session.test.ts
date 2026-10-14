@@ -875,6 +875,56 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "unarchives and pins sessions through update",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "round trip", metadata: { keep: "yes" } })
+        const update = (body: unknown) =>
+          requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: session.id }), {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify(body),
+          })
+        const listed = () =>
+          requestJson<Session.Info[]>(SessionPaths.list, { headers }).pipe(
+            Effect.map((items) => items.find((item) => item.id === session.id)),
+          )
+        const row = () =>
+          Effect.gen(function* () {
+            const { db } = yield* Database.Service
+            return yield* db
+              .select({ archived: SessionTable.time_archived, metadata: SessionTable.metadata })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, session.id))
+              .get()
+              .pipe(Effect.orDie)
+          })
+
+        expect((yield* update({ time: { archived: 5 } })).time.archived).toBe(5)
+        expect((yield* listed())?.time.archived).toBe(5)
+
+        const unarchived = yield* update({ time: { archived: null } })
+        expect(unarchived.time.archived).toBeUndefined()
+        expect((yield* row())?.archived).toBeNull()
+        expect((yield* listed())?.time.archived).toBeUndefined()
+
+        const pinned = yield* update({ pinned: true })
+        expect(typeof pinned.metadata?.pinned).toBe("number")
+        expect(pinned.metadata?.keep).toBe("yes")
+        expect((yield* row())?.metadata?.pinned).toBe(pinned.metadata?.pinned)
+        expect((yield* listed())?.metadata?.pinned).toBe(pinned.metadata?.pinned)
+
+        const unpinned = yield* update({ pinned: false })
+        expect(unpinned.metadata).toEqual({ keep: "yes" })
+        expect((yield* row())?.metadata).toEqual({ keep: "yes" })
+        expect((yield* listed())?.metadata?.pinned).toBeUndefined()
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "uses project-scoped path and directory precedence",
     () =>
       Effect.gen(function* () {
