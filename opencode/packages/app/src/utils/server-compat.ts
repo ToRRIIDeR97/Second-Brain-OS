@@ -331,7 +331,9 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
       revert: {
         stage: async (value: Parameters<ServerApi["session"]["revert"]["stage"]>[0]) => {
-          await legacy().session.revert(value)
+          // V1 servers always restore files; refuse rather than silently changing them.
+          if (value.files === false) throw new Error("This server cannot rewind messages without restoring files")
+          await legacy().session.revert({ sessionID: value.sessionID, messageID: value.messageID })
           return { messageID: value.messageID }
         },
         clear: async (value: Parameters<ServerApi["session"]["revert"]["clear"]>[0]) => {

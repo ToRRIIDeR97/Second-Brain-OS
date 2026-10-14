@@ -8,6 +8,8 @@ import {
   onCleanup,
   onMount,
   Show,
+  Switch,
+  Match,
   type Accessor,
   type JSX,
 } from "solid-js"
@@ -21,6 +23,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
 import {
   ContextToolGroup,
+  ToolGroup,
   Message,
   MessageDivider,
   Part as MessagePart,
@@ -895,28 +898,32 @@ export function MessageTimeline(props: {
   }
 
   const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>, onSizeChange?: () => void) => {
-    if (row().group.type === "context") {
-      const parts = createMemo(() => {
-        const group = row().group
-        if (group.type !== "context") return emptyTools
-        return group.refs
-          .map((ref) => getMsgPart(ref.messageID, ref.partID))
-          .filter((part): part is ToolPart => part?.type === "tool")
-      })
-      const contextOpenKey = () => `context:${row().group.key}`
-      const open = createMemo(() => {
-        return toolOpen[contextOpenKey()] === true
-      })
+    const groupType = createMemo(() => row().group.type)
+    const groupParts = createMemo(() => {
+      const group = row().group
+      if (group.type === "part") return emptyTools
+      return group.refs
+        .map((ref) => getMsgPart(ref.messageID, ref.partID))
+        .filter((part): part is ToolPart => part?.type === "tool")
+    })
+    const groupOpenKey = () => `context:${row().group.key}`
 
+    const renderPart = (part: PartType, message: MessageType) => {
+      const defaultOpen = () =>
+        partDefaultOpen(part, settings.general.shellToolPartsExpanded(), settings.general.editToolPartsExpanded())
       return (
-        <ContextToolGroup
-          parts={parts()}
-          open={open()}
-          onOpenChange={(value) => setToolOpen(contextOpenKey(), value)}
-          busy={
-            workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
-          }
-          onSizeChange={onSizeChange}
+        <MessagePart
+          part={part}
+          message={message}
+          showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
+          turnDurationMs={turnDurationMs(row().userMessageID)}
+          useV2Actions={settings.general.newLayoutDesigns()}
+          defaultOpen={defaultOpen()}
+          toolOpen={toolOpen[part.id] ?? defaultOpen()}
+          onToolOpenChange={(open) => setToolOpen(part.id, open)}
+          deferToolContent
+          virtualizeDiff={false}
+          onContentRendered={onSizeChange}
         />
       )
     }
@@ -931,34 +938,36 @@ export function MessageTimeline(props: {
       if (group.type !== "part") return
       return getMsgPart(group.ref.messageID, group.ref.partID)
     })
-    const defaultOpen = createMemo(() => {
-      const item = part()
-      if (!item) return
-      return partDefaultOpen(item, settings.general.shellToolPartsExpanded(), settings.general.editToolPartsExpanded())
-    })
 
     return (
-      <Show when={message()}>
-        {(message) => (
-          <Show when={part()}>
-            {(part) => (
-              <MessagePart
-                part={part()}
-                message={message()}
-                showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
-                turnDurationMs={turnDurationMs(row().userMessageID)}
-                useV2Actions={settings.general.newLayoutDesigns()}
-                defaultOpen={defaultOpen()}
-                toolOpen={toolOpen[part().id] ?? defaultOpen()}
-                onToolOpenChange={(open) => setToolOpen(part().id, open)}
-                deferToolContent
-                virtualizeDiff={false}
-                onContentRendered={onSizeChange}
-              />
-            )}
+      <Switch>
+        <Match when={groupType() === "context"}>
+          <ContextToolGroup
+            parts={groupParts()}
+            open={toolOpen[groupOpenKey()] === true}
+            onOpenChange={(value) => setToolOpen(groupOpenKey(), value)}
+            busy={
+              workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
+            }
+            onSizeChange={onSizeChange}
+          />
+        </Match>
+        <Match when={groupType() === "tools"}>
+          <ToolGroup
+            parts={groupParts()}
+            open={toolOpen[groupOpenKey()] === true}
+            onOpenChange={(value) => setToolOpen(groupOpenKey(), value)}
+            onSizeChange={onSizeChange}
+          >
+            {(item) => <Show when={messageByID().get(item.messageID)}>{(message) => renderPart(item, message())}</Show>}
+          </ToolGroup>
+        </Match>
+        <Match when={groupType() === "part"}>
+          <Show when={message()}>
+            {(message) => <Show when={part()}>{(part) => renderPart(part(), message())}</Show>}
           </Show>
-        )}
-      </Show>
+        </Match>
+      </Switch>
     )
   }
 

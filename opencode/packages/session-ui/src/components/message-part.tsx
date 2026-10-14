@@ -39,6 +39,7 @@ import { BasicTool, GenericTool } from "./basic-tool"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
@@ -59,9 +60,11 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
+import { AnimatedCountLabel } from "./tool-count-label"
 import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
 import { partDefaultOpen } from "./part-default-open"
+import { groupParts, isContextGroupTool, sameGroups, toolGroupCounts, type PartGroup } from "./part-group"
 import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
@@ -175,9 +178,16 @@ export interface MessageProps {
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
 
+export type RevertAction = (input: {
+  sessionID: string
+  messageID: string
+  /** false rewinds the conversation only and leaves workspace files untouched. */
+  files: boolean
+}) => Promise<void> | void
+
 export type UserActions = {
   fork?: SessionAction
-  revert?: SessionAction
+  revert?: RevertAction
   openAttachment?: (file: FilePart) => void
 }
 
@@ -210,36 +220,44 @@ function MessageActionButton(
     icon: "check" | "copy" | "reset"
     label: JSX.Element
     useV2?: boolean
+    /** Render as the trigger of an enclosing DropdownMenu. */
+    menu?: boolean
   },
 ) {
   const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
+  const v1 = () => ({
+    icon: props.icon,
+    size: "normal" as const,
+    variant: "ghost" as const,
+    disabled: props.disabled,
+    onMouseDown: props.onMouseDown,
+    onClick: props.onClick,
+    "aria-label": props["aria-label"],
+  })
+  const v2 = () => ({
+    icon: <IconV2 name={icon()} size="small" />,
+    size: "normal" as const,
+    variant: "ghost-muted" as const,
+    disabled: props.disabled,
+    onMouseDown: props.onMouseDown,
+    onClick: props.onClick,
+    "aria-label": props["aria-label"],
+  })
   return (
     <Show
       when={props.useV2}
       fallback={
         <Tooltip value={props.label} placement="top" gutter={4}>
-          <IconButton
-            icon={props.icon}
-            size="normal"
-            variant="ghost"
-            disabled={props.disabled}
-            onMouseDown={props.onMouseDown}
-            onClick={props.onClick}
-            aria-label={props["aria-label"]}
-          />
+          <Show when={props.menu} fallback={<IconButton {...v1()} />}>
+            <DropdownMenu.Trigger as={IconButton} {...v1()} />
+          </Show>
         </Tooltip>
       }
     >
       <TooltipV2 value={props.label} placement="top" gutter={4}>
-        <IconButtonV2
-          icon={<IconV2 name={icon()} size="small" />}
-          size="normal"
-          variant="ghost-muted"
-          disabled={props.disabled}
-          onMouseDown={props.onMouseDown}
-          onClick={props.onClick}
-          aria-label={props["aria-label"]}
-        />
+        <Show when={props.menu} fallback={<IconButtonV2 {...v2()} />}>
+          <DropdownMenu.Trigger as={IconButtonV2} {...v2()} />
+        </Show>
       </TooltipV2>
     </Show>
   )
@@ -604,7 +622,6 @@ function taskSession(
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
-const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite"])
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
@@ -619,90 +636,7 @@ function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
   return a.every((x, i) => x === b[i])
 }
 
-export type PartRef = {
-  messageID: string
-  partID: string
-}
-
-export type PartGroup =
-  | {
-      key: string
-      type: "part"
-      ref: PartRef
-    }
-  | {
-      key: string
-      type: "context"
-      refs: PartRef[]
-    }
-
-function sameRef(a: PartRef, b: PartRef) {
-  return a.messageID === b.messageID && a.partID === b.partID
-}
-
-function sameGroup(a: PartGroup, b: PartGroup) {
-  if (a === b) return true
-  if (a.key !== b.key) return false
-  if (a.type !== b.type) return false
-  if (a.type === "part") {
-    if (b.type !== "part") return false
-    return sameRef(a.ref, b.ref)
-  }
-  if (b.type !== "context") return false
-  if (a.refs.length !== b.refs.length) return false
-  return a.refs.every((ref, i) => sameRef(ref, b.refs[i]!))
-}
-
-export function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((item, i) => sameGroup(item, b[i]!))
-}
-
-export function groupParts(parts: { messageID: string; part: PartType }[]) {
-  const result: PartGroup[] = []
-  let start = -1
-
-  const flush = (end: number) => {
-    if (start < 0) return
-    const first = parts[start]
-    const last = parts[end]
-    if (!first || !last) {
-      start = -1
-      return
-    }
-    result.push({
-      key: `context:${first.part.id}`,
-      type: "context",
-      refs: parts.slice(start, end + 1).map((item) => ({
-        messageID: item.messageID,
-        partID: item.part.id,
-      })),
-    })
-    start = -1
-  }
-
-  parts.forEach((item, index) => {
-    if (isContextGroupTool(item.part)) {
-      if (start < 0) start = index
-      return
-    }
-
-    flush(index - 1)
-    result.push({
-      key: `part:${item.messageID}:${item.part.id}`,
-      type: "part",
-      ref: {
-        messageID: item.messageID,
-        partID: item.part.id,
-      },
-    })
-  })
-
-  flush(parts.length - 1)
-  return result
-}
+export { groupParts, sameGroups, type PartGroup, type PartRef } from "./part-group"
 
 function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
@@ -789,6 +723,41 @@ export function AssistantParts(props: {
                 )
               })()}
             </Match>
+            <Match when={entryType() === "tools"}>
+              {(() => {
+                const parts = createMemo(
+                  () => {
+                    const entry = entryAccessor()
+                    if (entry.type !== "tools") return emptyTools
+                    return entry.refs
+                      .map((ref) => part().get(ref.messageID)?.get(ref.partID))
+                      .filter((part): part is ToolPart => part?.type === "tool")
+                  },
+                  emptyTools,
+                  { equals: same },
+                )
+
+                return (
+                  <Show when={parts().length > 0}>
+                    <ToolGroup parts={parts()}>
+                      {(item) => (
+                        <Show when={msgs().get(item.messageID)}>
+                          {(message) => (
+                            <Part
+                              part={item}
+                              message={message()}
+                              turnDurationMs={props.turnDurationMs}
+                              useV2Actions={props.useV2Actions}
+                              defaultOpen={partDefaultOpen(item, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                            />
+                          )}
+                        </Show>
+                      )}
+                    </ToolGroup>
+                  </Show>
+                )
+              })()}
+            </Match>
             <Match when={entryType() === "part"}>
               {(() => {
                 const message = createMemo(() => {
@@ -823,10 +792,6 @@ export function AssistantParts(props: {
       }}
     </Index>
   )
-}
-
-function isContextGroupTool(part: PartType): part is ToolPart {
-  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
@@ -1013,6 +978,29 @@ export function AssistantMessageDisplay(props: {
                 )
               })()}
             </Match>
+            <Match when={entryType() === "tools"}>
+              {(() => {
+                const parts = createMemo(
+                  () => {
+                    const entry = entryAccessor()
+                    if (entry.type !== "tools") return emptyTools
+                    return entry.refs
+                      .map((ref) => part().get(ref.partID))
+                      .filter((part): part is ToolPart => part?.type === "tool")
+                  },
+                  emptyTools,
+                  { equals: same },
+                )
+
+                return (
+                  <Show when={parts().length > 0}>
+                    <ToolGroup parts={parts()}>
+                      {(item) => <Part part={item} message={props.message} useV2Actions={props.useV2Actions} />}
+                    </ToolGroup>
+                  </Show>
+                )
+              })()}
+            </Match>
             <Match when={entryType() === "part"}>
               {(() => {
                 const item = createMemo(() => {
@@ -1150,6 +1138,66 @@ export function ContextToolGroup(props: {
   )
 }
 
+export function ToolGroup(props: {
+  parts: ToolPart[]
+  children: (part: ToolPart) => JSX.Element
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onSizeChange?: () => void
+}) {
+  const [localOpen, setLocalOpen] = createSignal(false)
+  const open = () => props.open ?? localOpen()
+  const counts = createMemo(() => toolGroupCounts(props.parts))
+  const handleOpenChange = (value: boolean) => {
+    if (props.open === undefined) setLocalOpen(value)
+    props.onOpenChange?.(value)
+    props.onSizeChange?.()
+  }
+
+  return (
+    <Collapsible
+      open={open()}
+      onOpenChange={handleOpenChange}
+      variant="ghost"
+      class="tool-collapsible"
+      data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
+    >
+      <Collapsible.Trigger>
+        <div data-component="context-tool-group-trigger" data-variant="tools">
+          <span
+            data-slot="context-tool-group-title"
+            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
+          >
+            <span data-slot="context-tool-group-label" class="shrink-0">
+              <AnimatedCountLabel plural="secondBrain.messagePart.tools.title" count={props.parts.length} />
+            </span>
+            <span
+              data-slot="context-tool-group-summary"
+              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
+            >
+              <AnimatedCountList
+                items={[
+                  { key: "ui.messagePart.context.read", count: counts().read },
+                  { key: "secondBrain.messagePart.tools.command", count: counts().command },
+                  { key: "ui.messagePart.context.search", count: counts().search },
+                  { key: "secondBrain.messagePart.tools.other", count: counts().other },
+                ]}
+                fallback=""
+              />
+            </span>
+          </span>
+          <Collapsible.Arrow />
+        </div>
+      </Collapsible.Trigger>
+      <Collapsible.Content>
+        <div data-component="tool-group-list">
+          <For each={props.parts}>{(part) => props.children(part)}</For>
+        </div>
+      </Collapsible.Content>
+    </Collapsible>
+  )
+}
+
 function UserMessageComments(props: { comments: UserMessageComment[]; bounded: boolean }) {
   const i18n = useI18n()
   const [state, setState] = createStore({ expanded: false })
@@ -1247,7 +1295,7 @@ export function UserMessageDisplay(props: {
     }
   }
 
-  const revert = () => {
+  const revert = (files: boolean) => {
     const act = props.actions?.revert
     if (!act || busy()) return
     setState("busy", true)
@@ -1256,6 +1304,7 @@ export function UserMessageDisplay(props: {
         act({
           sessionID: props.message.sessionID,
           messageID: props.message.id,
+          files,
         }),
       )
       .finally(() => setState("busy", false))
@@ -1359,18 +1408,28 @@ export function UserMessageDisplay(props: {
             </span>
           </Show>
           <Show when={props.actions?.revert}>
-            <MessageActionButton
-              icon="reset"
-              label={i18n.t("ui.message.revertMessage")}
-              useV2={props.useV2Actions}
-              disabled={!!busy()}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={(event) => {
-                event.stopPropagation()
-                revert()
-              }}
-              aria-label={i18n.t("ui.message.revertMessage")}
-            />
+            <DropdownMenu gutter={4} placement="bottom-end">
+              <MessageActionButton
+                icon="reset"
+                menu
+                label={i18n.t("ui.message.revertMessage")}
+                useV2={props.useV2Actions}
+                disabled={!!busy()}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) => event.stopPropagation()}
+                aria-label={i18n.t("ui.message.revertMessage")}
+              />
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content>
+                  <DropdownMenu.Item onSelect={() => revert(false)}>
+                    <DropdownMenu.ItemLabel>{i18n.t("secondBrain.message.editFromHere.messages")}</DropdownMenu.ItemLabel>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={() => revert(true)}>
+                    <DropdownMenu.ItemLabel>{i18n.t("secondBrain.message.editFromHere.files")}</DropdownMenu.ItemLabel>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu>
           </Show>
           <Show when={text()}>
             <MessageActionButton

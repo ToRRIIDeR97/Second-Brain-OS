@@ -285,6 +285,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
     const revertMessageID = info()?.revert?.messageID
     if (!revertMessageID) return
+    // a messages-only rewind (no restored files) stays messages-only when redone
+    const revertDiff = info()?.revert?.diff
 
     const boundary = messages.findIndex((message) => message.id === revertMessageID)
     if (boundary < 0) return
@@ -303,7 +305,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await runCommand({
       owner,
       prompt: promptSession,
-      request: () => session.revert.stage({ sessionID, messageID: next.id }),
+      request: () =>
+        session.revert.stage({
+          sessionID,
+          messageID: next.id,
+          files: revertDiff === undefined ? undefined : revertDiff.length > 0,
+        }),
       updatePrompt: () => undefined,
       updateViewport: () => setActiveMessage(messages[boundary]),
     })

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Layer, Schema } from "effect"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -23,6 +23,8 @@ import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Location } from "@opencode-ai/core/location"
+import { SessionRevert } from "@opencode-ai/core/session/revert"
+import { RelativePath } from "@opencode-ai/core/schema"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
 const sessionsLayer = AppNodeBuilder.build(SessionV2.node, [[SessionExecution.node, SessionExecution.noopLayer]])
@@ -127,6 +129,68 @@ describe("SessionProjector", () => {
       expect(
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
       ).toEqual([boundary])
+    }),
+  )
+
+  it.effect("stages a messages-only revert without restoring files", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const boundary = SessionMessage.ID.make("msg_boundary")
+      const later = assistantRow(SessionMessage.ID.make("msg_later"), 2)
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          assistantRow(boundary, 1),
+          { ...later, data: { ...later.data, snapshot: { start: "tree_before", files: [RelativePath.make("a.ts")] } } },
+        ])
+        .run()
+      const restored: string[][] = []
+      const snapshot = Layer.succeed(
+        Snapshot.Service,
+        Snapshot.Service.of({
+          capture: () => Effect.succeed(Snapshot.ID.make("tree_now")),
+          files: () => Effect.succeed([]),
+          diff: (input) =>
+            Effect.succeed(
+              (input.paths ?? []).map((path) => ({
+                path,
+                status: "modified" as const,
+                additions: 1,
+                deletions: 1,
+                patch: `patch ${path}\n`,
+              })),
+            ),
+          preview: () => Effect.succeed([]),
+          restore: (input) => Effect.sync(() => void restored.push(Array.from(input.files.keys()))),
+          checkout: () => Effect.void,
+        }),
+      )
+      const session = { id: sessionID } as SessionV2.Info
+
+      const messagesOnly = yield* SessionRevert.stage({ session, messageID: boundary, files: false }).pipe(
+        Effect.provide(snapshot),
+      )
+      expect(restored).toEqual([])
+      expect(messagesOnly).toMatchObject({ messageID: boundary, files: [], diff: "" })
+
+      const withFiles = yield* SessionRevert.stage({ session, messageID: boundary }).pipe(Effect.provide(snapshot))
+      expect(restored).toEqual([[RelativePath.make("a.ts")]])
+      expect(withFiles.files.map((file) => String(file.path))).toEqual(["a.ts"])
     }),
   )
 

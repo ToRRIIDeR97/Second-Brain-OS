@@ -1580,3 +1580,10 @@ body:not([data-new-layout]) {
     color: var(--text-weak);
   }
 }
+
+[data-component="tool-group-list"] {
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

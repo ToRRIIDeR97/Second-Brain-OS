@@ -9,6 +9,9 @@ export const UI_PLURAL_KEYS = [
   "ui.messagePart.context.read",
   "ui.messagePart.context.search",
   "ui.messagePart.context.list",
+  "secondBrain.messagePart.tools.title",
+  "secondBrain.messagePart.tools.command",
+  "secondBrain.messagePart.tools.other",
 ] as const
 export type UiI18nPluralKey = (typeof UI_PLURAL_KEYS)[number]
 export type UiPluralCategory = "zero" | "one" | "two" | "few" | "many" | "other"
