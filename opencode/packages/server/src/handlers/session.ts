@@ -19,6 +19,34 @@ const DefaultSessionHistoryLimit = 50
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
+    const queuedAction = (action: ReturnType<SessionV2.Interface["withdrawQueued"]>) =>
+      action.pipe(
+        Effect.as(HttpApiSchema.NoContent.make()),
+        Effect.catchTags({
+          "Session.NotFoundError": (error) =>
+            Effect.fail(
+              new SessionNotFoundError({
+                sessionID: error.sessionID,
+                message: `Session not found: ${error.sessionID}`,
+              }),
+            ),
+          "Session.MessageNotFoundError": (error) =>
+            Effect.fail(
+              new MessageNotFoundError({
+                sessionID: error.sessionID,
+                messageID: error.messageID,
+                message: `Queued message not found: ${error.messageID}`,
+              }),
+            ),
+          "Session.InputStartedError": (error) =>
+            Effect.fail(
+              new ConflictError({
+                message: `Queued message already started: ${error.messageID}`,
+                resource: error.messageID,
+              }),
+            ),
+        }),
+      )
 
     return handlers
       .handle(
@@ -259,6 +287,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             ),
           }
         }),
+      )
+      .handle("session.queuedRemove", (ctx) =>
+        queuedAction(session.withdrawQueued({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID })),
+      )
+      .handle("session.queuedSteer", (ctx) =>
+        queuedAction(session.steerQueued({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID })),
       )
       .handle(
         "session.compact",

@@ -222,16 +222,16 @@ const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionS
   input.sessionID === expected.sessionID &&
   JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
 
+// Delivery is not compared: a queued input steered after the runner selected it is still promoted once.
 const matchesProjection = (
   input: Admitted,
   expected: {
     readonly sessionID: SessionSchema.ID
     readonly prompt: Prompt
-    readonly delivery: Delivery
     readonly timeCreated: DateTime.Utc
   },
 ) =>
-  equivalent(input, expected) &&
+  matchesPrompt(input, expected) &&
   DateTime.toEpochMillis(input.timeCreated) === DateTime.toEpochMillis(expected.timeCreated)
 
 const publish = Effect.fn("SessionInput.publish")(function* (
@@ -307,3 +307,89 @@ export const promoteNextQueued = Effect.fn("SessionInput.promoteNextQueued")(fun
     .pipe(Effect.orDie)
   return row === undefined ? false : yield* publish(db, events, sessionID, [row]).pipe(Effect.as(true))
 })
+
+// Where an admitted input stands. A withdrawn input keeps its row, with promoted_seq set to the
+// withdrawal event's sequence and no transcript message, so a racing promotion is skipped instead of
+// re-inserting it.
+export type PendingState = Delivery | "started" | "withdrawn" | "missing"
+
+export const pendingState = Effect.fn("SessionInput.pendingState")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  id: SessionMessage.ID,
+) {
+  const stored = yield* find(db, id)
+  if (stored === undefined || stored.sessionID !== sessionID) return "missing" as PendingState
+  if (stored.promotedSeq === undefined) return stored.delivery as PendingState
+  const message = yield* db
+    .select({ id: SessionMessageTable.id })
+    .from(SessionMessageTable)
+    .where(eq(SessionMessageTable.id, id))
+    .get()
+    .pipe(Effect.orDie)
+  return (message === undefined ? "withdrawn" : "started") as PendingState
+})
+
+// Publishes a transition of a still-queued input. The projector re-checks the row inside the event
+// transaction, so if the runner promotes it first nothing is written and the current state is returned.
+const transitionQueued = Effect.fn("SessionInput.transitionQueued")(function* (
+  db: DatabaseService,
+  events: EventV2.Interface,
+  input: { readonly sessionID: SessionSchema.ID; readonly id: SessionMessage.ID },
+  event: typeof SessionEvent.PromptWithdrawn | typeof SessionEvent.PromptSteered,
+  next: PendingState,
+) {
+  const state = yield* pendingState(db, input.sessionID, input.id)
+  if (state !== "queue") return state
+  const timestamp = yield* DateTime.now
+  return yield* events.publish(event, { sessionID: input.sessionID, messageID: input.id, timestamp }).pipe(
+    Effect.as(next),
+    Effect.catchDefect((defect) =>
+      defect instanceof LifecycleConflict ? pendingState(db, input.sessionID, input.id) : Effect.die(defect),
+    ),
+  )
+})
+
+export const withdraw = (
+  db: DatabaseService,
+  events: EventV2.Interface,
+  input: { readonly sessionID: SessionSchema.ID; readonly id: SessionMessage.ID },
+) => transitionQueued(db, events, input, SessionEvent.PromptWithdrawn, "withdrawn")
+
+export const steer = (
+  db: DatabaseService,
+  events: EventV2.Interface,
+  input: { readonly sessionID: SessionSchema.ID; readonly id: SessionMessage.ID },
+) => transitionQueued(db, events, input, SessionEvent.PromptSteered, "steer")
+
+const settleQueued = Effect.fn("SessionInput.settleQueued")(function* (
+  db: DatabaseService,
+  input: { readonly sessionID: SessionSchema.ID; readonly id: SessionMessage.ID },
+  set: { promoted_seq: number } | { delivery: "steer" },
+) {
+  const updated = yield* db
+    .update(SessionInputTable)
+    .set(set)
+    .where(
+      and(
+        eq(SessionInputTable.id, input.id),
+        eq(SessionInputTable.session_id, input.sessionID),
+        isNull(SessionInputTable.promoted_seq),
+        eq(SessionInputTable.delivery, "queue"),
+      ),
+    )
+    .returning({ id: SessionInputTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!updated) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+})
+
+export const projectWithdrawn = (
+  db: DatabaseService,
+  input: { readonly sessionID: SessionSchema.ID; readonly id: SessionMessage.ID; readonly withdrawnSeq: number },
+) => settleQueued(db, input, { promoted_seq: input.withdrawnSeq })
+
+export const projectSteered = (
+  db: DatabaseService,
+  input: { readonly sessionID: SessionSchema.ID; readonly id: SessionMessage.ID },
+) => settleQueued(db, input, { delivery: "steer" })

@@ -419,7 +419,11 @@ import type {
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
   V2SessionQueuedErrors,
+  V2SessionQueuedRemoveErrors,
+  V2SessionQueuedRemoveResponses,
   V2SessionQueuedResponses,
+  V2SessionQueuedSteerErrors,
+  V2SessionQueuedSteerResponses,
   V2SessionRevertClearErrors,
   V2SessionRevertClearResponses,
   V2SessionRevertCommitErrors,
@@ -6219,6 +6223,74 @@ export class Session3 extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
     return (options?.client ?? this.client).get<V2SessionQueuedResponses, V2SessionQueuedErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/queued",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove queued message
+   *
+   * Withdraw a queued input before the runner promotes it. Fails with 409 when the input already started.
+   */
+  public queuedRemove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      V2SessionQueuedRemoveResponses,
+      V2SessionQueuedRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/queued/{messageID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send queued message now
+   *
+   * Deliver a queued input at the next steer point of the current run, or start a run when idle. Fails with 409 when the input already started.
+   */
+  public queuedSteer<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionQueuedSteerResponses,
+      V2SessionQueuedSteerErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/queued/{messageID}/steer",
       ...options,
       ...params,
     })

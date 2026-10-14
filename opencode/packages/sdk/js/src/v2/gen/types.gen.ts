@@ -23,6 +23,8 @@ export type Event =
   | EventSessionNextMoved
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
+  | EventSessionNextPromptWithdrawn
+  | EventSessionNextPromptSteered
   | EventSessionNextContextUpdated
   | EventSessionNextMessageImported
   | EventSessionNextSynthetic
@@ -897,6 +899,24 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.prompt.withdrawn"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.prompt.steered"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.context.updated"
         properties: {
           timestamp: number
@@ -1651,6 +1671,8 @@ export type GlobalEvent = {
     | SyncEventSessionNextMoved
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
+    | SyncEventSessionNextPromptWithdrawn
+    | SyncEventSessionNextPromptSteered
     | SyncEventSessionNextContextUpdated
     | SyncEventSessionNextMessageImported
     | SyncEventSessionNextSynthetic
@@ -2790,6 +2812,8 @@ export type SessionDurableEvent =
   | SessionNextMoved
   | SessionNextPrompted
   | SessionNextPromptAdmitted
+  | SessionNextPromptWithdrawn
+  | SessionNextPromptSteered
   | SessionNextContextUpdated
   | SessionNextMessageImported
   | SessionNextSynthetic
@@ -2944,6 +2968,8 @@ export type V2Event =
   | SessionNextMoved
   | SessionNextPrompted
   | SessionNextPromptAdmitted
+  | SessionNextPromptWithdrawn
+  | SessionNextPromptSteered
   | SessionNextContextUpdated
   | SessionNextMessageImported
   | SessionNextSynthetic
@@ -3723,6 +3749,38 @@ export type SyncEventSessionNextPromptAdmitted = {
   }
 }
 
+export type SyncEventSessionNextPromptWithdrawn = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.prompt.withdrawn.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+    }
+  }
+}
+
+export type SyncEventSessionNextPromptSteered = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.prompt.steered.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+    }
+  }
+}
+
 export type SyncEventSessionNextContextUpdated = {
   type: "sync"
   id: string
@@ -4447,6 +4505,44 @@ export type SessionNextPromptAdmitted = {
     messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
+  }
+}
+
+export type SessionNextPromptWithdrawn = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompt.withdrawn"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type SessionNextPromptSteered = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompt.steered"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
   }
 }
 
@@ -6610,6 +6706,26 @@ export type EventSessionNextPromptAdmitted = {
     messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
+  }
+}
+
+export type EventSessionNextPromptWithdrawn = {
+  id: string
+  type: "session.next.prompt.withdrawn"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type EventSessionNextPromptSteered = {
+  id: string
+  type: "session.next.prompt.steered"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
   }
 }
 
@@ -12761,6 +12877,86 @@ export type V2SessionQueuedResponses = {
 }
 
 export type V2SessionQueuedResponse = V2SessionQueuedResponses[keyof V2SessionQueuedResponses]
+
+export type V2SessionQueuedRemoveData = {
+  body?: never
+  path: {
+    sessionID: string
+    messageID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/queued/{messageID}"
+}
+
+export type V2SessionQueuedRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * MessageNotFoundError | SessionNotFoundError
+   */
+  404: MessageNotFoundError | SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type V2SessionQueuedRemoveError = V2SessionQueuedRemoveErrors[keyof V2SessionQueuedRemoveErrors]
+
+export type V2SessionQueuedRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionQueuedRemoveResponse = V2SessionQueuedRemoveResponses[keyof V2SessionQueuedRemoveResponses]
+
+export type V2SessionQueuedSteerData = {
+  body?: never
+  path: {
+    sessionID: string
+    messageID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/queued/{messageID}/steer"
+}
+
+export type V2SessionQueuedSteerErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * MessageNotFoundError | SessionNotFoundError
+   */
+  404: MessageNotFoundError | SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type V2SessionQueuedSteerError = V2SessionQueuedSteerErrors[keyof V2SessionQueuedSteerErrors]
+
+export type V2SessionQueuedSteerResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionQueuedSteerResponse = V2SessionQueuedSteerResponses[keyof V2SessionQueuedSteerResponses]
 
 export type V2SessionCompactData = {
   body?: never

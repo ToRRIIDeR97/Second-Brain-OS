@@ -229,6 +229,8 @@ describe("PublicApi OpenAPI v2 errors", () => {
       ["post", "/api/session/{sessionID}/wait"],
       ["get", "/api/session/{sessionID}/context"],
       ["get", "/api/session/{sessionID}/queued"],
+      ["delete", "/api/session/{sessionID}/queued/{messageID}"],
+      ["post", "/api/session/{sessionID}/queued/{messageID}/steer"],
       ["get", "/api/session/{sessionID}/message"],
     ] as const) {
       expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toContain("SessionNotFoundError")
