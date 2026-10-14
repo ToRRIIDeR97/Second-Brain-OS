@@ -4,7 +4,7 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Button } from "@opencode-ai/ui/button"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog as DialogV2, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog as DialogV2, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -46,7 +46,6 @@ export const DialogManageModels: Component = () => {
   return (
     <Dialog
       title={language.t("dialog.model.manage")}
-      description={language.t("dialog.model.manage.description")}
       action={
         <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={handleConnectProvider}>
           {language.t("command.provider.connect")}
@@ -156,10 +155,7 @@ export const DialogManageModelsV2: Component = () => {
   return (
     <DialogV2 size="large" variant="settings" class="settings-v2-manage-models-dialog">
       <DialogHeader hideClose={true} closeLabel={language.t("common.close")}>
-        <DialogTitleGroup
-          title={language.t("dialog.model.manage")}
-          description={language.t("dialog.model.manage.description")}
-        />
+        <DialogTitle>{language.t("dialog.model.manage")}</DialogTitle>
         <ButtonV2 variant="neutral" icon="plus" onClick={handleConnectProvider}>
           {language.t("command.provider.connect")}
         </ButtonV2>
@@ -238,7 +234,7 @@ export const DialogManageModelsV2: Component = () => {
                       <SettingsListV2>
                         <For each={group.items}>
                           {(item) => (
-                            <SettingsRowV2 title={item.name} description="">
+                            <SettingsRowV2 title={item.name}>
                               <div>
                                 <SwitchV2
                                   checked={local.model.visible({ modelID: item.id, providerID: item.provider.id })}

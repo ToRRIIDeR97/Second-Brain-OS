@@ -188,3 +188,31 @@
     transform: scale(1);
   }
 }
+
+/* Material 3 shape and motion: rounded menu surface that scales in from its anchor. */
+[data-component="menu-v2-content"] {
+  border-radius: var(--v2-radius-md);
+  transform-origin: var(--kb-menu-content-transform-origin, top left);
+  animation: menu-v2-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
+}
+
+@keyframes menu-v2-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="menu-v2-content"] {
+    animation: none;
+  }
+}
+
+[data-component="menu-v2-item"] {
+  border-radius: var(--v2-radius-sm);
+}

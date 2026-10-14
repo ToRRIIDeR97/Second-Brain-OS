@@ -56,10 +56,9 @@ import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
-import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
-import { useSessionKey } from "@/pages/session/session-layout"
+import { useSessionKey, useSessionLayout } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { useSettings } from "@/context/settings"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
@@ -292,6 +291,12 @@ export function MessageTimeline(props: {
     return sync().session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
+  const sessionView = useSessionLayout().view
+  const changes = createMemo(() => {
+    const summary = info()?.summary
+    if (!summary || summary.additions + summary.deletions === 0) return
+    return summary
+  })
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
@@ -991,7 +996,7 @@ export function MessageTimeline(props: {
                 <div class="flex w-max min-w-full justify-end gap-2">
                   <Index each={comments()}>
                     {(comment) => (
-                      <div class="shrink-0 max-w-[260px] rounded-[6px] border-border-weak-base bg-background-stronger px-2.5 py-2 border-[0.5px]">
+                      <div class="shrink-0 max-w-[260px] rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2 shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
                         <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
                           <FileIcon node={{ path: comment().path, type: "file" }} class="size-3.5 shrink-0" />
                           <span class="truncate">{getFilename(comment().path)}</span>
@@ -1198,7 +1203,7 @@ export function MessageTimeline(props: {
   return (
     <div class="relative w-full h-full min-w-0">
       <div
-        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out bottom-8"
+        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-300 ease-emphasized bottom-8 motion-reduce:transition-none"
         classList={{
           "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
           "opacity-0 translate-y-2 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
@@ -1208,10 +1213,10 @@ export function MessageTimeline(props: {
         <button
           type="button"
           aria-label={language.t("session.messages.jumpToLatest")}
-          class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px]"
+          class="pointer-events-auto flex items-center justify-center size-9 rounded-full border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
           style={{
             background: "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
-            "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
+            "box-shadow": "0 0 0 0.5px var(--v2-border-border-muted), 0 6px 16px -8px rgb(0 0 0 / 0.2)",
           }}
           onClick={props.onResumeScroll}
         >
@@ -1257,7 +1262,7 @@ export function MessageTimeline(props: {
                     <button
                       type="button"
                       data-slot="session-title-parent"
-                      class="min-w-0 max-w-[40%] truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
+                      class="min-w-0 max-w-[40%] truncate pl-3 text-[14px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors duration-150 ease-standard hover:text-v2-text-text-muted motion-reduce:transition-none"
                       onClick={navigateParent}
                     >
                       {parentTitle()}
@@ -1276,7 +1281,7 @@ export function MessageTimeline(props: {
                       fallback={
                         <h1
                           data-slot="session-title-child"
-                          class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover"
+                          class="truncate text-[14px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-full px-3 py-1 transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover motion-reduce:transition-none"
                           onClick={openTitleEditor}
                         >
                           {childTitle()}
@@ -1290,7 +1295,7 @@ export function MessageTimeline(props: {
                         data-slot="session-title-child"
                         value={title.draft}
                         disabled={titleMutation.isPending}
-                        class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-[6px] px-2 py-1 "
+                        class="block text-[14px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-full px-3 py-1"
                         style={{
                           "--inline-input-shadow": "none",
                         }}
@@ -1315,8 +1320,22 @@ export function MessageTimeline(props: {
               </div>
               <Show when={sessionID()} keyed>
                 {(id) => (
-                  <div class="shrink-0 flex items-center gap-2">
-                    <SessionContextUsage placement="bottom" buttonAppearance="v2" />
+                  <div class="shrink-0 flex items-center gap-1">
+                    <Show when={changes()}>
+                      {(summary) => (
+                        <button
+                          type="button"
+                          data-action="session-changes"
+                          class="hidden md:flex h-7 items-center rounded-full px-2.5 transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                          aria-label={`${language.t("session.review.change.other")} +${summary().additions} -${summary().deletions}`}
+                          aria-expanded={sessionView().reviewPanel.opened()}
+                          aria-controls="review-panel"
+                          onClick={() => sessionView().reviewPanel.toggle()}
+                        >
+                          <DiffChanges changes={summary()} />
+                        </button>
+                      )}
+                    </Show>
                     <Show when={!parentID()}>
                       <MenuV2
                         gutter={6}

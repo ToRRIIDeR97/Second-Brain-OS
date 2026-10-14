@@ -179,3 +179,8 @@
     transform: scale(0.98);
   }
 }
+
+/* Material 3 shape, shared with the v2 dialog. Show/hide motion stays with the transition rules above. */
+[data-component="dialog"] [data-slot="dialog-container"] [data-slot="dialog-content"] {
+  border-radius: var(--v2-radius-xxl);
+}

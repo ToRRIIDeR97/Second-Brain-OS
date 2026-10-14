@@ -204,26 +204,28 @@ export const SettingsHarnessesV2: Component<{
           </SettingsListV2>
         </div>
 
-        <div class="settings-v2-section">
-          <h3 class="settings-v2-section-title">{language.t("harness.settings.section.readOnly")}</h3>
-          <SettingsListV2>
-            <For each={builtIn()}>
-              {(entry) => (
-                <div class="settings-v2-provider-row" data-harness={entry.id}>
-                  <div class="settings-v2-provider-lead">
-                    <div class="settings-v2-provider-main">
-                      <span class="settings-v2-provider-name truncate">{entry.name}</span>
-                      <Tag>{sourceLabel(entry)}</Tag>
+        <Show when={builtIn().length > 0}>
+          <div class="settings-v2-section">
+            <h3 class="settings-v2-section-title">{language.t("harness.settings.section.readOnly")}</h3>
+            <SettingsListV2>
+              <For each={builtIn()}>
+                {(entry) => (
+                  <div class="settings-v2-provider-row" data-harness={entry.id}>
+                    <div class="settings-v2-provider-lead">
+                      <div class="settings-v2-provider-main">
+                        <span class="settings-v2-provider-name truncate">{entry.name}</span>
+                        <Tag>{sourceLabel(entry)}</Tag>
+                      </div>
                     </div>
+                    <Show when={!entry.enabled}>
+                      <span class="settings-v2-harness-detail">{language.t("harness.settings.disabled")}</span>
+                    </Show>
                   </div>
-                  <Show when={!entry.enabled}>
-                    <span class="settings-v2-harness-detail">{language.t("harness.settings.disabled")}</span>
-                  </Show>
-                </div>
-              )}
-            </For>
-          </SettingsListV2>
-        </div>
+                )}
+              </For>
+            </SettingsListV2>
+          </div>
+        </Show>
       </div>
     </>
   )

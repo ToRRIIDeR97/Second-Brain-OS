@@ -36,10 +36,10 @@ export function SessionRevertDock(props: {
   return (
     <div
       data-component="session-revert-dock"
-      class="w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
+      class="w-full overflow-hidden rounded-[24px] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
     >
       <div
-        class="flex h-[42px] items-center gap-2 pl-4 pr-2"
+        class="flex h-[42px] items-center gap-2 pl-5 pr-3"
         role="button"
         tabIndex={0}
         onClick={toggle}
@@ -88,7 +88,7 @@ export function SessionRevertDock(props: {
 
       <Show when={!store.collapsed}>
         {/* Scroll viewport ends above the composer; the 18px sacrificial below is what the composer overlaps */}
-        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-4 pt-px pb-3 no-scrollbar">
+        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-5 pt-px pb-3 no-scrollbar">
           <For each={props.items}>
             {(item) => (
               <div class="flex h-6 min-w-0 items-center gap-2">

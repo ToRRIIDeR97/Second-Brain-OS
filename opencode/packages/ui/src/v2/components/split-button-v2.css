@@ -97,3 +97,7 @@
   width: 16px;
   height: 16px;
 }
+
+[data-component="split-button-v2"] {
+  border-radius: var(--v2-radius-full);
+}

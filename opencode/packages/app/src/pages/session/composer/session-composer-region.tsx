@@ -93,7 +93,7 @@ export function SessionComposerRegion(props: {
                   )}
                 </Show>
                 <div
-                  class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none"
+                  class="w-full min-h-32 md:min-h-40 rounded-[28px] bg-v2-background-bg-layer-01 px-5 py-4 text-v2-text-text-faint whitespace-pre-wrap pointer-events-none"
                   style={{ "margin-top": `${-36 * controller.dockProgress()}px` }}
                 >
                   {controller.handoffPrompt() || language.t("prompt.loading")}
@@ -138,7 +138,7 @@ export function SessionComposerRegion(props: {
               >
                 <div
                   ref={controller.setPromptRef}
-                  class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
+                  class="w-full rounded-[28px] bg-v2-background-bg-layer-01 px-5 py-4 text-[14px] text-v2-text-text-muted"
                 >
                   <span>{language.t("session.child.promptDisabled")} </span>
                   <Show when={controller.parentID()}>

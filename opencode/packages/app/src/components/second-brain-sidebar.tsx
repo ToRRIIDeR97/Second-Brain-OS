@@ -22,7 +22,7 @@ import { sessionPinnedAt } from "@/utils/session"
 import { sessionTitle } from "@/utils/session-title"
 
 const rowClass =
-  "group/row relative grid h-8 w-full min-w-0 shrink-0 cursor-default items-center overflow-hidden rounded-[6px] bg-transparent text-left text-[13px] text-v2-text-text-muted [font-weight:440] transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base data-[selected]:hover:bg-v2-background-bg-layer-03 focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
+  "group/row relative grid h-9 w-full min-w-0 shrink-0 cursor-default items-center overflow-hidden rounded-full bg-transparent text-left text-[13px] text-v2-text-text-muted [font-weight:440] transition-[background-color,color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base active:rounded-[12px] data-[selected]:bg-v2-background-bg-accent-container data-[selected]:text-v2-text-text-on-accent-container data-[selected]:[font-weight:530] focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
 
 export function SecondBrainSidebar() {
   const language = useLanguage()
@@ -33,123 +33,139 @@ export function SecondBrainSidebar() {
   const path = () => ctrl.location.pathname
   const items = () => [
     { id: "overview", icon: "home" as const, label: language.t("secondBrain.sidebar.overview"), href: "/" },
-    { id: "notes", icon: "edit" as const, label: language.t("secondBrain.sidebar.notes"), href: "/notes" },
-    { id: "calendar", icon: "status" as const, label: language.t("secondBrain.sidebar.calendar"), href: "/calendar" },
-    { id: "activity", icon: "status" as const, label: language.t("secondBrain.sidebar.activity"), href: "/activity" },
+    { id: "notes", icon: "book" as const, label: language.t("secondBrain.sidebar.notes"), href: "/notes" },
+    { id: "calendar", icon: "calendar" as const, label: language.t("secondBrain.sidebar.calendar"), href: "/calendar" },
+    { id: "activity", icon: "activity" as const, label: language.t("secondBrain.sidebar.activity"), href: "/activity" },
   ]
 
   return (
-    <aside
+    <div
       data-component="second-brain-sidebar"
       data-expanded={layout.sidebar.opened() ? "" : undefined}
-      classList={{
-        "hidden md:flex shrink-0 min-h-0 flex-col overflow-hidden bg-v2-background-bg-deep transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none": true,
-        "w-[260px]": layout.sidebar.opened(),
-        "w-12": !layout.sidebar.opened(),
-      }}
-      aria-label={language.t("secondBrain.sidebar.title")}
+      class="hidden min-h-0 shrink-0 md:flex"
     >
-      <nav class="flex shrink-0 flex-col gap-1 px-2 py-1">
+      <nav
+        class="flex w-20 shrink-0 flex-col items-center gap-3 pb-4 pt-2"
+        aria-label={language.t("secondBrain.sidebar.title")}
+      >
+        <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.newThread")}>
+          <button
+            type="button"
+            data-sidebar-item="new-thread"
+            class="mb-3 flex size-14 items-center justify-center rounded-[16px] bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container transition-[border-radius,background-color,transform] duration-300 ease-spring hover:rounded-[20px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+            aria-label={language.t("secondBrain.sidebar.newThread")}
+            onClick={() => ctrl.newThread()}
+          >
+            <Icon name="plus" size="large" />
+          </button>
+        </TooltipV2>
         <For each={items()}>
           {(item) => (
-            <NavRow
+            <RailItem
               id={item.id}
-              icon={<Icon name={item.icon} size="small" />}
+              icon={item.icon}
               label={item.label}
               active={path() === item.href}
-              opened={layout.sidebar.opened()}
               onClick={() => navigate(item.href)}
             />
           )}
         </For>
+        <div class="flex-1" />
+        <TooltipV2 placement="right" value={language.t("sidebar.settings")}>
+          <IconButtonV2
+            type="button"
+            data-sidebar-item="settings"
+            variant="ghost-muted"
+            class="!size-11"
+            icon={<Icon name="settings-gear" size="large" />}
+            aria-label={language.t("sidebar.settings")}
+            onClick={() => openSettings()}
+          />
+        </TooltipV2>
       </nav>
 
-      <Show when={layout.sidebar.opened()}>
-        <div data-sidebar-section="projects" class="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2 pt-3">
-          <SectionHeader
-            id="projects"
-            label={language.t("secondBrain.sidebar.projectsSection")}
-            onLabel={() => navigate("/projects")}
-            labelTitle={language.t("secondBrain.sidebar.manageProjects")}
-            action={{
-              label: language.t("secondBrain.command.openFolder"),
-              icon: <Icon name="folder-add-left" size="small" />,
-              run: ctrl.chooseFolder,
-            }}
-          />
-          <For each={ctrl.groups().projects}>
-            {(group) => <ProjectGroup ctrl={ctrl} project={group.project} threads={group.threads} />}
-          </For>
-          <Show when={!ctrl.loading() && ctrl.projects().length === 0}>
-            <p class="px-2 py-1 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.sidebar.noProjects")}</p>
-          </Show>
-          <Show when={ctrl.brainDirectory()}>
-            <ThreadGroup
-              ctrl={ctrl}
-              id={BRAIN_GROUP}
-              label={language.t("secondBrain.sidebar.brain")}
-              threads={ctrl.groups().brain}
-              onNewThread={ctrl.newBrainThread}
+      <aside
+        aria-label={language.t("secondBrain.sidebar.projectsSection")}
+        classList={{
+          "flex min-h-0 flex-col overflow-hidden transition-[width,opacity] duration-300 ease-emphasized will-change-[width] motion-reduce:transition-none": true,
+          "w-[248px] opacity-100": layout.sidebar.opened(),
+          "w-0 opacity-0": !layout.sidebar.opened(),
+        }}
+      >
+        <Show when={layout.sidebar.opened()}>
+          <div
+            data-sidebar-section="projects"
+            class="flex min-h-0 w-[248px] flex-1 flex-col overflow-y-auto pb-3 pr-2 pt-1"
+          >
+            <SectionHeader
+              id="projects"
+              label={language.t("secondBrain.sidebar.projectsSection")}
+              active={path() === "/projects"}
+              onLabel={() => navigate("/projects")}
+              labelTitle={language.t("secondBrain.sidebar.manageProjects")}
+              action={{
+                label: language.t("secondBrain.command.openFolder"),
+                icon: <Icon name="folder-add-left" size="small" />,
+                run: ctrl.chooseFolder,
+              }}
             />
-          </Show>
-          <Show when={ctrl.groups().other.length > 0}>
-            <ThreadGroup
-              ctrl={ctrl}
-              id={OTHER_GROUP}
-              label={language.t("secondBrain.sidebar.otherThreads")}
-              threads={ctrl.groups().other}
-            />
-          </Show>
-        </div>
-      </Show>
-      <Show when={!layout.sidebar.opened()}>
-        <div class="flex-1" />
-      </Show>
-
-      <div class="shrink-0 px-2 pb-5 pt-2">
-        <NavRow
-          id="settings"
-          icon={<Icon name="settings-gear" size="small" />}
-          label={language.t("sidebar.settings")}
-          opened={layout.sidebar.opened()}
-          onClick={openSettings}
-        />
-      </div>
-    </aside>
+            <For each={ctrl.groups().projects}>
+              {(group) => <ProjectGroup ctrl={ctrl} project={group.project} threads={group.threads} />}
+            </For>
+            <Show when={!ctrl.loading() && ctrl.projects().length === 0}>
+              <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">
+                {language.t("secondBrain.sidebar.noProjects")}
+              </p>
+            </Show>
+            <Show when={ctrl.brainDirectory()}>
+              <ThreadGroup
+                ctrl={ctrl}
+                id={BRAIN_GROUP}
+                label={language.t("secondBrain.sidebar.brain")}
+                threads={ctrl.groups().brain}
+                onNewThread={ctrl.newBrainThread}
+              />
+            </Show>
+            <Show when={ctrl.groups().other.length > 0}>
+              <ThreadGroup
+                ctrl={ctrl}
+                id={OTHER_GROUP}
+                label={language.t("secondBrain.sidebar.otherThreads")}
+                threads={ctrl.groups().other}
+              />
+            </Show>
+          </div>
+        </Show>
+      </aside>
+    </div>
   )
 }
 
-function NavRow(props: {
-  id: string
-  icon: JSX.Element
-  label: string
-  active?: boolean
-  opened: boolean
-  onClick: () => void
-}) {
+/** Material 3 navigation rail destination: icon in a pill indicator that grows in when selected, label below. */
+function RailItem(props: { id: string; icon: string; label: string; active?: boolean; onClick: () => void }) {
   return (
-    <TooltipV2 placement="right" value={props.label} inactive={props.opened}>
-      <button
-        type="button"
-        data-sidebar-item={props.id}
-        data-selected={props.active ? "" : undefined}
-        class={`${rowClass} grid-cols-[32px_1fr]`}
-        onClick={props.onClick}
-        aria-current={props.active ? "page" : undefined}
-        aria-label={props.label}
-      >
-        <span class="flex size-8 items-center justify-center text-v2-icon-icon-muted">{props.icon}</span>
+    <button
+      type="button"
+      data-sidebar-item={props.id}
+      data-selected={props.active ? "" : undefined}
+      class="group/rail flex w-full flex-col items-center gap-1 text-[12px] text-v2-text-text-muted [font-weight:500] focus-visible:outline-none data-[selected]:text-v2-text-text-base data-[selected]:[font-weight:600]"
+      aria-current={props.active ? "page" : undefined}
+      onClick={props.onClick}
+    >
+      <span class="relative flex h-8 w-14 items-center justify-center">
         <span
           classList={{
-            "min-w-0 truncate pl-1 transition-[opacity,transform] motion-reduce:transition-none": true,
-            "translate-x-0 opacity-100 duration-180 ease-out": props.opened,
-            "pointer-events-none -translate-x-1 opacity-0 duration-120 ease-in": !props.opened,
+            "absolute inset-y-0 left-1/2 -translate-x-1/2 rounded-full transition-[width,background-color] duration-[450ms] ease-standard motion-reduce:transition-none": true,
+            "w-14 bg-v2-background-bg-accent-container": !!props.active,
+            "w-0 group-hover/rail:w-14 group-hover/rail:bg-v2-overlay-simple-overlay-hover": !props.active,
           }}
-        >
-          {props.label}
+        />
+        <span class="relative flex text-v2-icon-icon-muted group-data-[selected]/rail:text-v2-text-text-on-accent-container group-focus-visible/rail:rounded-full group-focus-visible/rail:ring-2 group-focus-visible/rail:ring-v2-border-border-focus">
+          <Icon name={props.icon} size="large" />
         </span>
-      </button>
-    </TooltipV2>
+      </span>
+      <span class="max-w-full truncate px-1">{props.label}</span>
+    </button>
   )
 }
 
@@ -157,27 +173,31 @@ function SectionHeader(props: {
   id?: string
   label: string
   labelTitle?: string
+  active?: boolean
   onLabel?: () => void
   action?: { label: string; icon: JSX.Element; run: () => void }
 }) {
   return (
-    <div class="flex h-7 shrink-0 items-center gap-1 pl-2 pr-0.5">
+    <div class="flex h-10 shrink-0 items-center gap-1 pl-1 pr-0.5">
       <button
         type="button"
         data-sidebar-item={props.id}
-        class="min-w-0 flex-1 truncate text-left text-[11px] uppercase tracking-[0.04em] text-v2-text-text-faint [font-weight:530] hover:text-v2-text-text-muted focus-visible:outline-none"
+        data-selected={props.active ? "" : undefined}
+        aria-current={props.active ? "page" : undefined}
+        class="min-w-0 truncate rounded-full px-3 py-1 text-left text-[13px] text-v2-text-text-base [font-weight:600] transition-colors duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus data-[selected]:bg-v2-background-bg-accent-container data-[selected]:text-v2-text-text-on-accent-container"
         title={props.labelTitle}
         onClick={() => props.onLabel?.()}
       >
         {props.label}
       </button>
+      <div class="flex-1" />
       <Show when={props.action}>
         {(action) => (
           <TooltipV2 placement="right" value={action().label}>
             <IconButtonV2
               type="button"
               variant="ghost-muted"
-              size="small"
+              size="large"
               icon={action().icon}
               aria-label={action().label}
               onClick={action().run}
@@ -212,7 +232,7 @@ function ProjectGroup(props: { ctrl: SidebarController; project: SidebarProjectI
       >
         <button
           type="button"
-          class="flex h-8 min-w-0 items-center gap-1.5 pl-1.5 text-left focus-visible:outline-none"
+          class="flex h-9 min-w-0 items-center gap-1.5 pl-3 text-left focus-visible:outline-none"
           aria-expanded={open()}
           onClick={() => props.ctrl.toggleExpanded(props.project.id)}
         >
@@ -288,7 +308,7 @@ function ThreadGroup(props: {
       <div class={`${rowClass} grid-cols-[1fr_auto]`}>
         <button
           type="button"
-          class="flex h-8 min-w-0 items-center gap-1.5 pl-1.5 text-left focus-visible:outline-none"
+          class="flex h-9 min-w-0 items-center gap-1.5 pl-3 text-left focus-visible:outline-none"
           aria-expanded={open()}
           onClick={() => props.ctrl.toggleExpanded(props.id)}
         >
@@ -328,7 +348,7 @@ function ThreadList(props: { ctrl: SidebarController; threads: ThreadNode<Sessio
           <button
             type="button"
             data-sidebar-new-thread
-            class={`${rowClass} grid-cols-[1fr] pl-7 text-v2-text-text-faint`}
+            class={`${rowClass} grid-cols-[1fr] pl-8 text-v2-text-text-faint`}
             onClick={run()}
           >
             <span class="flex min-w-0 items-center gap-1.5">
@@ -340,7 +360,7 @@ function ThreadList(props: { ctrl: SidebarController; threads: ThreadNode<Sessio
       </Show>
       <For each={props.threads}>{(node) => <ThreadRow ctrl={props.ctrl} node={node} depth={0} />}</For>
       <Show when={!props.onNewThread && props.threads.length === 0}>
-        <p class="py-1 pl-7 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.sidebar.noThreads")}</p>
+        <p class="py-1 pl-8 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.sidebar.noThreads")}</p>
       </Show>
     </div>
   )
@@ -372,14 +392,14 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
         data-sidebar-thread={session().id}
         data-selected={active() ? "" : undefined}
         class={`${rowClass} grid-cols-[1fr_auto]`}
-        style={{ "padding-left": `${20 + props.depth * 12}px` }}
+        style={{ "padding-left": `${24 + props.depth * 12}px` }}
       >
         <Show
           when={editing()}
           fallback={
             <button
               type="button"
-              class="flex h-8 min-w-0 items-center gap-1.5 pl-2 text-left focus-visible:outline-none"
+              class="flex h-9 min-w-0 items-center gap-1.5 pl-2 pr-1 text-left focus-visible:outline-none"
               data-sidebar-thread-open
               aria-current={active() ? "page" : undefined}
               onClick={() => props.ctrl.openThread(session())}
@@ -402,7 +422,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
               <Show when={props.ctrl.working(session().id)}>
                 <span
                   data-sidebar-running
-                  class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent"
+                  class="size-2 shrink-0 animate-[running-pulse_1.6s_var(--v2-ease-standard)_infinite] rounded-full bg-v2-icon-icon-accent motion-reduce:animate-none"
                   role="status"
                   aria-label={language.t("secondBrain.sidebar.running")}
                 />
@@ -412,7 +432,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
         >
           <input
             ref={(el) => queueMicrotask(() => el.select())}
-            class="mx-1 h-6 min-w-0 rounded-[4px] bg-v2-background-bg-base px-1.5 text-[13px] text-v2-text-text-base outline-none [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
+            class="mx-1 h-7 min-w-0 rounded-full bg-v2-background-bg-base px-3 px-1.5 text-[13px] text-v2-text-text-base outline-none [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
             value={session().title ?? ""}
             aria-label={language.t("secondBrain.sidebar.renameThread")}
             onKeyDown={(event) => {

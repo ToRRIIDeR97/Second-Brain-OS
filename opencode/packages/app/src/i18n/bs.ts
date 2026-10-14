@@ -208,7 +208,6 @@ export const dict = {
   "dialog.model.search.placeholder": "Pretraži modele",
   "dialog.model.empty": "Nema rezultata za modele",
   "dialog.model.manage": "Upravljaj modelima",
-  "dialog.model.manage.description": "Prilagodi koji se modeli prikazuju u izborniku modela.",
   "dialog.model.manage.provider.toggle": "Uključi/isključi sve {{provider}} modele",
 
   "dialog.model.unpaid.freeModels.title": "Besplatni modeli koje obezbjeđuje OpenCode",
@@ -842,7 +841,6 @@ export const dict = {
   "settings.general.section.display": "Prikaz",
 
   "settings.general.row.language.title": "Jezik",
-  "settings.general.row.language.description": "Promijeni jezik prikaza u OpenCode-u",
   "settings.general.row.shell.title": "Shell terminala",
   "settings.general.row.shell.description":
     "Odaberi shell koji se koristi za terminal. Kompatibilni shellovi koriste se i za pozive alata agenta.",
@@ -851,47 +849,30 @@ export const dict = {
   "settings.general.row.appearance.title": "Izgled",
   "settings.general.row.appearance.description": "Prilagodi kako OpenCode izgleda na tvom uređaju",
   "settings.general.row.colorScheme.title": "Šema boja",
-  "settings.general.row.colorScheme.description": "Odaberi da li OpenCode prati sistemsku, svijetlu ili tamnu temu",
   "settings.general.row.theme.title": "Tema",
-  "settings.general.row.theme.description": "Prilagodi temu OpenCode-a.",
   "settings.general.row.font.title": "Font za kod",
-  "settings.general.row.font.description": "Prilagodi font koji se koristi u blokovima koda",
   "settings.general.row.terminalFont.title": "Font terminala",
-  "settings.general.row.terminalFont.description": "Prilagodi font koji se koristi u terminalu",
   "settings.general.row.uiFont.title": "UI font",
-  "settings.general.row.uiFont.description": "Prilagodi font koji se koristi u cijelom interfejsu",
   "settings.general.row.followup.title": "Ponašanje nadovezivanja",
   "settings.general.row.followup.description": "Odaberi da li upiti nadovezivanja usmjeravaju odmah ili čekaju u redu",
   "settings.general.row.followup.option.queue": "Red čekanja",
   "settings.general.row.followup.option.steer": "Usmjeri",
   "settings.general.row.showFileTree.title": "Stablo datoteka",
-  "settings.general.row.showFileTree.description": "Prikaži stablo datoteka u sesijama",
   "settings.general.row.showNavigation.title": "Kontrole navigacije",
   "settings.general.row.showNavigation.description":
     "Prikaži dugmad za nazad i naprijed u naslovnoj traci desktop aplikacije",
   "settings.general.row.showSearch.title": "Paleta komandi",
-  "settings.general.row.showSearch.description": "Prikaži dugme za pretragu i paletu komandi u naslovnoj traci",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Prikaži dugme terminala u naslovnoj traci desktop aplikacije",
   "settings.general.row.showStatus.title": "Status servera",
-  "settings.general.row.showStatus.description": "Prikaži dugme statusa servera u naslovnoj traci",
   "settings.general.row.mobileTitlebarBottom.title": "Donja navigacija",
-  "settings.general.row.mobileTitlebarBottom.description":
-    "Postavi naslovnu traku i kartice sesije na dno ekrana na mobilnim uređajima",
   "settings.general.row.showCustomAgents.title": "Prilagođeni agenti",
   "settings.general.row.showCustomAgents.description": "Prikaži izbor agenta u uređivaču poruke",
   "settings.general.row.reasoningSummaries.title": "Prikaži sažetke rasuđivanja",
-  "settings.general.row.reasoningSummaries.description": "Prikaži sažetke rasuđivanja modela na vremenskoj traci",
 
   "settings.general.row.shellToolPartsExpanded.title": "Proširi dijelove shell alata",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Prikaži dijelove shell alata podrazumijevano proširene na vremenskoj traci",
   "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
   "settings.general.row.pinchZoom.title": "Zumiranje štipanjem",
-  "settings.general.row.pinchZoom.description":
-    "Dozvoli zumiranje gestom štipanja na dodirnoj ploči i pomoću Ctrl-pomjeranja",
   "settings.general.row.wayland.title": "Koristi nativni Wayland",
   "settings.general.row.wayland.description":
     "Onemogući rezervni X11 način rada na Waylandu. Zahtijeva ponovno pokretanje.",
@@ -902,7 +883,6 @@ export const dict = {
   "settings.updates.row.startup.title": "Provjeri ažuriranja pri pokretanju",
   "settings.updates.row.startup.description": "Automatski provjerava ažuriranja kada se OpenCode pokrene",
   "settings.updates.row.check.title": "Provjeri ažuriranja",
-  "settings.updates.row.check.description": "Ručno provjeri ažuriranja i instaliraj ako su dostupna",
   "settings.updates.action.checkNow": "Provjeri sada",
   "settings.updates.action.checking": "Provjera...",
   "settings.updates.action.downloading": "Preuzimanje...",
@@ -957,19 +937,12 @@ export const dict = {
   "sound.option.yup06": "Da 06",
 
   "settings.general.notifications.agent.title": "Agent",
-  "settings.general.notifications.agent.description":
-    "Prikaži sistemsku obavijest kada agent završi ili zahtijeva pažnju",
   "settings.general.notifications.permissions.title": "Dozvole",
-  "settings.general.notifications.permissions.description": "Prikaži sistemsku obavijest kada je potrebna dozvola",
   "settings.general.notifications.errors.title": "Greške",
-  "settings.general.notifications.errors.description": "Prikaži sistemsku obavijest kada dođe do greške",
 
   "settings.general.sounds.agent.title": "Agent",
-  "settings.general.sounds.agent.description": "Pusti zvuk kada agent završi ili zahtijeva pažnju",
   "settings.general.sounds.permissions.title": "Dozvole",
-  "settings.general.sounds.permissions.description": "Pusti zvuk kada je potrebna dozvola",
   "settings.general.sounds.errors.title": "Greške",
-  "settings.general.sounds.errors.description": "Pusti zvuk kada dođe do greške",
 
   "settings.shortcuts.title": "Prečice na tastaturi",
   "settings.shortcuts.reset.button": "Vrati na podrazumijevano",
@@ -992,7 +965,6 @@ export const dict = {
   "settings.providers.title": "Provajderi",
   "settings.providers.description": "Postavke provajdera će se ovdje moći podešavati.",
   "settings.providers.section.connected": "Povezani provajderi",
-  "settings.providers.connected.empty": "Nema povezanih provajdera",
   "settings.providers.section.popular": "Popularni provajderi",
   "settings.providers.tag.environment": "Okruženje",
   "settings.providers.tag.config": "Konfiguracija",
@@ -1094,7 +1066,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "lozinka",
   "server.row.noUsername": "nema korisničkog imena",
   "session.review.noVcs.createGit.title": "Kreiraj Git repozitorij",
-  "session.review.noVcs.createGit.description": "Prati, pregledaj i poništi promjene u ovom projektu",
   "session.review.noVcs.createGit.actionLoading": "Kreiranje Git repozitorija...",
   "session.review.noVcs.createGit.action": "Kreiraj Git repozitorij",
   "session.todo.progress": "{{done}} od {{total}} zadataka završeno",

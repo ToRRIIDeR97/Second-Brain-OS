@@ -76,3 +76,7 @@
   color: var(--v2-state-fg-danger);
   opacity: 1;
 }
+
+[data-component="textarea-v2"] {
+  border-radius: var(--v2-radius-md);
+}

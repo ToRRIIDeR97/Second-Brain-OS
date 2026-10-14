@@ -1,9 +1,14 @@
+import { Icon } from "@opencode-ai/ui/icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createEffect, createMemo, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { pageRowClass } from "@/components/page"
 import { useLanguage } from "@/context/language"
 import { localDateKey } from "./calendar-domain"
 import type { PlannerTask, ProjectRecord } from "./client"
@@ -230,29 +235,32 @@ export function CalendarTasks(props: {
   const remove = () => persist(props.tasks.filter((task) => task.id !== state.draft.id))
 
   return (
-    <div class="grid min-h-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <section
-        class="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
-        aria-labelledby="tasks-title"
-      >
-        <div class="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-v2-border-border-weak px-3 py-2">
-          <h2 id="tasks-title" class="min-w-0 flex-1 text-[14px] text-v2-text-text-base [font-weight:530]">
-            {language.t("secondBrain.tasks.title")}
-          </h2>
-          <For each={["today", "upcoming", "unscheduled", "completed"] as const}>
-            {(filter) => (
-              <ButtonV2
-                size="small"
-                variant={state.filter === filter ? "outline" : "ghost-muted"}
-                onClick={() => {
-                  setState("filter", filter)
-                  props.onFilterChange?.(filter)
-                }}
-              >
-                {language.t(`secondBrain.tasks.filter.${filter}`)}
-              </ButtonV2>
-            )}
-          </For>
+    <div
+      classList={{
+        "grid min-h-0 flex-1 gap-3 px-3 pb-3": true,
+        "lg:grid-cols-[minmax(0,1fr)_320px]": state.editing,
+      }}
+    >
+      <section class="flex min-h-0 min-w-0 flex-col" aria-label={language.t("secondBrain.tasks.title")}>
+        <div class="flex shrink-0 flex-wrap items-center gap-2 px-3 pb-2">
+          <div class="min-w-0 flex-1">
+            <SegmentedControlV2 class="!w-auto" value={state.filter}>
+              <For each={["today", "upcoming", "unscheduled", "completed"] as const}>
+                {(filter) => (
+                  <SegmentedControlItemV2
+                    value={filter}
+                    class="!flex-auto"
+                    onClick={() => {
+                      setState("filter", filter)
+                      props.onFilterChange?.(filter)
+                    }}
+                  >
+                    {language.t(`secondBrain.tasks.filter.${filter}`)}
+                  </SegmentedControlItemV2>
+                )}
+              </For>
+            </SegmentedControlV2>
+          </div>
           <ButtonV2
             size="small"
             variant="contrast"
@@ -264,27 +272,44 @@ export function CalendarTasks(props: {
             {language.t("secondBrain.tasks.new")}
           </ButtonV2>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto p-2">
+        <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
           <Show
             when={visible().length > 0}
-            fallback={<p class="p-4 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.tasks.empty")}</p>}
+            fallback={
+              <p class="px-3 py-4 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.tasks.empty")}</p>
+            }
           >
             <For each={visible()}>
               {(task) => (
-                <div class="grid min-h-12 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[6px] px-2 transition-colors duration-150 hover:bg-v2-background-bg-layer-01">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(task.completedAt)}
-                    aria-label={language.t("secondBrain.tasks.toggle", { title: task.title })}
-                    class="size-4 cursor-pointer accent-current"
-                    onChange={() => void toggleComplete(task)}
-                  />
+                <div class={`${pageRowClass} min-h-12 py-1.5`}>
+                  <span class="relative flex size-5 shrink-0 items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(task.completedAt)}
+                      aria-label={language.t("secondBrain.tasks.toggle", { title: task.title })}
+                      class="peer size-5 cursor-pointer appearance-none rounded-full border-[1.5px] border-v2-border-border-base transition-colors duration-150 ease-standard checked:border-transparent checked:bg-v2-icon-icon-accent hover:border-v2-icon-icon-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                      onChange={() => void toggleComplete(task)}
+                    />
+                    <Icon
+                      name="check-small"
+                      size="small"
+                      class="pointer-events-none absolute text-v2-icon-icon-contrast opacity-0 peer-checked:opacity-100"
+                    />
+                  </span>
                   <button
                     type="button"
-                    class="min-w-0 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
+                    class="min-w-0 flex-1 cursor-pointer rounded-[8px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
                     onClick={() => openTask(task)}
                   >
-                    <span class="block truncate text-[13px] text-v2-text-text-base">{task.title}</span>
+                    <span
+                      classList={{
+                        "block truncate text-[13px]": true,
+                        "text-v2-text-text-base": !task.completedAt,
+                        "text-v2-text-text-faint line-through": Boolean(task.completedAt),
+                      }}
+                    >
+                      {task.title}
+                    </span>
                     <span class="block truncate text-[11px] text-v2-text-text-faint">
                       {task.scheduledDate ?? task.dueDate ?? language.t("secondBrain.tasks.unscheduled")}
                       <Show when={task.start}> {task.start}</Show>
@@ -296,7 +321,7 @@ export function CalendarTasks(props: {
                       <Show when={task.source === "google"}> · {task.taskListTitle}</Show>
                     </span>
                   </button>
-                  <span class="flex flex-col items-end gap-0.5 text-[10px] text-v2-text-text-faint">
+                  <span class="flex shrink-0 flex-col items-end gap-0.5 text-[10px] text-v2-text-text-faint">
                     <Show when={task.dueDate && !task.completedAt && task.dueDate < today()}>
                       <span class="text-[11px] text-v2-text-text-critical">
                         {language.t("secondBrain.tasks.overdue")}
@@ -316,17 +341,10 @@ export function CalendarTasks(props: {
         </div>
       </section>
 
-      <aside class="flex min-h-0 flex-col overflow-y-auto rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]">
-        <Show
-          when={state.editing}
-          fallback={
-            <div class="flex flex-1 items-center justify-center p-8 text-center text-[13px] text-v2-text-text-faint">
-              {language.t("secondBrain.tasks.select")}
-            </div>
-          }
-        >
+      <Show when={state.editing}>
+        <aside class="flex min-h-0 flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01">
           <form
-            class="flex flex-col gap-4 p-4"
+            class="flex flex-col gap-3 p-4"
             onSubmit={(event) => {
               event.preventDefault()
               void save()
@@ -336,9 +354,16 @@ export function CalendarTasks(props: {
               <h3 class="min-w-0 flex-1 text-[14px] text-v2-text-text-base [font-weight:530]">
                 {state.draft.id ? language.t("secondBrain.tasks.edit") : language.t("secondBrain.tasks.new")}
               </h3>
-              <ButtonV2 type="button" size="small" variant="ghost" onClick={() => setState("editing", false)}>
-                {language.t("common.cancel")}
-              </ButtonV2>
+              <TooltipV2 value={language.t("common.cancel")}>
+                <IconButtonV2
+                  type="button"
+                  size="small"
+                  variant="ghost"
+                  icon={<Icon name="close" />}
+                  aria-label={language.t("common.cancel")}
+                  onClick={() => setState("editing", false)}
+                />
+              </TooltipV2>
             </div>
             <label class="flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted" for="task-title">
               {language.t("secondBrain.tasks.name")}
@@ -407,7 +432,7 @@ export function CalendarTasks(props: {
               <input
                 id="task-due"
                 type="date"
-                class="h-8 rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
+                class={dateInputClass}
                 value={state.draft.dueDate}
                 onInput={(event) => setState("draft", "dueDate", event.currentTarget.value)}
               />
@@ -417,7 +442,7 @@ export function CalendarTasks(props: {
               <input
                 id="task-scheduled"
                 type="date"
-                class="h-8 rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
+                class={dateInputClass}
                 value={state.draft.scheduledDate}
                 onInput={(event) => setState("draft", "scheduledDate", event.currentTarget.value)}
               />
@@ -428,7 +453,7 @@ export function CalendarTasks(props: {
                 <input
                   id="task-start"
                   type="time"
-                  class="h-8 rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
+                  class={dateInputClass}
                   value={state.draft.start}
                   onInput={(event) => setState("draft", "start", event.currentTarget.value)}
                 />
@@ -438,7 +463,7 @@ export function CalendarTasks(props: {
                 <input
                   id="task-end"
                   type="time"
-                  class="h-8 rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 text-[12px] text-v2-text-text-base outline-none focus-visible:border-v2-border-border-focus"
+                  class={dateInputClass}
                   value={state.draft.end}
                   onInput={(event) => setState("draft", "end", event.currentTarget.value)}
                 />
@@ -471,7 +496,7 @@ export function CalendarTasks(props: {
             <Show when={state.googleConfirm}>
               <p
                 role="status"
-                class="rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3 text-[12px] leading-5 text-v2-text-text-muted"
+                class="rounded-[12px] bg-v2-background-bg-base px-3 py-2 text-[12px] leading-5 text-v2-text-text-muted"
               >
                 {language.t("secondBrain.tasks.google.confirm")}
               </p>
@@ -497,8 +522,11 @@ export function CalendarTasks(props: {
               </ButtonV2>
             </div>
           </form>
-        </Show>
-      </aside>
+        </aside>
+      </Show>
     </div>
   )
 }
+
+const dateInputClass =
+  "h-9 rounded-[12px] border border-v2-border-border-base bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-colors duration-150 ease-standard focus-visible:border-v2-border-border-focus motion-reduce:transition-none"

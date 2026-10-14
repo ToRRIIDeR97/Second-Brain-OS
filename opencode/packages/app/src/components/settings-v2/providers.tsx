@@ -147,15 +147,10 @@ export const SettingsProvidersV2: Component<{
       </div>
 
       <div class="settings-v2-tab-body settings-v2-providers">
-        <div class="settings-v2-section" data-component="connected-providers-section">
-          <h3 class="settings-v2-section-title">{language.t("settings.providers.section.connected")}</h3>
-          <SettingsListV2>
-            <Show
-              when={connected().length > 0}
-              fallback={
-                <div class="settings-v2-provider-empty">{language.t("settings.providers.connected.empty")}</div>
-              }
-            >
+        <Show when={connected().length > 0}>
+          <div class="settings-v2-section" data-component="connected-providers-section">
+            <h3 class="settings-v2-section-title">{language.t("settings.providers.section.connected")}</h3>
+            <SettingsListV2>
               <For each={connected()}>
                 {(item) => (
                   <div class="settings-v2-provider-row group">
@@ -186,9 +181,9 @@ export const SettingsProvidersV2: Component<{
                   </div>
                 )}
               </For>
-            </Show>
-          </SettingsListV2>
-        </div>
+            </SettingsListV2>
+          </div>
+        </Show>
 
         <div class="settings-v2-section">
           <h3 class="settings-v2-section-title">{language.t("settings.providers.section.popular")}</h3>

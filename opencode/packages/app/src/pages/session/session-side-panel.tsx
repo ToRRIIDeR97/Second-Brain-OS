@@ -19,7 +19,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Mark } from "@opencode-ai/ui/logo"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
@@ -55,6 +54,7 @@ import {
 } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { pagePanelClass } from "@/components/page"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 
 type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
@@ -294,7 +294,7 @@ export function SessionSidePanel(props: {
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 flex overflow-hidden bg-v2-background-bg-base rounded-[10px] shadow-[var(--v2-elevation-raised)]"
+        class={`relative min-w-0 flex overflow-hidden ${pagePanelClass}`}
         classList={{
           "h-full shrink-0": !props.stacked,
           "h-full min-h-0": props.stacked,
@@ -425,7 +425,7 @@ export function SessionSidePanel(props: {
                                     icon="plus-small"
                                     variant="ghost"
                                     iconSize="large"
-                                    class="!rounded-md"
+                                    class="!rounded-full"
                                     onClick={() => {
                                       void import("@/components/dialog-select-file").then((x) => {
                                         dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
@@ -455,7 +455,6 @@ export function SessionSidePanel(props: {
                             <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
                               <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                                 <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">
-                                  <Mark class="w-14 opacity-10" />
                                   <div class="text-14-regular text-text-weak max-w-56">
                                     {language.t("session.files.selectToOpen")}
                                   </div>
@@ -677,7 +676,6 @@ export function SessionSidePanel(props: {
                           <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
                             <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                               <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">
-                                <Mark class="w-14 opacity-10" />
                                 <div class="text-14-regular text-text-weak max-w-56">
                                   {language.t("session.files.selectToOpen")}
                                 </div>

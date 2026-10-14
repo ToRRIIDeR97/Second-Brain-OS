@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
@@ -62,12 +62,12 @@ function EditFromHereDialog(props: { files: string[] | undefined; onCancel: () =
           )}
         </Show>
         <div class="flex justify-end gap-2">
-          <Button type="button" variant="ghost" size="large" onClick={props.onCancel}>
+          <ButtonV2 type="button" variant="ghost" size="large" onClick={props.onCancel}>
             {language.t("common.cancel")}
-          </Button>
-          <Button type="button" variant="primary" size="large" onClick={props.onConfirm}>
+          </ButtonV2>
+          <ButtonV2 type="button" variant="contrast" size="large" onClick={props.onConfirm}>
             {language.t("secondBrain.editFromHere.confirm")}
-          </Button>
+          </ButtonV2>
         </div>
       </div>
     </Dialog>

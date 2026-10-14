@@ -25,6 +25,8 @@
     --v2-background-bg-contrast: var(--v2-grey-1000);
     --v2-background-bg-button-neutral: var(--v2-grey-50);
     --v2-background-bg-accent: var(--v2-blue-600);
+    --v2-background-bg-accent-container: var(--v2-blue-100);
+    --v2-text-text-on-accent-container: var(--v2-blue-1000);
 
     /* ── Text ── */
     --v2-text-text-base: var(--v2-grey-1100);
@@ -139,6 +141,21 @@
     --v2-illustration-illustration-layer-01: var(--v2-grey-300);
     --v2-illustration-illustration-layer-02: var(--v2-grey-400);
     --v2-illustration-illustration-layer-03: var(--v2-grey-500);
+
+    /* ── Shape and motion (Material 3; theme-independent) ── */
+    --v2-radius-sm: 8px;
+    --v2-radius-md: 12px;
+    --v2-radius-lg: 16px;
+    --v2-radius-xl: 24px;
+    --v2-radius-xxl: 28px;
+    --v2-radius-full: 9999px;
+    --v2-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --v2-ease-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+    --v2-ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+    --v2-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+    --v2-duration-short: 150ms;
+    --v2-duration-medium: 300ms;
+    --v2-duration-long: 450ms;
 
     --font-family-text: "Inter", sans-serif;
     --v2-font-family-sans: "Inter", sans-serif;

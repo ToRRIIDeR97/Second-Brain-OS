@@ -2,8 +2,8 @@
 
 Second Brain OS is an OpenCode fork. OpenCode is the runtime base: the
 Electron host, the managed local OpenCode server and the session runtime. The
-app shell and navigation are Second Brain's own: a sidebar of Home, Notes,
-Calendar, Activity and Projects with their threads. New product domains are
+app shell and navigation are Second Brain's own: a navigation rail of Home,
+Notes, Calendar and Activity beside a Projects panel with their threads. New product domains are
 added inside the existing OpenCode application rather than beside it.
 
 The previous React/Tauri and Rust implementation is retired. Its database
@@ -48,7 +48,14 @@ rather than standalone routes. The
 routes and shortcuts.
 
 `pages/layout-new.tsx` is the only shell: the titlebar (window chrome, back
-and forward) and `components/second-brain-sidebar.tsx`. The sidebar's
+and forward) and `components/second-brain-sidebar.tsx` (navigation rail plus
+collapsible Projects panel). Pages sit on one rounded panel built from
+`components/page.tsx` (`PageFrame`, `PageHeader`, `PageSection`); page titles
+carry no descriptive subtitle. Shape and motion follow Material 3: radius,
+easing and duration tokens (`--v2-radius-*`, `--v2-ease-*`,
+`--v2-duration-*`) and the accent-container colors live in
+`packages/ui/src/v2/styles/theme.css` and `packages/ui/src/theme/v2/mapping.ts`,
+and the v2 components (pill buttons, circular icon buttons) use them. The sidebar's
 controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with
 `serverSync().project.loadSessions(threadDirectory)` (kept live by

@@ -267,8 +267,8 @@ body[data-new-layout] {
     box-shadow: none;
 
     [data-component="task-tool-surface"] {
-      padding: 8px 12px;
-      border-radius: 8px;
+      padding: 8px 14px;
+      border-radius: 16px;
       background: var(--v2-background-bg-layer-01);
     }
 

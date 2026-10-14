@@ -29,21 +29,18 @@ const fontSettings = {
   ui: {
     action: "settings-ui-font",
     title: "settings.general.row.uiFont.title",
-    description: "settings.general.row.uiFont.description",
     font: "ui",
     input: "setUI",
   },
   code: {
     action: "settings-code-font",
     title: "settings.general.row.font.title",
-    description: "settings.general.row.font.description",
     font: "code",
     input: "setCode",
   },
   terminal: {
     action: "settings-terminal-font",
     title: "settings.general.row.terminalFont.title",
-    description: "settings.general.row.terminalFont.description",
     font: "terminal",
     input: "setTerminal",
   },
@@ -52,17 +49,14 @@ const soundSettings = {
   agent: {
     action: "settings-sounds-agent",
     title: "settings.general.sounds.agent.title",
-    description: "settings.general.sounds.agent.description",
   },
   permissions: {
     action: "settings-sounds-permissions",
     title: "settings.general.sounds.permissions.title",
-    description: "settings.general.sounds.permissions.description",
   },
   errors: {
     action: "settings-sounds-errors",
     title: "settings.general.sounds.errors.title",
-    description: "settings.general.sounds.errors.description",
   },
 } as const
 
@@ -154,10 +148,7 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
     <div class="settings-v2-section">
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.appearance")}</h3>
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.colorScheme.title")}
-          description={language.t("settings.general.row.colorScheme.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.colorScheme.title")}>
           <SelectV2
             appearance="inline"
             data-action="settings-color-scheme"
@@ -174,10 +165,7 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
           />
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.theme.title")}
-          description={language.t("settings.general.row.theme.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.theme.title")}>
           <SelectV2
             appearance="inline"
             data-action="settings-theme"
@@ -206,7 +194,7 @@ const FontSetting: Component<{
   const language = useLanguage()
   const config = () => fontSettings[props.kind]
   return (
-    <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
+    <SettingsRowV2 title={language.t(config().title)}>
       <div class="w-full sm:w-[220px]">
         <TextInputV2
           data-action={config().action}
@@ -248,7 +236,7 @@ const SoundSetting: Component<{
   const language = useLanguage()
   const config = () => soundSettings[props.kind]
   return (
-    <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
+    <SettingsRowV2 title={language.t(config().title)}>
       <SelectV2
         appearance="inline"
         data-action={config().action}
@@ -274,10 +262,7 @@ const LanguageSetting = () => {
     })),
   )
   return (
-    <SettingsRowV2
-      title={language.t("settings.general.row.language.title")}
-      description={language.t("settings.general.row.language.description")}
-    >
+    <SettingsRowV2 title={language.t("settings.general.row.language.title")}>
       <SelectV2
         appearance="inline"
         data-action="settings-language"
@@ -331,10 +316,7 @@ export const SettingsGeneralV2: Component<{
 
         <ShellSetting controller={shell} />
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.reasoningSummaries.title")}
-          description={language.t("settings.general.row.reasoningSummaries.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.reasoningSummaries.title")}>
           <div data-action="settings-feed-reasoning-summaries">
             <Switch
               checked={settings.general.showReasoningSummaries()}
@@ -346,10 +328,7 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
-          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.shellToolPartsExpanded.title")}>
           <div data-action="settings-feed-shell-tool-parts-expanded">
             <Switch
               checked={settings.general.shellToolPartsExpanded()}
@@ -361,10 +340,7 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.editToolPartsExpanded.title")}
-          description={language.t("settings.general.row.editToolPartsExpanded.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.editToolPartsExpanded.title")}>
           <div data-action="settings-feed-edit-tool-parts-expanded">
             <Switch
               checked={settings.general.editToolPartsExpanded()}
@@ -377,10 +353,7 @@ export const SettingsGeneralV2: Component<{
         </SettingsRowV2>
 
         <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
-          <SettingsRowV2
-            title={language.t("settings.general.row.mobileTitlebarBottom.title")}
-            description={language.t("settings.general.row.mobileTitlebarBottom.description")}
-          >
+          <SettingsRowV2 title={language.t("settings.general.row.mobileTitlebarBottom.title")}>
             <div data-action="settings-mobile-titlebar-bottom">
               <Switch
                 checked={settings.general.mobileTitlebarPosition() === "bottom"}
@@ -401,10 +374,7 @@ export const SettingsGeneralV2: Component<{
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.advanced")}</h3>
 
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.showFileTree.title")}
-          description={language.t("settings.general.row.showFileTree.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.showFileTree.title")}>
           <div data-action="settings-show-file-tree">
             <Switch
               checked={settings.general.showFileTree()}
@@ -416,10 +386,7 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.showSearch.title")}
-          description={language.t("settings.general.row.showSearch.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.showSearch.title")}>
           <div data-action="settings-show-search">
             <Switch
               checked={settings.general.showSearch()}
@@ -431,10 +398,7 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.showStatus.title")}
-          description={language.t("settings.general.row.showStatus.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.row.showStatus.title")}>
           <div data-action="settings-show-status">
             <Switch
               checked={settings.general.showStatus()}
@@ -469,10 +433,7 @@ export const SettingsGeneralV2: Component<{
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.notifications")}</h3>
 
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.notifications.agent.title")}
-          description={language.t("settings.general.notifications.agent.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.notifications.agent.title")}>
           <div data-action="settings-notifications-agent">
             <Switch
               checked={settings.notifications.agent()}
@@ -484,10 +445,7 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.notifications.permissions.title")}
-          description={language.t("settings.general.notifications.permissions.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.notifications.permissions.title")}>
           <div data-action="settings-notifications-permissions">
             <Switch
               checked={settings.notifications.permissions()}
@@ -499,10 +457,7 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.notifications.errors.title")}
-          description={language.t("settings.general.notifications.errors.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.general.notifications.errors.title")}>
           <div data-action="settings-notifications-errors">
             <Switch
               checked={settings.notifications.errors()}
@@ -522,10 +477,7 @@ export const SettingsGeneralV2: Component<{
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.updates")}</h3>
 
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.updates.row.check.title")}
-          description={language.t("settings.updates.row.check.description")}
-        >
+        <SettingsRowV2 title={language.t("settings.updates.row.check.title")}>
           <ButtonV2 size="normal" variant="neutral" disabled={!updater.action().run} onClick={() => updater.run()}>
             {language.t(updater.action().label)}
           </ButtonV2>
@@ -534,17 +486,13 @@ export const SettingsGeneralV2: Component<{
     </div>
   )
 
-  // We can probably remove this, right?
   const DisplaySection = () => (
     <Show when={desktop()}>
       <div class="settings-v2-section">
         <h3 class="settings-v2-section-title">{language.t("settings.general.section.display")}</h3>
 
         <SettingsListV2>
-          <SettingsRowV2
-            title={language.t("settings.general.row.pinchZoom.title")}
-            description={language.t("settings.general.row.pinchZoom.description")}
-          >
+          <SettingsRowV2 title={language.t("settings.general.row.pinchZoom.title")}>
             <div data-action="settings-pinch-zoom">
               <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} hideLabel>
                 {language.t("settings.general.row.pinchZoom.title")}

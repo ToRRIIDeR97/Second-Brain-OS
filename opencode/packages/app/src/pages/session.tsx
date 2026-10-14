@@ -103,6 +103,8 @@ import { switchHarnessForServer } from "@/utils/server"
 import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
+import { pagePanelClass } from "@/components/page"
+import { SessionContextUsage } from "@/components/session-context-usage"
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -161,7 +163,7 @@ export function TargetSessionRouteContent() {
     // when session content falls back to the route error boundary.
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
       <TargetSessionSettingsCommand />
-      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
         <ResolvedTargetSessionRoute />
       </SessionRouteErrorBoundary>
     </TargetServerScopedProviders>
@@ -174,13 +176,13 @@ function TargetSessionSettingsCommand() {
 }
 
 export function SessionRouteErrorBoundary(
-  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
+  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key }>,
 ) {
   return (
     <ErrorBoundary
       fallback={(error) => (
-        <SessionRouteFrame padded={props.padded}>
-          <SessionPanelFrame raised={!!props.sessionID}>
+        <SessionRouteFrame>
+          <SessionPanelFrame>
             <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
           </SessionPanelFrame>
         </SessionRouteFrame>
@@ -215,7 +217,7 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
             {(sessionID) => (
               <div class="max-w-full flex flex-col items-center gap-1">
                 <div class="max-w-full text-11-regular text-text-faint break-all">{displayServer()}</div>
-                <code class="max-w-full rounded-[4px] px-1 py-0.5 font-mono text-xs font-medium leading-4 text-text-base break-all bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)]">
+                <code class="max-w-full rounded-[8px] px-1.5 py-0.5 font-mono text-xs font-medium leading-4 text-text-base break-all bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)]">
                   {sessionID()}
                 </code>
               </div>
@@ -304,23 +306,12 @@ function SessionProviders(props: ParentProps) {
   )
 }
 
-function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
-  return (
-    <div class="relative size-full overflow-hidden flex flex-col" classList={{ "p-2": props.padded }}>
-      {props.children}
-    </div>
-  )
+function SessionRouteFrame(props: ParentProps) {
+  return <div class="relative size-full overflow-hidden flex flex-col p-2 pl-0">{props.children}</div>
 }
 
-function SessionPanelFrame(props: ParentProps<{ raised?: boolean }>) {
-  return (
-    <div
-      class="flex-1 min-h-0 flex flex-col bg-v2-background-bg-base rounded-[10px] overflow-hidden"
-      classList={{ "shadow-[var(--v2-elevation-raised)]": props.raised }}
-    >
-      {props.children}
-    </div>
-  )
+function SessionPanelFrame(props: ParentProps) {
+  return <div class={`flex-1 min-h-0 flex flex-col overflow-hidden ${pagePanelClass}`}>{props.children}</div>
 }
 
 export default function Page() {
@@ -441,8 +432,8 @@ export default function Page() {
     ({ width }) => setPanelRowWidth(width),
   )
   const splitReview = createMemo(() => desktopV2ReviewOpen() && layout.review.diffStyle() === "split")
-  // The observer reports the content-box width, which already excludes the row
-  // padding; only the flex gap between the panels remains to subtract.
+  // The observer reports the row width; only the flex gap between the panels
+  // remains to subtract.
   const sessionPanelAvailable = createMemo(() => {
     const width = panelRowWidth()
     if (width === undefined) return undefined
@@ -1223,12 +1214,7 @@ export default function Page() {
 
   const createGit = (input: { emptyClass: string }) => (
     <div class={input.emptyClass}>
-      <div class="flex flex-col gap-3">
-        <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
-        <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
-          {language.t("session.review.noVcs.createGit.description")}
-        </div>
-      </div>
+      <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
       <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
         {gitMutation.isPending
           ? language.t("session.review.noVcs.createGit.actionLoading")
@@ -2122,7 +2108,12 @@ export default function Page() {
             <SessionComposerRegion
               controller={controller}
               promptInput={
-                <PromptInputV2Composer controller={promptController} harness={sessionHarness} borderUnderlay />
+                <PromptInputV2Composer
+                  controller={promptController}
+                  harness={sessionHarness}
+                  borderUnderlay
+                  trailing={<SessionContextUsage buttonAppearance="v2" />}
+                />
               }
             />
           )
@@ -2135,7 +2126,7 @@ export default function Page() {
   return (
     <SessionRouteFrame>
       <SessionHeader />
-      <div ref={panelRow} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 p-2">
+      <div ref={panelRow} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2">
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
@@ -2148,7 +2139,7 @@ export default function Page() {
         >
           <Show when={sessionPanelKey()} keyed>
             {(_) => (
-              <SessionPanelFrame raised={!!params.id}>
+              <SessionPanelFrame>
                 <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
               </SessionPanelFrame>
             )}

@@ -62,6 +62,10 @@
   --radius-lg: 0.5rem;
   --radius-xl: 0.625rem;
 
+  --ease-standard: var(--v2-ease-standard);
+  --ease-emphasized: var(--v2-ease-emphasized-decelerate);
+  --ease-spring: var(--v2-ease-spring);
+
   --shadow-xs: var(--shadow-xs);
   --shadow-md: var(--shadow-md);
   --shadow-xs-border: var(--shadow-xs-border);
