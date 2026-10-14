@@ -45,6 +45,7 @@ dialogs or session panels rather than standalone routes.
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Notes                      | `packages/opencode/src/knowledge/note.ts`; workspace Markdown files                                                   |
 | Project records            | `packages/opencode/src/project/brain.ts`; workspace `projects/` Markdown cards and project folders                    |
+| Project thread directories | Derived, not stored: linked Workspace worktree, else `projects/<id>/`; thread counts read from `opencode.db`          |
 | Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in the XDG data directory                   |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
@@ -53,6 +54,33 @@ dialogs or session panels rather than standalone routes.
 Package paths in this table are relative to `opencode/`. Workspace files are
 the source of truth for notes, project records, and local planning. Do not
 assume the session or draft databases can be reconstructed from those files.
+
+### Projects and thread directories
+
+Every thread belongs to a Project. `BrainProject.threadDirectory` resolves a
+Project's directory: the worktree of the OpenCode project named by
+`location.workspaceId`, otherwise the Project folder `projects/<id>/` in the
+Brain directory. Sessions keep their exact `directory`, so
+`GET /api/session?directory=<threadDirectory>` (or `project` plus `subpath`)
+returns only that Project's threads; sibling Project folders in the same Brain
+repository do not mix.
+
+Entry points (legacy instance routes, scoped to the Brain directory through
+workspace routing):
+
+- `GET /second-brain/project-threads` lists Projects with `threadDirectory`,
+  `threadDirectoryKind` (`workspace` or `folder`), the linked Workspace, and
+  root thread count and last activity. The first call per Brain directory in a
+  server process runs the Workspace migration: every OpenCode project with
+  root threads, other than `global` and the Brain itself, gets a Project
+  through `BrainProject.ensureForWorkspace`. It only creates Markdown cards,
+  never moves files, and logs counts only. The server has no other way to
+  know which Workspace is the Brain, so the migration does not run at
+  bootstrap.
+- `POST /second-brain/projects/workspace` with `{ workspaceId }` returns the
+  Project linked to that OpenCode project id, creating one named after the
+  folder when none exists. The renderer calls it from `context/layout.tsx`
+  for folders opened during the app session.
 
 ## Home navigation
 

@@ -48,6 +48,12 @@ A Project joins an outcome, status, milestones, tasks, calendar items, notes,
 files, instructions, and activity. A local folder or repository can support a
 Project, but the folder is not the Project.
 
+Every thread belongs to a Project. Its threads run in the linked folder
+(Workspace) when the Project has one, otherwise in the Project folder that
+Second Brain manages. Opening a folder that no Project uses creates a Project
+named after the folder; existing folders with threads get one the first time
+the Projects list loads.
+
 ### Home shows attention, not structure
 
 Home answers four questions:

@@ -14,18 +14,24 @@ _Avoid_: Workspace, account, home
 **Project**:
 A bounded body of work with an intended outcome, status, plan, resources,
 instructions, and Activity. A Project may have a local location, but it is not
-the same thing as a folder or repository.
+the same thing as a folder or repository. Every thread belongs to a Project,
+and every Project owns a **thread directory**: its linked Workspace's folder
+when it has one, otherwise its Project folder. Opening a folder that no Project
+links to creates a Project for it.
 _Avoid_: Workspace, folder, repository
 
 **Project folder**:
 The app-managed directory containing one Project's card, notes, and
 calendar-derived timeline. It belongs to a Project but is not the Project
-itself or its optional linked Workspace.
+itself or its optional linked Workspace. Threads of a Project without a linked
+Workspace run here.
 _Avoid_: Project, Workspace
 
 **Workspace**:
 A registered local root with its own identity, trust, and access policy. It is
 a security boundary and should not replace Project in ordinary product copy.
+In code it is an OpenCode project (a folder or repository); a Project links to
+at most one Workspace through `location.workspaceId`.
 _Avoid_: Project, Brain
 
 **Resource**:
