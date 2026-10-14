@@ -302,8 +302,11 @@ export function createSidebarController() {
       .catch(requestFailed)
   }
 
-  /** Open a folder and make sure a Project links to it (Phase 3 merged Project model). */
-  const openFolder = async (directory: string) => {
+  /**
+   * Open a folder and make sure a Project links to it (Phase 3 merged Project model).
+   * `initEmpty` runs `git init` in an empty folder; only user-picked folders get it, never deep links.
+   */
+  const openFolder = async (directory: string, options: { initEmpty?: boolean } = {}) => {
     layout.projects.open(directory)
     server.projects.touch(directory)
     const sdk = serverSDK()
@@ -311,7 +314,7 @@ export function createSidebarController() {
     const project = await sdk.api.file
       .list({ path: ".", location })
       .then(async (files) => {
-        if (files.data.length > 0) return sdk.api.project.current({ location })
+        if (files.data.length > 0 || !options.initEmpty) return sdk.api.project.current({ location })
         const result = await sdk.client.project.initGit({ directory })
         return result.data ?? sdk.api.project.current({ location })
       })
@@ -333,7 +336,7 @@ export function createSidebarController() {
       title: language.t("command.project.open"),
       multiple: true,
       onSelect: (result) => {
-        for (const directory of homeProjectDirectories(result)) void openFolder(directory)
+        for (const directory of homeProjectDirectories(result)) void openFolder(directory, { initEmpty: true })
       },
     })
 
