@@ -2,8 +2,9 @@
 
 ## Architecture
 
-- Treat `opencode/` as the product base. Preserve OpenCode's Electron host,
-  Solid renderer, managed local server, and existing workflows.
+- Treat `opencode/` as the runtime base: OpenCode's Electron host, managed
+  local server, and session runtime. The app shell and navigation (the
+  sidebar, Projects and threads) are Second Brain's own.
 - The former Tauri application is retired. Keep its schema references and
   migration gaps documented in `docs/archive/tauri/README.md`.
 - Add Second Brain features inside OpenCode instead of recreating its shell.

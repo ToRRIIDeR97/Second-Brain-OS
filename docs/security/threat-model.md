@@ -25,6 +25,14 @@ stores that Workspace's worktree as `location.displayPath`, and
 `GET /second-brain/project-threads` returns absolute thread directories the
 same way session responses already return `directory`.
 
+`opencode://open-project` and `opencode://new-session` deep links are handled
+by the app shell's sidebar controller
+(`opencode/packages/app/src/components/sidebar/sidebar-controller.ts`) and
+only on a local server. A deep link can open a folder, link it to a Project
+and start an unsent draft (a `new-session` prompt is placed in the composer,
+never sent). It never runs `git init`; only a folder the user picks in the
+folder dialog is initialized when empty.
+
 Workspace notes, projects, calendar files, session data, provider tokens, and
 agent tool permissions are sensitive. Treat note contents, provider responses,
 workspace files, URL input, and IPC arguments as untrusted. Keep file access

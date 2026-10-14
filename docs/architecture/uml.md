@@ -146,6 +146,7 @@ Later turns in the same runtime send only the user message. See
 | Subject | Kind | Views | Source |
 | --- | --- | --- | --- |
 | Renderer routing and server connection | Subsystem | Component, Deployment, Sequence: startup | `app/src/app.tsx`, `app/src/utils/server-protocol.ts` |
+| Sidebar navigation (Projects, Brain, Other threads) and drafts | Subsystem | Component; text in [README](README.md#product-entry-points-and-persistence) and the [navigation map](../product/NAVIGATION-MAP-V1.md) | `app/src/components/second-brain-sidebar.tsx`, `app/src/components/sidebar/sidebar-controller.ts`, `app/src/features/second-brain/sidebar-threads.ts`, `app/src/context/drafts.tsx` |
 | Preload and IPC | Subsystem | Component, Sequence: startup | `desktop/src/preload/index.ts`, `desktop/src/main/ipc.ts` |
 | Server launch and lifecycle | Subsystem | Deployment, State: sidecar, Sequence: startup | `desktop/src/main/server.ts`, `desktop/src/main/sidecar.ts` |
 | Second Brain notes, projects, calendar | Subsystem | Component, Class, Activity: write, State: project status | `opencode/src/knowledge/`, `opencode/src/project/brain.ts`, `opencode/src/planner/calendar.ts` |
@@ -158,7 +159,7 @@ Later turns in the same runtime send only the user message. See
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |
 | Snapshot repository | Shared store | Component, Class, Activity: prompt run | `core/src/snapshot.ts` |
 | `harnesses.json` | Shared store | Component, Deployment | `core/src/harness/registry.ts` (written only from Settings → Harnesses through `/api/harness/registry`) |
-| `drafts.sqlite`, electron-store files | Shared store | Component, Deployment | `desktop/src/main/draft-store.ts`, `desktop/src/main/store.ts` |
+| `drafts.sqlite`, electron-store files | Shared store | Component, Deployment | `desktop/src/main/draft-store.ts`, `desktop/src/main/store.ts`; per-window `drafts` and `sidebar` keys from `app/src/context/drafts.tsx` and the sidebar controller |
 | Google Calendar and Tasks | External integration | Component, Deployment, State: outbox | `desktop/src/main/google-calendar.ts` |
 | LLM providers | External integration | Component, Deployment | `core/src/harness.ts` (`opencode` driver) |
 | Codex app-server, ACP agents | External integration | Component, Deployment, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts` |
