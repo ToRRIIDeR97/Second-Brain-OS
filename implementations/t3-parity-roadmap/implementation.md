@@ -1,6 +1,6 @@
 # T3 parity roadmap: sidebar workspaces, QOL, OpenCode cleanup
 
-Status: plan, not started. Date: 2026-10-14.
+Status: implemented on branch `feat/t3-parity` (all eight phases plus queued-message actions), 2026-10-14. Not yet merged to `main`.
 
 Sources: read-only research of T3 Code (`~/Downloads/t3code`, commit
 `11fd54fc`) and four audits of this repo. Paths below are relative to
