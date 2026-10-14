@@ -12725,6 +12725,43 @@ export type V2SessionPromptResponses = {
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
 
+export type V2SessionQueuedData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/queued"
+}
+
+export type V2SessionQueuedErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionQueuedError = V2SessionQueuedErrors[keyof V2SessionQueuedErrors]
+
+export type V2SessionQueuedResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<SessionInputAdmitted>
+  }
+}
+
+export type V2SessionQueuedResponse = V2SessionQueuedResponses[keyof V2SessionQueuedResponses]
+
 export type V2SessionCompactData = {
   body?: never
   path: {

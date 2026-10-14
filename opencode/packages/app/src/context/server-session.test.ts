@@ -289,6 +289,38 @@ describe("server session", () => {
     expect(store.data.message.child.map((message) => message.id)).toEqual(["msg_user", "msg_assistant"])
   })
 
+  test("tracks server-queued prompts outside the transcript until promotion", async () => {
+    const client = {
+      v2: {
+        session: {
+          queued: async () => ({ data: { data: [{ id: "msg_old", prompt: { text: "from before reload" } }] } }),
+        },
+      },
+    } as unknown as OpencodeClient
+    const messageApi = {
+      list: async () => ({ data: [], cursor: { previous: null, next: null } }),
+    } as unknown as MessageApi
+    const store = createServerSession(client, {} as SessionApi, messageApi)
+    store.remember(session("root"))
+    await store.sync("root")
+    await Bun.sleep(0)
+    const prompt = (type: string, messageID: string, delivery: "steer" | "queue") =>
+      store.applyV2({
+        id: `evt_${type}_${messageID}`,
+        type,
+        data: { timestamp: 1, sessionID: "root", messageID, prompt: { text: messageID }, delivery },
+      } as unknown as OpenCodeEvent)
+
+    prompt("session.next.prompt.admitted", "msg_queued", "queue")
+    prompt("session.next.prompt.admitted", "msg_steer", "steer")
+
+    expect(store.data.session_queue.root?.map((item) => item.id)).toEqual(["msg_old", "msg_queued"])
+    expect(store.data.session_message.root?.map((message) => message.id)).toEqual(["msg_steer"])
+
+    prompt("session.next.prompted", "msg_old", "queue")
+    expect(store.data.session_queue.root?.map((item) => item.id)).toEqual(["msg_queued"])
+  })
+
   test("resolves lineage by session ID without directory", async () => {
     const ctx = setup({ child: session("child", "root"), root: session("root") })
 

@@ -432,6 +432,16 @@ function SettingsKeybindsV2() {
   )
 }
 
+// Composer shortcuts are handled inside the editor (not global commands), so they are listed read-only.
+const COMPOSER_SHORTCUTS = [
+  { title: "secondBrain.composer.shortcuts.send", keybind: "enter" },
+  { title: "secondBrain.composer.shortcuts.newline", keybind: "shift+enter" },
+  { title: "secondBrain.composer.shortcuts.opposite", keybind: "mod+enter" },
+  { title: "secondBrain.composer.shortcuts.background", keybind: "mod+alt+enter" },
+  { title: "secondBrain.composer.shortcuts.stash", keybind: "mod+s" },
+  { title: "secondBrain.composer.shortcuts.history", keybind: "arrowup" },
+] as const
+
 function SettingsKeybindsV2View(props: {
   groups: KeybindGroup[]
   filtered: (query: string) => Map<KeybindGroup, string[]>
@@ -446,6 +456,13 @@ function SettingsKeybindsV2View(props: {
   const [store, setStore] = createStore({ filter: "" })
   const filtered = createMemo(() => props.filtered(store.filter))
   const hasResults = createMemo(() => props.groups.some((group) => (filtered().get(group)?.length ?? 0) > 0))
+  const composerShortcuts = createMemo(() => {
+    const query = store.filter.toLowerCase().trim()
+    return COMPOSER_SHORTCUTS.map((item) => ({
+      title: language.t(item.title),
+      keybind: formatKeybind(item.keybind, language.t),
+    })).filter((item) => !query || item.title.toLowerCase().includes(query))
+  })
 
   return (
     <>
@@ -517,7 +534,22 @@ function SettingsKeybindsV2View(props: {
               </Show>
             )}
           </For>
-          <Show when={store.filter && !hasResults()}>
+          <Show when={composerShortcuts().length > 0}>
+            <div class="settings-v2-section" data-section="composer-shortcuts">
+              <h3 class="settings-v2-section-title">{language.t("secondBrain.composer.shortcuts.title")}</h3>
+              <SettingsListV2>
+                <For each={composerShortcuts()}>
+                  {(item) => (
+                    <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                      <span>{item.title}</span>
+                      <span class="settings-v2-keybind-button">{item.keybind}</span>
+                    </div>
+                  )}
+                </For>
+              </SettingsListV2>
+            </div>
+          </Show>
+          <Show when={store.filter && !hasResults() && composerShortcuts().length === 0}>
             <div class="settings-v2-shortcuts-status">
               <span>{language.t("settings.shortcuts.search.empty")}</span>
               <span class="settings-v2-shortcuts-status-filter">&quot;{store.filter}&quot;</span>

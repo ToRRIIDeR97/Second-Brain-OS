@@ -126,12 +126,7 @@ export function SessionComposerRegion(props: {
               }}
             >
               <Show when={controller.followup()?.items.length}>
-                <SessionFollowupDock
-                  items={controller.followup()!.items}
-                  sending={controller.followup()!.sending}
-                  onSend={controller.followup()!.onSend}
-                  onEdit={controller.followup()!.onEdit}
-                />
+                <SessionFollowupDock items={controller.followup()!.items} />
               </Show>
               <Show
                 when={controller.child()}

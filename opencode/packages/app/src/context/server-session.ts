@@ -185,6 +185,12 @@ function reconcileFetched<T extends { id: string }>(
   return options.compare ? items.sort(options.compare) : items
 }
 
+export type SessionQueuedInput = { id: string; text: string; files: number }
+
+function queuedInput(input: { id: string; prompt: { text: string; files?: readonly unknown[] } }): SessionQueuedInput {
+  return { id: input.id, text: input.prompt.text, files: input.prompt.files?.length ?? 0 }
+}
+
 type ServerSessionOptions = { retry?: typeof retry; protocol?: Promise<"v1" | "v2"> }
 
 export function createServerSession(
@@ -204,6 +210,7 @@ export function createServerSession(
     question: {} as Record<string, QuestionRequest[]>,
     message: {} as Record<string, Message[]>,
     session_message: {} as Record<string, SessionMessageInfo[]>,
+    session_queue: {} as Record<string, SessionQueuedInput[] | undefined>,
     part: {} as Record<string, Part[]>,
     part_text_accum_delta: {} as Record<string, string>,
     session_working(id: string) {
@@ -497,6 +504,7 @@ export function createServerSession(
     setData(
       produce((draft) => {
         dropSessionCaches(draft, sessionIDs)
+        sessionIDs.forEach((sessionID) => delete draft.session_queue[sessionID])
       }),
     )
     setMeta(
@@ -837,6 +845,7 @@ export function createServerSession(
 
   const sync = (sessionID: string, options?: { force?: boolean; messageLimit?: number }) => {
     touch(sessionID)
+    if (data.session_queue[sessionID] === undefined || options?.force) void loadQueue(sessionID)
     return runInflight(inflight, sessionID, async () => {
       const cached = data.message[sessionID] !== undefined && meta.limit[sessionID] !== undefined
       if (cached && data.info[sessionID] && !options?.force) return
@@ -847,6 +856,19 @@ export function createServerSession(
           : loadMessages(sessionID, options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize),
       ])
     })
+  }
+
+  // Server-held queue-delivery inputs; V1 and older V2 servers have no queue route, so they report none.
+  const loadQueue = async (sessionID: string) => {
+    if ((await options?.protocol) === "v1") {
+      setData("session_queue", sessionID, [])
+      return
+    }
+    const items = await Promise.resolve()
+      .then(() => client.v2.session.queued({ sessionID }))
+      .then((result) => (result.data?.data ?? []).map(queuedInput))
+      .catch(() => [])
+    setData("session_queue", sessionID, reconcile(items, { key: "id" }))
   }
 
   const prefetch = async (sessionID: string, limit: number) => {
@@ -940,6 +962,21 @@ export function createServerSession(
     const sessionID = event.data.sessionID
     const eventType = event.type as string
     const eventData = event.data as typeof event.data & { assistantMessageID?: string; finish?: string }
+    if (eventType === "session.next.prompt.admitted" || eventType === "session.next.prompted") {
+      const prompt = event.data as unknown as {
+        messageID: string
+        prompt: { text: string; files?: readonly unknown[] }
+        delivery?: string
+      }
+      if (eventType === "session.next.prompted")
+        setData("session_queue", sessionID, (items) => items?.filter((item) => item.id !== prompt.messageID))
+      if (eventType === "session.next.prompt.admitted" && prompt.delivery === "queue")
+        setData("session_queue", sessionID, (items = []) =>
+          items.some((item) => item.id === prompt.messageID)
+            ? items
+            : [...items, queuedInput({ id: prompt.messageID, prompt: prompt.prompt })],
+        )
+    }
     const reduction = v2.reduce(data.session_message[sessionID] ?? [], event)
     if (reduction) {
       projectV2(reduction)

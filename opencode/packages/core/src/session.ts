@@ -169,6 +169,7 @@ export interface Interface {
     delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  readonly queued: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInput.Admitted[], NotFoundError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -470,6 +471,10 @@ const layer = Layer.effect(
           }),
         ),
       ),
+      queued: Effect.fn("V2Session.queued")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionInput.listQueued(db, sessionID)
+      }),
       shell: Effect.fn("V2Session.shell")(function* () {
         return yield* new OperationUnavailableError({ operation: "shell" })
       }),

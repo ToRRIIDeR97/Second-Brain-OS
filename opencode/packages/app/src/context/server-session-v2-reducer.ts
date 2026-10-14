@@ -12,6 +12,7 @@ type NextPromptEvent = {
     sessionID: string
     messageID: string
     prompt: Pick<User, "text" | "files" | "agents">
+    delivery?: "steer" | "queue"
   }
 }
 
@@ -44,6 +45,8 @@ export function createV2SessionReducer() {
     }
     if (eventType === "session.next.prompt.admitted" || eventType === "session.next.prompted") {
       const current = event as unknown as NextPromptEvent
+      // Queued prompts stay out of the transcript until the runner promotes them (session.next.prompted).
+      if (eventType === "session.next.prompt.admitted" && current.data.delivery === "queue") return
       const created =
         typeof current.data.timestamp === "number" ? current.data.timestamp : Date.parse(current.data.timestamp)
       return append({

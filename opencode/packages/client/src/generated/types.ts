@@ -662,6 +662,33 @@ export type SessionsPromptOutput = {
   }
 }["data"]
 
+export type SessionsQueuedInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionsQueuedOutput = {
+  readonly data: ReadonlyArray<{
+    readonly admittedSeq: number
+    readonly id: string
+    readonly sessionID: string
+    readonly prompt: {
+      readonly text: string
+      readonly files?: ReadonlyArray<{
+        readonly uri: string
+        readonly mime: string
+        readonly name?: string
+        readonly description?: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+      readonly agents?: ReadonlyArray<{
+        readonly name: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    }
+    readonly delivery: "steer" | "queue"
+    readonly timeCreated: number
+    readonly promotedSeq?: number
+  }>
+}["data"]
+
 export type SessionsCompactInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionsCompactOutput = void

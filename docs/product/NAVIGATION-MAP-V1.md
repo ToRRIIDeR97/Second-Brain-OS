@@ -105,7 +105,9 @@ goes to the server-scoped thread URL on the selected server, and
 
 A draft is an unsent thread. It is stored per window with its server, thread
 directory and Project, and its composer content is kept in `drafts.sqlite`.
-Sending a draft replaces it with the new thread and opens it. On the first
+Sending a draft replaces it with the new thread and opens it, except
+`mod+alt+Enter`, which sends in the background and leaves the draft open and
+empty. On the first
 start after upgrading, drafts from the retired tab strip are imported and the
 per-window `tabs`, `tabs.recent`, `tabs.info` and `tabs.closed` keys are
 deleted.
@@ -122,6 +124,18 @@ deleted.
 | `mod+[` / `mod+]` | Back / forward |
 | `mod+k` | Command palette |
 | `mod+z` | Undo the last sidebar action while its undo toast is open (not in text fields) |
+
+Composer keys (handled inside the prompt editor, listed read-only in Settings →
+Shortcuts):
+
+| Key | Action |
+|---|---|
+| `Enter` | Send (while the agent works: steer or queue per Settings → General) |
+| `shift+Enter` | New line |
+| `mod+Enter` | Send with the opposite delivery for this message |
+| `mod+alt+Enter` | Send into a new thread in the same Project, in the background |
+| `mod+s` | Stash the prompt; restore or delete from the composer's stash menu |
+| `ArrowUp` | Previous prompt from history (empty composer) |
 
 The desktop File menu uses `Cmd+N` for a new thread, `Cmd+Shift+N` to open a
 folder as a Project and `Cmd+Alt+N` for a new window. `mod+t`, `mod+shift+t`
