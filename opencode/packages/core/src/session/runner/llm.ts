@@ -203,6 +203,8 @@ const layer = Layer.effect(
         if (promotion === "queue") {
           promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
           promoted += yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+          // The queued input was withdrawn after the runner saw it pending; there is nothing to answer.
+          if (promoted === 0) return { needsContinuation: false, step: currentStep }
         }
         if (promoted > 0) currentStep = 1
       }

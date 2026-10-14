@@ -110,6 +110,11 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+// The runner already promoted the queued input, so it can no longer be withdrawn or steered.
+export class InputStartedError extends Schema.TaggedErrorClass<InputStartedError>()("Session.InputStartedError", {
+  sessionID: SessionSchema.ID,
+  messageID: SessionMessage.ID,
+}) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
@@ -170,6 +175,14 @@ export interface Interface {
     resume?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
   readonly queued: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInput.Admitted[], NotFoundError>
+  readonly withdrawQueued: (input: {
+    sessionID: SessionSchema.ID
+    messageID: SessionMessage.ID
+  }) => Effect.Effect<void, NotFoundError | MessageNotFoundError | InputStartedError>
+  readonly steerQueued: (input: {
+    sessionID: SessionSchema.ID
+    messageID: SessionMessage.ID
+  }) => Effect.Effect<void, NotFoundError | MessageNotFoundError | InputStartedError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -474,6 +487,20 @@ const layer = Layer.effect(
       queued: Effect.fn("V2Session.queued")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* SessionInput.listQueued(db, sessionID)
+      }),
+      withdrawQueued: Effect.fn("V2Session.withdrawQueued")(function* (input) {
+        yield* result.get(input.sessionID)
+        const state = yield* SessionInput.withdraw(db, events, { sessionID: input.sessionID, id: input.messageID })
+        if (state === "withdrawn") return
+        if (state === "missing") return yield* new MessageNotFoundError(input)
+        return yield* new InputStartedError(input)
+      }),
+      steerQueued: Effect.fn("V2Session.steerQueued")(function* (input) {
+        yield* result.get(input.sessionID)
+        const state = yield* SessionInput.steer(db, events, { sessionID: input.sessionID, id: input.messageID })
+        if (state === "started") return yield* new InputStartedError(input)
+        if (state !== "steer") return yield* new MessageNotFoundError(input)
+        yield* execution.wake(input.sessionID)
       }),
       shell: Effect.fn("V2Session.shell")(function* () {
         return yield* new OperationUnavailableError({ operation: "shell" })

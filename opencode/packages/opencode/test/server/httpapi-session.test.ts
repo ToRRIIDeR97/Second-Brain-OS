@@ -667,6 +667,58 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "removes and sends queued v2 inputs",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "v2 queued actions" })
+        const enqueue = (id: string) =>
+          request(`/api/session/${session.id}/prompt`, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify({ id, prompt: { text: id }, delivery: "queue", resume: false }),
+          })
+        const queued = () =>
+          requestJson<{ data: { id: string }[] }>(`/api/session/${session.id}/queued`, { headers }).pipe(
+            Effect.map(({ data }) => data.map((item) => item.id)),
+          )
+        const remove = (id: string) => request(`/api/session/${session.id}/queued/${id}`, { method: "DELETE", headers })
+        const steer = (id: string) =>
+          request(`/api/session/${session.id}/queued/${id}/steer`, { method: "POST", headers })
+
+        yield* enqueue("msg_http_remove")
+        yield* enqueue("msg_http_steer")
+        expect(yield* queued()).toEqual(["msg_http_remove", "msg_http_steer"])
+
+        expect((yield* remove("msg_http_remove")).status).toBe(204)
+        expect((yield* remove("msg_http_remove")).status).toBe(204)
+        expect(yield* queued()).toEqual(["msg_http_steer"])
+        const missing = yield* steer("msg_http_remove")
+        expect(missing.status).toBe(404)
+        expect(yield* responseJson(missing)).toMatchObject({ _tag: "MessageNotFoundError" })
+
+        expect((yield* steer("msg_http_steer")).status).toBe(204)
+        expect(yield* queued()).toEqual([])
+        yield* pollWithTimeout(
+          requestJson<{ data: SessionMessage.Message[] }>(`/api/session/${session.id}/message`, { headers }).pipe(
+            Effect.map(({ data }) => data.find((message) => message.id === "msg_http_steer")),
+          ),
+          "Sent queued input was not promoted",
+          "10 seconds",
+        )
+        const started = yield* remove("msg_http_steer")
+        expect(started.status).toBe(409)
+        expect(yield* responseJson(started)).toEqual({
+          _tag: "ConflictError",
+          message: "Queued message already started: msg_http_steer",
+          resource: "msg_http_steer",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public unavailable errors for unfinished session mutations",
     () =>
       Effect.gen(function* () {

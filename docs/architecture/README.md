@@ -292,9 +292,35 @@ the message on `session.next.prompted`. `serverSync.session.data.session_queue`
 holds the pending list: it is loaded from `GET /api/session/:sessionID/queued`
 (unpromoted `queue` rows of `session_input`, oldest first) when a thread syncs,
 then kept current from the same two events. The follow-up dock above the
-composer lists these items. It is read-only because the server has no
-operation to withdraw a queued input or promote it to a steer. Servers without
-the route (V1 and older V2) report an empty queue. The earlier client-side
+composer lists these items, each with "Send now" and "Remove":
+
+- Remove calls `DELETE /api/session/:sessionID/queued/:messageID`. The server
+  publishes durable `session.next.prompt.withdrawn`
+  (`{ sessionID, messageID, timestamp }`); the projector settles the
+  `session_input` row by setting `promoted_seq` to the withdrawal sequence
+  without a transcript message. Repeating it is a no-op.
+- Send now calls `POST /api/session/:sessionID/queued/:messageID/steer`. The
+  server publishes durable `session.next.prompt.steered` (same fields); the
+  projector switches the row's delivery to `steer` and the session is woken, so
+  the input joins the current drain at its next steer point or starts a run
+  when idle.
+- Both projectors update only a row that is still unpromoted with `queue`
+  delivery, inside the event transaction. If the runner promoted it first, the
+  event is not stored and the route answers 409 `ConflictError` ("Queued
+  message already started"); an unknown or withdrawn input answers 404
+  `MessageNotFoundError`. A runner that selected an input before it was
+  withdrawn skips it (its `session.next.prompted` projection conflicts and is
+  dropped, and a queue turn that promoted nothing ends without a model call);
+  one steered after selection is still promoted once.
+
+The renderer drops an item from `session_queue` on either event. The actions
+go through the workspace SDK (`client.v2.session.queuedRemove/queuedSteer`)
+in `utils/server-compat.ts`: V1 servers, and V2 servers whose unmatched-route
+404 shows the routes are missing, raise `QueuedActionsUnsupportedError`, and
+the dock then hides the buttons for that thread with a toast. One action runs
+at a time (`pages/session/composer/queued-actions.ts`); other failures show an
+error toast. Servers without the list route (V1 and older V2) report an empty
+queue. The earlier client-side
 queue (`followup.v1` per-workspace store) is removed; any items still in that
 key are no longer read.
 

@@ -139,6 +139,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         )
       },
       "session.next.prompt.admitted": () => Effect.void,
+      "session.next.prompt.withdrawn": () => Effect.void,
+      "session.next.prompt.steered": () => Effect.void,
       "session.next.message.imported": (event) => adapter.appendMessage(event.data.message),
       "session.next.context.updated": (event) =>
         adapter.appendMessage(

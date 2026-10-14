@@ -319,6 +319,19 @@ describe("server session", () => {
 
     prompt("session.next.prompted", "msg_old", "queue")
     expect(store.data.session_queue.root?.map((item) => item.id)).toEqual(["msg_queued"])
+
+    prompt("session.next.prompt.admitted", "msg_later", "queue")
+    const settle = (type: string, messageID: string) =>
+      store.applyV2({
+        id: `evt_${type}_${messageID}`,
+        type,
+        data: { timestamp: 2, sessionID: "root", messageID },
+      } as unknown as OpenCodeEvent)
+    settle("session.next.prompt.withdrawn", "msg_queued")
+    expect(store.data.session_queue.root?.map((item) => item.id)).toEqual(["msg_later"])
+    settle("session.next.prompt.steered", "msg_later")
+    expect(store.data.session_queue.root).toEqual([])
+    expect(store.data.session_message.root?.some((message) => message.id === "msg_later")).toBe(false)
   })
 
   test("resolves lineage by session ID without directory", async () => {

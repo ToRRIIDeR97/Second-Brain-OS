@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
-import { eq } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -606,6 +606,172 @@ describe("SessionV2.prompt", () => {
       expect((yield* session.queued(sessionID)).map((item) => item.id)).toEqual([first.id, second.id])
       yield* SessionInput.promoteNextQueued(db, events, sessionID)
       expect((yield* session.queued(sessionID)).map((item) => item.id)).toEqual([second.id])
+    }),
+  )
+
+  const queue = (text: string) =>
+    SessionV2.Service.use((session) =>
+      session.prompt({ sessionID, prompt: Prompt.make({ text }), delivery: "queue", resume: false }),
+    )
+
+  it.effect("withdraws a queued input durably and skips it at promotion", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const first = yield* queue("Withdraw me")
+      const second = yield* queue("Keep me")
+
+      yield* session.withdrawQueued({ sessionID, messageID: first.id })
+      yield* session.withdrawQueued({ sessionID, messageID: first.id })
+
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptWithdrawn.type, 1))).toBe(1)
+      expect((yield* session.queued(sessionID)).map((item) => item.id)).toEqual([second.id])
+      expect(yield* SessionInput.pendingState(db, sessionID, first.id)).toBe("withdrawn")
+      expect(yield* SessionInput.promoteNextQueued(db, events, sessionID)).toBe(true)
+      expect(yield* SessionInput.promoteNextQueued(db, events, sessionID)).toBe(false)
+      expect((yield* session.messages({ sessionID })).map((message) => message.id)).toEqual([second.id])
+    }),
+  )
+
+  it.effect("does not resurrect a withdrawn input promoted by a stale runner", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const input = yield* queue("Raced")
+      yield* session.withdrawQueued({ sessionID, messageID: input.id })
+
+      const defect = yield* events
+        .publish(SessionEvent.Prompted, {
+          sessionID,
+          messageID: input.id,
+          timestamp: input.timeCreated,
+          prompt: input.prompt,
+          delivery: "queue",
+        })
+        .pipe(Effect.as(undefined), Effect.catchDefect(Effect.succeed))
+
+      expect(defect).toBeInstanceOf(SessionInput.LifecycleConflict)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.Prompted.type, 1))).toBe(0)
+      expect(yield* session.messages({ sessionID })).toEqual([])
+    }),
+  )
+
+  it.effect("rejects withdraw and steer once the runner promoted the input", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const input = yield* queue("Already running")
+      yield* SessionInput.promoteNextQueued(db, events, sessionID)
+
+      const withdrawn = yield* session.withdrawQueued({ sessionID, messageID: input.id }).pipe(Effect.flip)
+      const steered = yield* session.steerQueued({ sessionID, messageID: input.id }).pipe(Effect.flip)
+
+      expect(withdrawn._tag).toBe("Session.InputStartedError")
+      expect(steered._tag).toBe("Session.InputStartedError")
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptWithdrawn.type, 1))).toBe(0)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptSteered.type, 1))).toBe(0)
+      expect((yield* session.messages({ sessionID })).map((message) => message.id)).toEqual([input.id])
+    }),
+  )
+
+  it.effect("steers a queued input to the next steer point and wakes the session", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      wakeCalls.length = 0
+      const input = yield* queue("Send now")
+
+      yield* session.steerQueued({ sessionID, messageID: input.id })
+
+      expect(wakeCalls).toEqual([sessionID])
+      expect(yield* session.queued(sessionID)).toEqual([])
+      expect(yield* SessionInput.hasPending(db, sessionID, "steer")).toBe(true)
+      expect(
+        yield* SessionInput.promoteSteers(db, events, sessionID, yield* EventV2.latestSequence(db, sessionID)),
+      ).toBe(1)
+      expect((yield* session.messages({ sessionID })).map((message) => message.id)).toEqual([input.id])
+      const withdrawn = yield* session.withdrawQueued({ sessionID, messageID: input.id }).pipe(Effect.flip)
+      expect(withdrawn._tag).toBe("Session.InputStartedError")
+    }),
+  )
+
+  it.effect("promotes a steered input once when a stale runner promotes it as queued", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const input = yield* queue("Steered mid-promotion")
+      yield* session.steerQueued({ sessionID, messageID: input.id })
+
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID,
+        messageID: input.id,
+        timestamp: input.timeCreated,
+        prompt: input.prompt,
+        delivery: "queue",
+      })
+
+      expect(yield* admitted(input.id)).toHaveProperty("promotedSeq")
+      expect((yield* session.messages({ sessionID })).map((message) => message.id)).toEqual([input.id])
+    }),
+  )
+
+  it.effect("fails withdraw and steer for unknown or withdrawn inputs", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const input = yield* queue("Gone")
+      yield* session.withdrawQueued({ sessionID, messageID: input.id })
+
+      const steered = yield* session.steerQueued({ sessionID, messageID: input.id }).pipe(Effect.flip)
+      const missing = yield* session
+        .withdrawQueued({ sessionID, messageID: SessionMessage.ID.create() })
+        .pipe(Effect.flip)
+
+      expect(steered._tag).toBe("Session.MessageNotFoundError")
+      expect(missing._tag).toBe("Session.MessageNotFoundError")
+    }),
+  )
+
+  it.effect("replays withdrawn and steered inputs to the same inbox state", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const withdrawn = yield* queue("Withdrawn")
+      const steered = yield* queue("Steered")
+      yield* session.withdrawQueued({ sessionID, messageID: withdrawn.id })
+      yield* session.steerQueued({ sessionID, messageID: steered.id })
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+
+      yield* events.remove(sessionID)
+      yield* db.delete(SessionInputTable).where(eq(SessionInputTable.session_id, sessionID)).run().pipe(Effect.orDie)
+      yield* events.replayAll(
+        recorded.map((event) => ({
+          id: event.id,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data: event.data,
+        })),
+      )
+
+      expect(yield* SessionInput.pendingState(db, sessionID, withdrawn.id)).toBe("withdrawn")
+      expect(yield* SessionInput.pendingState(db, sessionID, steered.id)).toBe("steer")
     }),
   )
 
