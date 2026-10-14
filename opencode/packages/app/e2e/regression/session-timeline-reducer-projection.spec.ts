@@ -24,9 +24,18 @@ test("groups singleton and separated context operations at correct boundaries", 
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
   await expect(page.locator('[data-timeline-part-ids="prt_boundary_01_read"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-part-ids="prt_boundary_03_glob,prt_boundary_04_grep"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-part-ids="prt_boundary_06_list"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(5)
+  // A completed shell between context tools folds the whole run into one "tools" summary row.
+  const tools = page.locator(
+    '[data-timeline-part-ids="prt_boundary_03_glob,prt_boundary_04_grep,prt_boundary_05_shell,prt_boundary_06_list"]',
+  )
+  await expect(tools).toBeVisible()
+  await expect(tools.getByRole("button", { name: /^Ran 4 tool/ })).toBeVisible()
+  await expect(page.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(3)
+
+  await tools.getByRole("button", { name: /^Ran 4 tool/ }).click()
+  for (const id of ["prt_boundary_03_glob", "prt_boundary_04_grep", "prt_boundary_05_shell", "prt_boundary_06_list"]) {
+    await expect(tools.locator(`[data-timeline-part-id="${id}"]`), id).toBeVisible()
+  }
 })
 
 test("reducer-hardening: converges when idle arrives before final part and message completion", async ({ page }) => {
