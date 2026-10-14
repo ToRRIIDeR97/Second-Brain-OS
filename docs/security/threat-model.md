@@ -46,6 +46,31 @@ Keep the existing permission checks on tool execution; a user opening a note
 does not authorize instructions embedded inside it. Destructive recovery must
 preserve both canonical workspace files and session/draft profile state.
 
+## Outbound network endpoints
+
+The shipped app, desktop, and server code no longer contacts `opencode.ai`
+on its own. Removed in the T3 parity Phase 1 cleanup:
+
+- the hosted UI proxy to `app.opencode.ai` (`server/shared/ui.ts`); without
+  a bundled UI the server returns a local 404,
+- the release-notes feed (`opencode.ai/changelog.json`),
+- remote notification icons and the upstream project avatar (bundled
+  `favicon-96x96-v3.png` is used instead),
+- upgrade checks and installs in `installation/index.ts` (the service is
+  inert; the desktop app owns updates),
+- the WSL `curl https://opencode.ai/install | bash` path,
+- Go/Zen upsell links in retry actions and the upsell dialogs,
+- the `HTTP-Referer: https://opencode.ai/` header sent to providers,
+- Help menu, sidebar, and error-page links to docs, Discord, and feedback.
+
+Still outbound: the configured LLM providers (including the `opencode` Zen
+provider when the user selects it), the `models.dev` catalog, Google APIs,
+and links the user opens. `$schema` URLs in config files are identifiers, not
+fetches. Known remaining references, out of this phase's scope: the
+`opencode` CLI commands under `packages/opencode/src/cli/` (removal planned in
+Phase 8), upstream agent prompts that point the model at `opencode.ai/docs`,
+and the MCP OAuth `client_uri` metadata value.
+
 ## Harness registration
 
 A registered harness is a command that the app later runs as the user, with
