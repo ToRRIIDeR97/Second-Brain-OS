@@ -89,7 +89,7 @@ export function createSidebarController() {
     retry: false,
   }))
   const projects = createMemo<SidebarProjectItem[]>(() =>
-    (projectsQuery.data ?? [])
+    (Array.isArray(projectsQuery.data) ? projectsQuery.data : [])
       .filter((entry) => entry.project.status === "active")
       .map((entry) => ({
         id: entry.project.id,

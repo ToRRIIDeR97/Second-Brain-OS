@@ -265,7 +265,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       { ...target, migrate },
       createStore({
         sidebar: {
-          opened: false,
+          // The sidebar is the app's navigation, so it starts open.
+          opened: true,
           width: DEFAULT_SIDEBAR_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
