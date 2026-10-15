@@ -46,9 +46,13 @@ type Msg = {
 const root = path.join(import.meta.dir, "../..")
 const worker = path.join(import.meta.dir, "../fixture/effect-flock-worker.ts")
 
+// The worker imports Global; without NODE_ENV=test it would run the legacy storage migration against
+// the real home folders.
+const workerEnv = { ...process.env, NODE_ENV: "test" }
+
 function run(msg: Msg) {
   return new Promise<{ code: number; stdout: Buffer; stderr: Buffer }>((resolve) => {
-    const proc = spawn(process.execPath, [worker, JSON.stringify(msg)], { cwd: root })
+    const proc = spawn(process.execPath, [worker, JSON.stringify(msg)], { cwd: root, env: workerEnv })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
     proc.stdout?.on("data", (data) => stdout.push(Buffer.from(data)))
@@ -62,6 +66,7 @@ function run(msg: Msg) {
 function spawnWorker(msg: Msg) {
   return spawn(process.execPath, [worker, JSON.stringify(msg)], {
     cwd: root,
+    env: workerEnv,
     stdio: ["ignore", "pipe", "pipe"],
   })
 }
