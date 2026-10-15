@@ -570,17 +570,27 @@ function PromptInputV2ConfiguredSelect(props: {
 export function PromptInputV2Select(props: {
   title: string
   keybind?: string[]
-  options: Array<PromptInputV2Option & { disabled?: boolean; title?: string }>
+  // Consecutive options with the same `group` render under one labelled section.
+  options: Array<PromptInputV2Option & { disabled?: boolean; title?: string; group?: string }>
   current: string
   currentIcon?: JSX.Element
   class?: string
   control?: string
   disabled?: boolean
   capitalize?: boolean
+  footer?: { label: string; onSelect: () => void }
   onOpenChange?: (open: boolean) => void
   onSelect: (id: string) => void
 }) {
   const currentLabel = () => props.options.find((option) => option.id === props.current)?.label ?? props.current
+  const sections = createMemo(() =>
+    props.options.reduce<Array<{ group?: string; options: typeof props.options }>>((result, option) => {
+      const last = result.at(-1)
+      if (last && last.group === option.group) last.options.push(option)
+      else result.push({ group: option.group, options: [option] })
+      return result
+    }, []),
+  )
   return (
     <TooltipV2
       placement="top"
@@ -614,21 +624,39 @@ export function PromptInputV2Select(props: {
         </MenuV2.Trigger>
         <MenuV2.Portal>
           <MenuV2.Content>
-            <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
-              <For each={props.options}>
-                {(option) => (
-                  <MenuV2.RadioItem
-                    value={option.id}
-                    classList={{ capitalize: props.capitalize ?? true }}
-                    disabled={option.disabled}
-                    title={option.title}
-                    closeOnSelect
-                  >
-                    {option.label}
-                  </MenuV2.RadioItem>
-                )}
-              </For>
-            </MenuV2.RadioGroup>
+            <For each={sections()}>
+              {(section, index) => (
+                <>
+                  <Show when={index() > 0}>
+                    <MenuV2.Separator />
+                  </Show>
+                  <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
+                    <Show when={section.group}>{(group) => <MenuV2.GroupLabel>{group()}</MenuV2.GroupLabel>}</Show>
+                    <For each={section.options}>
+                      {(option) => (
+                        <MenuV2.RadioItem
+                          value={option.id}
+                          classList={{ capitalize: props.capitalize ?? true }}
+                          disabled={option.disabled}
+                          title={option.title}
+                          closeOnSelect
+                        >
+                          {option.label}
+                        </MenuV2.RadioItem>
+                      )}
+                    </For>
+                  </MenuV2.RadioGroup>
+                </>
+              )}
+            </For>
+            <Show when={props.footer}>
+              {(footer) => (
+                <>
+                  <MenuV2.Separator />
+                  <MenuV2.Item onSelect={() => footer().onSelect()}>{footer().label}</MenuV2.Item>
+                </>
+              )}
+            </Show>
           </MenuV2.Content>
         </MenuV2.Portal>
       </MenuV2>

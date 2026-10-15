@@ -53,10 +53,11 @@ describe("createSessionForServer", () => {
 })
 
 describe("listHarnessesForServer", () => {
-  test("keeps OpenCode usable when the server lacks harness discovery", () => {
+  test("keeps the Tenon Workbench loop usable when the server lacks harness discovery", () => {
     expect(fallbackHarnesses()).toEqual([
-      expect.objectContaining({ id: Harness.OpenCode, status: "available" }),
+      expect.objectContaining({ id: Harness.OpenCode, name: "Tenon Workbench", status: "available" }),
       expect.objectContaining({ id: Harness.Codex, status: "unavailable" }),
+      expect.objectContaining({ id: Harness.OpenCodeAcp, driver: Harness.AcpDriver, status: "unavailable" }),
     ])
   })
 

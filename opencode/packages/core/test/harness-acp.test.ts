@@ -63,6 +63,7 @@ describe("ACP harness", () => {
     expect(instances.map((instance) => `${instance.id}:${instance.driver}`)).toEqual([
       "opencode:opencode",
       "codex:codex",
+      "opencode-acp:acp",
       "gemini:acp",
     ])
   })
@@ -74,6 +75,7 @@ describe("ACP harness", () => {
       info: {
         harnesses: {
           opencode: entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
+          "opencode-acp": entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
           gemini: entry({ driver: "acp", name: "Gemini", config: { command: "gemini" } }),
         },
       },
@@ -82,8 +84,13 @@ describe("ACP harness", () => {
     expect(instances.map((instance) => `${instance.id}:${instance.driver}`)).toEqual([
       "opencode:opencode",
       "codex:codex",
+      "opencode-acp:acp",
       "gemini:acp",
     ])
+    expect(instances.find((instance) => instance.id === "opencode-acp")?.config).toEqual({
+      command: "opencode",
+      args: ["acp"],
+    })
   })
 
   test("a returning ACP session gets only the messages since its last turn", () => {

@@ -117,7 +117,10 @@ export const Verification = Schema.Struct({
 }).annotate({ identifier: "Harness.Verification" })
 export interface Verification extends Schema.Schema.Type<typeof Verification> {}
 
+// `opencode` is the stored ID of Tenon Workbench's in-process loop, kept so existing sessions keep
+// routing there. Upstream OpenCode runs as an external ACP harness under `opencode-acp`.
 export const OpenCode = InstanceID.make("opencode")
+export const OpenCodeAcp = InstanceID.make("opencode-acp")
 export const Codex = InstanceID.make("codex")
 export const OpenCodeDriver = DriverKind.make("opencode")
 export const CodexDriver = DriverKind.make("codex")
