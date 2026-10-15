@@ -111,7 +111,7 @@ export const Controlled = {
           style={{
             padding: "4px 10px",
             "font-size": "12px",
-            "border-radius": "6px",
+            "border-radius": "var(--v2-radius-sm)",
             border: "1px solid rgba(0,0,0,0.15)",
             background: "#fff",
             color: "#161616",

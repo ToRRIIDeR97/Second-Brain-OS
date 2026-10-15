@@ -120,7 +120,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
         class="group/prompt-input relative min-h-[96px] w-full overflow-clip rounded-[28px] bg-v2-background-bg-base"
         classList={{
           "shadow-[0_0_0_0.5px_var(--v2-border-border-muted),0_8px_24px_-12px_rgb(0_0_0/0.18)]": !props.borderUnderlay,
-          "border border-v2-icon-icon-info border-dashed": state.drag === "active",
+          "border border-v2-border-border-focus border-dashed": state.drag === "active",
         }}
         style={{
           "--dock-shell-visual-shadow": "0 0 0 0.5px var(--v2-border-border-muted), 0 8px 24px -12px rgb(0 0 0 / 0.18)",
@@ -652,7 +652,7 @@ export function PromptInputV2Popover(props: {
 }) {
   return (
     <div
-      class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-[20px] bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
+      class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-[16px] bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
       onMouseDown={(event) => event.preventDefault()}
     >
       <Show when={props.search}>
@@ -742,7 +742,7 @@ export function PromptInputV2SubmitButton(props: {
 }
 
 function PromptInputV2SuggestionIcon(props: { item: PromptInputV2Suggestion }) {
-  if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
+  if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-v2-icon-icon-accent" />
   if (props.item.kind === "command") return null
   return (
     <FileIcon

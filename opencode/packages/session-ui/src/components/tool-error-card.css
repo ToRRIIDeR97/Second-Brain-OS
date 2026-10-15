@@ -1,9 +1,20 @@
+/* Tonal danger card: the fill carries the state, so the ui card's 2px accent rail is hidden. */
 [data-component="card"][data-kind="tool-error-card"] {
   --card-pad-y: 8px;
+  --card-pad-l: 14px;
+  --card-pad-r: 12px;
   --card-line-pad: 12px;
+  --card-accent: var(--v2-state-fg-danger);
+
+  border-radius: var(--v2-radius-lg);
+  background: var(--v2-state-bg-danger);
+
+  &::before {
+    display: none;
+  }
 
   [data-slot="basic-tool-tool-title"] {
-    color: var(--v2-text-text-base);
+    color: var(--v2-state-fg-danger);
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
@@ -12,7 +23,7 @@
 
   [data-slot="collapsible-arrow"],
   [data-slot="collapsible-arrow-icon"] {
-    color: var(--v2-text-text-faint);
+    color: var(--v2-state-fg-danger);
   }
 
   > [data-component="collapsible"].tool-collapsible {
@@ -45,7 +56,7 @@
     right: 0;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--v2-duration-short) var(--v2-ease-standard);
     will-change: opacity;
   }
 
@@ -56,36 +67,12 @@
   }
 
   [data-slot="tool-error-card-content"] :where(*)::selection {
-    background: var(--v2-state-bg-danger);
+    background: var(--v2-state-border-danger);
     color: var(--v2-text-text-base);
   }
 
   [data-slot="tool-error-card-content"] :where(*)::-moz-selection {
-    background: var(--v2-state-bg-danger);
+    background: var(--v2-state-border-danger);
     color: var(--v2-text-text-base);
-  }
-}
-
-body:not([data-new-layout]) [data-component="card"][data-kind="tool-error-card"] {
-  [data-slot="basic-tool-tool-title"] {
-    color: var(--text-strong);
-  }
-
-  [data-slot="basic-tool-tool-subtitle"] {
-    color: var(--text-base);
-  }
-
-  [data-slot="collapsible-arrow"] {
-    color: var(--text-base);
-  }
-
-  [data-slot="collapsible-arrow-icon"] {
-    color: var(--icon-weaker);
-  }
-
-  [data-slot="tool-error-card-content"] :where(*)::selection,
-  [data-slot="tool-error-card-content"] :where(*)::-moz-selection {
-    background: var(--surface-critical-base);
-    color: var(--text-on-critical-base);
   }
 }

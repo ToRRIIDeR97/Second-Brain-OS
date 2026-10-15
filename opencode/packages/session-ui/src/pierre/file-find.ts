@@ -167,9 +167,9 @@ export function createFileFind(opts: CreateFileFindOptions) {
         mark.style.width = `${Math.round(rect.width)}px`
         mark.style.height = `${Math.round(rect.height)}px`
         mark.style.borderRadius = "2px"
-        mark.style.backgroundColor = active ? "var(--surface-warning-strong)" : "var(--surface-warning-base)"
+        mark.style.backgroundColor = active ? "var(--v2-state-fg-warning)" : "var(--v2-state-border-warning)"
         mark.style.opacity = active ? "0.55" : "0.35"
-        if (active) mark.style.boxShadow = "inset 0 0 0 1px var(--border-warning-base)"
+        if (active) mark.style.boxShadow = "inset 0 0 0 1px var(--v2-state-fg-warning)"
         frag.appendChild(mark)
       }
     }

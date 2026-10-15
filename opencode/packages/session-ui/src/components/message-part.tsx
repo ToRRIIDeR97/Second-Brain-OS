@@ -396,29 +396,12 @@ function agentTitle(i18n: UiI18n, type?: string) {
   return i18n.t("ui.tool.agent", { type })
 }
 
-const agentTones: Record<string, string> = {
-  ask: "var(--icon-agent-ask-base)",
-  build: "var(--icon-agent-build-base)",
-  docs: "var(--icon-agent-docs-base)",
-  plan: "var(--icon-agent-plan-base)",
-}
-
 const v2AgentTones: Record<string, string> = {
   build: "var(--v2-agent-build-solid)",
   explore: "var(--v2-agent-explore-solid)",
   plan: "var(--v2-agent-plan-solid)",
   review: "var(--v2-agent-review-solid)",
   writer: "var(--v2-agent-writer-solid)",
-}
-
-const agentThemeColors: Record<string, string> = {
-  primary: "var(--text-interactive-base)",
-  secondary: "var(--text-base)",
-  accent: "var(--icon-info-base)",
-  success: "var(--icon-success-base)",
-  warning: "var(--icon-warning-base)",
-  error: "var(--icon-critical-base)",
-  info: "var(--icon-info-base)",
 }
 
 const v2AgentThemeColors: Record<string, string> = {
@@ -432,18 +415,18 @@ const v2AgentThemeColors: Record<string, string> = {
 }
 
 const agentPalette = [
-  "var(--icon-agent-ask-base)",
-  "var(--icon-agent-build-base)",
-  "var(--icon-agent-docs-base)",
-  "var(--icon-agent-plan-base)",
+  "var(--v2-agent-build-solid)",
+  "var(--v2-agent-explore-solid)",
+  "var(--v2-agent-plan-solid)",
+  "var(--v2-agent-review-solid)",
   "var(--syntax-info)",
   "var(--syntax-success)",
   "var(--syntax-warning)",
   "var(--syntax-property)",
   "var(--syntax-constant)",
-  "var(--text-diff-add-base)",
-  "var(--text-diff-delete-base)",
-  "var(--icon-warning-base)",
+  "var(--v2-agent-writer-solid)",
+  "var(--v2-state-fg-danger)",
+  "var(--v2-state-fg-warning)",
 ]
 
 function tone(name: string) {
@@ -455,17 +438,13 @@ function tone(name: string) {
 function taskAgent(
   raw: unknown,
   list?: readonly { name: string; color?: string }[],
-): { name?: string; color?: string; v2Color?: string } {
+): { name?: string; color?: string } {
   if (typeof raw !== "string" || !raw) return {}
   const key = raw.toLowerCase()
   const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
-  const v2Tone = item?.color ? undefined : v2AgentTones[key]
-  const color = agentColor(item?.color, agentThemeColors) ?? agentTones[key] ?? tone(key)
-  const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone ?? color
   return {
     name: item?.name ?? `${raw[0]!.toUpperCase()}${raw.slice(1)}`,
-    color,
-    v2Color,
+    color: agentColor(item?.color, v2AgentThemeColors) ?? v2AgentTones[key] ?? tone(key),
   }
 }
 
@@ -1061,7 +1040,7 @@ export function ContextToolGroup(props: {
         <div data-component="context-tool-group-trigger">
           <span
             data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
+            class="min-w-0 flex items-center gap-2 text-[14px] [font-weight:500] text-v2-text-text-base"
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
@@ -1073,7 +1052,7 @@ export function ContextToolGroup(props: {
             </span>
             <span
               data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
+              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-v2-text-text-muted"
             >
               <AnimatedCountList
                 items={[
@@ -1166,14 +1145,14 @@ export function ToolGroup(props: {
         <div data-component="context-tool-group-trigger" data-variant="tools">
           <span
             data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
+            class="min-w-0 flex items-center gap-2 text-[14px] [font-weight:500] text-v2-text-text-base"
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <AnimatedCountLabel plural="secondBrain.messagePart.tools.title" count={props.parts.length} />
             </span>
             <span
               data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
+              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-v2-text-text-muted"
             >
               <AnimatedCountList
                 items={[
@@ -1391,17 +1370,17 @@ export function UserMessageDisplay(props: {
           <Show when={metaHead() || metaTail()}>
             <span data-slot="user-message-meta-wrap">
               <Show when={metaHead()}>
-                <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                <span data-slot="user-message-meta" class="text-[12px] text-v2-text-text-muted cursor-default">
                   {metaHead()}
                 </span>
               </Show>
               <Show when={metaHead() && metaTail()}>
-                <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                <span data-slot="user-message-meta-sep" class="text-[12px] text-v2-text-text-muted cursor-default">
                   {"\u00A0\u00B7\u00A0"}
                 </span>
               </Show>
               <Show when={metaTail()}>
-                <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                <span data-slot="user-message-meta-tail" class="text-[12px] text-v2-text-text-muted cursor-default">
                   {metaTail()}
                 </span>
               </Show>
@@ -1636,7 +1615,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               if (part().tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
-                    <span class="text-13-regular text-text-weak cursor-default">
+                    <span class="text-[13px] text-v2-text-text-muted cursor-default">
                       {i18n.t("ui.messagePart.questions.dismissed")}
                     </span>
                   </div>
@@ -1696,7 +1675,7 @@ export function MessageDivider(props: { label: string }) {
     <div data-component="compaction-part">
       <div data-slot="compaction-part-divider">
         <span data-slot="compaction-part-line" />
-        <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
+        <span data-slot="compaction-part-label" class="text-[12px] text-v2-text-text-muted">
           {props.label}
         </span>
         <span data-slot="compaction-part-line" />
@@ -1804,7 +1783,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
             />
             <Show when={meta()}>
-              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
+              <span data-slot="text-part-meta" class="text-[12px] text-v2-text-text-muted cursor-default">
                 {meta()}
               </span>
             </Show>
@@ -2047,7 +2026,6 @@ ToolRegistry.register({
     const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
-    const v2Tone = createMemo(() => agent().v2Color)
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
@@ -2085,8 +2063,7 @@ ToolRegistry.register({
       <div
         data-component="task-tool-card"
         style={{
-          "--task-agent-color": v2Tone(),
-          "--task-agent-legacy-color": tone(),
+          "--task-agent-color": tone(),
         }}
       >
         <div data-component="task-tool-surface">
@@ -2102,10 +2079,10 @@ ToolRegistry.register({
                   </Show>
                 }
               >
-                <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
+                <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--v2-icon-icon-accent)" }}>
                   <Show when={newLayout()} fallback={<Spinner />}>
                     <SessionProgressIndicatorV2
-                      style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                      style={{ color: tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
                     />
                   </Show>
                 </span>
