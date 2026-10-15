@@ -10,6 +10,8 @@ import { createHomeScrollController } from "@/pages/home/home-scroll-controller"
 import { createHomeSessionSearchController } from "@/pages/home/home-session-search-controller"
 import { createHomeSessionsController } from "@/pages/home/home-sessions-controller"
 import { HomeSessions } from "@/pages/home/home-sessions"
+import { getRelativeTime } from "@/utils/time"
+import { agentRuns, agentRunStatus } from "./activity-runs"
 
 export default function ActivityPage() {
   const language = useLanguage()
@@ -32,6 +34,12 @@ export default function ActivityPage() {
     })
   })
   const changes = createMemo(() => sessions.data.records().filter((record) => (record.session.summary?.files ?? 0) > 0))
+  const runs = createMemo(() => {
+    const data = home.server.focusedSync().session.data
+    return agentRuns(sessions.data.records(), (record) =>
+      agentRunStatus(data.session_status[record.session.id], data.permission[record.session.id]?.length ?? 0),
+    )
+  })
 
   return (
     <PageFrame labelledBy="activity-title" class="flex flex-col">
@@ -146,7 +154,73 @@ export default function ActivityPage() {
             </Show>
           </div>
         </Show>
-        <Show when={view() === "runs" || view() === "history"}>
+        <Show when={view() === "runs"}>
+          <div class="h-full overflow-y-auto px-3 pb-6 pt-2 sm:px-6">
+            <Show
+              when={runs().length > 0}
+              fallback={
+                <p class="py-16 text-center text-[13px] text-v2-text-text-faint">
+                  {language.t("secondBrain.activity.runsEmpty")}
+                </p>
+              }
+            >
+              <ul
+                class="mx-auto flex max-w-[840px] flex-col gap-1"
+                aria-label={language.t("secondBrain.activity.view.runs")}
+              >
+                <For each={runs()}>
+                  {(run) => (
+                    <li>
+                      <button
+                        type="button"
+                        class={pageRowClass}
+                        onClick={() => sessions.session.open(run.record.session)}
+                      >
+                        <span
+                          classList={{
+                            "size-2 shrink-0 rounded-full": true,
+                            "bg-v2-icon-icon-accent animate-[running-pulse_1.6s_var(--v2-ease-standard)_infinite] motion-reduce:animate-none":
+                              run.status === "running",
+                            "bg-v2-state-fg-warning": run.status === "approval" || run.status === "retrying",
+                          }}
+                        />
+                        <span class="min-w-0 flex-1">
+                          <span class="block truncate text-[13px] text-v2-text-text-base [font-weight:470]">
+                            {run.record.session.title}
+                          </span>
+                          <span class="block truncate text-[12px] text-v2-text-text-faint">
+                            {[
+                              run.record.projectName,
+                              run.record.session.agent,
+                              getRelativeTime(new Date(run.record.session.time.updated).toISOString(), language.t),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                        <Show when={run.status}>
+                          {(status) => (
+                            <span
+                              classList={{
+                                "shrink-0 rounded-full px-2 py-0.5 text-[11px]": true,
+                                "bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container":
+                                  status() === "running",
+                                "bg-v2-state-bg-warning text-v2-state-fg-warning": status() !== "running",
+                              }}
+                            >
+                              {language.t(`secondBrain.activity.run.${status()}`)}
+                            </span>
+                          )}
+                        </Show>
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
+        </Show>
+        <Show when={view() === "history"}>
           <ScrollView
             class="h-full [container-type:size]"
             thumbContainer={scroll.viewport.thumbTrack}

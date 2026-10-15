@@ -1,11 +1,11 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { type Accessor, createMemo, createSignal, For, Show, Suspense } from "solid-js"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
@@ -150,7 +150,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                 variant="ghost-muted"
                 size="normal"
                 icon="edit"
-                class="pointer-events-auto h-7 px-2 [font-weight:530]"
+                class="pointer-events-auto [font-weight:530]"
                 onClick={props.onCreateSession}
               >
                 {props.language.t("command.session.new")}
@@ -267,7 +267,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
           <div
             data-component="home-session-search-panel"
             class={`
-              absolute flex flex-col overflow-hidden rounded-[20px]
+              absolute flex flex-col overflow-hidden rounded-[24px]
               bg-v2-background-bg-base shadow-[var(--v2-elevation-floating)]
             `}
             style={{ top: "-6px", left: "-6px", width: "calc(100% + 12px)" }}
@@ -278,7 +278,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                   when={!props.searchLoading()}
                   fallback={
                     <div class="flex items-center justify-center px-4 py-3 text-v2-text-text-muted [font-weight:440]">
-                      <Spinner class="size-4" />
+                      <LoaderV2 />
                     </div>
                   }
                 >

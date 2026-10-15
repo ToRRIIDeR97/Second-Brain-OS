@@ -13,6 +13,7 @@ import {
   type SlashCommandRange,
   type TextEdit,
 } from "./note-editor-commands"
+import { useLanguage } from "@/context/language"
 
 type EditorMode = "write" | "split" | "preview"
 type SplitOrientation = "side-by-side" | "stacked"
@@ -95,6 +96,7 @@ const toolbarCommands = noteEditorCommands.filter((command) =>
 const insertCommands = noteEditorCommands.filter((command) => !toolbarCommands.includes(command))
 
 export function NoteEditor(props: NoteEditorProps) {
+  const language = useLanguage()
   const label = <K extends keyof Required<NoteEditorLabels>>(key: K) => props.labels?.[key] ?? defaults[key]
   const commandLabel = (command: (typeof noteEditorCommands)[number]) =>
     props.commandLabel?.(command.id) ?? command.label
@@ -238,7 +240,7 @@ export function NoteEditor(props: NoteEditorProps) {
   return (
     <section
       classList={{
-        "flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] bg-v2-background-bg-base shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]": true,
+        "flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-v2-background-bg-base shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]": true,
         relative: !fullscreen(),
         "fixed inset-3 z-50 !rounded-[24px] shadow-2xl": fullscreen(),
       }}
@@ -306,7 +308,7 @@ export function NoteEditor(props: NoteEditorProps) {
                 size="large"
                 aria-label={orientation() === "side-by-side" ? label("stacked") : label("sideBySide")}
                 aria-pressed={orientation() === "stacked"}
-                icon={<Icon name={orientation() === "side-by-side" ? "layout-bottom" : "layout-left"} size="small" />}
+                icon={<Icon name={orientation() === "side-by-side" ? "unified" : "split"} size="small" />}
                 onClick={() => setOrientation((value) => (value === "side-by-side" ? "stacked" : "side-by-side"))}
               />
             </TooltipV2>
@@ -349,7 +351,10 @@ export function NoteEditor(props: NoteEditorProps) {
       <Show
         when={!props.loading}
         fallback={
-          <div class="flex flex-1 items-center justify-center text-[13px] text-v2-text-text-faint">Loading...</div>
+          <div class="flex flex-1 items-center justify-center text-[13px] text-v2-text-text-faint">
+            {language.t("common.loading")}
+            {language.t("common.loading.ellipsis")}
+          </div>
         }
       >
         <div

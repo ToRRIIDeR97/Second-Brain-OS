@@ -161,6 +161,9 @@ folder as a Project) and `opencode://new-session?directory=<path>&prompt=<text>`
 - **Calendar** shows events and tasks; account setup lives in Settings.
 - **Notes** holds global notes and Project notes.
 - **Activity** lists threads needing attention, agent runs, changes and
-  history.
+  history. Agent runs shows recent threads with active runs first and a
+  Running, Waiting for approval or Retrying status; finished and failed runs
+  both read as idle, so they carry no status. History is the full searchable
+  thread list.
 - **Settings** contains General, Shortcuts, Servers, Providers, Models and
   Harnesses.

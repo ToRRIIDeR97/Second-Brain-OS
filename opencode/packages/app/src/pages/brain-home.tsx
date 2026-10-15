@@ -170,7 +170,7 @@ export default function BrainHomePage() {
           <IconButtonV2
             variant="ghost"
             size="large"
-            class="!size-9 !rounded-full"
+            class="!size-9"
             aria-label={language.t("secondBrain.home.openWorkspace")}
             icon={<Icon name="folder-add-left" size="small" />}
             onClick={() => command.trigger("project.open")}
@@ -244,7 +244,7 @@ export default function BrainHomePage() {
                 type="submit"
                 variant="contrast"
                 size="large"
-                class="!size-10 !rounded-full"
+                class="!size-10"
                 aria-label={language.t("secondBrain.home.start")}
                 icon={<Icon name="arrow-up" size="small" />}
                 disabled={!state.prompt.trim() || state.starting || harnessQuery.isPending}
