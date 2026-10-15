@@ -126,6 +126,7 @@
 <rect class="store" x="760" y="631" width="200" height="56" rx="6"/>
 <text x="770" y="649" text-anchor="start" class="t">auth.json (XDG data)</text>
 <text x="770" y="665" text-anchor="start" class="s">provider credentials</text>
+<text x="770" y="681" text-anchor="start" class="s">data/tenon-workbench</text>
 <rect class="ext" x="20" y="705" width="200" height="60" rx="6"/>
 <text x="30" y="723" text-anchor="start" class="t">Google APIs</text>
 <text x="30" y="739" text-anchor="start" class="s">Calendar v3, Tasks v1</text>
@@ -134,7 +135,8 @@
 <text x="350" y="739" text-anchor="start" class="s">child process</text>
 <rect class="proc" x="510" y="705" width="160" height="60" rx="6"/>
 <text x="520" y="723" text-anchor="start" class="t">ACP agents</text>
-<text x="520" y="739" text-anchor="start" class="s">registered commands</text>
+<text x="520" y="739" text-anchor="start" class="s">opencode acp (PATH),</text>
+<text x="520" y="755" text-anchor="start" class="s">registered commands</text>
 <rect class="ext" x="690" y="705" width="190" height="60" rx="6"/>
 <text x="700" y="723" text-anchor="start" class="t">LLM provider APIs</text>
 <text x="700" y="739" text-anchor="start" class="s">opencode driver</text>

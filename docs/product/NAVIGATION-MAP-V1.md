@@ -148,8 +148,8 @@ keep their own `mod+w`.
 
 ## Deep links
 
-The app shell handles `opencode://open-project?directory=<path>` (opens the
-folder as a Project) and `opencode://new-session?directory=<path>&prompt=<text>`
+The app shell handles `tenon://open-project?directory=<path>` (opens the
+folder as a Project) and `tenon://new-session?directory=<path>&prompt=<text>`
 (opens a draft in that folder's Project, or in the folder itself).
 
 ## Pages

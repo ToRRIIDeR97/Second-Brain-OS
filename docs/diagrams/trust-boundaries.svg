@@ -103,7 +103,7 @@
 <text x="330" y="334" text-anchor="start" class="s">plan agent denies edits</text>
 <rect class="store" x="320" y="364" width="220" height="70" rx="6"/>
 <text x="330" y="382" text-anchor="start" class="t">Secrets at rest</text>
-<text x="330" y="398" text-anchor="start" class="s">auth.json (XDG data)</text>
+<text x="330" y="398" text-anchor="start" class="s">auth.json (data/tenon-workbench)</text>
 <text x="330" y="414" text-anchor="start" class="s">SQLite profile, harnesses.json</text>
 <rect class="zone" x="680" y="70" width="300" height="150" rx="10"/>
 <text x="690" y="86" text-anchor="start" class="zonet">Workspace filesystem</text>
@@ -116,7 +116,8 @@
 <text x="690" y="266" text-anchor="start" class="zonet">Harness child processes (run as user)</text>
 <rect class="proc" x="700" y="280" width="260" height="64" rx="6"/>
 <text x="710" y="298" text-anchor="start" class="t">Codex / ACP agents</text>
-<text x="710" y="314" text-anchor="start" class="s">own tools; ask via request_permission</text>
+<text x="710" y="314" text-anchor="start" class="s">incl. upstream OpenCode (opencode acp)</text>
+<text x="710" y="330" text-anchor="start" class="s">own tools; ask via request_permission</text>
 <rect class="proc" x="700" y="354" width="260" height="60" rx="6"/>
 <text x="710" y="372" text-anchor="start" class="t">Filtered environment</text>
 <text x="710" y="388" text-anchor="start" class="s">allowlist + per-harness env</text>
