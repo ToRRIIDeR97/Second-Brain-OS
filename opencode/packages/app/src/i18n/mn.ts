@@ -705,7 +705,6 @@ export const dict = {
   "session.new.workspace.existing": "Ажлын талбар…",
   "session.new.git.none": "Үгүй Git",
   "session.new.lastModified": "Сүүлд өөрчилсөн",
-  "session.header.search.placeholder": "Хайх {{project}}",
   "session.header.searchFiles": "Файл хайх",
   "session.header.openIn": "Нээх",
   "session.header.open.action": "Нээх {{app}}",
@@ -869,7 +868,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Навигацийн удирдлага",
   "settings.general.row.showNavigation.description":
     "Ширээний гарчгийн мөрөнд буцах болон урагшлах товчлууруудыг харуул",
-  "settings.general.row.showSearch.title": "Командын палитр",
   "settings.general.row.showTerminal.title": "Терминал",
   "settings.general.row.showTerminal.description": "Ширээний гарчгийн мөрөнд терминалын товчлуурыг харуул",
   "settings.general.row.showStatus.title": "Серверийн төлөв",

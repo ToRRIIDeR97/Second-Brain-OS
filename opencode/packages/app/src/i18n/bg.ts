@@ -705,7 +705,6 @@ export const dict = {
   "session.new.workspace.existing": "Работно пространство…",
   "session.new.git.none": "Не Git",
   "session.new.lastModified": "Последна промяна",
-  "session.header.search.placeholder": "Търсене {{project}}",
   "session.header.searchFiles": "Търсене на файлове",
   "session.header.openIn": "Отвори в",
   "session.header.open.action": "Отворете {{app}}",
@@ -869,7 +868,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Контроли за навигация",
   "settings.general.row.showNavigation.description":
     "Показване на бутоните за връщане назад и напред в заглавната лента на работния плот",
-  "settings.general.row.showSearch.title": "Командна палитра",
   "settings.general.row.showTerminal.title": "Терминал",
   "settings.general.row.showTerminal.description": "Покажете бутона на терминала в заглавната лента на работния плот",
   "settings.general.row.showStatus.title": "Състояние на сървъра",

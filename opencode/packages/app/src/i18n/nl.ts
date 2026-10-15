@@ -705,7 +705,6 @@ export const dict = {
   "session.new.workspace.existing": "Werkruimte…",
   "session.new.git.none": "Geen Git",
   "session.new.lastModified": "Laatst gewijzigd",
-  "session.header.search.placeholder": "Zoek {{project}}",
   "session.header.searchFiles": "Zoek bestanden",
   "session.header.openIn": "Openen in",
   "session.header.open.action": "Open {{app}}",
@@ -869,7 +868,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Navigatiebediening",
   "settings.general.row.showNavigation.description":
     "Toon de knoppen Vorige en Volgende in de titelbalk van de desktop-app",
-  "settings.general.row.showSearch.title": "Commandopalet",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Toon de terminalknop in de titelbalk van de desktop-app",
   "settings.general.row.showStatus.title": "Serverstatus",

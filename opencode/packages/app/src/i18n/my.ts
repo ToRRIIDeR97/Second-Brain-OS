@@ -706,7 +706,6 @@ export const dict = {
   "session.new.workspace.existing": "အလုပ်နေရာ…",
   "session.new.git.none": "Git မရှိပါ။",
   "session.new.lastModified": "နောက်ဆုံးမွမ်းမံထားသည်။",
-  "session.header.search.placeholder": "{{project}} ကိုရှာပါ။",
   "session.header.searchFiles": "ဖိုင်များကို ရှာဖွေပါ။",
   "session.header.openIn": "ဖွင့်ပါ။",
   "session.header.open.action": "{{app}} ကိုဖွင့်ပါ။",
@@ -873,7 +872,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "လမ်းညွှန်မှု ထိန်းချုပ်မှုများ",
   "settings.general.row.showNavigation.description":
     "ဒက်စ်တော့ ခေါင်းစဉ်ဘားတွင် နောက်နှင့် ရှေ့သို့ ခလုတ်များကို ပြပါ။",
-  "settings.general.row.showSearch.title": "အမိန့်များစာရင်း",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "ဒက်စ်တော့ခေါင်းစဉ်ဘားရှိ terminal ခလုတ်ကိုပြသပါ။",
   "settings.general.row.showStatus.title": "ဆာဗာအခြေအနေ",

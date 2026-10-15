@@ -383,18 +383,6 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2 title={language.t("settings.general.row.showSearch.title")}>
-          <div data-action="settings-show-search">
-            <Switch
-              checked={settings.general.showSearch()}
-              onChange={(checked) => settings.general.setShowSearch(checked)}
-              hideLabel
-            >
-              {language.t("settings.general.row.showSearch.title")}
-            </Switch>
-          </div>
-        </SettingsRowV2>
-
         <SettingsRowV2 title={language.t("settings.general.row.showStatus.title")}>
           <div data-action="settings-show-status">
             <Switch

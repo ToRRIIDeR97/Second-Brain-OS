@@ -707,7 +707,6 @@ export const dict = {
   "session.new.workspace.existing": "Espai de treball…",
   "session.new.git.none": "Sense Git",
   "session.new.lastModified": "Última modificació",
-  "session.header.search.placeholder": "Cerca {{project}}",
   "session.header.searchFiles": "Cerca fitxers",
   "session.header.openIn": "Obre dins",
   "session.header.open.action": "Obre {{app}}",
@@ -870,7 +869,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Controls de navegació",
   "settings.general.row.showNavigation.description":
     "Mostra els botons enrere i endavant a la barra de títol de l'escriptori",
-  "settings.general.row.showSearch.title": "Paleta de comandaments",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Mostra el botó del terminal a la barra de títol de l'escriptori",
   "settings.general.row.showStatus.title": "Estat del servidor",

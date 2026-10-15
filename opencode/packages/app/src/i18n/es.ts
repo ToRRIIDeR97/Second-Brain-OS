@@ -754,7 +754,6 @@ export const dict = {
   "session.new.git.none": "Sin Git",
   "session.new.lastModified": "Última modificación",
 
-  "session.header.search.placeholder": "Buscar {{project}}",
   "session.header.searchFiles": "Buscar archivos",
   "session.header.openIn": "Abrir en",
   "session.header.open.action": "Abrir {{app}}",
@@ -857,7 +856,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Controles de navegación",
   "settings.general.row.showNavigation.description":
     "Mostrar los botones para retroceder y avanzar en la barra de título de la aplicación de escritorio",
-  "settings.general.row.showSearch.title": "Paleta de comandos",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Mostrar el botón del terminal en la barra de título",
   "settings.general.row.showStatus.title": "Estado del servidor",

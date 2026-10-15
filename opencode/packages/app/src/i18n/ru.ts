@@ -751,7 +751,6 @@ export const dict = {
   "session.new.git.none": "Нет Git",
   "session.new.lastModified": "Последнее изменение",
 
-  "session.header.search.placeholder": "Поиск {{project}}",
   "session.header.searchFiles": "Поиск файлов",
   "session.header.openIn": "Открыть в",
   "session.header.open.action": "Открыть {{app}}",
@@ -855,7 +854,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Элементы навигации",
   "settings.general.row.showNavigation.description":
     "Показывать кнопки «Назад» и «Вперёд» в строке заголовка приложения",
-  "settings.general.row.showSearch.title": "Палитра команд",
   "settings.general.row.showTerminal.title": "Терминал",
   "settings.general.row.showTerminal.description": "Показывать кнопку терминала в строке заголовка приложения",
   "settings.general.row.showStatus.title": "Состояние сервера",

@@ -703,7 +703,6 @@ export const dict = {
   "session.new.workspace.existing": "Ish maydoni…",
   "session.new.git.none": "Git yo'q",
   "session.new.lastModified": "Oxirgi tahrirlangan",
-  "session.header.search.placeholder": "Qidiruv {{project}}",
   "session.header.searchFiles": "Fayllarni qidirish",
   "session.header.openIn": "Ochish",
   "session.header.open.action": "{{app}}-ni oching",
@@ -868,7 +867,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Navigatsiya boshqaruvlari",
   "settings.general.row.showNavigation.description":
     "Ish stolining sarlavha satrida orqaga va oldinga tugmalarini ko'rsating",
-  "settings.general.row.showSearch.title": "Buyruqlar palitrasi",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Ish stolining sarlavha satrida terminal tugmachasini ko'rsating",
   "settings.general.row.showStatus.title": "Server holati",

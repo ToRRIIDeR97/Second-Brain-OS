@@ -752,7 +752,6 @@ export const dict = {
   "session.new.git.none": "Git yok",
   "session.new.lastModified": "Son değişiklik",
 
-  "session.header.search.placeholder": "{{project}} ara",
   "session.header.searchFiles": "Dosya ara",
   "session.header.openIn": "Aç",
   "session.header.open.action": "{{app}} ile aç",
@@ -858,7 +857,6 @@ export const dict = {
   "settings.general.row.showFileTree.title": "Dosya ağacı",
   "settings.general.row.showNavigation.title": "Gezinme denetimleri",
   "settings.general.row.showNavigation.description": "Masaüstü başlık çubuğunda geri ve ileri düğmelerini göster",
-  "settings.general.row.showSearch.title": "Komut paleti",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Masaüstü başlık çubuğunda terminal düğmesini göster",
   "settings.general.row.showStatus.title": "Sunucu durumu",

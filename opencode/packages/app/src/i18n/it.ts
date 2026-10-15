@@ -621,7 +621,6 @@ export const dict = {
   "session.new.workspace.existing": "Area di lavoro...",
   "session.new.git.none": "Senza Git",
   "session.new.lastModified": "Ultima modifica",
-  "session.header.search.placeholder": "Cerca {{project}}",
   "session.header.searchFiles": "Cerca file",
   "session.header.openIn": "Apri in",
   "session.header.open.action": "Apri {{app}}",
@@ -784,7 +783,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Controlli di navigazione",
   "settings.general.row.showNavigation.description":
     "Mostra i pulsanti Avanti e Indietro nella barra del titolo del desktop",
-  "settings.general.row.showSearch.title": "Palette dei comandi",
   "settings.general.row.showTerminal.title": "Terminale",
   "settings.general.row.showTerminal.description":
     "Mostra il pulsante del terminale nella barra del titolo del desktop",

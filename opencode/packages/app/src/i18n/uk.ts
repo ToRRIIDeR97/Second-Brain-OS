@@ -778,7 +778,6 @@ export const dict = {
   "session.new.git.none": "Немає Git",
   "session.new.lastModified": "Востаннє змінено",
 
-  "session.header.search.placeholder": "Пошук {{project}}",
   "session.header.searchFiles": "Пошук файлів",
   "session.header.openIn": "Відкрити в",
   "session.header.open.action": "Відкрити {{app}}",
@@ -955,7 +954,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Елементи навігації",
   "settings.general.row.showNavigation.description":
     "Показувати кнопки назад і вперед на панелі заголовка десктопного застосунку",
-  "settings.general.row.showSearch.title": "Палітра команд",
   "settings.general.row.showTerminal.title": "Термінал",
   "settings.general.row.showTerminal.description":
     "Показувати кнопку термінала на панелі заголовка десктопного застосунку",
