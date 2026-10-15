@@ -4,7 +4,7 @@ import { useSync } from "@/context/sync"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { findLast } from "@opencode-ai/core/util/array"
 import { same } from "@/utils/same"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { AccordionV2 } from "@opencode-ai/ui/v2/accordion-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
@@ -400,7 +400,7 @@ export function SessionContextTab() {
               {language.t("context.rawMessages.title")}
             </div>
             <ButtonV2 variant="outline" class="gap-1.5" onClick={exportSession}>
-              <Icon name="download" size="small" />
+              <Icon name="download" />
               <span>{language.t("context.export.session")}</span>
             </ButtonV2>
           </div>

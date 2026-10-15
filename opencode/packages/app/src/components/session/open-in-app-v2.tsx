@@ -1,6 +1,5 @@
 import { For, Show } from "solid-js"
 import { AppIcon } from "@opencode-ai/ui/app-icon"
-import { Icon } from "@opencode-ai/ui/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
@@ -86,7 +85,7 @@ export function OpenInAppV2(props: { directory: () => string }) {
                   state.copyPath()
                 }}
               >
-                <Icon name="copy" size="small" class="text-icon-weak" />
+                <IconV2 name="outline-copy" class="text-v2-icon-icon-muted" />
                 {language.t("session.header.open.copyPath")}
               </MenuV2.Item>
             </MenuV2.Content>
