@@ -1,4 +1,4 @@
-"""Render the Tenon Workbench A2 mark into every icon file of the desktop and web app.
+"""Render the Tenon Workbench mark into every icon file of the desktop and web app.
 
 Usage, from the repository root: python opencode/packages/desktop/scripts/render-icons.py .
 Requires Python 3 with Pillow. Not part of the build; rerun only when the mark changes.
@@ -21,18 +21,27 @@ def mix(fg, bg, a):
     return tuple(round(f * a + b * (1 - a)) for f, b in zip(fg, bg))
 
 
+# The right half's two tabs sit in matching slots cut into the left half.
+# Each tab: centre y, tip x, half-width TAB; the slot leaves a GAP all round it.
+TABS = [(45, 47), (71, 43)]
+TAB = 4
+GAP = 4.5
+
+
 def glyph(draw, s, ox, oy, tile, fg, knock):
-    """Draw the two lobes and their grooves. s = px per unit, (ox, oy) = origin in px."""
+    """Draw the two interlocking halves. s = px per unit, (ox, oy) = origin in px."""
     p = lambda x, y: (ox + x * s, oy + y * s)
     r = 18 * s
+    right = mix(fg, tile, 0.6) + (255,)
     draw.rounded_rectangle([p(26, 28), p(58, 88)], r, fill=fg + (255,), corners=(True, False, False, True))
-    draw.rounded_rectangle([p(64, 34), p(94, 92)], r, fill=mix(fg, tile, 0.6) + (255,), corners=(False, True, True, False))
-    w = 5 * s
-    for (x1, y1), (x2, y2) in [((58, 49), (45, 49)), ((58, 67), (40, 67)), ((64, 63), (79, 63))]:
-        a, b = p(x1, y1), p(x2, y2)
-        draw.line([a, b], fill=knock, width=round(w))
-        for cx, cy in (a, b):
-            draw.ellipse([cx - w / 2, cy - w / 2, cx + w / 2, cy + w / 2], fill=knock)
+    slot = TAB + GAP
+    for c, tip in TABS:
+        # Slot: stadium from the tab tip minus the gap, running past the seam so its mouth stays square.
+        draw.rounded_rectangle([p(tip - GAP, c - slot), p(58 + 2 * slot, c + slot)], slot * s, fill=knock)
+    draw.rounded_rectangle([p(64, 34), p(94, 92)], r, fill=right, corners=(False, True, True, False))
+    for c, tip in TABS:
+        # Tab: stadium from its tip into the right half's body.
+        draw.rounded_rectangle([p(tip, c - TAB), p(66 + 2 * TAB, c + TAB)], TAB * s, fill=right)
 
 
 def render(size, tile, fg, kind="squircle"):

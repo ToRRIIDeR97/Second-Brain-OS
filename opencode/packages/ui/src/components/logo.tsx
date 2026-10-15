@@ -1,16 +1,17 @@
 import { type ComponentProps } from "solid-js"
 
-// Tenon Workbench mark: two interlocking halves on a rounded tile, drawn on a 120-unit grid.
+// Tenon Workbench mark on a 120-unit grid: the right half's two tabs sit in matching slots in the left half.
 const MarkShapes = () => (
   <>
     <rect width="120" height="120" rx="32" fill="var(--v2-background-bg-accent, #3b5cf6)" />
-    <path d="M58 28H44a18 18 0 0 0-18 18v24a18 18 0 0 0 18 18h14z" fill="#ffffff" />
-    <path d="M64 34h12a18 18 0 0 1 18 18v22a18 18 0 0 1-18 18H64z" fill="#ffffff" opacity=".6" />
     <path
-      d="M58 49H45M58 67H40M64 63h15"
-      stroke="var(--v2-background-bg-accent, #3b5cf6)"
-      stroke-width="5"
-      stroke-linecap="round"
+      d="M58 28H44a18 18 0 0 0-18 18v24a18 18 0 0 0 18 18h14V79.5H47a8.5 8.5 0 0 1 0-17H58V53.5H51a8.5 8.5 0 0 1 0-17H58z"
+      fill="#ffffff"
+    />
+    <path
+      d="M64 34h12a18 18 0 0 1 18 18v22a18 18 0 0 1-18 18H64V75H47a4 4 0 0 1 0-8H64V49H51a4 4 0 0 1 0-8H64z"
+      fill="#ffffff"
+      opacity=".6"
     />
   </>
 )

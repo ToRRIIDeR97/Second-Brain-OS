@@ -3,8 +3,9 @@
 Each channel folder (`dev`, `beta`, `prod`) holds the icon set that
 `scripts/copy-icons.ts` copies into `resources/icons` before packaging.
 
-The source is the Tenon Workbench mark in `tenon-mark.svg`: two interlocking
-halves on a rounded tile, drawn on a 120-unit grid. `scripts/render-icons.py`
+The source is the Tenon Workbench mark in `tenon-mark.svg`: two halves whose
+tabs and slots interlock, on a rounded tile, drawn on a 120-unit grid.
+`scripts/render-icons.py`
 renders every PNG, `icon.ico` and `icon.icns` in the three channel folders, and
 the web favicons in `packages/app/public`, from the same geometry:
 
