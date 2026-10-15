@@ -212,7 +212,19 @@ const layer = Layer.effect(
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
       const driver = harnesses.driver(session.harnessInstanceID)
       const usesHostModel = driver === Harness.OpenCodeDriver
-      const model = usesHostModel ? yield* models.resolve(session) : harnessRequestModel(session)
+      const model = usesHostModel
+        ? yield* models.resolve(session).pipe(
+            // Resolution fails before the provider publisher exists; record a failed step so the
+            // Session shows the error instead of waiting for a reply that never starts.
+            Effect.tapError((error) =>
+              createLLMEventPublisher(events, {
+                sessionID: session.id,
+                agent: agent.id,
+                model: session.model ?? { id: ModelV2.ID.make("none"), providerID: ProviderV2.ID.make("none") },
+              }).failAssistant(error.message),
+            ),
+          )
+        : harnessRequestModel(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
