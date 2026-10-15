@@ -36,7 +36,7 @@ export function SessionRevertDock(props: {
   return (
     <div
       data-component="session-revert-dock"
-      class="w-full overflow-hidden rounded-[24px] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
+      class="w-full overflow-hidden rounded-[24px] bg-v2-background-bg-layer-01"
     >
       <div
         class="flex h-[42px] items-center gap-2 pl-5 pr-3"
@@ -65,6 +65,7 @@ export function SessionRevertDock(props: {
             icon={<IconV2 name="outline-chevron-down" size="small" />}
             size="large"
             variant="ghost-muted"
+            class="transition-transform duration-300 ease-standard motion-reduce:transition-none"
             style={{ transform: `rotate(${store.collapsed ? 180 : 0}deg)` }}
             onMouseDown={(event) => {
               event.preventDefault()

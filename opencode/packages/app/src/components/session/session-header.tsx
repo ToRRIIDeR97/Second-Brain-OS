@@ -1,7 +1,4 @@
-import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -38,7 +35,7 @@ export function SessionHeader() {
     if (current) return current.name || getFilename(current.worktree)
     return getFilename(projectDirectory())
   })
-  const hotkey = createMemo(() => command.keybind("file.open"))
+  const hotkey = createMemo(() => command.keybindParts("file.open"))
   const search = settings.visibility.search
   const status = settings.visibility.status
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -68,30 +65,22 @@ export function SessionHeader() {
       <Show when={search() && centerMount()} keyed>
         {(mount) => (
           <Portal mount={mount}>
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="small"
-              class="hidden md:flex w-[240px] max-w-full min-w-0 items-center gap-2 justify-between !rounded-full !px-3.5 bg-v2-background-bg-layer-01 shadow-[0_0_0_0.5px_var(--v2-border-border-muted)] cursor-default"
+              class="hidden md:flex h-7 w-[320px] max-w-full min-w-0 items-center gap-2 rounded-full bg-v2-background-bg-layer-01 pl-3 pr-1.5 text-v2-text-text-faint transition-colors duration-150 ease-standard hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
-              <div class="flex min-w-0 flex-1 items-center overflow-visible">
-                <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
-                  {language.t("session.header.search.placeholder", {
-                    project: name(),
-                  })}
-                </span>
-              </div>
-
-              <Show when={hotkey()} keyed>
-                {(keybind) => (
-                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0 text-text-weaker">
-                    {keybind}
-                  </Keybind>
-                )}
+              <IconV2 name="magnifying-glass" size="small" class="shrink-0" />
+              <span class="min-w-0 flex-1 truncate text-left text-[12px]">
+                {language.t("session.header.search.placeholder", {
+                  project: name(),
+                })}
+              </span>
+              <Show when={hotkey().length > 0}>
+                <KeybindV2 keys={hotkey()} variant="ghost" class="shrink-0" />
               </Show>
-            </Button>
+            </button>
           </Portal>
         )}
       </Show>
@@ -124,9 +113,9 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
     <div class="flex items-center gap-1">
       <Show when={props.state.statusVisible}>
-        <Tooltip placement="bottom" value={props.state.statusLabel}>
+        <TooltipV2 class="shrink-0" placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
-        </Tooltip>
+        </TooltipV2>
       </Show>
       <TooltipV2
         class="shrink-0"

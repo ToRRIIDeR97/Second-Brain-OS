@@ -5,10 +5,9 @@ import { checksum } from "@opencode-ai/core/util/encode"
 import { findLast } from "@opencode-ai/core/util/array"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { Accordion } from "@opencode-ai/ui/accordion"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
+import { AccordionV2 } from "@opencode-ai/ui/v2/accordion-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { File } from "@opencode-ai/session-ui/file"
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
@@ -35,9 +34,9 @@ const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
-    <div class="flex flex-col gap-1">
-      <div class="text-12-regular text-text-weak">{props.label}</div>
-      <div class="text-12-medium text-text-strong">{props.value}</div>
+    <div class="flex min-w-0 flex-col gap-0.5 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5">
+      <div class="truncate text-[11px] leading-4 text-v2-text-text-muted">{props.label}</div>
+      <div class="break-words text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">{props.value}</div>
     </div>
   )
 }
@@ -71,26 +70,23 @@ function RawMessage(props: {
   time: (value: number | string | undefined) => string
 }) {
   return (
-    <Accordion.Item value={props.message.id}>
-      <StickyAccordionHeader>
-        <Accordion.Trigger>
-          <div class="flex items-center justify-between gap-2 w-full">
-            <div class="min-w-0 truncate">
-              {props.message.role} <span class="text-text-base">• {props.message.id}</span>
+    <AccordionV2.Item value={props.message.id}>
+      <AccordionV2.Header>
+        <AccordionV2.Trigger>
+          <div class="flex w-full min-w-0 items-center justify-between gap-2">
+            <div class="min-w-0 truncate [font-weight:530]">
+              {props.message.role} <span class="text-v2-text-text-muted [font-weight:400]">• {props.message.id}</span>
             </div>
-            <div class="flex items-center gap-3">
-              <div class="shrink-0 text-12-regular text-text-weak">{props.time(props.message.time.created)}</div>
-              <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
-            </div>
+            <div class="shrink-0 text-[12px] text-v2-text-text-muted">{props.time(props.message.time.created)}</div>
           </div>
-        </Accordion.Trigger>
-      </StickyAccordionHeader>
-      <Accordion.Content class="bg-background-base">
-        <div class="p-3">
+        </AccordionV2.Trigger>
+      </AccordionV2.Header>
+      <AccordionV2.Content>
+        <div class="px-3 pb-3">
           <RawMessageContent message={props.message} getParts={props.getParts} onRendered={props.onRendered} />
         </div>
-      </Accordion.Content>
-    </Accordion.Item>
+      </AccordionV2.Content>
+    </AccordionV2.Item>
   )
 }
 
@@ -329,24 +325,24 @@ export function SessionContextTab() {
       }}
       onScroll={handleScroll}
     >
-      <div class="px-6 pt-4 pb-10 flex flex-col gap-10">
+      <div class="px-4 pt-2 pb-10 flex flex-col gap-6">
         <Show when={harnessOptions().length > 1}>
-          <div class="flex items-center justify-between gap-3 rounded-[16px] bg-v2-background-bg-layer-01 px-4 py-2.5">
-            <div class="text-12-regular text-text-weak">{language.t("harness.label")}</div>
-            <Select
+          <div class="flex items-center justify-between gap-3 rounded-[16px] bg-v2-background-bg-layer-01 py-1.5 pl-3 pr-1.5">
+            <div class="text-[12px] text-v2-text-text-muted">{language.t("harness.label")}</div>
+            <SelectV2
+              appearance="inline"
               options={harnessOptions()}
               current={harnessOptions().find((item) => item.id === selectedHarness())}
               value={(item) => item.id}
               label={(item) => item.label}
+              placement="bottom-end"
+              gutter={6}
               onSelect={(item) => item && setSelectedHarness(item.id)}
-              variant="secondary"
-              size="small"
-              triggerStyle={{ "min-width": "140px", "justify-content": "space-between" }}
             />
           </div>
         </Show>
 
-        <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
+        <div class="grid grid-cols-2 @[32rem]:grid-cols-3 gap-2">
           <For each={stats}>
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
           </For>
@@ -354,8 +350,10 @@ export function SessionContextTab() {
 
         <Show when={breakdown().length > 0}>
           <div class="flex flex-col gap-2">
-            <div class="text-12-regular text-text-weak">{language.t("context.breakdown.title")}</div>
-            <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden flex">
+            <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
+              {language.t("context.breakdown.title")}
+            </div>
+            <div class="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-v2-background-bg-layer-02">
               <For each={breakdown()}>
                 {(segment) => (
                   <div
@@ -368,27 +366,29 @@ export function SessionContextTab() {
                 )}
               </For>
             </div>
-            <div class="flex flex-wrap gap-x-3 gap-y-1">
+            <div class="flex flex-wrap gap-x-3.5 gap-y-1">
               <For each={breakdown()}>
                 {(segment) => (
-                  <div class="flex items-center gap-1 text-11-regular text-text-weak">
-                    <div class="size-2 rounded-sm" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
+                  <div class="flex items-center gap-1.5 text-[11.5px] text-v2-text-text-muted">
+                    <div class="size-2 rounded-full" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
                     <div>{breakdownLabel(segment.key)}</div>
-                    <div class="text-text-weaker">{segment.percent.toLocaleString(language.intl())}%</div>
+                    <div class="text-v2-text-text-faint">{segment.percent.toLocaleString(language.intl())}%</div>
                   </div>
                 )}
               </For>
             </div>
-            <div class="hidden text-11-regular text-text-weaker">{language.t("context.breakdown.note")}</div>
+            <div class="hidden text-[11px] text-v2-text-text-faint">{language.t("context.breakdown.note")}</div>
           </div>
         </Show>
 
         <Show when={systemPrompt()}>
           {(prompt) => (
             <div class="flex flex-col gap-2">
-              <div class="text-12-regular text-text-weak">{language.t("context.systemPrompt.title")}</div>
+              <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
+                {language.t("context.systemPrompt.title")}
+              </div>
               <div class="rounded-[16px] bg-v2-background-bg-layer-01 px-4 py-2.5">
-                <Markdown text={prompt()} class="text-12-regular" />
+                <Markdown text={prompt()} class="text-[12px]" />
               </div>
             </div>
           )}
@@ -396,24 +396,21 @@ export function SessionContextTab() {
 
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between">
-            <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
-            <Button
-              size="small"
-              variant="ghost"
-              class="gap-1.5 px-2 text-text-weak hover:text-text-base"
-              onClick={exportSession}
-            >
+            <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
+              {language.t("context.rawMessages.title")}
+            </div>
+            <ButtonV2 variant="outline" class="gap-1.5" onClick={exportSession}>
               <Icon name="download" size="small" />
               <span>{language.t("context.export.session")}</span>
-            </Button>
+            </ButtonV2>
           </div>
-          <Accordion multiple>
+          <AccordionV2 multiple class="thread-collapsibles">
             <For each={messages()}>
               {(message) => (
                 <RawMessage message={message} getParts={getParts} onRendered={restoreScroll} time={formatter().time} />
               )}
             </For>
-          </Accordion>
+          </AccordionV2>
         </div>
       </div>
     </ScrollView>

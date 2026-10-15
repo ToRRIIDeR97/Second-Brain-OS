@@ -144,7 +144,7 @@ export function SessionComposerRegion(props: {
                   <Show when={controller.parentID()}>
                     <button
                       type="button"
-                      class="text-text-base transition-colors hover:text-text-strong"
+                      class="rounded-full text-v2-text-text-accent transition-colors duration-150 ease-standard hover:text-v2-text-text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus [font-weight:530] motion-reduce:transition-none"
                       onClick={controller.openParent}
                     >
                       {language.t("session.child.backToParent")}

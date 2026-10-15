@@ -1,14 +1,12 @@
 import { createMemo, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSortable } from "@dnd-kit/solid/sortable"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { FileVisual } from "./session-sortable-tab"
+import { SessionTabClose } from "./session-tab-close"
 
 export function SortableTabV2(props: {
   tab: string
@@ -20,7 +18,6 @@ export function SortableTabV2(props: {
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
-  const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
   const sortable = useSortable({
     get id() {
       return props.tab
@@ -37,38 +34,18 @@ export function SortableTabV2(props: {
   })
   return (
     <div ref={sortable.ref} class="h-full flex items-center">
-      <div class="relative">
-        <Tabs.Trigger
-          value={props.tab}
-          closeButton={
-            <TooltipV2
-              value={
-                <>
-                  {language.t("common.closeTab")}
-                  <Show when={closeTabKeybind().length > 0}>
-                    <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
-                  </Show>
-                </>
-              }
-              placement="bottom"
-              gutter={10}
-            >
-              <IconButton
-                icon="close-small"
-                variant="ghost"
-                class="h-5 w-5"
-                onClick={() => props.onTabClose(props.tab)}
-                aria-label={language.t("common.closeTab")}
-              />
-            </TooltipV2>
-          }
-          hideCloseButton
-          onMiddleClick={() => props.onTabClose(props.tab)}
-          onDblClick={() => props.onTabDoubleClick?.(props.tab)}
-        >
-          <Show when={content()}>{(value) => value()}</Show>
-        </Tabs.Trigger>
-      </div>
+      <TabsV2.Trigger
+        value={props.tab}
+        onMiddleClick={() => props.onTabClose(props.tab)}
+        onDblClick={() => props.onTabDoubleClick?.(props.tab)}
+      >
+        <Show when={content()}>{(value) => value()}</Show>
+        <SessionTabClose
+          label={language.t("common.closeTab")}
+          keybind={command.keybindParts("tab.close")}
+          onClose={() => props.onTabClose(props.tab)}
+        />
+      </TabsV2.Trigger>
     </div>
   )
 }

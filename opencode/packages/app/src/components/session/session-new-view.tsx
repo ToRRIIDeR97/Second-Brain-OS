@@ -3,7 +3,7 @@ import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 const MAIN_WORKTREE = "main"
@@ -54,23 +54,23 @@ export function NewSessionView(props: NewSessionViewProps) {
           <div class="text-[17px] text-v2-text-text-base [font-weight:560]">{language.t("session.new.title")}</div>
           <div class="w-full flex flex-col gap-4 items-center">
             <div class="flex items-start justify-center gap-3 min-h-5">
-              <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
+              <div class="text-[12px] [font-weight:500] text-v2-text-text-muted select-text leading-5 min-w-0 max-w-160 break-words text-center">
                 {getDirectory(projectRoot())}
-                <span class="text-text-strong">{getFilename(projectRoot())}</span>
+                <span class="text-v2-text-text-base">{getFilename(projectRoot())}</span>
               </div>
             </div>
             <div class="flex items-start justify-center gap-1.5 min-h-5">
-              <Icon name="branch" size="small" class="mt-0.5 shrink-0" />
-              <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
+              <Icon name="branch" size="small" class="mt-[3px] shrink-0 text-v2-icon-icon-muted" />
+              <div class="text-[12px] [font-weight:500] text-v2-text-text-muted select-text leading-5 min-w-0 max-w-160 break-words text-center">
                 {label(current())}
               </div>
             </div>
             <Show when={sync().project}>
               {(project) => (
                 <div class="flex items-start justify-center gap-3 min-h-5">
-                  <div class="text-12-medium text-text-weak leading-5 min-w-0 max-w-160 break-words text-center">
+                  <div class="text-[12px] [font-weight:500] text-v2-text-text-muted leading-5 min-w-0 max-w-160 break-words text-center">
                     {language.t("session.new.lastModified")}&nbsp;
-                    <span class="text-text-strong">
+                    <span class="text-v2-text-text-base">
                       {DateTime.fromMillis(project().time.updated ?? project().time.created)
                         .setLocale(language.intl())
                         .toRelative()}

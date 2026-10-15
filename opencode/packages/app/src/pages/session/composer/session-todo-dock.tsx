@@ -1,7 +1,8 @@
 import type { Todo } from "@opencode-ai/sdk/v2"
 import { AnimatedNumber } from "@opencode-ai/ui/animated-number"
-import { Checkbox } from "@opencode-ai/ui/checkbox"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
@@ -12,31 +13,6 @@ import { useLanguage } from "@/context/language"
 
 const doneToken = "\u0000done\u0000"
 const totalToken = "\u0000total\u0000"
-
-function dot(status: Todo["status"]) {
-  if (status !== "in_progress") return undefined
-  return (
-    <svg
-      viewBox="0 0 12 12"
-      width="12"
-      height="12"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-      class="block"
-    >
-      <circle
-        cx="6"
-        cy="6"
-        r="3"
-        style={{
-          animation: "var(--animate-pulse-scale)",
-          "transform-origin": "center",
-          "transform-box": "fill-box",
-        }}
-      />
-    </svg>
-  )
-}
 
 export function SessionTodoDock(props: {
   todos: Todo[]
@@ -92,7 +68,7 @@ export function SessionTodoDock(props: {
   return (
     <div
       data-component="session-todo-dock"
-      class="w-full overflow-hidden rounded-[24px] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
+      class="w-full overflow-hidden rounded-[24px] bg-v2-background-bg-layer-01"
       style={{
         "overflow-x": "visible",
         "overflow-y": "hidden",
@@ -157,12 +133,12 @@ export function SessionTodoDock(props: {
             />
           </div>
           <div class="ml-auto">
-            <IconButton
+            <IconButtonV2
               data-action="session-todo-toggle-button"
               data-collapsed={props.collapsed ? "true" : "false"}
-              icon="chevron-down"
-              size="normal"
-              variant="ghost"
+              icon={<Icon name="outline-chevron-down" size="small" />}
+              size="large"
+              variant="ghost-muted"
               style={{ transform: `rotate(${turn() * 180}deg)` }}
               onMouseDown={(event) => {
                 event.preventDefault()
@@ -211,43 +187,39 @@ function TodoList(props: { todos: Todo[] }) {
       >
         <Index each={props.todos}>
           {(todo) => (
-            <Checkbox
+            <CheckboxV2
               readOnly
               checked={todo().status === "completed"}
               indeterminate={todo().status === "in_progress"}
               data-in-progress={todo().status === "in_progress" ? "" : undefined}
               data-state={todo().status}
-              icon={dot(todo().status)}
               style={{
-                "--checkbox-align": "flex-start",
-                "--checkbox-offset": "1px",
-                transition: "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                transition: "opacity 220ms var(--v2-ease-standard)",
                 opacity: todo().status === "pending" ? "0.94" : "1",
               }}
-            >
-              <TextStrikethrough
-                active={todo().status === "completed" || todo().status === "cancelled"}
-                text={todo().content}
-                class="text-14-regular min-w-0 break-words"
-                style={{
-                  "line-height": "var(--line-height-normal)",
-                  transition:
-                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
-                  color:
-                    todo().status === "completed" || todo().status === "cancelled"
-                      ? "var(--text-weak)"
-                      : "var(--text-strong)",
-                  opacity: todo().status === "pending" ? "0.92" : "1",
-                }}
-              />
-            </Checkbox>
+              label={
+                <TextStrikethrough
+                  active={todo().status === "completed" || todo().status === "cancelled"}
+                  text={todo().content}
+                  class="min-w-0 break-words text-[13px] leading-5"
+                  style={{
+                    transition: "color 220ms var(--v2-ease-standard), opacity 220ms var(--v2-ease-standard)",
+                    color:
+                      todo().status === "completed" || todo().status === "cancelled"
+                        ? "var(--v2-text-text-faint)"
+                        : "var(--v2-text-text-base)",
+                    opacity: todo().status === "pending" ? "0.92" : "1",
+                  }}
+                />
+              }
+            />
           )}
         </Index>
       </div>
       <div
         class="pointer-events-none absolute top-0 left-0 right-0 h-4 transition-opacity duration-150"
         style={{
-          background: "linear-gradient(to bottom, var(--background-base), transparent)",
+          background: "linear-gradient(to bottom, var(--v2-background-bg-layer-01), transparent)",
           opacity: store.stuck ? 1 : 0,
         }}
       />

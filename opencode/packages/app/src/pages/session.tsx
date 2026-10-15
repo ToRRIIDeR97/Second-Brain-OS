@@ -29,14 +29,12 @@ import { FileProvider, selectionFromLines, useFile, type FileSelection, type Sel
 import { createStore } from "solid-js/store"
 import type { SessionReviewLineComment } from "@opencode-ai/session-ui/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Select } from "@opencode-ai/ui/select"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
-import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
@@ -90,6 +88,7 @@ import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@/pages/session/v2/review-diff-kinds"
 import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
+import "@/pages/session/thread.css"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -208,16 +207,18 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
       <div class="flex-1 min-h-0 overflow-hidden">
         <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-4">
           <div class="flex flex-col items-center gap-2">
-            <div class="text-16-medium text-text max-w-md">{language.t("session.error.notFound")}</div>
-            <div class="text-13-regular text-text-weak max-w-md">
+            <div class="max-w-md text-[17px] text-v2-text-text-base [font-weight:560]">
+              {language.t("session.error.notFound")}
+            </div>
+            <div class="max-w-md text-[13px] leading-5 text-v2-text-text-muted">
               {language.t("session.error.notFound.description")}
             </div>
           </div>
           <Show when={props.sessionID}>
             {(sessionID) => (
               <div class="max-w-full flex flex-col items-center gap-1">
-                <div class="max-w-full text-11-regular text-text-faint break-all">{displayServer()}</div>
-                <code class="max-w-full rounded-[8px] px-1.5 py-0.5 font-mono text-xs font-medium leading-4 text-text-base break-all bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)]">
+                <div class="max-w-full text-[11px] text-v2-text-text-faint break-all">{displayServer()}</div>
+                <code class="max-w-full rounded-full bg-v2-background-bg-layer-01 px-2.5 py-0.5 font-mono text-xs font-medium leading-5 text-v2-text-text-base break-all">
                   {sessionID()}
                 </code>
               </div>
@@ -1170,24 +1171,6 @@ export default function Page() {
     return language.t("ui.sessionReview.title.lastTurn")
   }
 
-  const changesTitle = () => {
-    if (!canReview()) {
-      return null
-    }
-
-    return (
-      <Select
-        options={changesOptions()}
-        current={reviewMode()}
-        label={changesLabel}
-        onSelect={(option) => option && view().review.setMode(option)}
-        variant="ghost"
-        size="small"
-        valueClass="text-14-medium"
-      />
-    )
-  }
-
   const changesTitleV2 = () => {
     if (!canReview()) {
       return null
@@ -1208,18 +1191,20 @@ export default function Page() {
 
   const empty = (text: string) => (
     <div class="h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6">
-      <div class="text-14-regular text-text-weak max-w-56">{text}</div>
+      <div class="max-w-56 text-[13px] leading-5 text-v2-text-text-muted">{text}</div>
     </div>
   )
 
   const createGit = (input: { emptyClass: string }) => (
     <div class={input.emptyClass}>
-      <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
-      <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
+      <div class="text-[14px] text-v2-text-text-base [font-weight:530]">
+        {language.t("session.review.noVcs.createGit.title")}
+      </div>
+      <ButtonV2 variant="contrast" size="large" disabled={gitMutation.isPending} onClick={initGit}>
         {gitMutation.isPending
           ? language.t("session.review.noVcs.createGit.actionLoading")
           : language.t("session.review.noVcs.createGit.action")}
-      </Button>
+      </ButtonV2>
     </div>
   )
 
@@ -1249,7 +1234,7 @@ export default function Page() {
 
     return (
       <div class={input.emptyClass}>
-        <div class="text-14-regular text-text-weak max-w-56">{reviewEmptyText()}</div>
+        <div class="max-w-56 text-[13px] leading-5 text-v2-text-text-muted">{reviewEmptyText()}</div>
       </div>
     )
   }
@@ -1257,12 +1242,16 @@ export default function Page() {
   const reviewEmptyV2 = () => {
     if (reviewError())
       return (
-        <div role="alert" class="px-6 py-4 text-text-weak">
+        <div role="alert" class="px-6 py-4 text-[13px] text-v2-state-fg-danger">
           {language.t("common.requestFailed")}
         </div>
       )
     if (!reviewReady()) {
-      return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
+      return (
+        <div role="status" class="px-6 py-4 text-[13px] text-v2-text-text-muted">
+          {language.t("session.review.loadingChanges")}
+        </div>
+      )
     }
     if (reviewMode() === "turn" && nogit()) {
       return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
@@ -1279,7 +1268,7 @@ export default function Page() {
   }) => (
     <Show when={!store.deferRender}>
       <SessionReviewTab
-        title={changesTitle()}
+        title={changesTitleV2()}
         empty={reviewEmpty(input)}
         diffs={reviewDiffs}
         view={view}
@@ -1921,40 +1910,19 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
-  const mobileTabs = (compact = false, bottom = false) => (
-    <Tabs value={store.mobileTab} class="h-auto">
-      <Tabs.List
-        classList={{
-          "!h-9": compact,
-          "[&::after]:!border-b-0 [&::after]:!border-t [&::after]:!border-border-weak-base": bottom,
-        }}
-      >
-        <Tabs.Trigger
-          value="session"
-          classList={{
-            "!w-1/2 !max-w-none": true,
-            "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
-          }}
-          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
-          onClick={() => setStore("mobileTab", "session")}
-        >
+  const mobileTabs = () => (
+    <TabsV2 value={store.mobileTab} class="thread-tabs !h-auto !flex-none px-2 py-1.5">
+      <TabsV2.List>
+        <TabsV2.Trigger value="session" class="flex-1 !max-w-none" onClick={() => setStore("mobileTab", "session")}>
           {language.t("session.tab.session")}
-        </Tabs.Trigger>
-        <Tabs.Trigger
-          value="changes"
-          classList={{
-            "!w-1/2 !max-w-none !border-r-0": true,
-            "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
-          }}
-          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
-          onClick={() => setStore("mobileTab", "changes")}
-        >
+        </TabsV2.Trigger>
+        <TabsV2.Trigger value="changes" class="flex-1 !max-w-none" onClick={() => setStore("mobileTab", "changes")}>
           {hasReview()
             ? language.t("session.review.filesChanged", { count: reviewCount() })
             : language.t("session.review.change.other")}
-        </Tabs.Trigger>
-      </Tabs.List>
-    </Tabs>
+        </TabsV2.Trigger>
+      </TabsV2.List>
+    </TabsV2>
   )
   const mobileTabsBottom = createMemo(() => !isDesktop() && settings.general.mobileTitlebarPosition() === "bottom")
 
@@ -1966,7 +1934,7 @@ export default function Page() {
   const sessionPanelContent = () => (
     <>
       {sessionSync() ?? ""}
-      <Show when={!isDesktop() && !!params.id && !mobileTabsBottom()}>{mobileTabs(true)}</Show>
+      <Show when={!isDesktop() && !!params.id && !mobileTabsBottom()}>{mobileTabs()}</Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
           <Match when={params.id && mobileChanges()}>
@@ -1978,7 +1946,7 @@ export default function Page() {
                   header: "px-4 !h-16 !pb-4",
                   container: "px-4",
                 },
-                loadingClass: "px-4 py-4 text-text-weak",
+                loadingClass: "px-4 py-4 text-[13px] text-v2-text-text-muted",
                 emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
               })}
             </div>
@@ -2119,7 +2087,7 @@ export default function Page() {
           )
         }}
       </Show>
-      <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
+      <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs()}</Show>
     </>
   )
 

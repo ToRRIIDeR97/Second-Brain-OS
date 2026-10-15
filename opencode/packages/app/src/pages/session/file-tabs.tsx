@@ -9,7 +9,7 @@ import { createLineCommentControllerV2 } from "@opencode-ai/session-ui/v2/line-c
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
 import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@/utils/toast"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
@@ -170,9 +170,9 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 
 export function FileTabContent(props: { tab: string }) {
   return (
-    <Tabs.Content value={props.tab}>
+    <TabsV2.Content value={props.tab}>
       <SessionFileView tab={props.tab} />
-    </Tabs.Content>
+    </TabsV2.Content>
   )
 }
 
@@ -460,9 +460,13 @@ function SessionFileViewV2(props: { tab: string }) {
         <Switch>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+            <div role="status" class="px-6 py-4 text-[13px] text-v2-text-text-muted">
+              {language.t("common.loading")}...
+            </div>
           </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+          <Match when={state()?.error}>
+            {(err) => <div class="px-6 py-4 text-[13px] text-v2-state-fg-danger">{err()}</div>}
+          </Match>
         </Switch>
       </ScrollView>
     </div>

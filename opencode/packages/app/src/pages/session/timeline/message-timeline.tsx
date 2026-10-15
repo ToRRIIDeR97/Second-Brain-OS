@@ -18,8 +18,7 @@ import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
-import { Accordion } from "@opencode-ai/ui/accordion"
-import { Card } from "@opencode-ai/ui/card"
+import { AccordionV2 } from "@opencode-ai/ui/v2/accordion-v2"
 import {
   ContextToolGroup,
   ToolGroup,
@@ -29,9 +28,8 @@ import {
   partDefaultOpen,
   type UserActions,
 } from "@opencode-ai/session-ui/message-part"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
@@ -40,7 +38,6 @@ import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import type {
@@ -167,8 +164,9 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
         </Show>
       </div>
       <div data-component="session-turn-diffs-content">
-        <Accordion
+        <AccordionV2
           multiple
+          class="thread-collapsibles"
           style={{ "--sticky-accordion-offset": "44px" }}
           value={expanded()}
           onChange={(value) => setState("expanded", Array.isArray(value) ? value : value ? [value] : [])}
@@ -178,9 +176,9 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
               const opened = createMemo(() => expanded().includes(diff.file))
 
               return (
-                <Accordion.Item value={diff.file}>
-                  <StickyAccordionHeader>
-                    <Accordion.Trigger>
+                <AccordionV2.Item value={diff.file}>
+                  <AccordionV2.Header>
+                    <AccordionV2.Trigger>
                       <div data-slot="session-turn-diff-trigger">
                         <span data-slot="session-turn-diff-path">
                           <Show when={diff.file.includes("/")}>
@@ -192,23 +190,20 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
                           <span data-slot="session-turn-diff-changes">
                             <DiffChanges changes={diff} />
                           </span>
-                          <span data-slot="session-turn-diff-chevron">
-                            <Icon name="chevron-down" size="small" />
-                          </span>
                         </div>
                       </div>
-                    </Accordion.Trigger>
-                  </StickyAccordionHeader>
-                  <Accordion.Content>
+                    </AccordionV2.Trigger>
+                  </AccordionV2.Header>
+                  <AccordionV2.Content>
                     <Show when={opened()}>
                       <TimelineDiffView diff={diff} />
                     </Show>
-                  </Accordion.Content>
-                </Accordion.Item>
+                  </AccordionV2.Content>
+                </AccordionV2.Item>
               )
             }}
           </For>
-        </Accordion>
+        </AccordionV2>
         <Show when={!showAll() && overflow() > 0}>
           <div data-slot="session-turn-diffs-more" onClick={() => setState("showAll", true)}>
             {language.t("ui.sessionTurn.diffs.more", { count: String(overflow()) })}
@@ -996,13 +991,13 @@ export function MessageTimeline(props: {
                 <div class="flex w-max min-w-full justify-end gap-2">
                   <Index each={comments()}>
                     {(comment) => (
-                      <div class="shrink-0 max-w-[260px] rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2 shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
-                        <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                      <div class="shrink-0 max-w-[260px] rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2">
+                        <div class="flex items-center gap-1.5 min-w-0 text-[11px] text-v2-text-text-base [font-weight:530]">
                           <FileIcon node={{ path: comment().path, type: "file" }} class="size-3.5 shrink-0" />
                           <span class="truncate">{getFilename(comment().path)}</span>
                           <Show when={comment().selection}>
                             {(selection) => (
-                              <span class="shrink-0 text-text-weak">
+                              <span class="shrink-0 text-v2-text-text-muted">
                                 {selection().startLine === selection().endLine
                                   ? `:${selection().startLine}`
                                   : `:${selection().startLine}-${selection().endLine}`}
@@ -1010,7 +1005,7 @@ export function MessageTimeline(props: {
                             )}
                           </Show>
                         </div>
-                        <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                        <div class="pt-1 text-[12.5px] leading-5 text-v2-text-text-base whitespace-pre-wrap break-words">
                           {comment().comment}
                         </div>
                       </div>
@@ -1120,9 +1115,12 @@ export function MessageTimeline(props: {
         return (
           <TimelineRowFrame row={errorRow}>
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <Card variant="error" class="error-card">
+              <div
+                role="alert"
+                class="rounded-[16px] bg-v2-state-bg-danger px-4 py-2.5 text-[13px] leading-5 text-v2-state-fg-danger whitespace-pre-wrap break-words"
+              >
                 {errorRow().text}
-              </Card>
+              </div>
             </div>
           </TimelineRowFrame>
         )

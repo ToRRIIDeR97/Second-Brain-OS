@@ -2,7 +2,7 @@ import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import {
   createEffect,
   createMemo,
@@ -92,7 +92,7 @@ const buildDragImage = (target: HTMLElement) => {
 
   const image = document.createElement("div")
   image.className =
-    "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
+    "flex items-center gap-x-2 h-8 px-3 rounded-full bg-v2-background-bg-layer-02 text-[12.5px] text-v2-text-text-base"
   image.style.position = "absolute"
   image.style.top = "-1000px"
   image.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
@@ -136,6 +136,7 @@ const FileTreeNode = (
   ])
   const kind = () => visibleKind(local.node, local.kinds, local.marks)
   const active = () => !!kind() && !local.node.ignored
+  const selected = () => local.node.path === local.active
   const color = () => {
     const value = kind()
     if (!value) return
@@ -146,8 +147,9 @@ const FileTreeNode = (
     <Dynamic
       component={local.as ?? "div"}
       classList={{
-        "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-start hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
-        "bg-surface-base-active": local.node.path === local.active,
+        "w-full min-w-0 h-8 flex items-center justify-start gap-x-2 rounded-full px-2.5 py-0 text-start cursor-pointer transition-[background-color,border-radius] duration-150 ease-standard active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
+        "hover:bg-v2-overlay-simple-overlay-hover": !selected(),
+        "bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container": selected(),
         ...local.classList,
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
@@ -166,9 +168,9 @@ const FileTreeNode = (
       {local.children}
       <span
         classList={{
-          "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
-          "text-text-weaker": local.node.ignored,
-          "text-text-weak": !local.node.ignored && !active(),
+          "flex-1 min-w-0 text-[12.5px] [font-weight:500] whitespace-nowrap truncate": true,
+          "text-v2-text-text-faint": local.node.ignored,
+          "text-v2-text-text-muted": !local.node.ignored && !active() && !selected(),
         }}
         style={active() ? color() : undefined}
       >
@@ -179,7 +181,7 @@ const FileTreeNode = (
         if (!value) return null
         if (local.node.type === "file") {
           return (
-            <span class="shrink-0 w-4 text-center text-12-medium" style={kindTextColor(value)}>
+            <span class="shrink-0 w-4 text-center text-[12px] [font-weight:500]" style={kindTextColor(value)}>
               {kindLabel(value)}
             </span>
           )
@@ -404,7 +406,7 @@ export default function FileTree(props: {
                   open={expanded()}
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
                 >
-                  <Collapsible.Trigger>
+                  <Collapsible.Trigger class="h-8 rounded-full focus-visible:outline-none">
                     <FileTreeNode
                       node={node}
                       level={level}
@@ -414,15 +416,20 @@ export default function FileTree(props: {
                       kinds={kinds()}
                       marks={marks()}
                     >
-                      <div class="size-4 flex items-center justify-center text-icon-weak">
-                        <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                      <div class="size-4 flex items-center justify-center text-v2-icon-icon-muted">
+                        <Icon
+                          name="chevron-down"
+                          size="small"
+                          class="transition-transform duration-300 ease-standard motion-reduce:transition-none"
+                          classList={{ "-rotate-90": !expanded() }}
+                        />
                       </div>
                     </FileTreeNode>
                   </Collapsible.Trigger>
                   <Collapsible.Content class="relative pt-0.5">
                     <div
                       classList={{
-                        "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none": true,
+                        "absolute top-0 bottom-0 w-px pointer-events-none bg-v2-border-border-muted opacity-0 transition-opacity duration-150 ease-standard motion-reduce:transition-none": true,
                         "group-hover/filetree:opacity-100": expanded() && deep() === level,
                         "group-hover/filetree:opacity-50": !(expanded() && deep() === level),
                       }}
@@ -430,7 +437,7 @@ export default function FileTree(props: {
                     />
                     <Show
                       when={level < MAX_DEPTH && !chain.includes(key(node.path))}
-                      fallback={<div class="px-2 py-1 text-12-regular text-text-weak">...</div>}
+                      fallback={<div class="px-3 py-1 text-[12.5px] text-v2-text-text-muted">...</div>}
                     >
                       <FileTree
                         path={node.path}
@@ -472,7 +479,7 @@ export default function FileTree(props: {
                       <FileIcon
                         node={node}
                         class="size-4 filetree-icon filetree-icon--mono"
-                        style="color: var(--icon-weak-base)"
+                        style="color: var(--v2-icon-icon-muted)"
                         mono
                       />
                     </Match>

@@ -1,8 +1,8 @@
 import { For, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Button } from "@opencode-ai/ui/button"
-import { DockTray } from "@opencode-ai/ui/dock-surface"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { useLanguage } from "@/context/language"
 
 // Lists messages the server holds with queue delivery. Items leave when the runner promotes them, or
@@ -26,15 +26,13 @@ export function SessionFollowupDock(props: {
   const preview = createMemo(() => props.items[0]?.text ?? "")
 
   return (
-    <DockTray
+    <div
       data-component="session-followup-dock"
-      style={{
-        "margin-bottom": "-0.875rem",
-        "border-radius": "24px",
-      }}
+      class="w-full overflow-hidden rounded-[24px] bg-v2-background-bg-layer-01"
+      style={{ "margin-bottom": "-0.875rem" }}
     >
       <div
-        class="pl-5 pr-3 py-2.5 flex items-center gap-2"
+        class="flex h-[42px] items-center gap-2 pl-5 pr-3"
         role="button"
         tabIndex={0}
         onClick={toggle}
@@ -44,16 +42,21 @@ export function SessionFollowupDock(props: {
           toggle()
         }}
       >
-        <span class="shrink-0 text-13-medium text-text-strong cursor-default">{label()}</span>
+        <span class="shrink-0 cursor-default text-[13px] leading-5 text-v2-text-text-base [font-weight:530]">
+          {label()}
+        </span>
         <Show when={store.collapsed && preview()}>
-          <span class="min-w-0 flex-1 truncate text-13-regular text-text-base cursor-default">{preview()}</span>
+          <span class="min-w-0 flex-1 truncate cursor-default text-[13px] leading-5 text-v2-text-text-faint">
+            {preview()}
+          </span>
         </Show>
         <div class="ml-auto shrink-0">
-          <IconButton
+          <IconButtonV2
             data-collapsed={store.collapsed ? "true" : "false"}
-            icon="chevron-down"
-            size="normal"
-            variant="ghost"
+            icon={<Icon name="outline-chevron-down" size="small" />}
+            size="large"
+            variant="ghost-muted"
+            class="transition-transform duration-300 ease-standard motion-reduce:transition-none"
             style={{ transform: `rotate(${store.collapsed ? 180 : 0}deg)` }}
             onMouseDown={(event) => {
               event.preventDefault()
@@ -79,21 +82,21 @@ export function SessionFollowupDock(props: {
           <For each={props.items}>
             {(item) => (
               <div class="flex items-center gap-2 min-w-0 py-1" data-queued-id={item.id}>
-                <span class="min-w-0 flex-1 truncate text-13-regular text-text-strong">{item.text}</span>
+                <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-v2-text-text-base">{item.text}</span>
                 <Show when={props.actions}>
                   {(actions) => (
                     <>
-                      <Button
+                      <ButtonV2
                         size="small"
-                        variant="secondary"
+                        variant="neutral"
                         class="shrink-0"
                         disabled={!!props.pending}
                         data-pending={props.pending === item.id ? "true" : undefined}
                         onClick={() => actions().onSend(item.id)}
                       >
                         {language.t("session.followupDock.sendNow")}
-                      </Button>
-                      <Button
+                      </ButtonV2>
+                      <ButtonV2
                         size="small"
                         variant="ghost"
                         class="shrink-0"
@@ -101,7 +104,7 @@ export function SessionFollowupDock(props: {
                         onClick={() => actions().onRemove(item.id)}
                       >
                         {language.t("secondBrain.followupDock.remove")}
-                      </Button>
+                      </ButtonV2>
                     </>
                   )}
                 </Show>
@@ -110,6 +113,6 @@ export function SessionFollowupDock(props: {
           </For>
         </div>
       </Show>
-    </DockTray>
+    </div>
   )
 }
