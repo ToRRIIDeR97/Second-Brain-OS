@@ -6,7 +6,7 @@ OUT = sys.argv[1]
 
 
 def component():
-    s = SVG(980, 790, "Component view of Second Brain OS",
+    s = SVG(980, 790, "Component view of Tenon Workbench",
             "UML component view: Solid renderer, preload bridge, Electron main, the bundled OpenCode server "
             "with HTTP API, Second Brain domains, location services and agent runtime, plus stores and external services.")
     s.heading("Component view", "UML 2.5.1 component diagram · paths relative to opencode/packages/")
@@ -97,7 +97,7 @@ def trust():
 
 
 def deployment():
-    s = SVG(1000, 640, "Deployment view of Second Brain OS",
+    s = SVG(1000, 640, "Deployment view of Tenon Workbench",
             "UML deployment view: the user's machine runs the Electron main, renderer and utility-process server, optional "
             "harness processes and CLI daemon, with userData, XDG data and workspace artifacts, plus external services.")
     s.heading("Deployment view", "UML 2.5.1 deployment diagram · unsigned development candidates; auto-update disabled")

@@ -1,11 +1,11 @@
-# Second Brain OS v1 product brief
+# Tenon Workbench v1 product brief
 
 - Status: product direction for the v1 reset
 - Audience: product, design, and engineering
 - Implementation plan: [`IMPLEMENTATION-PLAN-V1.md`](../archive/tauri/implementation-plan-v1.md)
 - Updated: 2026-08-22
 
-This document defines what Second Brain OS should become. It supersedes the
+This document defines what Tenon Workbench should become. It supersedes the
 product positioning and information architecture in
 [`product-designer-handoff.md`](../archive/tauri/product-designer-handoff.md). That document
 remains useful as an inventory of existing behavior, states, and unfinished
@@ -13,7 +13,7 @@ surfaces.
 
 ## Product definition
 
-Second Brain OS is a personal operating system for projects, commitments,
+Tenon Workbench is a personal operating system for projects, commitments,
 knowledge, and delegated work. It gives one person a reliable view of what is
 happening and a safe way to act, either directly or through an agent.
 
@@ -68,7 +68,7 @@ Home must not use the graph as its main content.
 ### The agent uses product actions
 
 The agent does not control the interface through clicks or coordinates. The UI
-and the agent call the same typed application actions. Second Brain OS owns the
+and the agent call the same typed application actions. Tenon Workbench owns the
 permissions, approvals, audit record, and resulting state.
 
 ### Local files remain canonical

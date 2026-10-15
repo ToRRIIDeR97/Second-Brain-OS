@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=Second Brain OS
-Exec="/opt/Second Brain OS/ai.opencode.desktop" %U
+Name=Tenon Workbench
+Exec="/opt/Tenon Workbench/ai.opencode.desktop" %U
 Terminal=false
 Type=Application
 Icon=ai.opencode.desktop

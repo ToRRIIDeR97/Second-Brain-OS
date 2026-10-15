@@ -1,6 +1,6 @@
-# Second Brain OS
+# Tenon Workbench
 
-Second Brain OS is a personal operating system for organizing projects,
+Tenon Workbench is a personal operating system for organizing projects,
 commitments, knowledge, and delegated work. This glossary defines the product
 language shared by design and engineering.
 

@@ -20,7 +20,7 @@ const requestMarker = "\n\nRequest: "
 export function setupInstructions(request: string) {
   return (
     [
-      "You are helping me set up an agent CLI as a harness in Second Brain OS.",
+      "You are helping me set up an agent CLI as a harness in Tenon Workbench.",
       "A harness is a command-line agent that Second Brain starts and talks to over the Agent Client Protocol (ACP) on stdio.",
       "Goal: find the exact command and arguments that start the requested agent in ACP mode on this computer.",
       "",

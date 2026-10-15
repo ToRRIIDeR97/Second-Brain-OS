@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 790" width="980" height="790" role="img" aria-labelledby="title desc">
-<title id="title">Component view of Second Brain OS</title>
+<title id="title">Component view of Tenon Workbench</title>
 <desc id="desc">UML component view: Solid renderer, preload bridge, Electron main, the bundled OpenCode server with HTTP API, Second Brain domains, location services and agent runtime, plus stores and external services.</desc>
 
 <style>

@@ -1,7 +1,7 @@
-# Second Brain OS product base
+# Tenon Workbench product base
 
 This directory contains the active Electron desktop app, Solid renderer, and
-agent/server runtime for Second Brain OS. Run development, checks, and builds
+agent/server runtime for Tenon Workbench. Run development, checks, and builds
 from the repository root as described in [the project README](../README.md).
 
 The code was imported from [OpenCode](https://github.com/anomalyco/opencode)

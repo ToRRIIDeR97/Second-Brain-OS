@@ -1,16 +1,30 @@
 import { type ComponentProps } from "solid-js"
 
+// Tenon Workbench mark: two interlocking halves on a rounded tile, drawn on a 120-unit grid.
+const MarkShapes = () => (
+  <>
+    <rect width="120" height="120" rx="32" fill="var(--v2-background-bg-accent, #3b5cf6)" />
+    <path d="M58 28H44a18 18 0 0 0-18 18v24a18 18 0 0 0 18 18h14z" fill="#ffffff" />
+    <path d="M64 34h12a18 18 0 0 1 18 18v22a18 18 0 0 1-18 18H64z" fill="#ffffff" opacity=".6" />
+    <path
+      d="M58 49H45M58 67H40M64 63h15"
+      stroke="var(--v2-background-bg-accent, #3b5cf6)"
+      stroke-width="5"
+      stroke-linecap="round"
+    />
+  </>
+)
+
 export const Mark = (props: { class?: string }) => {
   return (
     <svg
       data-component="logo-mark"
       classList={{ [props.class ?? ""]: !!props.class }}
-      viewBox="0 0 16 20"
+      viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path data-slot="logo-logo-mark-shadow" d="M12 16H4V8H12V16Z" fill="var(--icon-weak-base)" />
-      <path data-slot="logo-logo-mark-o" d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill="var(--icon-strong-base)" />
+      <MarkShapes />
     </svg>
   )
 }
@@ -21,12 +35,11 @@ export const Splash = (props: Pick<ComponentProps<"svg">, "ref" | "class">) => {
       ref={props.ref}
       data-component="logo-splash"
       classList={{ [props.class ?? ""]: !!props.class }}
-      viewBox="0 0 80 100"
+      viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d="M60 80H20V40H60V80Z" fill="var(--icon-base)" />
-      <path d="M60 20H20V80H60V20ZM80 100H0V0H80V100Z" fill="var(--icon-strong-base)" />
+      <MarkShapes />
     </svg>
   )
 }
@@ -38,7 +51,7 @@ export const Logo = (props: { class?: string }) => {
       viewBox="0 0 234 42"
       fill="none"
       role="img"
-      aria-label="Second Brain OS"
+      aria-label="Tenon Workbench"
       classList={{ [props.class ?? ""]: !!props.class }}
     >
       <text
@@ -50,7 +63,7 @@ export const Logo = (props: { class?: string }) => {
         font-weight="600"
         fill="var(--icon-strong-base)"
       >
-        Second Brain OS
+        Tenon Workbench
       </text>
     </svg>
   )

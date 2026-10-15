@@ -135,14 +135,14 @@ export const dict = {
   "provider.connect.status.waiting": "Waiting for authorization...",
   "provider.connect.status.failed": "Authorization failed: {{error}}",
   "provider.connect.apiKey.description":
-    "Enter your {{provider}} API key to connect your account and use {{provider}} models in Second Brain OS.",
+    "Enter your {{provider}} API key to connect your account and use {{provider}} models in Tenon Workbench.",
   "provider.connect.apiKey.label": "{{provider}} API key",
   "provider.connect.apiKey.placeholder": "API key",
   "provider.connect.apiKey.required": "API key is required",
   "provider.connect.oauth.code.visit.prefix": "Visit ",
   "provider.connect.oauth.code.visit.link": "this link",
   "provider.connect.oauth.code.visit.suffix":
-    " to collect your authorization code to connect your account and use {{provider}} models in Second Brain OS.",
+    " to collect your authorization code to connect your account and use {{provider}} models in Tenon Workbench.",
   "provider.connect.oauth.code.label": "{{method}} authorization code",
   "provider.connect.oauth.code.placeholder": "Authorization code",
   "provider.connect.oauth.code.required": "Authorization code is required",
@@ -150,7 +150,7 @@ export const dict = {
   "provider.connect.oauth.auto.visit.prefix": "Visit ",
   "provider.connect.oauth.auto.visit.link": "this link",
   "provider.connect.oauth.auto.visit.suffix":
-    " and enter the code below to connect your account and use {{provider}} models in Second Brain OS.",
+    " and enter the code below to connect your account and use {{provider}} models in Tenon Workbench.",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
@@ -324,7 +324,7 @@ export const dict = {
   "app.server.otherServers": "Other servers",
 
   "dialog.server.title": "Servers",
-  "dialog.server.description": "Switch which Second Brain OS server this app connects to.",
+  "dialog.server.description": "Switch which Tenon Workbench server this app connects to.",
   "dialog.server.search.placeholder": "Search servers",
   "dialog.server.empty": "No servers yet",
   "dialog.server.add.title": "Add server",
@@ -394,11 +394,11 @@ export const dict = {
   "wsl.onboarding.needAnotherDistroHint": "Install a Linux distribution from the WSL catalog",
   "wsl.onboarding.wslNotInstalled.title": "WSL not installed",
   "wsl.onboarding.wslNotInstalled.description":
-    "WSL (Windows Subsystem for Linux) is required before Second Brain OS can add a WSL server",
+    "WSL (Windows Subsystem for Linux) is required before Tenon Workbench can add a WSL server",
   "wsl.onboarding.wslUnavailable.title": "WSL unavailable",
-  "wsl.onboarding.wslUnavailable.description": "Second Brain OS could not verify WSL on this machine.",
+  "wsl.onboarding.wslUnavailable.description": "Tenon Workbench could not verify WSL on this machine.",
   "wsl.onboarding.installWsl": "Install WSL",
-  "wsl.onboarding.windowsRestartRequired": "Restart Windows to finish installing WSL, then reopen Second Brain OS.",
+  "wsl.onboarding.windowsRestartRequired": "Restart Windows to finish installing WSL, then reopen Tenon Workbench.",
   "wsl.onboarding.next": "Next",
   "wsl.onboarding.refresh": "Refresh",
   "wsl.onboarding.allDistrosAdded": "All installed distros are already added.",
@@ -523,7 +523,7 @@ export const dict = {
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
 
   "toast.update.title": "Update available",
-  "toast.update.description": "A new version of Second Brain OS ({{version}}) is now available to install.",
+  "toast.update.description": "A new version of Tenon Workbench ({{version}}) is now available to install.",
   "toast.update.action.installRestart": "Install and restart",
   "toast.update.action.notYet": "Not yet",
 
@@ -563,7 +563,7 @@ export const dict = {
   "error.chain.didYouMean": "Did you mean: {{suggestions}}",
   "error.chain.modelNotFound": "Model not found: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Check your config (opencode.json) provider/model names",
-  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, Second Brain OS does not support MCP authentication yet.',
+  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, Tenon Workbench does not support MCP authentication yet.',
   "error.chain.providerAuthFailed": "Provider authentication failed ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Failed to initialize provider "{{provider}}". Check credentials and configuration.',
@@ -1136,7 +1136,7 @@ export const dict = {
   "debugBar.direction.ltr": "LTR",
   "debugBar.direction.rtl": "RTL",
 
-  "app.name.desktop": "Second Brain OS",
+  "app.name.desktop": "Tenon Workbench",
 
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
@@ -1144,7 +1144,7 @@ export const dict = {
   "settings.tab.shortcuts": "Shortcuts",
   "settings.desktop.section.wsl": "WSL",
   "settings.desktop.wsl.title": "WSL integration",
-  "settings.desktop.wsl.description": "Run the Second Brain OS server inside WSL on Windows.",
+  "settings.desktop.wsl.description": "Run the Tenon Workbench server inside WSL on Windows.",
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.advanced": "Advanced",
@@ -1160,7 +1160,7 @@ export const dict = {
   "settings.general.row.shell.autoDefault": "Auto (Default)",
   "settings.general.row.shell.terminalOnly": "terminal only",
   "settings.general.row.appearance.title": "Appearance",
-  "settings.general.row.appearance.description": "Customise how Second Brain OS looks on your device",
+  "settings.general.row.appearance.description": "Customise how Tenon Workbench looks on your device",
   "settings.general.row.colorScheme.title": "Color scheme",
   "settings.general.row.theme.title": "Theme",
   "settings.general.row.font.title": "Code Font",
@@ -1192,14 +1192,14 @@ export const dict = {
 
 
   "settings.updates.row.startup.title": "Check for updates on startup",
-  "settings.updates.row.startup.description": "Automatically check for updates when Second Brain OS launches",
+  "settings.updates.row.startup.description": "Automatically check for updates when Tenon Workbench launches",
   "settings.updates.row.check.title": "Check for updates",
   "settings.updates.action.checkNow": "Check now",
   "settings.updates.action.checking": "Checking...",
   "settings.updates.action.downloading": "Downloading...",
   "settings.updates.action.installing": "Installing...",
   "settings.updates.toast.latest.title": "You're up to date",
-  "settings.updates.toast.latest.description": "You're running the latest version of Second Brain OS.",
+  "settings.updates.toast.latest.description": "You're running the latest version of Tenon Workbench.",
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",
   "sound.option.alert02": "Alert 02",

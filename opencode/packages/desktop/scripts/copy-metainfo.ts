@@ -5,7 +5,7 @@ const channel = arg === "dev" || arg === "beta" || arg === "prod" ? arg : resolv
 
 const appId = channel === "prod" ? "ai.opencode.desktop" : `ai.opencode.desktop.${channel}`
 const productName =
-  channel === "prod" ? "Second Brain OS" : `Second Brain OS ${channel.charAt(0).toUpperCase() + channel.slice(1)}`
+  channel === "prod" ? "Tenon Workbench" : `Tenon Workbench ${channel.charAt(0).toUpperCase() + channel.slice(1)}`
 const summary = "Projects, knowledge, planning, and agent workflows"
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -19,12 +19,12 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
   <summary>${summary}</summary>
 
   <developer id="io.github.ToRRIIDeR97">
-    <name>Second Brain OS contributors</name>
+    <name>Tenon Workbench contributors</name>
   </developer>
 
   <description>
     <p>
-      Second Brain OS organizes local files, projects, notes, calendar commitments, and agent work.
+      Tenon Workbench organizes local files, projects, notes, calendar commitments, and agent work.
     </p>
   </description>
 

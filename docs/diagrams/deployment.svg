@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640" role="img" aria-labelledby="title desc">
-<title id="title">Deployment view of Second Brain OS</title>
+<title id="title">Deployment view of Tenon Workbench</title>
 <desc id="desc">UML deployment view: the user's machine runs the Electron main, renderer and utility-process server, optional harness processes and CLI daemon, with userData, XDG data and workspace artifacts, plus external services.</desc>
 
 <style>

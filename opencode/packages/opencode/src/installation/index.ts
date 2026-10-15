@@ -7,7 +7,7 @@ import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 
-// Second Brain OS ships the runtime inside the desktop app, which owns updates.
+// Tenon Workbench ships the runtime inside the desktop app, which owns updates.
 // This service keeps the upstream API shape but never checks or installs releases.
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
