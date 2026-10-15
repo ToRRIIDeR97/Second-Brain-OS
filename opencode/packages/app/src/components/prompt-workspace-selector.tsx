@@ -1,10 +1,10 @@
 import { For, Show } from "solid-js"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useLanguage } from "@/context/language"
+import { menuSurfaceClass } from "./surface-classes"
 
 export function PromptWorkspaceSelector(props: {
   value: string
@@ -42,24 +42,24 @@ export function PromptWorkspaceSelector(props: {
     <>
       <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
       <MenuV2 placement="bottom" gutter={4} onOpenChange={onOpenChange}>
-        <MenuV2.Trigger class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted">
-          <IconV2 name={icon()} class="shrink-0 text-v2-icon-icon-muted" />
+        <MenuV2.Trigger class="flex h-8 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full px-2.5 transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted motion-reduce:transition-none">
+          <Icon name={icon()} class="shrink-0 text-v2-icon-icon-muted" />
           <span class="min-w-0 truncate">{label()}</span>
           <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
         </MenuV2.Trigger>
         <MenuV2.Portal>
-          <MenuV2.Content class="w-[180px]">
+          <MenuV2.Content class={`w-[220px] ${menuSurfaceClass}`}>
             <MenuV2.Group>
               <MenuV2.GroupLabel>{language.t("session.new.workspace.runIn")}</MenuV2.GroupLabel>
-              <MenuV2.Item onSelect={() => select("main")}>
-                <IconV2 name="monitor" />
+              <MenuV2.Item data-checked={selected() === "main" ? "" : undefined} onSelect={() => select("main")}>
+                <Icon name="monitor" />
                 <span class="min-w-0 flex-1 truncate">{language.t("session.new.workspace.local")}</span>
                 <Show when={selected() === "main"}>
                   <Icon name="check" size="small" class="shrink-0" />
                 </Show>
               </MenuV2.Item>
-              <MenuV2.Item onSelect={() => select("create")}>
-                <IconV2 name="workspace-new" />
+              <MenuV2.Item data-checked={selected() === "create" ? "" : undefined} onSelect={() => select("create")}>
+                <Icon name="workspace-new" />
                 <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
                 <Show when={selected() === "create"}>
                   <Icon name="check" size="small" class="shrink-0" />
@@ -70,15 +70,18 @@ export function PromptWorkspaceSelector(props: {
               <MenuV2.Separator />
               <MenuV2.Sub gutter={0} overlap overflowPadding={8}>
                 <MenuV2.SubTrigger>
-                  <IconV2 name="workspace" />
+                  <Icon name="workspace" />
                   {language.t("session.new.workspace.existing")}
                 </MenuV2.SubTrigger>
                 <MenuV2.Portal>
-                  <MenuV2.SubContent class="max-w-[200px]">
+                  <MenuV2.SubContent class={`max-w-[220px] ${menuSurfaceClass}`}>
                     <For each={props.workspaces}>
                       {(workspace) => (
-                        <MenuV2.Item onSelect={() => select(workspace)}>
-                          <IconV2 name="workspace-isolated" />
+                        <MenuV2.Item
+                          data-checked={selected() === workspace ? "" : undefined}
+                          onSelect={() => select(workspace)}
+                        >
+                          <Icon name="workspace-isolated" />
                           <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
                           <Show when={selected() === workspace}>
                             <Icon name="check" size="small" class="shrink-0" />

@@ -5,15 +5,12 @@ import { createVirtualizer } from "@tanstack/solid-virtual"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
-import { Tag as TagV2 } from "@opencode-ai/ui/v2/badge-v2"
+import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { ModelTooltip } from "./model-tooltip"
@@ -23,6 +20,7 @@ import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
 import { createMenuDismissController } from "@/utils/menu-dismiss-controller"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./dialog-select-model-search"
+import { activeOverlayClass, listV2Class, menuItemsClass, searchFieldClass } from "./surface-classes"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -47,9 +45,7 @@ const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { categ
 
 const ModelList: Component<{
   provider?: string
-  class?: string
   onSelect: () => void
-  action?: JSX.Element
   model?: ModelState
 }> = (props) => {
   const model = props.model ?? useLocal().model
@@ -64,8 +60,8 @@ const ModelList: Component<{
 
   return (
     <List
-      class={`flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
-      search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
+      class={`flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${listV2Class}`}
+      search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
@@ -81,7 +77,7 @@ const ModelList: Component<{
         return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
       }}
       itemWrapper={(item, node) => (
-        <Tooltip
+        <TooltipV2
           class="w-full"
           placement="right-start"
           gutter={12}
@@ -89,7 +85,7 @@ const ModelList: Component<{
           value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
         >
           {node}
-        </Tooltip>
+        </TooltipV2>
       )}
       onSelect={(x) => {
         model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
@@ -99,7 +95,7 @@ const ModelList: Component<{
       }}
     >
       {(i) => (
-        <div class="w-full flex items-center gap-x-2 text-13-regular">
+        <div class="flex w-full items-center gap-x-2 text-[13px]">
           <span class="truncate">{i.name}</span>
           <Show when={isFree(i.provider.id, i.cost)}>
             <Tag>{language.t("model.tag.free")}</Tag>
@@ -115,114 +111,6 @@ const ModelList: Component<{
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
 type ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => JSX.Element
-type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
-
-export function ModelSelectorPopover(props: {
-  provider?: string
-  model?: ModelState
-  trigger: ModelSelectorTrigger
-  onClose?: (cause: "escape" | "select") => void
-}) {
-  const [store, setStore] = createStore<{
-    open: boolean
-    dismiss: Dismiss | null
-  }>({
-    open: false,
-    dismiss: null,
-  })
-  const dialog = useDialog()
-  const local = useLocal()
-  const directory = () => decode64(local.slug())
-
-  const close = (dismiss: Dismiss) => {
-    setStore("dismiss", dismiss)
-    setStore("open", false)
-  }
-
-  const handleManage = () => {
-    close("manage")
-    void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
-    })
-  }
-
-  const handleConnectProvider = () => {
-    close("provider")
-    void import("./dialog-connect-provider").then((x) => {
-      void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
-    })
-  }
-  const language = useLanguage()
-
-  return (
-    <Kobalte
-      open={store.open}
-      onOpenChange={(next) => {
-        if (next) setStore("dismiss", null)
-        setStore("open", next)
-      }}
-      modal={false}
-      placement="top-start"
-      gutter={4}
-    >
-      <Kobalte.Trigger as={props.trigger} />
-      <Kobalte.Portal>
-        <Kobalte.Content
-          class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
-          onEscapeKeyDown={(event) => {
-            close("escape")
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          onPointerDownOutside={() => close("outside")}
-          onFocusOutside={() => close("outside")}
-          onCloseAutoFocus={(event) => {
-            const dismiss = store.dismiss
-            if (dismiss === "outside") event.preventDefault()
-            if (dismiss === "escape" || dismiss === "select") {
-              event.preventDefault()
-              props.onClose?.(dismiss)
-            }
-            setStore("dismiss", null)
-          }}
-        >
-          <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
-          <ModelList
-            provider={props.provider}
-            model={props.model}
-            onSelect={() => close("select")}
-            class="p-1"
-            action={
-              <div class="flex items-center gap-1">
-                <Tooltip placement="top" value={language.t("command.provider.connect")}>
-                  <IconButton
-                    icon="plus-small"
-                    variant="ghost"
-                    iconSize="normal"
-                    class="size-6"
-                    aria-label={language.t("command.provider.connect")}
-                    onClick={handleConnectProvider}
-                  />
-                </Tooltip>
-                <Tooltip placement="top" value={language.t("dialog.model.manage")}>
-                  <IconButton
-                    icon="sliders"
-                    variant="ghost"
-                    iconSize="normal"
-                    class="size-6"
-                    aria-label={language.t("dialog.model.manage")}
-                    onClick={handleManage}
-                  />
-                </Tooltip>
-              </div>
-            }
-          />
-        </Kobalte.Content>
-      </Kobalte.Portal>
-    </Kobalte>
-  )
-}
-
 export function ModelSelectorPopoverV2(props: {
   provider?: string
   model?: ModelState
@@ -324,10 +212,11 @@ function ModelSelectorPopoverV2View(props: {
       return store.open
     },
     getScrollElement: () => store.viewport ?? null,
-    initialRect: { width: 284, height: 220 },
+    initialRect: { width: 300, height: 320 },
     get estimateSize() {
       const current = groups()
-      return (index: number) => (current[index].items.length + 1) * 28
+      // Group label is 28px; each item is 36px (menuItemsClass) plus the 2px group gap.
+      return (index: number) => 28 + current[index].items.length * 38
     },
     get getItemKey() {
       const current = groups()
@@ -412,19 +301,20 @@ function ModelSelectorPopoverV2View(props: {
       <MenuV2.Portal>
         <MenuV2.Content
           ref={(element: HTMLDivElement) => (contentRef = element)}
-          class="w-[284px] overflow-hidden rounded-[20px] border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
+          class={`w-[300px] overflow-hidden !rounded-[24px] border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none ${menuItemsClass}`}
           onPointerDownOutside={dismiss.preventTriggerRestore}
           onFocusOutside={dismiss.preventTriggerRestore}
           onCloseAutoFocus={dismiss.onCloseAutoFocus}
         >
-          <div class="flex flex-col p-0.5">
-            <div class="flex h-7 items-center gap-2 rounded-full pl-3 pr-2.5 text-v2-icon-icon-muted">
-              <Icon name="magnifying-glass" size="small" class="shrink-0" />
+          <div class="flex flex-col px-2 pt-2 pb-1.5">
+            <div class="relative flex items-center text-v2-icon-icon-muted">
+              <Icon name="magnifying-glass" size="small" class="pointer-events-none absolute left-3 shrink-0" />
               <input
                 ref={(el) => (searchRef = el)}
                 value={store.search}
                 placeholder={language.t("dialog.model.search.placeholder")}
-                class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                aria-label={language.t("dialog.model.search.placeholder")}
+                class={`${searchFieldClass} pr-9`}
                 spellcheck={false}
                 autocorrect="off"
                 autocomplete="off"
@@ -460,7 +350,7 @@ function ModelSelectorPopoverV2View(props: {
               <Show when={store.search.trim()}>
                 <button
                   type="button"
-                  class="flex size-5 items-center justify-center rounded-full text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                  class="absolute right-2 flex size-6 items-center justify-center rounded-full text-v2-icon-icon-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => setSearch("")}
                   aria-label={language.t("common.clear")}
@@ -470,16 +360,12 @@ function ModelSelectorPopoverV2View(props: {
               </Show>
             </div>
           </div>
-          <div class="h-px bg-v2-border-border-muted" />
           <ScrollView
             data-slot="model-selector-scroll"
-            class="max-h-[220px] min-h-0"
+            class="max-h-[320px] min-h-0"
             viewportRef={(element) => setStore("viewport", element)}
           >
-            <div
-              class="relative p-0.5 pt-0"
-              style={{ height: `${models().length ? virtualizer.getTotalSize() : 48}px` }}
-            >
+            <div class="relative" style={{ height: `${models().length ? virtualizer.getTotalSize() : 48}px` }}>
               <Show
                 when={models().length > 0}
                 fallback={
@@ -492,7 +378,10 @@ function ModelSelectorPopoverV2View(props: {
                   {(group, index) => (
                     <Show when={visibleGroups().get(index())}>
                       {(row) => (
-                        <MenuV2.Group class="absolute inset-x-0.5" style={{ top: `${row().start}px` }}>
+                        <MenuV2.Group
+                          class="absolute inset-x-2 flex flex-col gap-0.5"
+                          style={{ top: `${row().start}px` }}
+                        >
                           <MenuV2.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
                             <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
                           </MenuV2.GroupLabel>
@@ -509,7 +398,6 @@ function ModelSelectorPopoverV2View(props: {
                                       model={item}
                                       latest={item.latest}
                                       free={isFree(item.provider.id, item.cost)}
-                                      v2
                                     />
                                   }
                                 >
@@ -518,7 +406,7 @@ function ModelSelectorPopoverV2View(props: {
                                     data-option-key={modelKey(item)}
                                     data-selected-model={props.current() === modelKey(item) ? true : undefined}
                                     class="scroll-my-6 w-full"
-                                    classList={{ "!bg-v2-overlay-simple-overlay-hover": active(modelKey(item)) }}
+                                    classList={{ [activeOverlayClass]: active(modelKey(item)) }}
                                     onMouseEnter={() => {
                                       setStore("active", modelKey(item))
                                       setTimeout(() => searchRef?.focus())
@@ -527,10 +415,10 @@ function ModelSelectorPopoverV2View(props: {
                                   >
                                     <span class="min-w-0 truncate leading-5">{item.name}</span>
                                     <Show when={isFree(item.provider.id, item.cost)}>
-                                      <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
+                                      <Tag class="shrink-0">{language.t("model.tag.free")}</Tag>
                                     </Show>
                                     <Show when={item.latest}>
-                                      <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
+                                      <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
                                     </Show>
                                   </MenuV2.RadioItem>
                                 </TooltipV2>
@@ -545,11 +433,11 @@ function ModelSelectorPopoverV2View(props: {
               </Show>
             </div>
           </ScrollView>
-          <div class="h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col p-0.5">
+          <div class="mx-4 h-px bg-v2-border-border-muted" />
+          <div class="flex flex-col p-2">
             <MenuV2.Item
               data-option-key={manageKey}
-              classList={{ "!bg-v2-overlay-simple-overlay-hover": active(manageKey) }}
+              classList={{ [activeOverlayClass]: active(manageKey) }}
               onMouseEnter={() => {
                 setStore("active", manageKey)
                 setTimeout(() => searchRef?.focus())
@@ -580,23 +468,26 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
 
   const manage = () => {
     void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
+      dialog.show(() => <x.DialogManageModelsV2 />)
     })
   }
 
   return (
-    <Dialog
-      title={language.t("dialog.model.select.title")}
-      action={
-        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
+    <Dialog size="large">
+      <DialogHeader>
+        <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
+        <ButtonV2 size="small" variant="ghost" icon="plus" class="-my-1.5 me-2" tabIndex={-1} onClick={provider}>
           {language.t("command.provider.connect")}
-        </Button>
-      }
-    >
-      <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
-      <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
-        {language.t("dialog.model.manage")}
-      </Button>
+        </ButtonV2>
+      </DialogHeader>
+      <DialogBody class="min-h-0">
+        <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
+      </DialogBody>
+      <DialogFooter>
+        <ButtonV2 variant="ghost" icon="outline-sliders" onClick={manage}>
+          {language.t("dialog.model.manage")}
+        </ButtonV2>
+      </DialogFooter>
     </Dialog>
   )
 }
