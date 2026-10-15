@@ -152,7 +152,7 @@ const echo = Layer.effectDiscard(
   ),
 )
 const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [ToolRegistry.node] })
-let modelResolveHook = Effect.void
+let modelResolveHook: Effect.Effect<void, SessionRunnerModel.Error> = Effect.void
 let currentModel = model
 const models = SessionRunnerModel.layerWith((session) =>
   modelResolveHook.pipe(Effect.as(session.model?.id === "replacement" ? replacementModel : currentModel)),
@@ -735,6 +735,27 @@ describe("SessionRunnerLLM", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(ContextSnapshotDecodeError)
       expect(requests).toHaveLength(0)
+    }),
+  )
+
+  it.effect("records a failed assistant step when the selected model cannot be resolved", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const failure = new SessionRunnerModel.ModelUnavailableError({
+        providerID: ProviderV2.ID.make("fake"),
+        modelID: ModelV2.ID.make("missing"),
+      })
+      modelResolveHook = Effect.fail(failure)
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+      requests.length = 0
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(0)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Hi" },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Model unavailable: fake/missing" } },
+      ])
     }),
   )
 
