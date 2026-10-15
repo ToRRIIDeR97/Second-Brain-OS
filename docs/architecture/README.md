@@ -1,8 +1,8 @@
 # Architecture
 
-Second Brain OS is an OpenCode fork. OpenCode is the runtime base: the
+Tenon Workbench (formerly Second Brain OS) is an OpenCode fork. OpenCode is the runtime base: the
 Electron host, the managed local OpenCode server and the session runtime. The
-app shell and navigation are Second Brain's own: a navigation rail of Home,
+app shell and navigation are Tenon Workbench's own: a navigation rail of Home,
 Notes, Calendar and Activity beside a Projects panel with their threads. New product domains are
 added inside the existing OpenCode application rather than beside it.
 
