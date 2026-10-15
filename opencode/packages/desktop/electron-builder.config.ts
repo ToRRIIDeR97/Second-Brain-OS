@@ -42,7 +42,7 @@ const APP_IDS = {
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "second-brain-os-${os}-${arch}.${ext}",
+  artifactName: "tenon-workbench-${os}-${arch}.${ext}",
   // Release candidates are uploaded as artifacts. No automatic publishing or upstream update feed.
   publish: null,
   directories: {
@@ -88,7 +88,7 @@ const getBase = (appId: string): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: "Second Brain OS",
+    name: "Tenon Workbench",
     schemes: ["opencode"],
   },
   win: {
@@ -129,7 +129,7 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "Second Brain OS Dev",
+        productName: "Tenon Workbench Dev",
         deb: { fpm: [metainfoFpm(appId)] },
         rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
       }
@@ -138,8 +138,8 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "Second Brain OS Beta",
-        protocols: { name: "Second Brain OS Beta", schemes: ["opencode"] },
+        productName: "Tenon Workbench Beta",
+        protocols: { name: "Tenon Workbench Beta", schemes: ["opencode"] },
         deb: { fpm: [metainfoFpm(appId)] },
         rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
       }
@@ -148,8 +148,8 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "Second Brain OS",
-        protocols: { name: "Second Brain OS", schemes: ["opencode"] },
+        productName: "Tenon Workbench",
+        protocols: { name: "Tenon Workbench", schemes: ["opencode"] },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
         rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
       }

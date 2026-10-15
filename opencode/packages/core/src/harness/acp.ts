@@ -100,7 +100,7 @@ function connect(
     const initialize = yield* client.request("initialize", {
       protocolVersion,
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: { name: "second_brain_os", title: "Second Brain OS", version: "0.1.0" },
+      clientInfo: { name: "second_brain_os", title: "Tenon Workbench", version: "0.1.0" },
     })
     const info = isRecord(initialize) ? initialize : {}
     if (info.protocolVersion !== protocolVersion)

@@ -359,7 +359,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
       </Show>
       <Show when={loading()}>
         <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-v2-background-bg-deep">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <Splash class="size-16 opacity-50 animate-pulse" />
         </div>
       </Show>
     </>

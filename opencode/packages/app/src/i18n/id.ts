@@ -1,5 +1,5 @@
 export const dict = {
-  "desktop.menu.app": "OpenCode",
+  "desktop.menu.app": "Tenon Workbench",
   "desktop.menu.file": "Berkas",
   "desktop.menu.edit": "Sunting",
   "desktop.menu.view": "Tampilan",
@@ -39,7 +39,7 @@ export const dict = {
   "desktop.menu.nextProject": "Proyek berikutnya",
   "desktop.menu.minimize": "Minimalkan",
   "desktop.menu.maximize": "Maksimalkan",
-  "desktop.menu.ariaLabel": "Menu OpenCode",
+  "desktop.menu.ariaLabel": "Menu Tenon Workbench",
 
   "desktop.updater.dialog.checkFailed.message": "Pemeriksaan pembaruan gagal.",
   "desktop.updater.dialog.checkFailed.title": "Kesalahan pembaruan",
@@ -54,9 +54,9 @@ export const dict = {
   "desktop.recovery.action.exportLogs": "Ekspor log",
   "desktop.recovery.action.keepWaiting": "Tetap tunggu",
   "desktop.recovery.action.quit": "Keluar",
-  "desktop.recovery.loadFailed": "OpenCode gagal dimuat",
-  "desktop.recovery.terminated": "Jendela OpenCode berhenti secara tidak terduga",
-  "desktop.recovery.unresponsive": "OpenCode tidak merespons",
+  "desktop.recovery.loadFailed": "Tenon Workbench gagal dimuat",
+  "desktop.recovery.terminated": "Jendela Tenon Workbench berhenti secara tidak terduga",
+  "desktop.recovery.unresponsive": "Tenon Workbench tidak merespons",
   "desktop.recovery.unresponsive.detail": "Anda dapat meluncurkan ulang aplikasi, membuka log, atau tetap menunggu.",
   "desktop.recovery.loadFailed.detail": "Jendela: {{window}}\nURL: {{url}}\nKesalahan: {{code}} {{description}}",
   "desktop.recovery.terminated.detail": "Jendela: {{window}}\nAlasan: {{reason}}\nKode: {{code}}",
@@ -226,14 +226,14 @@ export const dict = {
   "provider.connect.status.waiting": "Menunggu otorisasi...",
   "provider.connect.status.failed": "Otorisasi gagal: {{error}}",
   "provider.connect.apiKey.description":
-    "Masukkan kunci API {{provider}} untuk menghubungkan akun Anda dan gunakan model {{provider}} di OpenCode.",
+    "Masukkan kunci API {{provider}} untuk menghubungkan akun Anda dan gunakan model {{provider}} di Tenon Workbench.",
   "provider.connect.apiKey.label": "Kunci API {{provider}}",
   "provider.connect.apiKey.placeholder": "Kunci API",
   "provider.connect.apiKey.required": "Kunci API diperlukan",
   "provider.connect.oauth.code.visit.prefix": "Kunjungi ",
   "provider.connect.oauth.code.visit.link": "tautan ini",
   "provider.connect.oauth.code.visit.suffix":
-    " untuk mendapatkan kode otorisasi guna menghubungkan akun Anda dan menggunakan model {{provider}} di OpenCode.",
+    " untuk mendapatkan kode otorisasi guna menghubungkan akun Anda dan menggunakan model {{provider}} di Tenon Workbench.",
   "provider.connect.oauth.code.label": "Kode otorisasi {{method}}",
   "provider.connect.oauth.code.placeholder": "Kode otorisasi",
   "provider.connect.oauth.code.required": "Kode otorisasi diperlukan",
@@ -241,7 +241,7 @@ export const dict = {
   "provider.connect.oauth.auto.visit.prefix": "Kunjungi ",
   "provider.connect.oauth.auto.visit.link": "tautan ini",
   "provider.connect.oauth.auto.visit.suffix":
-    " dan masukkan kode di bawah untuk menghubungkan akun dan menggunakan model {{provider}} di OpenCode.",
+    " dan masukkan kode di bawah untuk menghubungkan akun dan menggunakan model {{provider}} di Tenon Workbench.",
   "provider.connect.oauth.auto.confirmationCode": "Kode konfirmasi",
   "provider.connect.toast.connected.title": "{{provider}} terhubung",
   "provider.connect.toast.connected.description": "Model {{provider}} sekarang tersedia untuk digunakan.",
@@ -415,7 +415,7 @@ export const dict = {
   "app.server.otherServers": "Server lainnya",
 
   "dialog.server.title": "Server",
-  "dialog.server.description": "Ganti server OpenCode mana yang terhubung dengan aplikasi ini.",
+  "dialog.server.description": "Ganti server Tenon Workbench mana yang terhubung dengan aplikasi ini.",
   "dialog.server.search.placeholder": "Cari server",
   "dialog.server.empty": "Belum ada server",
   "dialog.server.add.title": "Tambah server",
@@ -485,12 +485,12 @@ export const dict = {
   "wsl.onboarding.needAnotherDistroHint": "Instal distribusi Linux dari katalog WSL",
   "wsl.onboarding.wslNotInstalled.title": "WSL belum terinstal",
   "wsl.onboarding.wslNotInstalled.description":
-    "WSL (Windows Subsystem for Linux) diperlukan sebelum OpenCode dapat menambahkan server WSL",
+    "WSL (Windows Subsystem for Linux) diperlukan sebelum Tenon Workbench dapat menambahkan server WSL",
   "wsl.onboarding.wslUnavailable.title": "WSL tidak tersedia",
-  "wsl.onboarding.wslUnavailable.description": "OpenCode tidak dapat memverifikasi WSL di komputer ini.",
+  "wsl.onboarding.wslUnavailable.description": "Tenon Workbench tidak dapat memverifikasi WSL di komputer ini.",
   "wsl.onboarding.installWsl": "Instal WSL",
   "wsl.onboarding.windowsRestartRequired":
-    "Mulai ulang Windows untuk menyelesaikan instalasi WSL, lalu buka kembali OpenCode.",
+    "Mulai ulang Windows untuk menyelesaikan instalasi WSL, lalu buka kembali Tenon Workbench.",
   "wsl.onboarding.next": "Berikutnya",
   "wsl.onboarding.refresh": "Muat ulang",
   "wsl.onboarding.allDistrosAdded": "Semua distro yang terinstal sudah ditambahkan.",
@@ -616,7 +616,7 @@ export const dict = {
   "toast.project.reloadFailed.title": "Gagal memuat ulang {{project}}",
 
   "toast.update.title": "Pembaruan tersedia",
-  "toast.update.description": "Versi baru OpenCode ({{version}}) sekarang tersedia untuk diinstal.",
+  "toast.update.description": "Versi baru Tenon Workbench ({{version}}) sekarang tersedia untuk diinstal.",
   "toast.update.action.installRestart": "Instal dan mulai ulang",
   "toast.update.action.notYet": "Nanti saja",
 
@@ -656,7 +656,7 @@ export const dict = {
   "error.chain.didYouMean": "Maksud Anda: {{suggestions}}",
   "error.chain.modelNotFound": "Model tidak ditemukan: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Periksa nama penyedia/model di konfigurasi Anda (opencode.json)",
-  "error.chain.mcpFailed": 'Server MCP "{{name}}" gagal. Catatan: OpenCode belum mendukung autentikasi MCP.',
+  "error.chain.mcpFailed": 'Server MCP "{{name}}" gagal. Catatan: Tenon Workbench belum mendukung autentikasi MCP.',
   "error.chain.providerAuthFailed": "Autentikasi penyedia gagal ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Gagal menginisialisasi penyedia "{{provider}}". Periksa kredensial dan konfigurasi.',
@@ -903,7 +903,7 @@ export const dict = {
   "debugBar.direction.ltr": "LTR",
   "debugBar.direction.rtl": "RTL",
 
-  "app.name.desktop": "OpenCode Desktop",
+  "app.name.desktop": "Tenon Workbench",
 
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
@@ -911,7 +911,7 @@ export const dict = {
   "settings.tab.shortcuts": "Pintasan",
   "settings.desktop.section.wsl": "WSL",
   "settings.desktop.wsl.title": "Integrasi WSL",
-  "settings.desktop.wsl.description": "Jalankan server OpenCode di dalam WSL di Windows.",
+  "settings.desktop.wsl.description": "Jalankan server Tenon Workbench di dalam WSL di Windows.",
 
   "settings.general.section.appearance": "Tampilan",
   "settings.general.section.advanced": "Lanjutan",
@@ -927,7 +927,7 @@ export const dict = {
   "settings.general.row.shell.autoDefault": "Otomatis (Bawaan)",
   "settings.general.row.shell.terminalOnly": "hanya terminal",
   "settings.general.row.appearance.title": "Tampilan",
-  "settings.general.row.appearance.description": "Sesuaikan tampilan OpenCode di perangkat Anda",
+  "settings.general.row.appearance.description": "Sesuaikan tampilan Tenon Workbench di perangkat Anda",
   "settings.general.row.colorScheme.title": "Skema warna",
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.font.title": "Font kode",
@@ -960,14 +960,14 @@ export const dict = {
 
 
   "settings.updates.row.startup.title": "Periksa pembaruan saat dimulai",
-  "settings.updates.row.startup.description": "Secara otomatis memeriksa pembaruan saat OpenCode diluncurkan",
+  "settings.updates.row.startup.description": "Secara otomatis memeriksa pembaruan saat Tenon Workbench diluncurkan",
   "settings.updates.row.check.title": "Periksa pembaruan",
   "settings.updates.action.checkNow": "Periksa sekarang",
   "settings.updates.action.checking": "Memeriksa...",
   "settings.updates.action.downloading": "Mengunduh...",
   "settings.updates.action.installing": "Menginstal...",
   "settings.updates.toast.latest.title": "Versi Anda sudah terbaru",
-  "settings.updates.toast.latest.description": "Anda menjalankan versi terbaru OpenCode.",
+  "settings.updates.toast.latest.description": "Anda menjalankan versi terbaru Tenon Workbench.",
   "sound.option.none": "Tidak ada",
   "sound.option.alert01": "Peringatan 01",
   "sound.option.alert02": "Peringatan 02",

@@ -656,7 +656,7 @@ function openCodex(
       handleRequest,
     })
     const initialize = yield* client.request("initialize", {
-      clientInfo: { name: "second_brain_os", title: "Second Brain OS", version: "0.1.0" },
+      clientInfo: { name: "second_brain_os", title: "Tenon Workbench", version: "0.1.0" },
       capabilities: { experimentalApi: true, requestAttestation: false },
     })
     yield* client.notify("initialized")

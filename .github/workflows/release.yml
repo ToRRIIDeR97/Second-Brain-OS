@@ -36,7 +36,7 @@ jobs:
             } | Set-Content opencode/packages/desktop/dist/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: second-brain-os-unsigned-windows
+          name: tenon-workbench-unsigned-windows
           path: |
             opencode/packages/desktop/dist/*.exe
             opencode/packages/desktop/dist/SHA256SUMS

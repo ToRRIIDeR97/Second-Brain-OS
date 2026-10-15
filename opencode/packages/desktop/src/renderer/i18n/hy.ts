@@ -8,12 +8,12 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Թարմացման ստուգումը ձախողվեց",
   "desktop.updater.checkFailed.message": "Չհաջողվեց ստուգել թարմացումների առկայությունը",
   "desktop.updater.none.title": "Թարմացում չկա",
-  "desktop.updater.none.message": "Դուք արդեն օգտագործում եք OpenCode-ի վերջին տարբերակը",
+  "desktop.updater.none.message": "Դուք արդեն օգտագործում եք Tenon Workbench-ի վերջին տարբերակը",
   "desktop.updater.downloadFailed.title": "Թարմացումը ձախողվեց",
   "desktop.updater.downloadFailed.message": "Չհաջողվեց ներբեռնել թարմացումը",
   "desktop.updater.downloaded.title": "Թարմացումը ներբեռնված է",
   "desktop.updater.downloaded.prompt":
-    "OpenCode-ի {{version}} տարբերակը ներբեռնվել է: Ցանկանու՞մ եք տեղադրել այն և վերագործարկել:",
+    "Tenon Workbench-ի {{version}} տարբերակը ներբեռնվել է: Ցանկանու՞մ եք տեղադրել այն և վերագործարկել:",
   "desktop.updater.installFailed.title": "Թարմացումը ձախողվեց",
   "desktop.updater.installFailed.message": "Չհաջողվեց տեղադրել թարմացումը",
 

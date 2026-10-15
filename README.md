@@ -1,4 +1,4 @@
-# Second Brain OS
+# Tenon Workbench
 
 A local-first, agent-powered second brain for files, notes, projects, and
 planning. The Electron app builds on OpenCode's agent, session, terminal, and
@@ -41,7 +41,7 @@ revision, and migration gaps are recorded in [the archive](docs/archive/tauri/RE
 
 | Command                 | Purpose                                               |
 | ----------------------- | ----------------------------------------------------- |
-| `bun run dev`           | Start the Second Brain OS Electron app                |
+| `bun run dev`           | Start the Tenon Workbench Electron app                |
 | `bun run build`         | Build the Electron renderer and main process          |
 | `bun run desktop:build` | Build and package an unsigned Windows candidate       |
 | `bun run typecheck`     | Check renderer, desktop, core, and server types       |

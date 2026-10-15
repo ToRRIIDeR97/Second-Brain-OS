@@ -1,4 +1,4 @@
-# Second Brain OS v1 navigation map
+# Tenon Workbench v1 navigation map
 
 - Status: implemented (sidebar-only navigation, roadmap Phase 4)
 - Companion: [`PRODUCT-BRIEF-V1.md`](./PRODUCT-BRIEF-V1.md)
@@ -7,7 +7,7 @@
 
 ## Navigation model
 
-Second Brain OS has one Brain: the Workspace selected on Home, where notes,
+Tenon Workbench has one Brain: the Workspace selected on Home, where notes,
 Project cards and the calendar live. Every thread belongs to a Project, and
 every Project owns a thread directory (its linked Workspace, otherwise its
 Project folder). The left sidebar is the only navigation. There is no tab

@@ -7,7 +7,7 @@ export function WordmarkV2(props: Pick<ComponentProps<"svg">, "class">) {
       viewBox="0 0 720 129"
       fill="none"
       role="img"
-      aria-label="Second Brain OS"
+      aria-label="Tenon Workbench"
       classList={{ [props.class ?? ""]: !!props.class }}
     >
       <text
@@ -20,7 +20,7 @@ export function WordmarkV2(props: Pick<ComponentProps<"svg">, "class">) {
         fill="currentColor"
         opacity="0.1"
       >
-        Second Brain OS
+        Tenon Workbench
       </text>
     </svg>
   )

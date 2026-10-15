@@ -41,7 +41,8 @@ The local server comes from `opencode/packages/opencode/script/build-node.ts`
 (entry `src/node.ts`). The fork doesn't build or ship its own `opencode` CLI
 binary, and the desktop app has no "Install CLI" action.
 
-The product display name is Second Brain OS. Existing `ai.opencode.desktop.*`
+The product display name is Tenon Workbench (renamed from Second Brain OS on
+2026-10-15). Existing `ai.opencode.desktop.*`
 application IDs and data paths are retained to preserve profile compatibility.
 The `opencode:` URL scheme is also retained for existing links.
 

@@ -8,12 +8,12 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Kontrolli i përditësimit dështoi",
   "desktop.updater.checkFailed.message": "Kontrolli për përditësime dështoi",
   "desktop.updater.none.title": "Nuk ka përditësim të disponueshëm",
-  "desktop.updater.none.message": "Ju tashmë po përdorni versionin më të fundit të OpenCode",
+  "desktop.updater.none.message": "Ju tashmë po përdorni versionin më të fundit të Tenon Workbench",
   "desktop.updater.downloadFailed.title": "Përditësimi dështoi",
   "desktop.updater.downloadFailed.message": "Shkarkimi i përditësimit dështoi",
   "desktop.updater.downloaded.title": "Përditësimi u shkarkua",
   "desktop.updater.downloaded.prompt":
-    "Versioni {{version}} i OpenCode është shkarkuar, dëshironi ta instaloni dhe rinisni?",
+    "Versioni {{version}} i Tenon Workbench është shkarkuar, dëshironi ta instaloni dhe rinisni?",
   "desktop.updater.installFailed.title": "Përditësimi dështoi",
   "desktop.updater.installFailed.message": "Instalimi i përditësimit dështoi",
 

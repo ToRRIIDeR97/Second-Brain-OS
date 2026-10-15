@@ -8,12 +8,12 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Värskenduskontroll ebaõnnestus",
   "desktop.updater.checkFailed.message": "Värskenduste kontrollimine ebaõnnestus",
   "desktop.updater.none.title": "Värskendus pole saadaval",
-  "desktop.updater.none.message": "Kasutate juba rakenduse OpenCode uusimat versiooni",
+  "desktop.updater.none.message": "Kasutate juba rakenduse Tenon Workbench uusimat versiooni",
   "desktop.updater.downloadFailed.title": "Värskendus ebaõnnestus",
   "desktop.updater.downloadFailed.message": "Värskenduse allalaadimine ebaõnnestus",
   "desktop.updater.downloaded.title": "Värskendus alla laaditud",
   "desktop.updater.downloaded.prompt":
-    "OpenCode'i versioon {{version}} on alla laaditud. Kas soovite selle installida ja rakenduse taaskäivitada?",
+    "Tenon Workbench'i versioon {{version}} on alla laaditud. Kas soovite selle installida ja rakenduse taaskäivitada?",
   "desktop.updater.installFailed.title": "Värskendus ebaõnnestus",
   "desktop.updater.installFailed.message": "Värskenduse installimine ebaõnnestus",
 

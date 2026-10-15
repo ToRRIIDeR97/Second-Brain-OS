@@ -8,12 +8,12 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Atjauninājumu pārbaude neizdevās",
   "desktop.updater.checkFailed.message": "Neizdevās pārbaudīt atjauninājumus",
   "desktop.updater.none.title": "Atjauninājumu nav",
-  "desktop.updater.none.message": "Jūs jau izmantojat jaunāko OpenCode versiju",
+  "desktop.updater.none.message": "Jūs jau izmantojat jaunāko Tenon Workbench versiju",
   "desktop.updater.downloadFailed.title": "Atjaunināšana neizdevās",
   "desktop.updater.downloadFailed.message": "Neizdevās lejupielādēt atjauninājumu",
   "desktop.updater.downloaded.title": "Atjauninājums lejupielādēts",
   "desktop.updater.downloaded.prompt":
-    "OpenCode versija {{version}} ir lejupielādēta. Vai vēlaties to instalēt un palaist no jauna?",
+    "Tenon Workbench versija {{version}} ir lejupielādēta. Vai vēlaties to instalēt un palaist no jauna?",
   "desktop.updater.installFailed.title": "Atjaunināšana neizdevās",
   "desktop.updater.installFailed.message": "Neizdevās instalēt atjauninājumu",
 

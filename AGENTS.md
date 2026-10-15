@@ -1,4 +1,4 @@
-# Second Brain OS Repository Rules
+# Tenon Workbench Repository Rules
 
 ## Architecture
 

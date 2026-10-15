@@ -21,7 +21,7 @@ for (const channel of channels) {
     else process.env.OPENCODE_CHANNEL = previous
 
     expect(config.appId).toBe(channel.appId)
-    expect(config.productName).toStartWith("Second Brain OS")
+    expect(config.productName).toStartWith("Tenon Workbench")
     expect(config.publish).toBeNull()
     expect(config.extraMetadata?.desktopName).toBe(`${channel.appId}.desktop`)
     expect(config.linux?.executableName).toBe(channel.appId)
@@ -53,7 +53,7 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
   ).toBe(true)
 
   const desktop = await Bun.file(legacyDesktopEntry).text()
-  expect(desktop).toContain('Exec="/opt/Second Brain OS/ai.opencode.desktop" %U')
+  expect(desktop).toContain('Exec="/opt/Tenon Workbench/ai.opencode.desktop" %U')
   expect(desktop).toContain("Icon=ai.opencode.desktop")
   expect(desktop).toContain("StartupWMClass=ai.opencode.desktop")
   expect(desktop).toContain("NoDisplay=true")
