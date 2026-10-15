@@ -94,7 +94,7 @@ export function fallbackHarnesses(): ReadonlyArray<Harness.Instance> {
     HarnessSchema.Instance.make({
       id: HarnessSchema.OpenCode,
       driver: HarnessSchema.OpenCodeDriver,
-      name: "OpenCode",
+      name: "Tenon Workbench",
       status: "available",
       models: [],
     }),
@@ -102,6 +102,13 @@ export function fallbackHarnesses(): ReadonlyArray<Harness.Instance> {
       id: HarnessSchema.Codex,
       driver: HarnessSchema.CodexDriver,
       name: "Codex",
+      status: "unavailable",
+      models: [],
+    }),
+    HarnessSchema.Instance.make({
+      id: HarnessSchema.OpenCodeAcp,
+      driver: HarnessSchema.AcpDriver,
+      name: "OpenCode",
       status: "unavailable",
       models: [],
     }),

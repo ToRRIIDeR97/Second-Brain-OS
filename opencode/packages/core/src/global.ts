@@ -6,8 +6,12 @@ import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
+import { LegacyStorage } from "./legacy-storage"
 
-const app = "opencode"
+// Tenon Workbench's own XDG namespace. Upstream OpenCode keeps `opencode`; sharing it mixed both apps'
+// credentials, config and database.
+const app = "tenon-workbench"
+const legacy = "opencode"
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
@@ -29,6 +33,20 @@ const paths = {
 }
 
 export const Path = paths
+
+// Must run before the folders below are created: an existing target folder marks the copy as done.
+// Tests use isolated folders and exercise LegacyStorage directly.
+if (process.env.NODE_ENV !== "test")
+  await LegacyStorage.migrate([
+    {
+      from: path.join(xdgData!, legacy),
+      to: data,
+      // Rebuildable caches, plus worktrees whose absolute paths git has registered.
+      skip: ["snapshot", "bin", "log", "repos", "tool-output", "worktree"],
+    },
+    { from: path.join(xdgConfig!, legacy), to: config, skip: ["node_modules"] },
+    { from: path.join(xdgState!, legacy), to: state, skip: ["locks"] },
+  ])
 
 Flock.setGlobal({ state })
 

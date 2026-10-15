@@ -25,7 +25,7 @@ stores that Workspace's worktree as `location.displayPath`, and
 `GET /second-brain/project-threads` returns absolute thread directories the
 same way session responses already return `directory`.
 
-`opencode://open-project` and `opencode://new-session` deep links are handled
+`tenon://open-project` and `tenon://new-session` deep links are handled
 by the app shell's sidebar controller
 (`opencode/packages/app/src/components/sidebar/sidebar-controller.ts`) and
 only on a local server. A deep link can open a folder, link it to a Project
@@ -45,7 +45,7 @@ Google token encryption is specific to the desktop integration. It does not
 establish encryption for every provider credential store. Provider
 credentials (`auth.json`, `mcp-auth.json`) and the session database
 (`opencode.db`) live in the XDG data directory (by default
-`~/.local/share/opencode/`), outside Electron `userData`. `userData` holds
+`~/.local/share/tenon-workbench/`), outside Electron `userData`. `userData` holds
 drafts, electron-store files, logs, and server state. Treat both locations as
 sensitive and exclude them from source control and release artifacts.
 
@@ -127,7 +127,7 @@ refused.
 
 The registry stores commands, arguments, and model IDs only. Agents can't
 store environment variables or secrets in it, and it can't replace the
-built-in `opencode` and `codex` instances. ACP agents get no client
+built-in `opencode`, `codex`, and `opencode-acp` instances. ACP agents get no client
 file-system or terminal capability. Their own tool approvals arrive as
 `session/request_permission` and use Second Brain permissions. Treat output
 from an ACP agent as untrusted model output.
@@ -139,6 +139,54 @@ locale, temp and terminal variables, `XDG_*`, Windows system variables) plus the
 the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.
+
+### Upstream OpenCode harness
+
+The built-in `opencode-acp` instance starts upstream OpenCode from `PATH` as
+`opencode acp`, through the same ACP driver as registered agents. It is a
+separate child process running as the user, and it gets the same treatment:
+
+- It receives only the launch allowlist from `core/src/harness/env.ts`. No
+  `OPENCODE_*` variables and no provider keys from the app reach it.
+- It uses its own credentials, set up with `opencode auth login`.
+- The client advertises no file-system or terminal capability. Its tool
+  approvals arrive as `session/request_permission` and go through
+  `PermissionV2`, so the user approves them in Tenon Workbench.
+- Which binary runs depends on `PATH`. A different `opencode` earlier on
+  `PATH` would run instead.
+
+Resolved: Tenon Workbench's core `Global` paths now use the app name
+`tenon-workbench` (`core/src/global.ts`), so Tenon Workbench and upstream OpenCode
+no longer share `~/.config/opencode` and `~/.local/share/opencode`. On first
+start, `core/src/legacy-storage.ts` copies the legacy folders once, including
+`auth.json`, `account.json`, `mcp-auth.json` and the database. That copy
+duplicates the credentials into the `tenon-workbench` folder; after it, each app
+reads and writes only its own copy. The legacy folders are left unchanged and
+still hold the original credentials. If the shared `opencode.db` contained
+upstream OpenCode sessions, Tenon Workbench's copy contains them too.
+Per-project `.opencode/` folders and `.git/opencode` are still shared by
+design.
+
+Resolved: the Electron app IDs are `io.github.torriider97.tenonworkbench[.dev|.beta]`
+(`APP_IDS` in `desktop/src/main/index.ts`), separate from upstream OpenCode
+Desktop's `ai.opencode.desktop[.dev|.beta]`. Electron `userData`
+(electron-store files, logs, and server state via `XDG_STATE_HOME`) and the
+Windows install identity no longer collide with an upstream install. Related
+changes:
+
+- The deep-link scheme is `tenon://`, so Tenon Workbench no longer
+  registers for, or takes over, upstream's `opencode://` handler.
+- Background CLI discovery (`desktop/src/main/background-cli.ts`) checks only
+  Tenon Workbench's own `userData` folders and cannot attach to upstream OpenCode
+  Desktop's background service.
+- The upstream Tauri `.dat` import (`desktop/src/main/migrate.ts`), which read
+  upstream OpenCode app data from `ai.opencode.desktop*` folders, was removed.
+- Only the dev channel copies the old `ai.opencode.desktop.dev` `userData`
+  (`desktop/src/main/user-data-migration.ts`). Beta and prod do not read the
+  `ai.opencode.desktop` and `ai.opencode.desktop.beta` folders, which belong to
+  upstream OpenCode Desktop. The copy leaves the old folder unchanged.
+
+The in-window DOM event name `opencode:deep-link` is internal and unchanged.
 
 ### Harness handoff text
 

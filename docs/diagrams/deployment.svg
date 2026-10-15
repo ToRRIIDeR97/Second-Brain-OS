@@ -68,7 +68,7 @@
 <text x="70" y="148" text-anchor="start" class="s">«process»</text>
 <text x="70" y="164" text-anchor="start" class="t">Main process</text>
 <text x="70" y="180" text-anchor="start" class="s">out/main/index.js</text>
-<text x="70" y="196" text-anchor="start" class="s">app id ai.opencode.desktop.*</text>
+<text x="70" y="196" text-anchor="start" class="s">io.github.torriider97.tenonworkbench</text>
 <rect class="box" x="270" y="130" width="200" height="86" rx="6"/>
 <text x="280" y="148" text-anchor="start" class="s">«process»</text>
 <text x="280" y="164" text-anchor="start" class="t">Renderer process</text>
@@ -86,8 +86,8 @@
 <text x="280" y="356" text-anchor="start" class="s">opt-in v2, dev channel only</text>
 <rect class="proc" x="510" y="100" width="230" height="76" rx="6"/>
 <text x="520" y="118" text-anchor="start" class="t">Harness processes</text>
-<text x="520" y="134" text-anchor="start" class="s">codex app-server, ACP agents</text>
-<text x="520" y="150" text-anchor="start" class="s">spawned by server, stdio</text>
+<text x="520" y="134" text-anchor="start" class="s">codex app-server, opencode acp,</text>
+<text x="520" y="150" text-anchor="start" class="s">other ACP agents; stdio</text>
 <text x="520" y="166" text-anchor="start" class="s">cwd = workspace</text>
 <rect class="proc" x="510" y="190" width="230" height="50" rx="6"/>
 <text x="520" y="208" text-anchor="start" class="t">WSL sidecars</text>
@@ -99,16 +99,19 @@
 <text x="50" y="496" text-anchor="start" class="s">drafts.sqlite (+wal/shm)</text>
 <text x="50" y="512" text-anchor="start" class="s">window-state-&lt;id&gt;.json</text>
 <text x="50" y="528" text-anchor="start" class="s">logs/&lt;stamp&gt;/, Crashpad/</text>
-<text x="50" y="544" text-anchor="start" class="s">opencode/ server state</text>
+<text x="50" y="544" text-anchor="start" class="s">tenon-workbench/ server state</text>
 <text x="50" y="560" text-anchor="start" class="s">(XDG_STATE_HOME default)</text>
 <text x="50" y="576" text-anchor="start" class="s">cli/&lt;ver&gt;/opencode-cli (v2)</text>
+<text x="50" y="592" text-anchor="start" class="s">.user-data-migrated (dev copy)</text>
 <rect class="store" x="290" y="430" width="200" height="100" rx="6"/>
-<text x="300" y="448" text-anchor="start" class="t">XDG data/opencode</text>
+<text x="300" y="448" text-anchor="start" class="t">XDG data/tenon-workbench</text>
 <text x="300" y="464" text-anchor="start" class="s">auth.json, mcp-auth.json</text>
 <text x="300" y="480" text-anchor="start" class="s">profile SQLite, snapshots</text>
+<text x="300" y="496" text-anchor="start" class="s">copied once from opencode/</text>
 <rect class="store" x="290" y="545" width="200" height="64" rx="6"/>
 <text x="300" y="563" text-anchor="start" class="t">Global config dir</text>
-<text x="300" y="579" text-anchor="start" class="s">harnesses.json</text>
+<text x="300" y="579" text-anchor="start" class="s">config/tenon-workbench</text>
+<text x="300" y="595" text-anchor="start" class="s">harnesses.json</text>
 <rect class="store" x="510" y="430" width="230" height="90" rx="6"/>
 <text x="520" y="448" text-anchor="start" class="t">Workspace directories</text>
 <text x="520" y="464" text-anchor="start" class="s">notes/, projects/</text>

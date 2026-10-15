@@ -1,12 +1,10 @@
 import { expect, test } from "bun:test"
 import type { Configuration } from "electron-builder"
 
-const legacyDesktopEntry = "resources/linux/opencode-desktop.desktop"
-
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev" },
-  { channel: "beta", appId: "ai.opencode.desktop.beta" },
-  { channel: "prod", appId: "ai.opencode.desktop" },
+  { channel: "dev", appId: "io.github.torriider97.tenonworkbench.dev", name: "tenon-workbench-dev" },
+  { channel: "beta", appId: "io.github.torriider97.tenonworkbench.beta", name: "tenon-workbench-beta" },
+  { channel: "prod", appId: "io.github.torriider97.tenonworkbench", name: "tenon-workbench" },
 ] as const
 
 for (const channel of channels) {
@@ -28,66 +26,11 @@ for (const channel of channels) {
     expect(config.linux?.desktop?.entry?.StartupWMClass).toBe(channel.appId)
     expect(config.deb?.fpm).toContainEqual(expect.stringContaining(`/usr/share/metainfo/${channel.appId}.metainfo.xml`))
     expect(config.rpm?.fpm).toContainEqual(expect.stringContaining(`/usr/share/metainfo/${channel.appId}.metainfo.xml`))
-  })
-}
-
-test("keeps a hidden prod launcher for old Linux pins", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "prod"
-
-  const module = await import("./electron-builder.config.ts?compat=prod")
-  const config = module.default as Configuration
-
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
-
-  expect(
-    config.deb?.fpm?.some((entry) =>
-      entry.endsWith("opencode-desktop.desktop=/usr/share/applications/opencode-desktop.desktop"),
-    ),
-  ).toBe(true)
-  expect(
-    config.rpm?.fpm?.some((entry) =>
-      entry.endsWith("opencode-desktop.desktop=/usr/share/applications/opencode-desktop.desktop"),
-    ),
-  ).toBe(true)
-
-  const desktop = await Bun.file(legacyDesktopEntry).text()
-  expect(desktop).toContain('Exec="/opt/Tenon Workbench/ai.opencode.desktop" %U')
-  expect(desktop).toContain("Icon=ai.opencode.desktop")
-  expect(desktop).toContain("StartupWMClass=ai.opencode.desktop")
-  expect(desktop).toContain("NoDisplay=true")
-})
-
-test("bundles the CLI outside the dev app archive", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "dev"
-  const module = await import("./electron-builder.config.ts?cli-resource")
-  const config = module.default as Configuration
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
-
-  expect(config.files).toContain("!resources/opencode-cli*")
-  expect(config.extraResources).toContainEqual({
-    from: "resources/",
-    to: "",
-    filter: ["opencode-cli*"],
-  })
-})
-
-for (const channel of ["beta", "prod"] as const) {
-  test(`does not bundle the CLI in ${channel} builds`, async () => {
-    const previous = process.env.OPENCODE_CHANNEL
-    process.env.OPENCODE_CHANNEL = channel
-    const module = await import(`./electron-builder.config.ts?no-cli-resource=${channel}`)
-    const config = module.default as Configuration
-    if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-    else process.env.OPENCODE_CHANNEL = previous
-
-    expect(config.extraResources).not.toContainEqual({
-      from: "resources/",
-      to: "",
-      filter: ["opencode-cli*"],
-    })
+    // Nothing may reuse upstream OpenCode Desktop's identity.
+    expect(config.extraMetadata?.name).toBe(channel.name)
+    expect(config.deb?.packageName).toBe(channel.name)
+    expect(config.rpm?.packageName).toBe(channel.name)
+    expect(config.protocols).toEqual(expect.objectContaining({ schemes: ["tenon"] }))
+    expect(JSON.stringify(config)).not.toContain("ai.opencode.desktop")
   })
 }

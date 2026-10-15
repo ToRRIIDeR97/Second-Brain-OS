@@ -21,11 +21,17 @@ import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeSessionsController } from "@/pages/home/home-sessions-controller"
 import { Harness } from "@opencode-ai/schema/harness"
 import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
+import { isExternalHarness, openHarnessSettings, orderHarnesses } from "@/components/prompt-input/harness-controls"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+
+// Always the last entry of the external group, so new ACP agents can be registered from the picker.
+const addHarness = { kind: "add-harness" } as const
 
 type TodayItem = { kind: "event"; value: CalendarEvent } | { kind: "task"; value: PlannerTask; overdue: boolean }
 
 export default function BrainHomePage() {
   const language = useLanguage()
+  const dialog = useDialog()
   const layout = useLayout()
   const navigate = useNavigate()
   const platform = usePlatform()
@@ -223,20 +229,27 @@ export default function BrainHomePage() {
                   </span>
                 }
               >
-                <SelectV2
+                <SelectV2<Harness.Instance | typeof addHarness>
                   aria-label={language.t("harness.label")}
                   class="!h-8 !w-auto max-w-[220px]"
                   appearance="inline"
-                  options={[...(harnesses() ?? [])]}
+                  options={[...(orderHarnesses(harnesses()) ?? []), addHarness]}
                   current={harnesses()?.find((instance) => instance.id === state.harnessInstanceID)}
-                  value={(instance) => instance.id}
-                  label={(instance) =>
-                    `${instance.name}${instance.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}`
+                  value={(item) => ("kind" in item ? item.kind : item.id)}
+                  label={(item) =>
+                    "kind" in item
+                      ? language.t("harness.settings.add")
+                      : `${item.name}${item.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}`
                   }
-                  optionDisabled={(instance) => instance.status === "unavailable"}
+                  groupBy={(item) => ("kind" in item || isExternalHarness(item) ? language.t("harness.group.external") : "")}
+                  optionDisabled={(item) => !("kind" in item) && item.status === "unavailable"}
                   placeholder={language.t("harness.checking")}
                   disabled={harnessQuery.isPending}
-                  onSelect={(instance) => instance && setState("harnessInstanceID", instance.id)}
+                  onSelect={(item) => {
+                    if (!item) return
+                    if ("kind" in item) return void openHarnessSettings(dialog)
+                    setState("harnessInstanceID", item.id)
+                  }}
                 />
               </Suspense>
               <span class="flex-1" />

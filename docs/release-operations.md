@@ -42,9 +42,135 @@ The local server comes from `opencode/packages/opencode/script/build-node.ts`
 binary, and the desktop app has no "Install CLI" action.
 
 The product display name is Tenon Workbench (renamed from Second Brain OS on
-2026-10-15). Existing `ai.opencode.desktop.*`
-application IDs and data paths are retained to preserve profile compatibility.
-The `opencode:` URL scheme is also retained for existing links.
+2026-10-15). The application IDs are
+`io.github.torriider97.tenonworkbench[.dev|.beta]` and the URL scheme is
+`tenon:`; see [Desktop identity change](#desktop-identity-change).
+Core data paths moved to `tenon-workbench` folders; see
+[Storage migration](#storage-migration-opencode--tenon-workbench).
+
+## Desktop identity change
+
+Earlier builds used upstream OpenCode Desktop's identity. Current builds use
+their own:
+
+| Item | Before | Now |
+| --- | --- | --- |
+| App ID (prod, beta, dev) | `ai.opencode.desktop`, `.beta`, `.dev` | `io.github.torriider97.tenonworkbench`, `.beta`, `.dev` |
+| Package name (deb, rpm, `extraMetadata.name`) | `opencode*` (rpm), `@opencode-ai/desktop` | `tenon-workbench`, `tenon-workbench-beta`, `tenon-workbench-dev` |
+| Windows install folder | `%LOCALAPPDATA%/Programs/@opencode-aidesktop` | derived from `tenon-workbench*` |
+| Deep-link scheme | `opencode://` | `tenon://` (same `open-project` and `new-session` hosts) |
+
+The app ID sets Electron `userData` (`%APPDATA%/<appId>` on Windows,
+`~/Library/Application Support/<appId>` on macOS, `~/.config/<appId>` on
+Linux), the Windows AppUserModelId, the NSIS install GUID, and the Linux
+executable, desktop file, `StartupWMClass` and metainfo ID. The upstream
+Tauri `.dat` import (`desktop/src/main/migrate.ts`) and the hidden
+`opencode-desktop.desktop` Linux launcher were removed.
+
+Upgrade consequences:
+
+- On Windows the new build installs beside the old "Tenon Workbench Dev",
+  because the GUID and folder differ. Uninstall the old one in Settings >
+  Apps.
+- Taskbar and Start pins must be created again.
+- `opencode://` links no longer open Tenon Workbench.
+- Automatic updates stay disabled (`UPDATER_ENABLED=false`, `publish: null`),
+  so there is no update-feed continuity to keep.
+
+`userData` copy (`desktop/src/main/user-data-migration.ts`), run once before
+`app.setPath("userData")`:
+
+- Only the dev channel (packaged dev builds and unpackaged dev runs) copies
+  from `%APPDATA%/ai.opencode.desktop.dev`. The release workflow only built
+  dev candidates. Beta and prod start fresh because their old folders belong
+  to upstream OpenCode Desktop.
+- Not copied: `Cache`, `Code Cache`, `GPUCache`, `DawnGraphiteCache`,
+  `DawnWebGPUCache`, `Crashpad`, `logs`, `cli`, `DevToolsActivePort`,
+  `Singleton*`, `lockfile`.
+- The copy goes to a temporary sibling folder and is renamed into place. If
+  the target already exists, files are merged and existing ones are kept.
+  The old folder is never modified.
+- A `.user-data-migrated` marker is written last. Fresh installs are marked
+  too.
+- On failure the app logs "user data migration failed; retrying on next
+  start" and tries again on the next launch.
+- On the development machine it copied 351 KB in 50 ms from a 505 MB folder
+  that was almost all caches.
+- The copied `userData` includes the old core state folders, so the
+  [storage migration](#storage-migration-opencode--tenon-workbench) continues
+  from there.
+
+Verify after the first launch of a dev build:
+
+1. `%APPDATA%/io.github.torriider97.tenonworkbench.dev` exists and contains
+   `.user-data-migrated`.
+2. Settings, drafts and Workspaces from the old build appear in the app.
+
+Rollback: uninstall the new build if needed and reinstall the previous one.
+Its `userData` folder is unchanged. Anything the new build wrote stays in the
+new folder.
+
+## Storage migration (opencode → tenon-workbench)
+
+Builds that include `core/src/legacy-storage.ts` store core data under
+`tenon-workbench` instead of `opencode`:
+
+| Root   | Path                                                                                           |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| Data   | `$XDG_DATA_HOME/tenon-workbench` (default `~/.local/share/tenon-workbench`)                          |
+| Config | `$XDG_CONFIG_HOME/tenon-workbench` (default `~/.config/tenon-workbench`)                             |
+| State  | `$XDG_STATE_HOME/tenon-workbench` (the desktop app sets `XDG_STATE_HOME` to Electron `userData`)  |
+| Cache  | `$XDG_CACHE_HOME/tenon-workbench`                                                                 |
+
+Upstream OpenCode keeps using its `opencode` folders.
+
+On the first start of such a build, the server copies each legacy `opencode`
+data, config and state folder to its `tenon-workbench` path, then starts
+normally:
+
+- Each root is done once: completion is recorded by a
+  `.legacy-storage-migrated` marker file in the `tenon-workbench` folder, written
+  last. A fresh install with no legacy folder is marked too, so a later
+  upstream OpenCode install is never imported.
+- If the `tenon-workbench` folder already exists without the marker (for example
+  empty folders created by a test run), the copy is merged into it. Files
+  already there are kept.
+- Credentials (`auth.json`, `account.json`, `mcp-auth.json`), databases,
+  `storage/` and `plans/` are copied. Afterwards the two apps have separate
+  credentials and databases. If the shared `opencode.db` held upstream
+  OpenCode sessions, Tenon Workbench's copy holds them too.
+- Not copied: `snapshot` (undo and diff for past turns), `bin`, `log`,
+  `repos`, `tool-output` and `worktree` from data; `node_modules` from config;
+  `locks` from state; any `*.tmp`. Existing worktrees keep working at their
+  legacy paths; new ones go under `tenon-workbench/worktree`. ripgrep, LSP
+  binaries and the models cache are downloaded again when needed.
+- Legacy folders are never modified.
+- On the development machine the copy took about 13 s for about 92 MB, mostly
+  small files under `config/skill-libraries`. Later starts are unaffected.
+  The desktop sidecar stall timeout is 60 s
+  (`SIDECAR_START_STALL_TIMEOUT` in `desktop/src/main/server.ts`).
+- If the copy fails, startup stops with "Could not copy Tenon Workbench data from
+  X to Y. The original folder is unchanged."
+
+Before the first launch, quit every older Tenon Workbench build. Copying a SQLite
+database that another process is writing can capture an inconsistent state.
+
+Verify after the first launch:
+
+1. The `tenon-workbench` data, config and state folders each contain
+   `.legacy-storage-migrated`, and no `*.migrating-*` folder is left beside
+   them.
+2. Existing sessions, projects and provider sign-ins appear in the app.
+3. New server logs are written under `tenon-workbench/log`.
+
+Rollback: quit the app and run the previous build. It reads the unchanged
+legacy `opencode` folders. Anything the new build wrote after migration stays
+in `tenon-workbench` and is not visible to the previous build.
+
+Re-run the migration: quit the app, then delete `.legacy-storage-migrated` in a
+`tenon-workbench` folder to fill in missing files from the legacy folder (existing
+files are kept), or rename the whole `tenon-workbench` folder for a clean copy.
+Start the app.
 
 ## Release limits
 

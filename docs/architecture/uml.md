@@ -49,6 +49,14 @@ reading of the code, not a runtime trace, except where a step says it was run.
   `userData` by default, but `auth.json` and `opencode.db` live in the XDG
   data directory (`core/src/global.ts`, `core/src/database/database.ts`,
   `opencode/src/auth/index.ts`).
+- Those XDG directories are named `tenon-workbench`, separate from upstream
+  OpenCode's `opencode` folders. `core/src/legacy-storage.ts` copies the
+  legacy `opencode` data, config and state folders once on first start; see
+  [Harness drivers and registration](README.md#harness-drivers-and-registration).
+  The Electron app ID is `io.github.torriider97.tenonworkbench[.dev|.beta]`, so
+  `userData` no longer collides with upstream OpenCode Desktop. On the dev
+  channel, `desktop/src/main/user-data-migration.ts` copies the old
+  `ai.opencode.desktop.dev` `userData` once before startup sets the path.
 - The `opencode-cli` daemon (`OPENCODE_SIDECAR_V2=1`) ships only in the
   development channel. Packaging and update limits are covered in
   [release operations](../release-operations.md).
@@ -63,6 +71,9 @@ Notes on the class view:
   per-instance continuations (`harnessContinuations[instanceID]` =
   `{ nativeID, lastSeenMessageID }`) live in the session's `metadata` JSON.
   They have no separate table.
+- Built-in `HarnessInstance` IDs are `opencode` (driver `opencode`, shown as
+  Tenon Workbench), `codex`, and `opencode-acp` (driver `acp`, shown as OpenCode).
+  They are reserved, so `harnesses.json` and config files can't replace them.
 - Permission requests exist only in memory. Saved permission rows are allow
   rules, scoped to a project.
 - `BrainProject` and `KnowledgeNote` are Markdown files. `CalendarSnapshot` is
@@ -121,7 +132,9 @@ discussion. The V2 runtime emits no `session.status` busy or idle events, so
 
 ![Sequence: prompt admission, drain, ACP runtime open with session load or new, streaming updates, permission ask answered in the renderer, completion and interrupt](../diagrams/sequence-acp-turn.svg)
 
-The Codex driver follows the same outline. It speaks the `codex app-server`
+The built-in `opencode-acp` instance (upstream OpenCode started as
+`opencode acp`) follows this sequence unchanged. The Codex driver follows the
+same outline. It speaks the `codex app-server`
 JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 `turn/interrupt`) instead of ACP. Its approvals come from
 `item/*/requestApproval` requests.
@@ -153,23 +166,24 @@ Later turns in the same runtime send only the user message. See
 | Second Brain notes, projects, calendar | Subsystem | Component, Class, Activity: write, State: project status | `opencode/src/knowledge/`, `opencode/src/project/brain.ts`, `opencode/src/planner/calendar.ts` |
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
-| Harness drivers and registry | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `server/src/handlers/harness.ts` |
+| Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |
 | Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `continuationFor`), `core/src/session/projector.ts` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |
 | Workspace files | Shared store | Component, Deployment, Activity: write | `notes/`, `projects/`, `.second-brain/calendar-v1.json` |
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |
 | Snapshot repository | Shared store | Component, Class, Activity: prompt run | `core/src/snapshot.ts` |
+| Global XDG paths and legacy-folder migration (`opencode` → `tenon-workbench`) | Critical workflow | Deployment; text in [README](README.md#harness-drivers-and-registration) | `core/src/global.ts`, `core/src/legacy-storage.ts` |
 | `harnesses.json` | Shared store | Component, Deployment | `core/src/harness/registry.ts` (written only from Settings → Harnesses through `/api/harness/registry`) |
 | `drafts.sqlite`, electron-store files | Shared store | Component, Deployment | `desktop/src/main/draft-store.ts`, `desktop/src/main/store.ts`; per-window `drafts` and `sidebar` keys from `app/src/context/drafts.tsx` and the sidebar controller |
 | Google Calendar and Tasks | External integration | Component, Deployment, State: outbox | `desktop/src/main/google-calendar.ts` |
 | LLM providers | External integration | Component, Deployment | `core/src/harness.ts` (`opencode` driver) |
-| Codex app-server, ACP agents | External integration | Component, Deployment, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts` |
+| Codex app-server, ACP agents (including upstream OpenCode via `opencode acp`) | External integration | Component, Deployment, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts` |
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
 | Project thread directories and Workspace migration | Critical workflow | Class | `opencode/src/project/brain.ts` (`ensureForWorkspace`, `threadDirectory`, `migrateWorkspaces`), `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `app/src/features/second-brain/workspace-projects.ts` |
 | Session archive, unarchive, pin, sidebar undo | Critical workflow | Text only ([README](README.md#session-compatibility-and-review), [navigation map](../product/NAVIGATION-MAP-V1.md#undo)): `time_archived` set or NULL, `metadata.pinned`; 5-second in-memory undo, deferred delete | `opencode/src/server/routes/instance/httpapi/handlers/session.ts`, `opencode/src/session/session.ts`, `core/src/session/projector.ts`, `app/src/context/global-sync/event-reducer.ts`, `app/src/utils/undo-action.ts` |
 | Composer delivery (steer or queue), queued list with remove and send now, background send, prompt stash | Critical workflow | Activity: prompt run (server side); client text only ([README](README.md#composer-delivery-background-send-and-stash)) | `app/src/components/prompt-input/submit.ts`, `app/src/components/prompt-input/stash-store.ts`, `app/src/context/server-session.ts`, `app/src/pages/session/composer/queued-actions.ts`, `app/src/utils/server-compat.ts`, `session-ui/src/v2/components/prompt-input/machine.ts`, `core/src/session/input.ts` (`listQueued`, `withdraw`, `steer`), `core/src/session/projector.ts`, `server/src/handlers/session.ts` |
-| Desktop startup | Critical workflow | Sequence: startup | `desktop/src/main/index.ts` |
+| Desktop startup and dev-channel `userData` migration | Critical workflow | Sequence: startup; Deployment | `desktop/src/main/index.ts`, `desktop/src/main/user-data-migration.ts` |
 | Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
 
 ## Unverified relationships and assumptions

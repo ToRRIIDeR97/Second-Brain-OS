@@ -4,6 +4,7 @@ import { PromptInputV2Select } from "@opencode-ai/session-ui/v2/prompt-input"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 
 export type PromptInputHarnessController = {
@@ -19,11 +20,29 @@ export type PromptInputHarnessController = {
   }
 }
 
+// Tenon Workbench's own loop first, then every external agent (built-in or registered) as one group.
+export function orderHarnesses(instances: ReadonlyArray<Harness.Instance> | undefined) {
+  return instances?.toSorted((a, b) => Number(isExternalHarness(a)) - Number(isExternalHarness(b)))
+}
+
+export function isExternalHarness(instance: Pick<Harness.Instance, "driver">) {
+  return instance.driver !== Harness.OpenCodeDriver
+}
+
+export async function openHarnessSettings(dialog: ReturnType<typeof useDialog>) {
+  // Loaded on demand: Settings renders these controls too, so a static import would be circular.
+  const { DialogSettings } = await import("@/components/settings-v2/dialog-settings-v2")
+  void dialog.show(() => <DialogSettings defaultValue="harnesses" />)
+}
+
 const SELECT_CLASS =
   "prompt-input-responsive-select !h-7 !w-auto min-w-0 max-w-[220px] !bg-transparent !shadow-none hover:!bg-v2-overlay-simple-overlay-hover"
 
 export function PromptInputHarnessControls(props: { controller: PromptInputHarnessController }) {
   const language = useLanguage()
+  const dialog = useDialog()
+  const options = createMemo(() => orderHarnesses(props.controller.instances()))
+  const addHarness = () => openHarnessSettings(dialog)
   const instance = createMemo(() =>
     props.controller.instances()?.find((item) => item.id === props.controller.current()),
   )
@@ -46,13 +65,15 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
       <PromptInputV2Select
         title={language.t("harness.label")}
         options={
-          props.controller.instances()?.map((item) => ({
+          options()?.map((item) => ({
             id: item.id,
             label: item.name + (item.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""),
             disabled: item.status === "unavailable",
             title: item.error,
+            group: isExternalHarness(item) ? language.t("harness.group.external") : undefined,
           })) ?? [{ id: props.controller.current(), label: language.t("harness.checking") }]
         }
+        footer={{ label: language.t("harness.settings.add"), onSelect: () => void addHarness() }}
         current={props.controller.current()}
         control="harness"
         currentIcon={<Icon name="status" />}

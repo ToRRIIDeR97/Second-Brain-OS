@@ -83,7 +83,7 @@ state alive across route changes; it replaced the tab store.
 | Project records            | `packages/opencode/src/project/brain.ts`; workspace `projects/` Markdown cards and project folders                    |
 | Project thread directories | Derived, not stored: linked Workspace worktree, else `projects/<id>/`; thread counts read from `opencode.db`          |
 | Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
-| Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in the XDG data directory                   |
+| Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in `$XDG_DATA_HOME/tenon-workbench`            |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
 | Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
 | Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
@@ -119,7 +119,7 @@ workspace routing):
   folder when none exists. The renderer calls it from `context/layout.tsx`
   for folders opened during the app session, and from the sidebar's
   open-folder flow (`mod+shift+n`, Home's Open Workspace, and
-  `opencode://open-project` deep links).
+  `tenon://open-project` deep links).
 
 ## Home navigation
 
@@ -161,8 +161,78 @@ Three drivers execute: `opencode` (in-process provider calls), `codex`
 Protocol over stdio, in `packages/core/src/harness/acp.ts`). Instances come
 from built-ins, then the app-owned `harnesses.json` registry in the global
 config directory, then `harnesses` entries in config files. Later sources win,
-except that the registry can't replace `opencode` or `codex`. The registry is
-re-read on each list and stream call, so new entries appear without a restart.
+except that neither the registry nor config files can replace a built-in. The
+registry is re-read on each list and stream call, so new entries appear
+without a restart.
+
+`configuredInstances()` in `harness.ts` defines three built-in instances. The
+reserved IDs are listed in `packages/core/src/harness/registry.ts`.
+
+| ID             | Driver     | Shown as     | Runs                                                                 |
+| -------------- | ---------- | ------------ | -------------------------------------------------------------------- |
+| `opencode`     | `opencode` | Tenon Workbench | Tenon Workbench's own in-process LLM loop                               |
+| `codex`        | `codex`    | Codex        | `codex app-server`                                                   |
+| `opencode-acp` | `acp`      | OpenCode     | Upstream OpenCode from `PATH` as `opencode acp`, via the ACP driver |
+
+The `opencode` ID is kept for the Tenon Workbench loop so stored sessions keep
+routing to it. `Harness.OpenCodeAcp` in `packages/schema/src/harness.ts` names
+the new instance, and the app's fallback list (`fallbackHarnesses` in
+`app/src/utils/server.ts`) shows it as unavailable until the server reports
+otherwise. The upstream child gets only the harness environment allowlist from
+`core/src/harness/env.ts`, so no `OPENCODE_*` variables or app provider keys
+reach it. It uses its own credentials from `opencode auth login`.
+
+Both harness pickers (Home in `pages/brain-home.tsx` and the session composer in
+`components/prompt-input/harness-controls.tsx`) list the Tenon Workbench loop
+first, then every other instance under one "External agents" group: Codex,
+OpenCode, and any `harnesses.json` or config-file agents. The group always ends
+with "Add harness", which opens Settings > Harnesses to register a new ACP agent.
+
+Tenon Workbench's core `Global` paths use the app name `tenon-workbench`
+(`core/src/global.ts`), so they no longer overlap with upstream OpenCode's
+`opencode` folders. Data is in `$XDG_DATA_HOME/tenon-workbench` (default
+`~/.local/share/tenon-workbench`), config in `$XDG_CONFIG_HOME/tenon-workbench`
+(`opencode.json`, `harnesses.json`, skills, `AGENTS.md`), state in
+`$XDG_STATE_HOME/tenon-workbench` (the desktop app sets `XDG_STATE_HOME` to
+Electron `userData`), cache in `$XDG_CACHE_HOME/tenon-workbench`, and temp files
+in `os.tmpdir()/tenon-workbench`. Database filenames are unchanged (`opencode.db`
+on latest, beta and prod, `opencode-<channel>.db` otherwise; `path()` in
+`core/src/database/database.ts`).
+
+On first start, `LegacyStorage.migrate` (`core/src/legacy-storage.ts`, called
+from `global.ts` before folders are created; skipped when `NODE_ENV=test`)
+copies each legacy `opencode` data, config and state folder to its
+`tenon-workbench` path. Each root runs once: a `.legacy-storage-migrated` marker
+file, written last, records completion (a fresh install with no legacy folder
+is marked too). The copy goes to `<target>.migrating-<uuid>` and is renamed
+into place; if the target already exists without the marker (tests and early
+startup can create empty folders), files are moved in one by one and existing
+files are kept. It skips `snapshot`, `bin`, `log`,
+`repos`, `tool-output` and `worktree` (data), `node_modules` (config), `locks`
+(state) and any `*.tmp` entry. Legacy folders are never modified. A failed copy
+stops startup. After migration the two apps have separate credentials and
+databases; a shared `opencode.db` that held upstream OpenCode sessions is
+copied with them. Snapshot history for past turns is not copied, existing
+worktrees stay at their legacy paths, and new ones go under
+`tenon-workbench/worktree`. Upgrade and rollback steps are in
+[release operations](../release-operations.md#storage-migration-opencode--tenon-workbench).
+Per-project `.opencode/` folders and the `.git/opencode` project ID file are
+still shared with upstream OpenCode by design.
+
+The Electron app IDs are `io.github.torriider97.tenonworkbench[.dev|.beta]`
+(`APP_IDS` in `desktop/src/main/index.ts` and `electron-builder.config.ts`),
+separate from upstream OpenCode Desktop's `ai.opencode.desktop[.dev|.beta]`.
+The ID sets Electron `userData` (electron-store files and `XDG_STATE_HOME`),
+the Windows AppUserModelId and NSIS install GUID, and the Linux executable,
+desktop file and metainfo ID. Package names are `tenon-workbench[-beta|-dev]`
+and the deep-link scheme is `tenon://`. On the dev channel only,
+`desktop/src/main/user-data-migration.ts` copies the old
+`ai.opencode.desktop.dev` `userData` once before `app.setPath("userData")`,
+skipping caches, logs and lock files; beta and prod start fresh because their
+old folders belong to upstream OpenCode Desktop. The copied state folders then
+go through the `opencode` to `tenon-workbench` migration above. Upgrade and
+rollback steps are in
+[release operations](../release-operations.md#desktop-identity-change).
 
 ACP sessions are created with `session/new`, or reopened with `session/load`
 when the agent supports it. The ACP session ID is stored as the Run's harness

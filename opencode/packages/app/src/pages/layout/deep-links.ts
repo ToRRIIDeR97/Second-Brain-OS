@@ -1,7 +1,10 @@
 export const deepLinkEvent = "opencode:deep-link"
 
+// Must match DEEP_LINK_SCHEME in packages/desktop/src/main/constants.ts.
+const scheme = "tenon://"
+
 const parseUrl = (input: string) => {
-  if (!input.startsWith("opencode://")) return
+  if (!input.startsWith(scheme)) return
   if (typeof URL.canParse === "function" && !URL.canParse(input)) return
   try {
     return new URL(input)

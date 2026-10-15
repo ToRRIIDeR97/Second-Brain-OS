@@ -48,7 +48,7 @@ def classes():
     klass(s, 540, 84, 230, "PermissionRule", ["action, resource (wildcards)", "effect: allow | ask | deny", "saved rows: allow only"])
     klass(s, 800, 84, 240, "Location", ["directory: AbsolutePath", "workspaceID?", "project {id, directory}"], "schema")
     klass(s, 20, 240, 230, "Session", ["id, projectID, workspaceID?", "directory, parentID?", "harnessInstanceID, harnessModel?",
-                                       "harnessRevision", "harnessContinuation?"])
+                                       "harnessRevision", "harnessContinuations[instance]?"])
     klass(s, 280, 240, 230, "SessionMessage", ["seq (= durable event seq)", "User | Assistant | System |", "Shell | Synthetic | Compaction |",
                                               "AgentSwitched | ModelSwitched"], "union")
     klass(s, 540, 240, 230, "PermissionRequest", ["id per_…, sessionID", "action, resources[], save[]", "source? {messageID, callID}"], "in memory")
@@ -57,7 +57,8 @@ def classes():
                                             "threadDirectory: worktree | folder"])
     klass(s, 20, 470, 230, "SessionInput", ["id (= User message id)", "delivery: steer | queue", "admitted_seq, promoted_seq?"])
     klass(s, 280, 470, 230, "AssistantContent", ["Text | Reasoning | Tool", "Tool.state: ToolState", "snapshot {start, end, files}"])
-    klass(s, 540, 470, 230, "HarnessInstance", ["id, driver: opencode|codex|acp", "status: available|unavailable", "models[]",
+    klass(s, 540, 470, 230, "HarnessInstance", ["id, driver: opencode|codex|acp", "status: available|unavailable",
+                                               "models[]; built-ins: opencode,", "codex, opencode-acp",
                                                "source: built-in | harnesses.json", "| config harnesses"])
     klass(s, 800, 470, 240, "KnowledgeNote", ["path notes/**.md or", "projects/<id>/notes/**.md", "title, tags[], links[]",
                                              "projectIds[]", "revision = sha256(raw)"])

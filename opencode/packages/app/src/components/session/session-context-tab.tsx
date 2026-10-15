@@ -146,7 +146,8 @@ export function SessionContextTab() {
     setSelectedHarness(available.at(-1))
   })
   const harnessLabel = (id: string) => {
-    if (id === Harness.OpenCode) return language.t("harness.openCode")
+    if (id === Harness.OpenCode) return language.t("harness.tenonWorkbench")
+    if (id === Harness.OpenCodeAcp) return language.t("harness.openCode")
     if (id === Harness.Codex) return language.t("harness.codex")
     return id
   }

@@ -585,9 +585,20 @@ export function configuredInstances(
   const instances = new Map<Harness.InstanceID, InstanceConfig>([
     [
       Harness.OpenCode,
-      { id: Harness.OpenCode, driver: Harness.OpenCodeDriver, name: "OpenCode", enabled: true, config: {} },
+      { id: Harness.OpenCode, driver: Harness.OpenCodeDriver, name: "Tenon Workbench", enabled: true, config: {} },
     ],
     [Harness.Codex, { id: Harness.Codex, driver: Harness.CodexDriver, name: "Codex", enabled: true, config: {} }],
+    // Upstream OpenCode from PATH, over ACP. Its own config and credentials stay in its process.
+    [
+      Harness.OpenCodeAcp,
+      {
+        id: Harness.OpenCodeAcp,
+        driver: Harness.AcpDriver,
+        name: "OpenCode",
+        enabled: true,
+        config: { command: "opencode", args: ["acp"] },
+      },
+    ],
   ])
   const decodeID = Schema.decodeUnknownOption(Harness.InstanceID)
   for (const [rawID, value] of Object.entries(registry)) {
@@ -606,7 +617,7 @@ export function configuredInstances(
     for (const [rawID, value] of Object.entries(entry.info.harnesses)) {
       const id = Option.getOrUndefined(decodeID(rawID))
       // Reserved IDs must not be replaced from config files either; only the
-      // built-in definitions own the opencode and codex instances (issue #40).
+      // built-in definitions own the opencode, opencode-acp and codex instances (issue #40).
       if (!id || HarnessRegistry.reserved.has(id)) continue
       instances.set(id, {
         id,
