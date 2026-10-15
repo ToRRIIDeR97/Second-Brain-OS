@@ -1,4 +1,4 @@
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   children,
@@ -55,7 +55,7 @@ export function ServerRow(props: ServerRowProps) {
     <span class="flex items-center gap-2">
       <span>{serverName(props.conn, true)}</span>
       <Show when={props.status?.version}>
-        <span class="text-text-invert-weak">v{props.status?.version}</span>
+        <span class="text-v2-text-text-muted">v{props.status?.version}</span>
       </Show>
     </span>
   )
@@ -63,7 +63,7 @@ export function ServerRow(props: ServerRowProps) {
   const badge = children(() => props.badge)
 
   return (
-    <Tooltip
+    <TooltipV2
       class="flex-1 min-w-0"
       value={tooltipValue()}
       contentStyle={{ "max-width": "none", "white-space": "nowrap" }}
@@ -82,7 +82,7 @@ export function ServerRow(props: ServerRowProps) {
                 <Show when={props.status?.version}>
                   <span
                     ref={versionRef}
-                    class={`${props.versionClass ?? "text-text-weak text-14-regular truncate"} min-w-0`}
+                    class={`${props.versionClass ?? "text-[13px] text-v2-text-text-muted truncate"} min-w-0`}
                   >
                     v{props.status?.version}
                   </span>
@@ -97,19 +97,19 @@ export function ServerRow(props: ServerRowProps) {
               <div class="flex flex-row gap-3">
                 <span>
                   {conn().http.username ? (
-                    <span class="text-text-weak">{conn().http.username}</span>
+                    <span class="text-v2-text-text-muted">{conn().http.username}</span>
                   ) : (
-                    <span class="text-text-weaker">{language.t("server.row.noUsername")}</span>
+                    <span class="text-v2-text-text-faint">{language.t("server.row.noUsername")}</span>
                   )}
                 </span>
-                {conn().http.password && <span class="text-text-weak">••••••••</span>}
+                {conn().http.password && <span class="text-v2-text-text-muted">••••••••</span>}
               </div>
             )}
           </Show>
         </div>
         {props.children}
       </div>
-    </Tooltip>
+    </TooltipV2>
   )
 }
 
@@ -118,9 +118,9 @@ export function ServerHealthIndicator(props: { health?: ServerHealth }) {
     <div
       classList={{
         "size-1.5 rounded-full shrink-0 my-[3.5px]": true,
-        "bg-icon-success-base": props.health?.healthy === true,
-        "bg-icon-critical-base": props.health?.healthy === false,
-        "bg-border-weak-base": props.health === undefined,
+        "bg-v2-state-fg-success": props.health?.healthy === true,
+        "bg-v2-state-fg-danger": props.health?.healthy === false,
+        "bg-v2-border-border-base": props.health === undefined,
       }}
     />
   )

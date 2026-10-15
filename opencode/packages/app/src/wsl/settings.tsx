@@ -34,13 +34,13 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
     <Show
       when={platform.wslServers}
       fallback={
-        <ButtonV2 variant="ghost-muted" icon="plus" onClick={props.onAddServer}>
+        <ButtonV2 variant="ghost" class="settings-v2-tonal" icon="plus" onClick={props.onAddServer}>
           {language.t("dialog.server.add.button")}
         </ButtonV2>
       }
     >
       <MenuV2 gutter={4} modal={false} placement="bottom-end">
-        <MenuV2.Trigger as={ButtonV2} variant="ghost-muted" icon="plus">
+        <MenuV2.Trigger as={ButtonV2} variant="ghost" class="settings-v2-tonal" icon="plus">
           {language.t("dialog.server.add.button")}
         </MenuV2.Trigger>
         <MenuV2.Portal>
@@ -100,11 +100,12 @@ export function WslServerSettings(props: {
               <div class="settings-v2-servers-lead">
                 <ServerHealthIndicator health={props.controller.status()[key]} />
                 <div class="settings-v2-servers-copy">
-                  <span class="flex min-w-0 items-center gap-1">
+                  <span class="settings-v2-servers-title">
                     <span class="settings-v2-servers-name">{item.config.distro}</span>
-                    <span class="shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5 text-[9px] leading-none text-v2-text-text-muted">
-                      {language.t("wsl.server.label")}
-                    </span>
+                    <Tag>{language.t("wsl.server.label")}</Tag>
+                    <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
+                      <Tag class="settings-v2-tag-default">{language.t("dialog.server.status.default")}</Tag>
+                    </Show>
                   </span>
                   <span class="settings-v2-servers-meta">
                     <Show when={check()?.version}>{(version) => `v${version()}`}</Show>
@@ -112,9 +113,6 @@ export function WslServerSettings(props: {
                 </div>
               </div>
               <div class="settings-v2-servers-actions">
-                <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
-                  <Tag>{language.t("dialog.server.status.default")}</Tag>
-                </Show>
                 <MenuV2 gutter={4} modal={false} placement="bottom-end">
                   <MenuV2.Trigger
                     as={IconButtonV2}
