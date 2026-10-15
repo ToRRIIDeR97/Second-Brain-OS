@@ -735,7 +735,6 @@ export const dict = {
   "session.new.git.none": "無 Git",
   "session.new.lastModified": "最後修改",
 
-  "session.header.search.placeholder": "搜尋 {{project}}",
   "session.header.searchFiles": "搜尋檔案",
   "session.header.openIn": "開啟於",
   "session.header.open.action": "開啟 {{app}}",
@@ -833,7 +832,6 @@ export const dict = {
   "settings.general.row.showFileTree.title": "檔案樹",
   "settings.general.row.showNavigation.title": "導覽控制項",
   "settings.general.row.showNavigation.description": "在桌面標題列中顯示上一頁和下一頁按鈕",
-  "settings.general.row.showSearch.title": "命令面板",
   "settings.general.row.showTerminal.title": "終端機",
   "settings.general.row.showTerminal.description": "在桌面標題列中顯示終端機按鈕",
   "settings.general.row.showStatus.title": "伺服器狀態",

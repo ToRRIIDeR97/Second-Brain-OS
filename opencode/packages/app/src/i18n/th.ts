@@ -740,7 +740,6 @@ export const dict = {
   "session.new.git.none": "ไม่มี Git",
   "session.new.lastModified": "แก้ไขล่าสุด",
 
-  "session.header.search.placeholder": "ค้นหา {{project}}",
   "session.header.searchFiles": "ค้นหาไฟล์",
   "session.header.openIn": "เปิดใน",
   "session.header.open.action": "เปิด {{app}}",
@@ -841,7 +840,6 @@ export const dict = {
   "settings.general.row.showFileTree.title": "แผนผังไฟล์",
   "settings.general.row.showNavigation.title": "ตัวควบคุมการนำทาง",
   "settings.general.row.showNavigation.description": "แสดงปุ่มย้อนกลับและไปข้างหน้าในแถบชื่อเรื่องเดสก์ท็อป",
-  "settings.general.row.showSearch.title": "ชุดคำสั่ง",
   "settings.general.row.showTerminal.title": "เทอร์มินัล",
   "settings.general.row.showTerminal.description": "แสดงปุ่มเทอร์มินัลในแถบชื่อเรื่องเดสก์ท็อป",
   "settings.general.row.showStatus.title": "สถานะเซิร์ฟเวอร์",

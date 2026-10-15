@@ -680,7 +680,6 @@ export const dict = {
   "session.new.git.none": "No Git",
   "session.new.lastModified": "Last modified",
 
-  "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
   "session.header.openIn": "Open in",
   "session.header.open.action": "Open {{app}}",
@@ -1174,7 +1173,6 @@ export const dict = {
   "settings.general.row.showFileTree.title": "File tree",
   "settings.general.row.showNavigation.title": "Navigation controls",
   "settings.general.row.showNavigation.description": "Show the back and forward buttons in the desktop title bar",
-  "settings.general.row.showSearch.title": "Command palette",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Show the terminal button in the desktop title bar",
   "settings.general.row.showStatus.title": "Server status",

@@ -769,7 +769,6 @@ export const dict = {
   "session.new.git.none": "Tanpa Git",
   "session.new.lastModified": "Terakhir diubah",
 
-  "session.header.search.placeholder": "Cari {{project}}",
   "session.header.searchFiles": "Cari berkas",
   "session.header.openIn": "Buka di",
   "session.header.open.action": "Buka {{app}}",
@@ -942,7 +941,6 @@ export const dict = {
   "settings.general.row.showFileTree.title": "Pohon berkas",
   "settings.general.row.showNavigation.title": "Kontrol navigasi",
   "settings.general.row.showNavigation.description": "Tampilkan tombol mundur dan maju di bilah judul desktop",
-  "settings.general.row.showSearch.title": "Palet perintah",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Tampilkan tombol terminal di bilah judul desktop",
   "settings.general.row.showStatus.title": "Status server",

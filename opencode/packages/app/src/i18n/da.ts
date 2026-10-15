@@ -646,7 +646,6 @@ export const dict = {
   "session.new.git.none": "Ingen Git",
   "session.new.lastModified": "Sidst ændret",
 
-  "session.header.search.placeholder": "Søg {{project}}",
   "session.header.searchFiles": "Søg efter filer",
   "session.header.openIn": "Åbn i",
   "session.header.open.action": "Åbn {{app}}",
@@ -747,7 +746,6 @@ export const dict = {
   "settings.general.row.showFileTree.title": "Filtræ",
   "settings.general.row.showNavigation.title": "Navigationsknapper",
   "settings.general.row.showNavigation.description": "Vis tilbage- og frem-knapperne i desktopappens titellinje",
-  "settings.general.row.showSearch.title": "Kommandopalette",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Vis terminalknappen i desktopappens titellinje",
   "settings.general.row.showStatus.title": "Serverstatus",

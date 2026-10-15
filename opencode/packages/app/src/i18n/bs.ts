@@ -751,7 +751,6 @@ export const dict = {
   "session.new.git.none": "Nema Gita",
   "session.new.lastModified": "Posljednja izmjena",
 
-  "session.header.search.placeholder": "Pretraži {{project}}",
   "session.header.searchFiles": "Pretraži datoteke",
   "session.header.openIn": "Otvori u",
   "session.header.open.action": "Otvori {{app}}",
@@ -854,7 +853,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Kontrole navigacije",
   "settings.general.row.showNavigation.description":
     "Prikaži dugmad za nazad i naprijed u naslovnoj traci desktop aplikacije",
-  "settings.general.row.showSearch.title": "Paleta komandi",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Prikaži dugme terminala u naslovnoj traci desktop aplikacije",
   "settings.general.row.showStatus.title": "Status servera",

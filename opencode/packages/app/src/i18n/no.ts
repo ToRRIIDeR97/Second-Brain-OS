@@ -637,7 +637,6 @@ export const dict = {
   "session.new.worktree.create": "Opprett nytt worktree",
   "session.new.lastModified": "Sist endret",
 
-  "session.header.search.placeholder": "Søk i {{project}}",
   "session.header.searchFiles": "Søk etter filer",
   "session.header.openIn": "Åpne i",
   "session.header.open.action": "Åpne {{app}}",
@@ -1133,7 +1132,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Navigasjonskontroller",
   "settings.general.row.showNavigation.description":
     "Vis tilbake- og fremoverknappene på tittellinjen i skrivebordsappen",
-  "settings.general.row.showSearch.title": "Kommandopalett",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Vis terminalknappen på tittellinjen i skrivebordsappen",
   "settings.general.row.showStatus.title": "Serverstatus",

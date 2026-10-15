@@ -707,7 +707,6 @@ export const dict = {
   "session.new.workspace.existing": "Χώρος εργασίας…",
   "session.new.git.none": "Χωρίς Git",
   "session.new.lastModified": "Τελευταία τροποποίηση",
-  "session.header.search.placeholder": "Αναζήτηση {{project}}",
   "session.header.searchFiles": "Αναζήτηση αρχείων",
   "session.header.openIn": "Άνοιγμα σε",
   "session.header.open.action": "Άνοιγμα {{app}}",
@@ -872,7 +871,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Στοιχεία ελέγχου πλοήγησης",
   "settings.general.row.showNavigation.description":
     "Εμφάνιση των κουμπιών πίσω και εμπρός στη γραμμή τίτλου της επιφάνειας εργασίας",
-  "settings.general.row.showSearch.title": "Παλέτα εντολών",
   "settings.general.row.showTerminal.title": "Τερματικό",
   "settings.general.row.showTerminal.description":
     "Εμφάνιση του κουμπιού τερματικού στη γραμμή τίτλου της επιφάνειας εργασίας",

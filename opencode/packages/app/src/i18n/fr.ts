@@ -702,7 +702,6 @@ export const dict = {
   "session.new.workspace.existing": "Espace de travail…",
   "session.new.git.none": "Pas de Git",
   "session.new.lastModified": "Dernière modification",
-  "session.header.search.placeholder": "Rechercher {{project}}",
   "session.header.searchFiles": "Rechercher des fichiers",
   "session.header.openIn": "Ouvrir dans",
   "session.header.open.action": "Ouvrir {{app}}",
@@ -792,7 +791,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Commandes de navigation",
   "settings.general.row.showNavigation.description":
     "Afficher les boutons précédent et suivant dans la barre de titre de l'application de bureau",
-  "settings.general.row.showSearch.title": "Palette de commandes",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description":
     "Afficher le bouton du terminal dans la barre de titre de l'application de bureau",

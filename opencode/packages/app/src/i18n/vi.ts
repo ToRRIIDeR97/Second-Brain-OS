@@ -708,7 +708,6 @@ export const dict = {
   "session.new.workspace.existing": "Không gian làm việc…",
   "session.new.git.none": "Không dùng Git",
   "session.new.lastModified": "Sửa đổi lần cuối",
-  "session.header.search.placeholder": "Tìm kiếm {{project}}",
   "session.header.searchFiles": "Tìm kiếm tệp",
   "session.header.openIn": "Mở trong",
   "session.header.open.action": "Mở {{app}}",
@@ -872,7 +871,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Điều khiển điều hướng",
   "settings.general.row.showNavigation.description":
     "Hiển thị các nút quay lại và tiến lên trên thanh tiêu đề của màn hình",
-  "settings.general.row.showSearch.title": "Bảng lệnh",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Hiển thị nút terminal trên thanh tiêu đề của ứng dụng desktop",
   "settings.general.row.showStatus.title": "Trạng thái máy chủ",

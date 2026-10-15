@@ -709,7 +709,6 @@ export const dict = {
   "session.new.workspace.existing": "Radni prostor…",
   "session.new.git.none": "Ne Git",
   "session.new.lastModified": "Zadnja izmjena",
-  "session.header.search.placeholder": "Traži {{project}}",
   "session.header.searchFiles": "Pretraživanje datoteka",
   "session.header.openIn": "Otvori u",
   "session.header.open.action": "Otvorite {{app}}",
@@ -872,7 +871,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Navigacijske kontrole",
   "settings.general.row.showNavigation.description":
     "Prikaži gumbe za povratak i naprijed u naslovnoj traci radne površine",
-  "settings.general.row.showSearch.title": "Paleta naredbi",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Prikaži gumb terminala u naslovnoj traci radne površine",
   "settings.general.row.showStatus.title": "Status poslužitelja",

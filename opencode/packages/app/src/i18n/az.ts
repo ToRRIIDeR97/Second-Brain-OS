@@ -708,7 +708,6 @@ export const dict = {
   "session.new.workspace.existing": "İş sahəsi…",
   "session.new.git.none": "Git yoxdur",
   "session.new.lastModified": "Son dəyişiklik",
-  "session.header.search.placeholder": "{{project}} axtar",
   "session.header.searchFiles": "Faylları axtar",
   "session.header.openIn": "Burada aç:",
   "session.header.open.action": "{{app}} tətbiqini aç",
@@ -871,7 +870,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Naviqasiya nəzarətləri",
   "settings.general.row.showNavigation.description":
     "Masaüstü tətbiqin başlıq zolağında geri və irəli düymələrini göstərin",
-  "settings.general.row.showSearch.title": "Komanda palitrası",
   "settings.general.row.showTerminal.title": "Terminal",
   "settings.general.row.showTerminal.description": "Masaüstü tətbiqin başlıq zolağında terminal düyməsini göstərin",
   "settings.general.row.showStatus.title": "Server statusu",

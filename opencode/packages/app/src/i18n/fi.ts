@@ -616,7 +616,6 @@ export const dict = {
   "session.new.workspace.existing": "Työtila…",
   "session.new.git.none": "Ei Gitiä",
   "session.new.lastModified": "Viimeksi muokattu",
-  "session.header.search.placeholder": "Hae projektista {{project}}",
   "session.header.searchFiles": "Etsi tiedostoja",
   "session.header.openIn": "Avaa sovelluksessa",
   "session.header.open.action": "Avaa {{app}}",
@@ -779,7 +778,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Navigointiohjaimet",
   "settings.general.row.showNavigation.description":
     "Näytä taaksepäin- ja eteenpäin-painikkeet työpöydän otsikkorivillä",
-  "settings.general.row.showSearch.title": "Komentopaletti",
   "settings.general.row.showTerminal.title": "Terminaali",
   "settings.general.row.showTerminal.description": "Näytä terminaalipainike työpöydän otsikkorivillä",
   "settings.general.row.showStatus.title": "Palvelimen tila",

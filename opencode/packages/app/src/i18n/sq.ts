@@ -702,7 +702,6 @@ export const dict = {
   "session.new.workspace.existing": "Hapësira e punës…",
   "session.new.git.none": "Jo Git",
   "session.new.lastModified": "Ndryshuar së fundi",
-  "session.header.search.placeholder": "Kërko {{project}}",
   "session.header.searchFiles": "Kërko skedarët",
   "session.header.openIn": "Hape brenda",
   "session.header.open.action": "Hap {{app}}",
@@ -865,7 +864,6 @@ export const dict = {
   "settings.general.row.showNavigation.title": "Kontrollet e navigimit",
   "settings.general.row.showNavigation.description":
     "Shfaqni butonat prapa dhe përpara në shiritin e titullit të desktopit",
-  "settings.general.row.showSearch.title": "Paleta e komandave",
   "settings.general.row.showTerminal.title": "Terminali",
   "settings.general.row.showTerminal.description": "Shfaq butonin e terminalit në shiritin e titullit të desktopit",
   "settings.general.row.showStatus.title": "Statusi i serverit",

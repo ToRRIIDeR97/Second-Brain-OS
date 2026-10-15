@@ -709,7 +709,6 @@ export const dict: Record<string, string> = {
   "session.new.workspace.existing": "ལཱ་གི་ས་སྒོ...",
   "session.new.git.none": "མེད། Git།",
   "session.new.lastModified": "མཐའ་མའི་བཟོ་བཅོས་འབད་ཡོདཔ།",
-  "session.header.search.placeholder": "འཚོལ་ཞིབ་ {{project}}།",
   "session.header.searchFiles": "ཡིག་སྣོད་ཚུ་འཚོལ་ཞིབ་འབད།",
   "session.header.openIn": "ནང་ཁ་ཕྱེ།",
   "session.header.open.action": "{{app}}ཁ་ཕྱེ།",
@@ -875,7 +874,6 @@ export const dict: Record<string, string> = {
   "settings.general.row.showNavigation.title": "འགྲུལ་བསྐྱོད་ཚད་འཛིན་ཚུ།",
   "settings.general.row.showNavigation.description":
     "ཌེཀསི་ཊོཔ་ཁ་ཡིག་ཕྲ་རིང་ནང་ རྒྱབ་བསྐྱོད་དང་གདོང་བསྐྱོད་ཨེབ་རྟ་ཚུ་སྟོན།",
-  "settings.general.row.showSearch.title": "བརྡ་བཀོད་པེ་ལེཊི།",
   "settings.general.row.showTerminal.title": "ཊར་མི་ནཱལ།",
   "settings.general.row.showTerminal.description": "ཌེཀསི་ཊོཔ་མགོ་མིང་ཕྲ་རིང་ནང་ ཊར་མི་ནཱལ་ཨེབ་རྟ་སྟོན།",
   "settings.general.row.showStatus.title": "སར་བར་གནས་ཚད།",

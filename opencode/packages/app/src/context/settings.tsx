@@ -25,7 +25,6 @@ export interface Settings {
     followup: "queue" | "steer"
     showFileTree: boolean
     showNavigation: boolean
-    showSearch: boolean
     showStatus: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
@@ -116,7 +115,6 @@ const defaultSettings: Settings = {
     followup: "steer",
     showFileTree: false,
     showNavigation: false,
-    showSearch: false,
     showStatus: false,
     showTerminal: false,
     showReasoningSummaries: false,
@@ -169,7 +167,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       previous: undefined as string | undefined,
     })
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
-    const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
@@ -229,10 +226,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowNavigation(value: boolean) {
           setStore("general", "showNavigation", value)
         },
-        showSearch,
-        setShowSearch(value: boolean) {
-          setStore("general", "showSearch", value)
-        },
         showStatus,
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
@@ -277,7 +270,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       },
       visibility: {
         fileTree: visible(showFileTree),
-        search: visible(showSearch),
         status: visible(showStatus),
         customAgents: visible(showCustomAgents),
       },
