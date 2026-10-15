@@ -37,7 +37,8 @@ export function NewSessionView(props: {
       <div data-component="session-new-design" class={`relative flex-1 min-h-0 overflow-hidden ${pagePanelClass}`}>
         <div class="absolute inset-0 flex items-center justify-center px-6 pb-[12vh]">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <div class="flex flex-col gap-6">
+            {/* The composer's own 0.5px border-muted edge vanishes on the dark panel; give it a 1px ring here. */}
+            <div class="flex flex-col gap-6 [&_[data-component=prompt-input-v2]]:shadow-[0_0_0_1px_var(--v2-border-border-base),0_8px_24px_-12px_rgb(0_0_0/0.18)]">
               <PromptInputV2Composer controller={props.input} harness={props.harness} />
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />

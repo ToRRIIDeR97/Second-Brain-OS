@@ -55,6 +55,18 @@ export function PageSection(
   )
 }
 
+/** Empty list or view: a centred message in the space the list would fill, with an optional action. */
+export function PageEmpty(props: ParentProps<{ action?: JSX.Element; class?: string }>) {
+  return (
+    <div
+      class={`flex min-h-40 flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center ${props.class ?? ""}`}
+    >
+      <p class="max-w-sm text-[14px] leading-5 text-v2-text-text-muted">{props.children}</p>
+      {props.action}
+    </div>
+  )
+}
+
 /** Shared list-row look: a pill-shaped hover target. */
 export const pageRowClass =
   "flex w-full min-w-0 items-center gap-3 rounded-[16px] px-3 py-2.5 text-left transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"

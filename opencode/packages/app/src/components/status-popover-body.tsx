@@ -297,6 +297,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               const status = () => mcpStatus(name)
               return (
                 <Switch
+                  size="small"
                   class={`${row} ${switchRowClass}`}
                   checked={status() === "connected"}
                   disabled={toggleMcp.isPending && toggleMcp.variables === name}

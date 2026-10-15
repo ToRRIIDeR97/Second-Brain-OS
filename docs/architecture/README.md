@@ -50,8 +50,8 @@ routes and shortcuts.
 `pages/layout-new.tsx` is the only shell: the titlebar (window chrome, back
 and forward) and `components/second-brain-sidebar.tsx` (navigation rail plus
 collapsible Projects panel). Pages sit on one rounded panel built from
-`components/page.tsx` (`PageFrame`, `PageHeader`, `PageSection`); page titles
-carry no descriptive subtitle. Shape and motion follow Material 3: radius,
+`components/page.tsx` (`PageFrame`, `PageHeader`, `PageSection`, and
+`PageEmpty` for centred empty states); page titles carry no descriptive subtitle. Shape and motion follow Material 3: radius,
 easing and duration tokens (`--v2-radius-*`, `--v2-ease-*`,
 `--v2-duration-*`) and the accent-container colors live in
 `packages/ui/src/v2/styles/theme.css` and `packages/ui/src/theme/v2/mapping.ts`,

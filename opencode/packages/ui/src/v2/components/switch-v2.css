@@ -1,9 +1,20 @@
+/*
+ * Material 3 switch: a 52x32 pill track. Off, the track is outlined and the thumb is a
+ * 16px muted dot; on, the track fills with the accent and the thumb grows to a 24px white
+ * disc; while pressed the thumb grows to 28px. `data-size="small"` is the compact
+ * 44x26 version for dense popover rows.
+ */
 [data-component="switch"] {
+  --switch-track-width: 52px;
+  --switch-track-height: 32px;
+  --switch-thumb-off: 16px;
+  --switch-thumb-on: 24px;
+  --switch-thumb-pressed: 28px;
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: default;
+  cursor: pointer;
 
   [data-slot="switch-input"] {
     position: absolute;
@@ -19,45 +30,40 @@
 
   [data-slot="switch-control"] {
     box-sizing: border-box;
+    position: relative;
     display: inline-flex;
-    justify-content: flex-start;
-    align-items: center;
-    padding: 2px;
-    width: 24px;
-    height: 16px;
     flex-shrink: 0;
-    border-radius: 4px;
+    width: var(--switch-track-width);
+    height: var(--switch-track-height);
+    padding: 0;
     border: none;
-    background:
-      linear-gradient(180deg, var(--v2-alpha-light-0) 0%, var(--v2-alpha-light-20) 100%),
-      var(--v2-background-bg-layer-04);
-    box-shadow: var(--v2-elevation-switch-off);
+    border-radius: var(--v2-radius-full);
+    background-color: var(--v2-background-bg-layer-02);
+    box-shadow: inset 0 0 0 2px var(--v2-icon-icon-muted);
     transition:
-      background 90ms ease-out,
-      opacity 90ms ease-out,
-      outline-color 90ms ease-out;
+      background-color var(--v2-duration-short) var(--v2-ease-standard),
+      box-shadow var(--v2-duration-short) var(--v2-ease-standard),
+      opacity var(--v2-duration-short) var(--v2-ease-standard);
   }
 
+  /* The thumb is centred on a fixed point in each state, so it grows in place. */
   [data-slot="switch-thumb"] {
+    --switch-thumb: var(--switch-thumb-off);
+    --switch-thumb-center: calc(var(--switch-track-height) / 2);
     box-sizing: border-box;
-    width: 12px;
-    height: 12px;
-    transform: translateX(0);
-    border-radius: 2px;
-    border: 0.5px solid var(--v2-overlay-gradient-depth-overlay-depth-top);
-    background:
-      linear-gradient(
-        180deg,
-        var(--v2-overlay-gradient-depth-overlay-depth-top) 0%,
-        var(--v2-overlay-gradient-depth-overlay-depth-bot) 100%
-      ),
-      var(--v2-grey-200);
-    box-shadow: var(--v2-elevation-elements);
+    position: absolute;
+    top: 50%;
+    inset-inline-start: calc(var(--switch-thumb-center) - var(--switch-thumb) / 2);
+    width: var(--switch-thumb);
+    height: var(--switch-thumb);
+    transform: translateY(-50%);
+    border-radius: var(--v2-radius-full);
+    background-color: var(--v2-icon-icon-muted);
     transition:
-      transform 90ms ease-out,
-      width 90ms ease-out,
-      border-radius 90ms,
-      background 90ms;
+      inset-inline-start var(--v2-duration-medium) var(--v2-ease-spring),
+      width var(--v2-duration-medium) var(--v2-ease-spring),
+      height var(--v2-duration-medium) var(--v2-ease-spring),
+      background-color var(--v2-duration-short) var(--v2-ease-standard);
   }
 
   [data-slot="switch-label"] {
@@ -86,61 +92,48 @@
     display: none;
   }
 
-  &:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    background:
-      linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-      linear-gradient(180deg, var(--v2-alpha-light-0) 0%, var(--v2-alpha-light-20) 100%),
-      var(--v2-background-bg-layer-04);
+  &:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
+    background-color: var(--v2-icon-icon-base);
   }
 
-  &:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
-    width: 13px;
-    border-radius: 3px;
+  &:active:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
+    --switch-thumb: var(--switch-thumb-pressed);
   }
 
   &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   &[data-checked] [data-slot="switch-control"] {
-    background:
-      linear-gradient(180deg, var(--v2-alpha-light-0) 0%, var(--v2-alpha-light-10) 100%), var(--v2-background-bg-accent);
-    box-shadow: var(--v2-elevation-switch-on);
+    background-color: var(--v2-background-bg-accent);
+    box-shadow: none;
   }
 
   &[data-checked] [data-slot="switch-thumb"] {
-    transform: translateX(8px);
-    border-radius: 2px;
-    background:
-      linear-gradient(
-        180deg,
-        var(--v2-overlay-gradient-depth-overlay-depth-top) 0%,
-        var(--v2-overlay-gradient-depth-overlay-depth-bot) 100%
-      ),
-      var(--v2-grey-300);
+    --switch-thumb: var(--switch-thumb-on);
+    --switch-thumb-center: calc(var(--switch-track-width) - var(--switch-track-height) / 2);
+    background-color: #ffffff;
   }
 
-  &:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
-    transform: translateX(-8px);
+  &[data-checked]:active:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
+    --switch-thumb: var(--switch-thumb-pressed);
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    background:
-      linear-gradient(
-        0deg,
-        var(--v2-overlay-simple-overlay-contrast-hover),
-        var(--v2-overlay-simple-overlay-contrast-hover)
-      ),
-      linear-gradient(180deg, var(--v2-alpha-light-0) 0%, var(--v2-alpha-light-10) 100%), var(--v2-background-bg-accent);
+    background-image: linear-gradient(
+      0deg,
+      var(--v2-overlay-simple-overlay-contrast-hover),
+      var(--v2-overlay-simple-overlay-contrast-hover)
+    );
   }
 
-  &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
-    transform: translateX(7px);
-  }
-
-  &:dir(rtl)[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
-    transform: translateX(-7px);
+  &[data-size="small"] {
+    --switch-track-width: 44px;
+    --switch-track-height: 26px;
+    --switch-thumb-off: 14px;
+    --switch-thumb-on: 20px;
+    --switch-thumb-pressed: 22px;
   }
 
   &[data-disabled] {
@@ -148,11 +141,11 @@
   }
 
   &[data-disabled] [data-slot="switch-control"] {
-    opacity: 0.5;
+    opacity: 0.38;
   }
 
   &[data-invalid] [data-slot="switch-control"] {
-    border-color: var(--v2-state-border-danger);
+    box-shadow: inset 0 0 0 2px var(--v2-state-fg-danger);
   }
 
   &[data-readonly] {
@@ -161,21 +154,9 @@
   }
 }
 
-/* Material 3 shape: pill track, round thumb, accent when on. */
-[data-component="switch"] [data-slot="switch-control"],
-[data-component="switch"] [data-slot="switch-thumb"],
-[data-component="switch"]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"],
-[data-component="switch"][data-checked] [data-slot="switch-thumb"] {
-  border-radius: var(--v2-radius-full);
-}
-
-[data-component="switch"] [data-slot="switch-thumb"] {
-  transition:
-    transform var(--v2-duration-medium) var(--v2-ease-spring),
-    width var(--v2-duration-short) var(--v2-ease-standard),
-    background var(--v2-duration-short) var(--v2-ease-standard);
-}
-
-[data-component="switch"][data-checked] [data-slot="switch-control"] {
-  background: var(--v2-background-bg-accent);
+@media (prefers-reduced-motion: reduce) {
+  [data-component="switch"] [data-slot="switch-control"],
+  [data-component="switch"] [data-slot="switch-thumb"] {
+    transition: none;
+  }
 }

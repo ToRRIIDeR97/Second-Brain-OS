@@ -193,7 +193,7 @@ export default function BrainHomePage() {
       >
         <div class="mx-auto flex w-full max-w-[720px] flex-col gap-8 px-6 pb-12 pt-[15vh]">
           <form
-            class="flex flex-col gap-2 rounded-[28px] bg-v2-background-bg-base p-3 shadow-[0_0_0_0.5px_var(--v2-border-border-muted),0_8px_28px_-12px_rgb(0_0_0/0.18)] transition-shadow duration-200 ease-standard focus-within:shadow-[0_0_0_1px_var(--v2-border-border-focus),0_8px_28px_-12px_rgb(0_0_0/0.18)] motion-reduce:transition-none"
+            class="flex flex-col gap-2 rounded-[28px] bg-v2-background-bg-base p-3 shadow-[0_0_0_1px_var(--v2-border-border-base),0_8px_28px_-12px_rgb(0_0_0/0.18)] transition-shadow duration-200 ease-standard focus-within:shadow-[0_0_0_1px_var(--v2-border-border-focus),0_8px_28px_-12px_rgb(0_0_0/0.18)] motion-reduce:transition-none"
             onSubmit={(event) => {
               event.preventDefault()
               void startSession()

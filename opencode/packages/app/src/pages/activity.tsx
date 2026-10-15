@@ -2,7 +2,7 @@ import { useNavigate } from "@solidjs/router"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
-import { PageFrame, PageHeader, pageRowClass } from "@/components/page"
+import { PageEmpty, PageFrame, PageHeader, pageRowClass } from "@/components/page"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { createHomeController } from "@/pages/home/home-controller"
@@ -112,9 +112,7 @@ export default function ActivityPage() {
             <Show
               when={!google.loading && attention().length === 0 && !(google()?.pendingWrites || google()?.failedWrites)}
             >
-              <p class="py-16 text-center text-[13px] text-v2-text-text-faint">
-                {language.t("secondBrain.activity.attentionEmpty")}
-              </p>
+              <PageEmpty>{language.t("secondBrain.activity.attentionEmpty")}</PageEmpty>
             </Show>
           </div>
         </Show>
@@ -122,11 +120,7 @@ export default function ActivityPage() {
           <div class="h-full overflow-y-auto px-3 pb-6 pt-2 sm:px-6">
             <Show
               when={changes().length > 0}
-              fallback={
-                <p class="py-16 text-center text-[13px] text-v2-text-text-faint">
-                  {language.t("secondBrain.activity.changesEmpty")}
-                </p>
-              }
+              fallback={<PageEmpty>{language.t("secondBrain.activity.changesEmpty")}</PageEmpty>}
             >
               <ul class="mx-auto flex max-w-[840px] flex-col gap-1">
                 <For each={changes()}>
@@ -158,11 +152,7 @@ export default function ActivityPage() {
           <div class="h-full overflow-y-auto px-3 pb-6 pt-2 sm:px-6">
             <Show
               when={runs().length > 0}
-              fallback={
-                <p class="py-16 text-center text-[13px] text-v2-text-text-faint">
-                  {language.t("secondBrain.activity.runsEmpty")}
-                </p>
-              }
+              fallback={<PageEmpty>{language.t("secondBrain.activity.runsEmpty")}</PageEmpty>}
             >
               <ul
                 class="mx-auto flex max-w-[840px] flex-col gap-1"
