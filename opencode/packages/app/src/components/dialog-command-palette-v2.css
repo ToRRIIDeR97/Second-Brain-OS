@@ -14,7 +14,7 @@
   min-height: 280px;
   max-height: min(calc(100vh - 96px), 480px);
   margin-top: max(48px, calc((100vh - 480px) / 2));
-  border-radius: 24px;
+  border-radius: var(--v2-radius-xxl);
   background: var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-floating);
 }
@@ -30,40 +30,46 @@
 
 .command-palette-v2-search {
   flex-shrink: 0;
-  padding: 6px;
+  padding: 12px 12px 6px;
 }
 
 .command-palette-v2-search [data-component="text-input-v2"] {
   width: 100%;
-  height: 36px;
-  border-radius: 12px;
+  height: 48px;
+  border-radius: var(--v2-radius-full);
   outline: 0;
-  background: color-mix(in srgb, var(--v2-background-bg-layer-02) 60%, transparent);
+  background: var(--v2-background-bg-layer-01);
   box-shadow: none;
+  font-size: 15px;
   transition:
-    background-color 120ms ease-in-out,
-    box-shadow 120ms ease-in-out;
+    background-color var(--v2-duration-short) var(--v2-ease-standard),
+    box-shadow var(--v2-duration-short) var(--v2-ease-standard);
 }
 
-.command-palette-v2-search [data-component="text-input-v2"]:where(:hover):not([data-disabled], [data-invalid]),
-.command-palette-v2-search [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
+.command-palette-v2-search [data-component="text-input-v2"]:where(:hover):not([data-disabled], [data-invalid]) {
   background: var(--v2-background-bg-layer-02);
   box-shadow: none;
 }
 
+.command-palette-v2-search [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 2px var(--v2-border-border-focus);
+}
+
 .command-palette-v2-search [data-component="text-input-v2"] [data-slot="text-input-v2-value"] {
-  border-radius: 12px;
+  border-radius: var(--v2-radius-full);
   background: transparent;
   gap: 8px;
 }
 
 .command-palette-v2-search [data-component="text-input-v2"] [data-slot="text-input-v2-leading-icon"] {
-  padding-left: 12px;
+  padding-left: 16px;
 }
 
 .command-palette-v2-search [data-component="text-input-v2"] [data-slot="text-input-v2-input"] {
-  border-radius: 12px;
+  border-radius: var(--v2-radius-full);
   background: transparent;
+  font-size: 15px;
 }
 
 .command-palette-v2-scroll {
@@ -74,22 +80,21 @@
 .command-palette-v2-results {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 6px 6px 8px;
+  gap: 8px;
+  padding: 0 12px 8px;
 }
 
 .command-palette-v2-group {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .command-palette-v2-group-title {
-  margin: 6px 0;
-  padding: 0 12px;
-  color: var(--v2-text-text-muted);
-  font-size: 13px;
-  font-weight: 440;
+  padding: 10px 12px 4px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  font-weight: 530;
   line-height: 16px;
   letter-spacing: -0.04px;
   user-select: none;
@@ -98,28 +103,38 @@
 .command-palette-v2-row {
   display: flex;
   width: 100%;
-  height: 36px;
+  height: 40px;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   padding: 0 12px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--v2-radius-lg);
   background: transparent;
   color: var(--v2-text-text-base);
   text-align: left;
   cursor: default;
   scroll-margin: 6px 0;
+  transition:
+    background-color var(--v2-duration-short) var(--v2-ease-standard),
+    border-radius var(--v2-duration-medium) var(--v2-ease-standard);
+}
+
+.command-palette-v2-row:active {
+  border-radius: var(--v2-radius-md);
 }
 
 .command-palette-v2-row[data-active] {
-  background: var(--v2-overlay-simple-overlay-hover);
+  background: var(--v2-background-bg-accent-container);
+  --v2-text-text-base: var(--v2-text-text-on-accent-container);
+  --v2-text-text-muted: var(--v2-text-text-on-accent-container);
+  --v2-icon-icon-muted: var(--v2-text-text-on-accent-container);
 }
 
 .command-palette-v2-row:focus-visible {
-  background: var(--v2-overlay-simple-overlay-hover);
-  outline: none;
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
 }
 
 .command-palette-v2-row-main {
@@ -127,7 +142,7 @@
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .command-palette-v2-row-icon {
@@ -205,6 +220,13 @@
   font-weight: 440;
   line-height: 16px;
   letter-spacing: -0.04px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .command-palette-v2-search [data-component="text-input-v2"],
+  .command-palette-v2-row {
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {

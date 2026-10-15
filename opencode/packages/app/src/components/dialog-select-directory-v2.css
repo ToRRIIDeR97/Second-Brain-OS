@@ -37,8 +37,9 @@
 
 .directory-picker-v2-suggestions button {
   overflow: hidden;
-  padding: 6px 8px;
-  border-radius: 9999px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  transition: background-color var(--v2-duration-short) var(--v2-ease-standard);
   color: var(--v2-text-text-muted);
   font-size: 12px;
   text-align: left;
@@ -81,8 +82,15 @@
   --trees-border-color-override: var(--v2-border-border-base);
   --trees-font-family-override: var(--font-family-sans);
   --trees-font-size-override: 12px;
-  --trees-item-height: 24px;
-  --trees-border-radius-override: 8px;
+  --trees-item-height: 28px;
+  /* Rows are 28px tall, so 12px corners read as M3 list pills. */
+  --trees-border-radius-override: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .directory-picker-v2-suggestions button {
+    transition: none;
+  }
 }
 
 .directory-picker-v2-state {

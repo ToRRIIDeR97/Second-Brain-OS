@@ -9,9 +9,8 @@ import {
   type ComponentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { useLanguage } from "@/context/language"
@@ -19,6 +18,7 @@ import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { pathKey } from "@/utils/path-key"
 import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
 import { createMenuDismissController } from "@/utils/menu-dismiss-controller"
+import { activeOverlayClass, menuSurfaceClass, searchFieldClass } from "./surface-classes"
 
 export type PromptProject = {
   name?: string
@@ -277,7 +277,7 @@ export function PromptProjectSelector(props: {
   })
 
   return (
-    <DropdownMenu
+    <MenuV2
       open={triggerReady() && props.controller.open()}
       placement={props.placement ?? "bottom"}
       gutter={4}
@@ -287,156 +287,147 @@ export function PromptProjectSelector(props: {
         props.controller.setOpen(open)
       }}
     >
-      <DropdownMenu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
+      <MenuV2.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
+      <MenuV2.Portal>
+        <MenuV2.Content
           ref={contentRef}
           id="prompt-project-menu"
-          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:!animate-none"
+          class={`w-[280px] overflow-hidden border-0 focus:outline-none [&[data-closed]]:!animate-none ${menuSurfaceClass}`}
           onOpenAutoFocus={(event) => event.preventDefault()}
           onPointerDownOutside={dismiss.preventTriggerRestore}
           onFocusOutside={dismiss.preventTriggerRestore}
           onCloseAutoFocus={dismiss.onCloseAutoFocus}
         >
-          <div class="flex flex-col p-0.5">
-            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
-              <Icon name="magnifying-glass" size="small" class="shrink-0" />
-              <input
-                ref={(el) => props.controller.setSearchRef(el)}
-                value={props.controller.search()}
-                placeholder={props.controller.labels.search()}
-                aria-autocomplete="list"
-                aria-controls="prompt-project-menu"
-                aria-activedescendant={props.controller.active() || undefined}
-                class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                onInput={(event) => props.controller.setSearch(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Tab") {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    if (event.shiftKey) {
-                      focusPreviousControl()
-                      return
-                    }
-                    activeItem()?.focus()
-                    return
-                  }
+          <div class="relative flex items-center p-0.5 pb-1 text-v2-icon-icon-muted">
+            <Icon name="magnifying-glass" size="small" class="pointer-events-none absolute left-3.5 shrink-0" />
+            <input
+              ref={(el) => props.controller.setSearchRef(el)}
+              value={props.controller.search()}
+              placeholder={props.controller.labels.search()}
+              aria-label={props.controller.labels.search()}
+              aria-autocomplete="list"
+              aria-controls="prompt-project-menu"
+              aria-activedescendant={props.controller.active() || undefined}
+              class={`${searchFieldClass} pr-9`}
+              onInput={(event) => props.controller.setSearch(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Tab") {
+                  event.preventDefault()
                   event.stopPropagation()
-                  if (event.key === "Escape") {
-                    event.preventDefault()
-                    props.controller.setOpen(false)
+                  if (event.shiftKey) {
+                    focusPreviousControl()
                     return
                   }
-                  if (event.altKey || event.metaKey) return
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault()
-                    moveActive(1)
-                    return
-                  }
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault()
-                    moveActive(-1)
-                    return
-                  }
-                  if (event.key === "Enter" && !event.isComposing) {
-                    event.preventDefault()
-                    selectActive()
-                  }
-                }}
-              />
-              <Show when={props.controller.search().trim()}>
-                <button
-                  type="button"
-                  class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
-                  onPointerDown={(event) => event.preventDefault()}
-                  onClick={() => props.controller.clearSearch()}
-                  aria-label={props.controller.labels.clear()}
-                >
-                  <Icon name="close-small" size="small" />
-                </button>
-              </Show>
-            </div>
-            <div class="max-h-[224px] overflow-y-auto">
-              <Show
-                when={props.controller.servers().length > 1}
-                fallback={
-                  <DropdownMenu.RadioGroup value={selectedValue()}>
-                    <For each={props.controller.projects()}>
-                      {(project) => (
-                        <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                      )}
-                    </For>
-                  </DropdownMenu.RadioGroup>
+                  activeItem()?.focus()
+                  return
                 }
+                event.stopPropagation()
+                if (event.key === "Escape") {
+                  event.preventDefault()
+                  props.controller.setOpen(false)
+                  return
+                }
+                if (event.altKey || event.metaKey) return
+                if (event.key === "ArrowDown") {
+                  event.preventDefault()
+                  moveActive(1)
+                  return
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault()
+                  moveActive(-1)
+                  return
+                }
+                if (event.key === "Enter" && !event.isComposing) {
+                  event.preventDefault()
+                  selectActive()
+                }
+              }}
+            />
+            <Show when={props.controller.search().trim()}>
+              <button
+                type="button"
+                class="absolute right-2 flex size-6 items-center justify-center rounded-full text-v2-icon-icon-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => props.controller.clearSearch()}
+                aria-label={props.controller.labels.clear()}
               >
-                <For
-                  each={props.controller
-                    .servers()
-                    .filter((server) =>
-                      props.controller.projects().some((project) => project.server?.key === server!.key),
-                    )}
-                >
-                  {(server) => (
-                    <div>
-                      <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
-                        {server!.name}
-                      </div>
-                      <DropdownMenu.RadioGroup value={selectedValue()}>
-                        <For
-                          each={props.controller.projects().filter((project) => project.server?.key === server!.key)}
-                        >
-                          {(project) => (
-                            <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                          )}
-                        </For>
-                      </DropdownMenu.RadioGroup>
-                    </div>
-                  )}
-                </For>
-              </Show>
-            </div>
+                <Icon name="close" size="small" />
+              </button>
+            </Show>
           </div>
-          <div class="h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col p-0.5">
+          <div class="flex max-h-[240px] flex-col gap-0.5 overflow-y-auto">
             <Show
               when={props.controller.servers().length > 1}
               fallback={
-                <ProjectAction
-                  server={props.controller.servers()[0]?.key}
-                  controller={props.controller}
-                  onSelect={selectAction}
-                />
+                <MenuV2.RadioGroup value={selectedValue()} class="flex flex-col gap-0.5">
+                  <For each={props.controller.projects()}>
+                    {(project) => (
+                      <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
+                    )}
+                  </For>
+                </MenuV2.RadioGroup>
               }
             >
-              <DropdownMenu.Sub>
-                <DropdownMenu.SubTrigger
-                  id={props.controller.actionKey()}
-                  data-option-key={props.controller.actionKey()}
-                  class={projectActionClass}
-                  classList={{
-                    "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === props.controller.actionKey(),
-                  }}
-                  onMouseEnter={() => props.controller.setActive(props.controller.actionKey())}
-                >
-                  <Icon name="plus" size="small" />
-                  <span data-slot="dropdown-menu-item-label" class="min-w-0 flex-1 truncate leading-5">
-                    {props.controller.labels.add()}
-                  </span>
-                  <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                </DropdownMenu.SubTrigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
-                    <For each={props.controller.servers()}>
-                      {(server) => <ServerAction server={server!} onSelect={selectAction} />}
-                    </For>
-                  </DropdownMenu.SubContent>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Sub>
+              <For
+                each={props.controller
+                  .servers()
+                  .filter((server) =>
+                    props.controller.projects().some((project) => project.server?.key === server!.key),
+                  )}
+              >
+                {(server) => (
+                  <MenuV2.Group>
+                    <MenuV2.GroupLabel>{server!.name}</MenuV2.GroupLabel>
+                    <MenuV2.RadioGroup value={selectedValue()} class="flex flex-col gap-0.5">
+                      <For each={props.controller.projects().filter((project) => project.server?.key === server!.key)}>
+                        {(project) => (
+                          <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
+                        )}
+                      </For>
+                    </MenuV2.RadioGroup>
+                  </MenuV2.Group>
+                )}
+              </For>
             </Show>
           </div>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu>
+          <MenuV2.Separator />
+          <Show
+            when={props.controller.servers().length > 1}
+            fallback={
+              <ProjectAction
+                server={props.controller.servers()[0]?.key}
+                controller={props.controller}
+                onSelect={selectAction}
+              />
+            }
+          >
+            <MenuV2.Sub>
+              <MenuV2.SubTrigger
+                id={props.controller.actionKey()}
+                data-option-key={props.controller.actionKey()}
+                classList={{ [activeOverlayClass]: props.controller.active() === props.controller.actionKey() }}
+                onMouseEnter={() => props.controller.setActive(props.controller.actionKey())}
+              >
+                <Icon name="plus" size="small" class="shrink-0" />
+                <span class="min-w-0 flex-1 truncate">{props.controller.labels.add()}</span>
+              </MenuV2.SubTrigger>
+              <MenuV2.Portal>
+                <MenuV2.SubContent class={`min-w-[180px] ${menuSurfaceClass}`}>
+                  <For each={props.controller.servers()}>
+                    {(server) => (
+                      <MenuV2.Item onSelect={() => selectAction(server!.key)}>
+                        <span class="min-w-0 flex-1 truncate">{server!.name}</span>
+                      </MenuV2.Item>
+                    )}
+                  </For>
+                </MenuV2.SubContent>
+              </MenuV2.Portal>
+            </MenuV2.Sub>
+          </Show>
+        </MenuV2.Content>
+      </MenuV2.Portal>
+    </MenuV2>
   )
 }
 
@@ -445,7 +436,7 @@ export function PromptProjectAddButton(props: { controller: PromptProjectControl
     <button
       data-action="prompt-project"
       type="button"
-      class="flex h-7 min-w-0 max-w-[160px] items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      class={`${chipClass} max-w-[160px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover`}
       onClick={() => props.controller.add()}
     >
       <Icon name="folder-add-left" size="small" class="shrink-0 text-v2-icon-icon-muted" />
@@ -455,6 +446,10 @@ export function PromptProjectAddButton(props: { controller: PromptProjectControl
   )
 }
 
+/** Composer chip: a pill that tightens its corners while pressed. */
+const chipClass =
+  "flex h-8 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] transition-[background-color,border-radius] duration-200 ease-standard active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+
 function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptProjectController }) {
   const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown"])
   const project = () => local.controller.selected()
@@ -463,7 +458,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
       {...rest}
       data-action="prompt-project"
       type="button"
-      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      class={`${chipClass} max-w-[220px] pl-1.5`}
       classList={{
         ...local.classList,
         "hover:bg-v2-overlay-simple-overlay-hover": !local.controller.open(),
@@ -507,21 +502,11 @@ function ProjectItem(props: {
 }) {
   const key = () => props.controller.projectKey(props.project)
   return (
-    <DropdownMenu.RadioItem
+    <MenuV2.RadioItem
       id={key()}
       value={key()}
       data-option-key={key()}
-      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
-      classList={{ "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
-      style={{
-        "font-family": "var(--v2-font-family-sans)",
-        "font-size": "13px",
-        "font-weight": 440,
-        "line-height": "20px",
-        "letter-spacing": "-0.04px",
-        color: "var(--v2-text-text-base)",
-        padding: "0 12px",
-      }}
+      classList={{ [activeOverlayClass]: props.controller.active() === key() }}
       closeOnSelect
       onMouseEnter={() => {
         props.controller.setActive(key())
@@ -534,16 +519,10 @@ function ProjectItem(props: {
         src={getProjectAvatarSource(props.project.id, props.project.icon)}
         variant={getProjectAvatarVariant(props.project.icon?.color)}
       />
-      <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">{displayName(props.project)}</DropdownMenu.ItemLabel>
-      <DropdownMenu.ItemIndicator style={{ width: "14px", height: "14px", right: "12px" }}>
-        <IconV2 name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-      </DropdownMenu.ItemIndicator>
-    </DropdownMenu.RadioItem>
+      <span class="min-w-0 truncate">{displayName(props.project)}</span>
+    </MenuV2.RadioItem>
   )
 }
-
-const projectActionClass =
-  "h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
 
 function ProjectAction(props: {
   server?: string
@@ -552,38 +531,18 @@ function ProjectAction(props: {
 }) {
   const key = () => props.controller.actionKey(props.server)
   return (
-    <DropdownMenu.Item
+    <MenuV2.Item
       id={key()}
       data-option-key={key()}
-      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
-      classList={{ "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
-      style={{
-        "font-family": "var(--v2-font-family-sans)",
-        "font-size": "13px",
-        "font-weight": 440,
-        "line-height": "20px",
-        "letter-spacing": "-0.04px",
-        color: "var(--v2-text-text-base)",
-        padding: "0 12px",
-      }}
+      classList={{ [activeOverlayClass]: props.controller.active() === key() }}
       onMouseEnter={() => {
         props.controller.setActive(key())
         props.controller.focusSearch()
       }}
       onSelect={() => props.onSelect(props.server)}
     >
-      <Icon name="plus" size="small" />
-      <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">
-        {props.controller.labels.add()}
-      </DropdownMenu.ItemLabel>
-    </DropdownMenu.Item>
-  )
-}
-
-function ServerAction(props: { server: { key: string; name: string }; onSelect: (server: string) => void }) {
-  return (
-    <DropdownMenu.Item class={projectActionClass} onSelect={() => props.onSelect(props.server.key)}>
-      <DropdownMenu.ItemLabel class="min-w-0 flex-1 truncate leading-5">{props.server.name}</DropdownMenu.ItemLabel>
-    </DropdownMenu.Item>
+      <Icon name="plus" size="small" class="shrink-0" />
+      <span class="min-w-0 truncate">{props.controller.labels.add()}</span>
+    </MenuV2.Item>
   )
 }

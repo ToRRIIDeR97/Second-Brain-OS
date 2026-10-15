@@ -1,17 +1,20 @@
-import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Dialog, DialogBody, DialogHeader } from "@opencode-ai/ui/v2/dialog-v2"
+import { Field } from "@opencode-ai/ui/v2/field-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useMutation } from "@tanstack/solid-query"
-import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@/utils/toast"
-import { batch, For } from "solid-js"
+import { batch, For, Show } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
+import { filledFieldClass } from "./surface-classes"
 
 type Props = {
   onBack: () => void
@@ -21,20 +24,21 @@ export function DialogCustomProvider(props: Props) {
   const language = useLanguage()
 
   return (
-    <Dialog
-      class="h-full"
-      title={
-        <IconButton
+    <Dialog size="large">
+      <DialogHeader closeLabel={language.t("common.close")}>
+        <IconButtonV2
           tabIndex={-1}
-          icon="arrow-left"
-          variant="ghost"
+          variant="ghost-muted"
+          size="small"
+          class="-my-1"
+          icon={<Icon name="chevron-down" class="rotate-90" />}
           onClick={props.onBack}
           aria-label={language.t("common.goBack")}
         />
-      }
-      transition
-    >
-      <CustomProviderForm />
+      </DialogHeader>
+      <DialogBody class="min-h-0 px-2 pb-2">
+        <CustomProviderForm />
+      </DialogBody>
     </Dialog>
   )
 }
@@ -175,149 +179,203 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   }
 
   return (
-    <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
-      <div class="px-2.5 flex gap-4 items-center">
-        <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
-        <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
+    <div class="flex max-h-[60vh] flex-col gap-5 overflow-y-auto px-2.5 pb-3">
+      <div class="flex items-center gap-3 px-2.5">
+        <ProviderIcon id="synthetic" class="size-5 shrink-0 text-v2-icon-icon-base" />
+        <h2 class="text-[15px] font-[530] tracking-[-0.13px] text-v2-text-text-base">
+          {language.t("provider.custom.title")}
+        </h2>
       </div>
 
-      <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
-        <p class="text-14-regular text-text-base">{language.t("provider.custom.description.prefix")}</p>
+      <form onSubmit={save} class="flex flex-col gap-5 px-2.5 pb-6">
+        <p class="text-[13px] leading-5 text-v2-text-text-muted">{language.t("provider.custom.description.prefix")}</p>
 
-        <div class="flex flex-col gap-4">
-          <TextField
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField
             autofocus={props.autofocus ?? true}
             label={language.t("provider.custom.field.providerID.label")}
             placeholder={language.t("provider.custom.field.providerID.placeholder")}
             description={language.t("provider.custom.field.providerID.description")}
             value={form.providerID}
-            onChange={(v) => setField("providerID", v)}
-            validationState={form.err.providerID ? "invalid" : undefined}
             error={form.err.providerID}
+            mono
+            onInput={(value) => setField("providerID", value)}
           />
-          <TextField
+          <FormField
             label={language.t("provider.custom.field.name.label")}
             placeholder={language.t("provider.custom.field.name.placeholder")}
             value={form.name}
-            onChange={(v) => setField("name", v)}
-            validationState={form.err.name ? "invalid" : undefined}
             error={form.err.name}
-          />
-          <TextField
-            label={language.t("provider.custom.field.baseURL.label")}
-            placeholder={language.t("provider.custom.field.baseURL.placeholder")}
-            value={form.baseURL}
-            onChange={(v) => setField("baseURL", v)}
-            validationState={form.err.baseURL ? "invalid" : undefined}
-            error={form.err.baseURL}
-          />
-          <TextField
-            label={language.t("provider.custom.field.apiKey.label")}
-            placeholder={language.t("provider.custom.field.apiKey.placeholder")}
-            description={language.t("provider.custom.field.apiKey.description")}
-            value={form.apiKey}
-            onChange={(v) => setField("apiKey", v)}
+            onInput={(value) => setField("name", value)}
           />
         </div>
+        <FormField
+          label={language.t("provider.custom.field.baseURL.label")}
+          placeholder={language.t("provider.custom.field.baseURL.placeholder")}
+          value={form.baseURL}
+          error={form.err.baseURL}
+          mono
+          onInput={(value) => setField("baseURL", value)}
+        />
+        <FormField
+          label={language.t("provider.custom.field.apiKey.label")}
+          placeholder={language.t("provider.custom.field.apiKey.placeholder")}
+          description={language.t("provider.custom.field.apiKey.description")}
+          value={form.apiKey}
+          mono
+          onInput={(value) => setField("apiKey", value)}
+        />
 
-        <div class="flex flex-col gap-3">
-          <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
-          <For each={form.models}>
-            {(m, i) => (
-              <div class="flex gap-2 items-start" data-row={m.row}>
-                <div class="flex-1">
-                  <TextField
+        <div class="flex flex-col gap-2">
+          <span class="ms-1 text-[12px] font-[530] text-v2-text-text-muted">
+            {language.t("provider.custom.models.label")}
+          </span>
+          <div class="flex flex-col gap-0.5 overflow-hidden rounded-[16px]">
+            <For each={form.models}>
+              {(m, i) => (
+                <div class="flex items-start gap-1.5 bg-v2-background-bg-layer-02 p-1.5 ps-2" data-row={m.row}>
+                  <RowInput
                     label={language.t("provider.custom.models.id.label")}
-                    hideLabel
                     placeholder={language.t("provider.custom.models.id.placeholder")}
                     value={m.id}
-                    onChange={(v) => setModel(i(), "id", v)}
-                    validationState={m.err.id ? "invalid" : undefined}
                     error={m.err.id}
+                    mono
+                    onInput={(value) => setModel(i(), "id", value)}
                   />
-                </div>
-                <div class="flex-1">
-                  <TextField
+                  <RowInput
                     label={language.t("provider.custom.models.name.label")}
-                    hideLabel
                     placeholder={language.t("provider.custom.models.name.placeholder")}
                     value={m.name}
-                    onChange={(v) => setModel(i(), "name", v)}
-                    validationState={m.err.name ? "invalid" : undefined}
                     error={m.err.name}
+                    onInput={(value) => setModel(i(), "name", value)}
+                  />
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    class="mt-0.5 shrink-0"
+                    icon={<Icon name="close" />}
+                    onClick={() => removeModel(i())}
+                    disabled={form.models.length <= 1}
+                    aria-label={language.t("provider.custom.models.remove")}
                   />
                 </div>
-                <IconButton
-                  type="button"
-                  icon="trash"
-                  variant="ghost"
-                  class="mt-1.5"
-                  onClick={() => removeModel(i())}
-                  disabled={form.models.length <= 1}
-                  aria-label={language.t("provider.custom.models.remove")}
-                />
-              </div>
-            )}
-          </For>
-          <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addModel} class="self-start">
+              )}
+            </For>
+          </div>
+          <ButtonV2 type="button" size="small" variant="ghost" icon="plus" onClick={addModel} class="self-start">
             {language.t("provider.custom.models.add")}
-          </Button>
+          </ButtonV2>
         </div>
 
-        <div class="flex flex-col gap-3">
-          <label class="text-12-medium text-text-weak">{language.t("provider.custom.headers.label")}</label>
-          <For each={form.headers}>
-            {(h, i) => (
-              <div class="flex gap-2 items-start" data-row={h.row}>
-                <div class="flex-1">
-                  <TextField
+        <div class="flex flex-col gap-2">
+          <span class="ms-1 text-[12px] font-[530] text-v2-text-text-muted">
+            {language.t("provider.custom.headers.label")}
+          </span>
+          <div class="flex flex-col gap-0.5 overflow-hidden rounded-[16px]">
+            <For each={form.headers}>
+              {(h, i) => (
+                <div class="flex items-start gap-1.5 bg-v2-background-bg-layer-02 p-1.5 ps-2" data-row={h.row}>
+                  <RowInput
                     label={language.t("provider.custom.headers.key.label")}
-                    hideLabel
                     placeholder={language.t("provider.custom.headers.key.placeholder")}
                     value={h.key}
-                    onChange={(v) => setHeader(i(), "key", v)}
-                    validationState={h.err.key ? "invalid" : undefined}
                     error={h.err.key}
+                    mono
+                    onInput={(value) => setHeader(i(), "key", value)}
                   />
-                </div>
-                <div class="flex-1">
-                  <TextField
+                  <RowInput
                     label={language.t("provider.custom.headers.value.label")}
-                    hideLabel
                     placeholder={language.t("provider.custom.headers.value.placeholder")}
                     value={h.value}
-                    onChange={(v) => setHeader(i(), "value", v)}
-                    validationState={h.err.value ? "invalid" : undefined}
                     error={h.err.value}
+                    mono
+                    onInput={(value) => setHeader(i(), "value", value)}
+                  />
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    class="mt-0.5 shrink-0"
+                    icon={<Icon name="close" />}
+                    onClick={() => removeHeader(i())}
+                    disabled={form.headers.length <= 1}
+                    aria-label={language.t("provider.custom.headers.remove")}
                   />
                 </div>
-                <IconButton
-                  type="button"
-                  icon="trash"
-                  variant="ghost"
-                  class="mt-1.5"
-                  onClick={() => removeHeader(i())}
-                  disabled={form.headers.length <= 1}
-                  aria-label={language.t("provider.custom.headers.remove")}
-                />
-              </div>
-            )}
-          </For>
-          <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addHeader} class="self-start">
+              )}
+            </For>
+          </div>
+          <ButtonV2 type="button" size="small" variant="ghost" icon="plus" onClick={addHeader} class="self-start">
             {language.t("provider.custom.headers.add")}
-          </Button>
+          </ButtonV2>
         </div>
 
-        <Button
-          class="w-auto self-start"
-          type="submit"
-          size="large"
-          variant="primary"
-          disabled={saveMutation.isPending}
-        >
+        <ButtonV2 class="self-end" type="submit" variant="contrast" disabled={saveMutation.isPending}>
           {saveMutation.isPending ? language.t("common.saving") : language.t("common.submit")}
-        </Button>
+        </ButtonV2>
       </form>
+    </div>
+  )
+}
+
+function FormField(props: {
+  label: string
+  placeholder: string
+  value: string
+  description?: string
+  error?: string
+  mono?: boolean
+  autofocus?: boolean
+  onInput: (value: string) => void
+}) {
+  return (
+    <Field invalid={!!props.error} class="flex min-w-0 flex-col gap-1.5">
+      <Field.Label class="ms-1">{props.label}</Field.Label>
+      <Show when={props.description}>
+        <Field.Prefix class="ms-1">{props.description}</Field.Prefix>
+      </Show>
+      <TextInputV2
+        autofocus={props.autofocus}
+        appearance="large"
+        class={`${filledFieldClass} ${props.mono ? "[&_input]:font-mono" : ""}`}
+        placeholder={props.placeholder}
+        value={props.value}
+        invalid={!!props.error}
+        spellcheck={false}
+        autocomplete="off"
+        onInput={(event) => props.onInput(event.currentTarget.value)}
+      />
+      <Show when={props.error}>
+        <Field.Suffix class="ms-1 text-v2-state-fg-danger">{props.error}</Field.Suffix>
+      </Show>
+    </Field>
+  )
+}
+
+function RowInput(props: {
+  label: string
+  placeholder: string
+  value: string
+  error?: string
+  mono?: boolean
+  onInput: (value: string) => void
+}) {
+  return (
+    <div class="flex min-w-0 flex-1 flex-col gap-1">
+      <TextInputV2
+        aria-label={props.label}
+        class={`!h-9 !w-full !bg-v2-background-bg-layer-01 !shadow-none ${props.mono ? "[&_input]:font-mono" : ""}`}
+        placeholder={props.placeholder}
+        value={props.value}
+        invalid={!!props.error}
+        spellcheck={false}
+        autocomplete="off"
+        onInput={(event) => props.onInput(event.currentTarget.value)}
+      />
+      <Show when={props.error}>
+        <span role="alert" class="ms-1 text-[12px] text-v2-state-fg-danger">
+          {props.error}
+        </span>
+      </Show>
     </div>
   )
 }

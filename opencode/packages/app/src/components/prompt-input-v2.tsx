@@ -1,7 +1,7 @@
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
@@ -379,7 +379,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       if (item?.commentID) comments.remove(item.path, item.commentID)
     },
     openAttachment: (attachment) =>
-      dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />),
+      dialog.show(() => <AttachmentPreview src={attachment.blob.url} name={attachment.filename} />),
     openContext(key) {
       const item = controller.contextItem(key)
       if (item) openComment(item, props, sync, layout, files, comments)
@@ -494,6 +494,25 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   ])
 
   return controller as PromptInputV2ComposerController
+}
+
+function AttachmentPreview(props: { src: string; name: string }) {
+  return (
+    <Dialog size="x-large">
+      <DialogHeader>
+        <DialogTitle>
+          <span class="block truncate">{props.name}</span>
+        </DialogTitle>
+      </DialogHeader>
+      <DialogBody class="min-h-0 items-center justify-center px-4 pb-4">
+        <img
+          src={props.src}
+          alt={props.name}
+          class="max-h-[min(calc(100vh-180px),512px)] max-w-full rounded-[16px] object-contain"
+        />
+      </DialogBody>
+    </Dialog>
+  )
 }
 
 function PromptStashMenu(props: { stash: PromptInputV2ComposerController["stash"] }) {

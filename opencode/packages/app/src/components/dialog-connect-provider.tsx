@@ -1,13 +1,13 @@
 import type { IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
-import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
 import { List } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { TextField } from "@opencode-ai/ui/text-field"
+import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { showToast } from "@/utils/toast"
 import {
@@ -33,6 +33,7 @@ import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
+import { filledFieldClass, listV2Class } from "./surface-classes"
 
 const CUSTOM_ID = "_custom"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
@@ -97,14 +98,14 @@ export const DialogConnectProvider: Component<{
           when={controller.selected()}
           fallback={<DialogTitle>{language.t("command.provider.connect")}</DialogTitle>}
         >
-          <button
-            type="button"
-            class="flex size-6 items-center justify-center rounded-full text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+          <IconButtonV2
+            variant="ghost-muted"
+            size="small"
+            class="-my-1"
+            icon={<Icon name="chevron-down" class="rotate-90" />}
             onClick={() => back.current()}
             aria-label={language.t("common.goBack")}
-          >
-            <Icon name="arrow-left" size="small" />
-          </button>
+          />
         </Show>
       </DialogHeader>
       <DialogBody class="min-h-0 flex-1 overflow-hidden px-2 pb-2">
@@ -188,7 +189,7 @@ function ProviderPickerV2(props: {
         <TextInputV2
           ref={search}
           type="search"
-          class="!w-full [font-family:var(--v2-font-family-sans)]"
+          class="!h-9 !w-full !rounded-full [font-family:var(--v2-font-family-sans)]"
           leadingIcon={<Icon name="magnifying-glass" size="small" />}
           placeholder={language.t("dialog.provider.search.placeholder")}
           value={store.filter}
@@ -216,7 +217,7 @@ function ProviderPickerV2(props: {
                       <button
                         type="button"
                         data-provider-id={provider.id}
-                        class="flex min-h-9 w-full items-center gap-2 rounded-full px-4 py-2.5 text-left text-[13px] leading-none tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                        class="flex min-h-10 w-full items-center gap-2 rounded-[16px] px-4 py-2.5 text-left text-[13px] leading-none tracking-[-0.04px] transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none active:rounded-[12px] motion-reduce:transition-none"
                         classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                         onMouseEnter={() => setStore("active", provider.id)}
                         disabled={store.connecting !== undefined}
@@ -226,12 +227,10 @@ function ProviderPickerV2(props: {
                         <ProviderIcon id={provider.id} class="size-4 shrink-0 text-v2-icon-icon-base" />
                         <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{provider.name}</span>
                         <Show when={provider.id === CUSTOM_ID}>
-                          <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
-                            {language.t("settings.providers.tag.custom")}
-                          </span>
+                          <Tag class="shrink-0">{language.t("settings.providers.tag.custom")}</Tag>
                         </Show>
                         <Show when={store.connecting === provider.id}>
-                          <Spinner class="ml-auto size-4 shrink-0 text-v2-icon-icon-muted" />
+                          <LoaderV2 class="ml-auto shrink-0" />
                         </Show>
                       </button>
                     )}
@@ -513,27 +512,30 @@ function ProviderConnection(props: {
       <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
         <Switch>
           <Match when={item()?.prompt.type === "text"}>
-            <TextField
-              type="text"
-              label={text()?.message ?? ""}
-              placeholder={text()?.placeholder}
-              value={text() ? (formStore.value[text()!.key] ?? "") : ""}
-              onChange={(value) => {
-                const prompt = text()
-                if (!prompt) return
-                setFormStore("value", prompt.key, value)
-              }}
-            />
-            <Button class="w-auto" type="submit" size="large" variant="primary" disabled={!valid()}>
+            <label class="flex w-full flex-col gap-1.5 px-3 text-[13px] font-[530] leading-4 text-v2-text-text-base">
+              {text()?.message ?? ""}
+              <TextInputV2
+                appearance="large"
+                class={filledFieldClass}
+                placeholder={text()?.placeholder}
+                value={text() ? (formStore.value[text()!.key] ?? "") : ""}
+                onInput={(event) => {
+                  const prompt = text()
+                  if (!prompt) return
+                  setFormStore("value", prompt.key, event.currentTarget.value)
+                }}
+              />
+            </label>
+            <ButtonV2 class="mx-3" type="submit" variant="contrast" disabled={!valid()}>
               {language.t("common.continue")}
-            </Button>
+            </ButtonV2>
           </Match>
           <Match when={item()?.prompt.type === "select"}>
             <div class="w-full flex flex-col gap-1.5">
-              <div class="text-14-regular text-text-base">{select()?.message}</div>
+              <div class="px-3 text-[13px] text-v2-text-text-base">{select()?.message}</div>
               <div>
                 <List
-                  class="px-3"
+                  class={`px-1 ${listV2Class}`}
                   items={select()?.options ?? []}
                   key={(x) => x.value}
                   current={select()?.options.find((x) => x.value === formStore.value[select()!.key])}
@@ -550,12 +552,9 @@ function ProviderConnection(props: {
                   }}
                 >
                   {(option) => (
-                    <div class="w-full flex items-center gap-x-2">
-                      <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
-                        <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
-                      </div>
-                      <span>{option.label}</span>
-                      <span class="text-14-regular text-text-weak">{option.hint}</span>
+                    <div class="flex w-full items-center gap-x-2">
+                      <span class="[font-weight:530]">{option.label}</span>
+                      <span class="opacity-80">{option.hint}</span>
                     </div>
                   )}
                 </List>
@@ -600,34 +599,43 @@ function ProviderConnection(props: {
 
   props.setBack(goBack)
 
+  // Pill toggles that wrap, so long method labels never overflow the dialog.
+  function MethodChoice() {
+    return (
+      <div
+        role="group"
+        aria-label={language.t("provider.connect.selectMethod", { provider: provider().name })}
+        class="flex flex-wrap gap-1.5 px-3 pb-4"
+      >
+        <For each={methods()}>
+          {(item, index) => {
+            const details = () => methodDetails(item)
+            const selected = () => store.methodIndex === index()
+            return (
+              <button
+                type="button"
+                aria-pressed={selected()}
+                class="flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] leading-5 tracking-[-0.04px] transition-[background-color,color,border-radius] duration-150 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus active:rounded-[8px] motion-reduce:transition-none"
+                classList={{
+                  "bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container": selected(),
+                  "bg-v2-background-bg-layer-02 text-v2-text-text-base hover:bg-v2-background-bg-layer-03": !selected(),
+                }}
+                onClick={() => void selectMethod(index())}
+              >
+                <span class="font-[530]">{details().label}</span>
+                <Show when={details().hint}>{(hint) => <span class="font-[440] opacity-80">{hint()}</span>}</Show>
+              </button>
+            )
+          }}
+        </For>
+      </div>
+    )
+  }
+
   function MethodSelection() {
     return (
-      <div class="flex flex-col gap-2">
-        <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-          {language.t("provider.connect.selectMethod", { provider: provider().name })}
-        </div>
-        <div class="flex flex-col">
-          <For each={methods()}>
-            {(item, index) => {
-              const details = () => methodDetails(item)
-              return (
-                <button
-                  type="button"
-                  class="group flex h-9 w-full items-center gap-2 rounded-full px-4 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-                  onClick={() => void selectMethod(index())}
-                >
-                  <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
-                    <span class="hidden h-0.5 w-2.5 bg-v2-icon-icon-base group-hover:block group-focus-visible:block" />
-                  </span>
-                  <span class="font-[530] text-v2-text-text-base">{details().label}</span>
-                  <Show when={details().hint}>
-                    {(hint) => <span class="font-[440] text-v2-text-text-muted">{hint()}</span>}
-                  </Show>
-                </button>
-              )
-            }}
-          </For>
-        </div>
+      <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+        {language.t("provider.connect.selectMethod", { provider: provider().name })}
       </div>
     )
   }
@@ -669,11 +677,11 @@ function ProviderConnection(props: {
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
         {language.t("provider.connect.apiKey.description", { provider: provider().name })}
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
-          <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
+          <label class="flex w-full flex-col gap-1.5 font-[530] leading-4 text-v2-text-text-base">
             {language.t("provider.connect.apiKey.label", { provider: provider().name })}
             <TextInputV2
               ref={apiKey}
-              class="!w-full"
+              class={`${filledFieldClass} [&_input]:font-mono`}
               name="apiKey"
               data-input="provider-api-key"
               placeholder={language.t("provider.connect.apiKey.placeholder")}
@@ -751,11 +759,11 @@ function ProviderConnection(props: {
           {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
         </div>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
-          <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
+          <label class="flex w-full flex-col gap-1.5 font-[530] leading-4 text-v2-text-text-base">
             {language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
             <TextInputV2
               ref={codeInput}
-              class="!w-full"
+              class={filledFieldClass}
               name="code"
               placeholder={language.t("provider.connect.oauth.code.placeholder")}
               value={formStore.value}
@@ -825,23 +833,27 @@ function ProviderConnection(props: {
     })
 
     return (
-      <div class="flex flex-col gap-6">
-        <div class="text-14-regular text-text-base">
+      <div class="flex flex-col gap-5 px-3 text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-base">
+        <div>
           {language.t("provider.connect.oauth.auto.visit.prefix")}
           <ExternalLink href={store.authorization!.url}>
             {language.t("provider.connect.oauth.auto.visit.link")}
           </ExternalLink>
           {language.t("provider.connect.oauth.auto.visit.suffix", { provider: provider().name })}
         </div>
-        <TextField
-          label={language.t("provider.connect.oauth.auto.confirmationCode")}
-          class="font-mono"
-          value={code()}
-          readOnly
-          copyable
-        />
-        <div class="text-14-regular text-text-base flex items-center gap-4">
-          <Spinner />
+        <label class="flex w-full flex-col gap-1.5 font-[530] leading-4">
+          {language.t("provider.connect.oauth.auto.confirmationCode")}
+          <TextInputV2
+            appearance="large"
+            class={`${filledFieldClass} [&_input]:font-mono`}
+            value={code() ?? ""}
+            readOnly
+            showCopyButton
+            onCopyClick={() => void navigator.clipboard.writeText(code() ?? "")}
+          />
+        </label>
+        <div class="flex items-center gap-2 text-v2-text-text-muted">
+          <LoaderV2 />
           <span>{language.t("provider.connect.status.waiting")}</span>
         </div>
       </div>
@@ -862,36 +874,33 @@ function ProviderConnection(props: {
         </div>
       </div>
       <div class="flex min-h-0 flex-1 flex-col">
+        <Show when={!loading() && methods().length > 1}>
+          <MethodChoice />
+        </Show>
         <div>
           <Switch>
             <Match when={loading()}>
-              <div class="text-14-regular text-text-base">
-                <div class="flex items-center gap-x-2">
-                  <Spinner />
-                  <span>{language.t("provider.connect.status.inProgress")}</span>
-                </div>
+              <div class="flex items-center gap-x-2 px-3 text-[13px] text-v2-text-text-base">
+                <LoaderV2 />
+                <span>{language.t("provider.connect.status.inProgress")}</span>
               </div>
             </Match>
             <Match when={store.methodIndex === undefined}>
               <MethodSelection />
             </Match>
             <Match when={store.state === "pending"}>
-              <div class="text-14-regular text-text-base">
-                <div class="flex items-center gap-x-2">
-                  <Spinner />
-                  <span>{language.t("provider.connect.status.inProgress")}</span>
-                </div>
+              <div class="flex items-center gap-x-2 px-3 text-[13px] text-v2-text-text-base">
+                <LoaderV2 />
+                <span>{language.t("provider.connect.status.inProgress")}</span>
               </div>
             </Match>
             <Match when={store.state === "prompt"}>
               <AuthPromptsView />
             </Match>
             <Match when={store.state === "error"}>
-              <div class="text-14-regular text-text-base">
-                <div class="flex items-center gap-x-2">
-                  <Icon name="circle-ban-sign" class="text-icon-critical-base" />
-                  <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
-                </div>
+              <div role="alert" class="flex items-center gap-x-2 px-3 text-[13px] text-v2-text-text-base">
+                <Icon name="outline-xmark" class="shrink-0 text-v2-state-fg-danger" />
+                <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
               </div>
             </Match>
             <Match when={method()?.type === "key"}>

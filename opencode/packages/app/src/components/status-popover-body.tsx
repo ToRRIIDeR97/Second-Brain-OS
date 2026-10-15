@@ -1,12 +1,13 @@
-import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
+import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { popoverSurfaceClass, statusDotClass, switchRowClass } from "./surface-classes"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -23,7 +24,7 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   return (
     <>
       {parts[0]}
-      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
+      <code class="rounded-[8px] bg-v2-background-bg-layer-02 px-1.5 py-0.5 text-v2-text-text-base">{file}</code>
       {parts.slice(1).join(file)}
     </>
   )
@@ -171,80 +172,61 @@ export function StatusPopoverServerBody() {
 
 function ServerStatusPopoverView(props: { state: ServerStatusState }) {
   return (
-    <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
-      <Tabs
-        aria-label={props.state.ariaLabel}
-        class="tabs bg-background-strong rounded-xl overflow-hidden"
-        data-component="tabs"
-        data-active="servers"
-        defaultValue="servers"
-        variant="alt"
-      >
-        <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
-          <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-            {props.state.servers().length > 0 ? `${props.state.servers().length} ` : ""}
-            {props.state.serversLabel}
-          </Tabs.Trigger>
-        </Tabs.List>
-        <Tabs.Content value="servers">
-          <ServerStatusList state={props.state} />
-        </Tabs.Content>
-      </Tabs>
-    </div>
-  )
-}
-
-function ServerStatusList(props: { state: ServerStatusState }) {
-  return (
-    <div class="flex flex-col px-2 pb-2">
-      <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
-        <For each={props.state.servers()}>
-          {(item) => {
-            return (
-              <button
-                type="button"
-                class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-full transition-colors text-left"
-                classList={{
-                  "hover:bg-surface-raised-base-hover": !item.blocked,
-                  "cursor-not-allowed": item.blocked,
-                }}
-                aria-disabled={item.blocked}
-                onClick={() => {
-                  if (item.blocked) return
-                  item.onSelect()
-                }}
-              >
-                <ServerHealthIndicator health={item.health} />
-                <ServerRow
-                  conn={item.conn}
-                  dimmed={item.blocked}
-                  status={item.health}
-                  class="flex items-center gap-2 w-full min-w-0"
-                  nameClass="text-14-regular text-text-base truncate"
-                  versionClass="text-12-regular text-text-weak truncate"
-                  badge={
-                    <Show when={item.key === props.state.defaultKey()}>
-                      <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-full">
-                        {props.state.defaultLabel}
-                      </span>
-                    </Show>
-                  }
-                >
-                  <div class="flex-1" />
-                  <Show when={item.active}>
-                    <Icon name="check" size="small" class="text-icon-weak shrink-0" />
-                  </Show>
-                </ServerRow>
-              </button>
-            )
-          }}
-        </For>
-
-        <Button variant="secondary" class="mt-3 self-start h-8 px-3 py-1.5" onClick={props.state.onManage}>
+    <section
+      aria-label={props.state.ariaLabel}
+      class={`flex w-[360px] max-w-full flex-col gap-0.5 ${popoverSurfaceClass}`}
+    >
+      <h2 class="px-3 pt-1.5 pb-1 text-[12px] text-v2-text-text-faint [font-weight:530]">
+        {props.state.servers().length > 0 ? `${props.state.servers().length} ` : ""}
+        {props.state.serversLabel}
+      </h2>
+      <For each={props.state.servers()}>
+        {(item) => (
+          <button
+            type="button"
+            class="flex min-h-11 w-full items-center gap-2.5 rounded-[16px] py-1.5 pr-2.5 pl-3 text-left text-[13px] transition-[background-color,border-radius] duration-200 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+            classList={{
+              "hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px]": !item.blocked,
+              "cursor-not-allowed": item.blocked,
+              "bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container": item.active,
+            }}
+            aria-disabled={item.blocked}
+            aria-current={item.active ? "true" : undefined}
+            onClick={() => {
+              if (item.blocked) return
+              item.onSelect()
+            }}
+          >
+            <ServerHealthIndicator health={item.health} />
+            <ServerRow
+              conn={item.conn}
+              dimmed={item.blocked}
+              status={item.health}
+              class="flex w-full min-w-0 items-center gap-2"
+              nameClass="truncate [font-weight:530]"
+              versionClass="truncate text-[12px] text-v2-text-text-faint"
+              badge={
+                <Show when={item.key === props.state.defaultKey()}>
+                  <span class="inline-flex h-5 items-center rounded-full bg-v2-background-bg-layer-02 px-2 text-[11px] text-v2-text-text-muted [font-weight:560]">
+                    {props.state.defaultLabel}
+                  </span>
+                </Show>
+              }
+            >
+              <div class="flex-1" />
+              <Show when={item.active}>
+                <Icon name="check" class="shrink-0" />
+              </Show>
+            </ServerRow>
+          </button>
+        )}
+      </For>
+      <div class="flex justify-end px-1 pt-1.5 pb-0.5">
+        <ButtonV2 variant="ghost" size="small" onClick={props.state.onManage}>
           {props.state.manageLabel}
-        </Button>
+        </ButtonV2>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -276,146 +258,99 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+  const [view, setView] = createStore({ tab: "mcp" })
+  const empty = "my-auto px-3 py-4 text-center text-[13px] text-v2-text-text-muted"
+  const row = "flex min-h-11 w-full items-center gap-2.5 rounded-[16px] py-1.5 pr-2.5 pl-3 text-[13px]"
 
   return (
-    <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
-      <Tabs
-        aria-label={language.t("status.popover.ariaLabel")}
-        class="tabs bg-background-strong rounded-xl overflow-hidden"
-        data-component="tabs"
-        data-active="mcp"
-        defaultValue="mcp"
-        variant="alt"
-      >
-        <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
-          <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
+    <section
+      aria-label={language.t("status.popover.ariaLabel")}
+      class={`flex w-[360px] max-w-full flex-col gap-0.5 ${popoverSurfaceClass}`}
+    >
+      <div class="px-1.5 pt-1.5 pb-2">
+        <SegmentedControlV2
+          aria-label={language.t("status.popover.ariaLabel")}
+          value={view.tab}
+          onChange={(value) => value && setView("tab", value)}
+        >
+          <SegmentedControlItemV2 value="mcp">
             {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
             {language.t("status.popover.tab.mcp")}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
+          </SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="lsp">
             {lspCount() > 0 ? `${lspCount()} ` : ""}
             {language.t("status.popover.tab.lsp")}
-          </Tabs.Trigger>
+          </SegmentedControlItemV2>
           <Show when={protocol() === "v1"}>
-            <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
+            <SegmentedControlItemV2 value="plugins">
               {pluginCount() > 0 ? `${pluginCount()} ` : ""}
               {language.t("status.popover.tab.plugins")}
-            </Tabs.Trigger>
+            </SegmentedControlItemV2>
           </Show>
-        </Tabs.List>
+        </SegmentedControlV2>
+      </div>
 
-        <Tabs.Content value="mcp">
-          <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
-              <Show
-                when={mcpNames().length > 0}
-                fallback={
-                  <div class="text-14-regular text-text-base text-center my-auto">{language.t("dialog.mcp.empty")}</div>
-                }
-              >
-                <For each={mcpNames()}>
-                  {(name) => {
-                    const status = () => mcpStatus(name)
-                    const enabled = () => status() === "connected"
-                    return (
-                      <button
-                        type="button"
-                        class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-full hover:bg-surface-raised-base-hover transition-colors text-left"
-                        onClick={() => {
-                          if (toggleMcp.isPending) return
-                          toggleMcp.mutate(name)
-                        }}
-                        disabled={toggleMcp.isPending && toggleMcp.variables === name}
-                      >
-                        <div
-                          classList={{
-                            "size-1.5 rounded-full shrink-0": true,
-                            "bg-icon-success-base": status() === "connected",
-                            "bg-icon-critical-base": status() === "failed",
-                            "bg-border-weak-base": status() === "disabled",
-                            "bg-icon-warning-base":
-                              status() === "needs_auth" || status() === "needs_client_registration",
-                          }}
-                        />
-                        <span class="flex flex-col min-w-0 flex-1">
-                          <span class="flex items-center gap-2 min-w-0">
-                            <span class="text-14-regular text-text-base truncate">{name}</span>
-                          </span>
-                          <Show when={status() === "needs_auth"}>
-                            <span class="text-11-regular text-text-weaker truncate">
-                              {language.t("mcp.auth.clickToAuthenticate")}
-                            </span>
-                          </Show>
-                        </span>
-                        <div onClick={(event) => event.stopPropagation()}>
-                          <Switch
-                            checked={enabled()}
-                            disabled={toggleMcp.isPending && toggleMcp.variables === name}
-                            onChange={() => {
-                              if (toggleMcp.isPending) return
-                              toggleMcp.mutate(name)
-                            }}
-                          />
-                        </div>
-                      </button>
-                    )
+      <Show when={view.tab === "mcp"}>
+        <Show when={mcpNames().length > 0} fallback={<div class={empty}>{language.t("dialog.mcp.empty")}</div>}>
+          <For each={mcpNames()}>
+            {(name) => {
+              const status = () => mcpStatus(name)
+              return (
+                <Switch
+                  class={`${row} ${switchRowClass}`}
+                  checked={status() === "connected"}
+                  disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                  onChange={() => {
+                    if (toggleMcp.isPending) return
+                    toggleMcp.mutate(name)
                   }}
-                </For>
-              </Show>
-            </div>
-          </div>
-        </Tabs.Content>
-
-        <Tabs.Content value="lsp">
-          <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
-              <Show
-                when={lspItems().length > 0}
-                fallback={
-                  <div class="text-14-regular text-text-base text-center my-auto">{language.t("dialog.lsp.empty")}</div>
-                }
-              >
-                <For each={lspItems()}>
-                  {(item) => (
-                    <div class="flex items-center gap-2 w-full px-2 py-1">
-                      <div
-                        classList={{
-                          "size-1.5 rounded-full shrink-0": true,
-                          "bg-icon-success-base": item.status === "connected",
-                          "bg-icon-critical-base": item.status === "error",
-                        }}
-                      />
-                      <span class="text-14-regular text-text-base truncate">{item.name || item.id}</span>
-                    </div>
-                  )}
-                </For>
-              </Show>
-            </div>
-          </div>
-        </Tabs.Content>
-
-        <Show when={protocol() === "v1"}>
-          <Tabs.Content value="plugins">
-            <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded-[16px] min-h-14">
-                <Show
-                  when={plugins().length > 0}
-                  fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
                 >
-                  <For each={plugins()}>
-                    {(plugin) => (
-                      <div class="flex items-center gap-2 w-full px-2 py-1">
-                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                      </div>
-                    )}
-                  </For>
-                </Show>
-              </div>
-            </div>
-          </Tabs.Content>
+                  <span class={`size-2 shrink-0 rounded-full ${statusDotClass(status())}`} />
+                  <span class="flex min-w-0 flex-1 flex-col gap-px">
+                    <span class="truncate [font-weight:530]">{name}</span>
+                    <Show when={status() === "needs_auth"}>
+                      <span class="truncate text-[12px] text-v2-text-text-faint">
+                        {language.t("mcp.auth.clickToAuthenticate")}
+                      </span>
+                    </Show>
+                    <Show when={status() === "failed"}>
+                      <span class="truncate text-[12px] text-v2-text-text-critical">
+                        {language.t("mcp.status.failed")}
+                      </span>
+                    </Show>
+                  </span>
+                </Switch>
+              )
+            }}
+          </For>
         </Show>
-      </Tabs>
-    </div>
+      </Show>
+
+      <Show when={view.tab === "lsp"}>
+        <Show when={lspItems().length > 0} fallback={<div class={empty}>{language.t("dialog.lsp.empty")}</div>}>
+          <For each={lspItems()}>
+            {(item) => (
+              <div class={row}>
+                <span class={`size-2 shrink-0 rounded-full ${statusDotClass(item.status)}`} />
+                <span class="truncate [font-weight:530]">{item.name || item.id}</span>
+              </div>
+            )}
+          </For>
+        </Show>
+      </Show>
+
+      <Show when={protocol() === "v1" && view.tab === "plugins"}>
+        <Show when={plugins().length > 0} fallback={<div class={empty}>{pluginEmpty()}</div>}>
+          <For each={plugins()}>
+            {(plugin) => (
+              <div class={row}>
+                <span class={`size-2 shrink-0 rounded-full ${statusDotClass("connected")}`} />
+                <span class="truncate [font-weight:530]">{plugin}</span>
+              </div>
+            )}
+          </For>
+        </Show>
+      </Show>
+    </section>
   )
 }
