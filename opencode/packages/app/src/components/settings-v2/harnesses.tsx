@@ -136,13 +136,20 @@ export const SettingsHarnessesV2: Component<{
         </Show>
 
         <div class="settings-v2-section">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between gap-2">
             <h3 class="settings-v2-section-title">{language.t("harness.settings.section.added")}</h3>
             <div class="flex items-center gap-2">
-              <ButtonV2 size="normal" variant="ghost-muted" disabled={!directory()} onClick={openAdd}>
+              <ButtonV2 size="normal" variant="ghost" disabled={!directory()} onClick={openAdd}>
                 {language.t("harness.settings.addManually")}
               </ButtonV2>
-              <ButtonV2 size="normal" variant="neutral" icon="plus" disabled={!directory()} onClick={openAssistant}>
+              <ButtonV2
+                size="normal"
+                variant="ghost"
+                class="settings-v2-tonal"
+                icon="plus"
+                disabled={!directory()}
+                onClick={openAssistant}
+              >
                 {language.t("harness.settings.assistant")}
               </ButtonV2>
             </div>
@@ -155,22 +162,19 @@ export const SettingsHarnessesV2: Component<{
               <For each={registered()}>
                 {(entry) => (
                   <div class="settings-v2-provider-row" data-harness={entry.id}>
-                    <div class="settings-v2-provider-lead">
-                      <div class="settings-v2-provider-main">
-                        <span class="settings-v2-provider-name truncate">{entry.name}</span>
-                        <span class="settings-v2-harness-detail">
-                          {[entry.command, ...(entry.args ?? [])].join(" ")}
-                        </span>
-                      </div>
+                    <div class="settings-v2-provider-copy">
+                      <span class="settings-v2-provider-name truncate">{entry.name}</span>
+                      <span class="settings-v2-harness-command">
+                        {[entry.command, ...(entry.args ?? [])].join(" ")}
+                      </span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="settings-v2-harness-controls">
                       <Switch
                         checked={entry.enabled}
                         disabled={busy() === entry.id}
                         onChange={(checked) =>
                           run(entry.id, () => setHarnessEnabled(server(), directory()!, entry.id, checked))
                         }
-                        hideLabel
                       >
                         {language.t("harness.settings.enabled")}
                       </Switch>
@@ -179,7 +183,8 @@ export const SettingsHarnessesV2: Component<{
                         fallback={
                           <ButtonV2
                             size="normal"
-                            variant="ghost-muted"
+                            variant="ghost"
+                            class="settings-v2-danger-text"
                             disabled={busy() === entry.id}
                             onClick={() => setConfirming(entry.id)}
                           >
@@ -189,7 +194,7 @@ export const SettingsHarnessesV2: Component<{
                       >
                         <ButtonV2
                           size="normal"
-                          variant="neutral"
+                          variant="danger"
                           disabled={busy() === entry.id}
                           onClick={() => run(entry.id, () => removeHarness(server(), directory()!, entry.id))}
                         >
@@ -211,15 +216,11 @@ export const SettingsHarnessesV2: Component<{
               <For each={builtIn()}>
                 {(entry) => (
                   <div class="settings-v2-provider-row" data-harness={entry.id}>
-                    <div class="settings-v2-provider-lead">
-                      <div class="settings-v2-provider-main">
-                        <span class="settings-v2-provider-name truncate">{entry.name}</span>
-                        <Tag>{sourceLabel(entry)}</Tag>
-                      </div>
-                    </div>
+                    <span class="settings-v2-provider-name min-w-0 flex-1 truncate">{entry.name}</span>
                     <Show when={!entry.enabled}>
-                      <span class="settings-v2-harness-detail">{language.t("harness.settings.disabled")}</span>
+                      <span class="settings-v2-provider-env-hint">{language.t("harness.settings.disabled")}</span>
                     </Show>
+                    <Tag>{sourceLabel(entry)}</Tag>
                   </div>
                 )}
               </For>

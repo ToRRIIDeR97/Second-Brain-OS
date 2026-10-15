@@ -1,6 +1,7 @@
-import { Component, Show, createMemo, createResource } from "solid-js"
+import { Component, For, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -63,10 +64,7 @@ const soundSettings = {
 const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
   const language = useLanguage()
   return (
-    <SettingsRowV2
-      title={language.t("command.permissions.autoaccept.enable")}
-      description={language.t("toast.permissions.autoaccept.on.description")}
-    >
+    <SettingsRowV2 title={language.t("command.permissions.autoaccept.enable")}>
       <div data-action="settings-auto-accept-permissions">
         <Switch
           checked={props.controller.accepting()}
@@ -149,20 +147,19 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.appearance")}</h3>
       <SettingsListV2>
         <SettingsRowV2 title={language.t("settings.general.row.colorScheme.title")}>
-          <SelectV2
-            appearance="inline"
+          <SegmentedControlV2
             data-action="settings-color-scheme"
-            options={schemeOptions}
-            current={schemeOptions.find((option) => option === props.controller.scheme.current())}
-            placement="bottom-end"
-            gutter={6}
-            label={(option) => {
-              if (option === "system") return language.t("theme.scheme.system")
-              if (option === "light") return language.t("theme.scheme.light")
-              return language.t("theme.scheme.dark")
-            }}
-            onSelect={(option) => option && props.controller.scheme.select(option)}
-          />
+            aria-label={language.t("settings.general.row.colorScheme.title")}
+            value={props.controller.scheme.current()}
+          >
+            <For each={schemeOptions}>
+              {(option) => (
+                <SegmentedControlItemV2 value={option} onClick={() => props.controller.scheme.select(option)}>
+                  {language.t(`theme.scheme.${option}`)}
+                </SegmentedControlItemV2>
+              )}
+            </For>
+          </SegmentedControlV2>
         </SettingsRowV2>
 
         <SettingsRowV2 title={language.t("settings.general.row.theme.title")}>
@@ -478,7 +475,13 @@ export const SettingsGeneralV2: Component<{
 
       <SettingsListV2>
         <SettingsRowV2 title={language.t("settings.updates.row.check.title")}>
-          <ButtonV2 size="normal" variant="neutral" disabled={!updater.action().run} onClick={() => updater.run()}>
+          <ButtonV2
+            size="normal"
+            variant="ghost"
+            class="settings-v2-tonal"
+            disabled={!updater.action().run}
+            onClick={() => updater.run()}
+          >
             {language.t(updater.action().label)}
           </ButtonV2>
         </SettingsRowV2>

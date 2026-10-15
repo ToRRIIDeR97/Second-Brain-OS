@@ -109,7 +109,12 @@ export const SettingsServersV2: Component = () => {
                     <div class="settings-v2-servers-lead">
                       <ServerHealthIndicator health={health()} />
                       <div class="settings-v2-servers-copy">
-                        <span class="settings-v2-servers-name">{serverName(item)}</span>
+                        <span class="settings-v2-servers-title">
+                          <span class="settings-v2-servers-name">{serverName(item)}</span>
+                          <Show when={controller.canDefault() && isDefault()}>
+                            <Tag class="settings-v2-tag-default">{language.t("dialog.server.status.default")}</Tag>
+                          </Show>
+                        </span>
                         <span class="settings-v2-servers-meta">
                           <Show when={health()?.version}>v{health()?.version}</Show>
                           <Show when={health()?.version && item.type === "http"}> • </Show>
@@ -123,9 +128,6 @@ export const SettingsServersV2: Component = () => {
                       </div>
                     </div>
                     <div class="settings-v2-servers-actions">
-                      <Show when={controller.canDefault() && isDefault()}>
-                        <Tag>{language.t("dialog.server.status.default")}</Tag>
-                      </Show>
                       <ServerRowMenu server={item} controller={controller} onEdit={openEdit} />
                     </div>
                   </div>

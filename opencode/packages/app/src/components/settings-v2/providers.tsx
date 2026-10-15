@@ -153,7 +153,7 @@ export const SettingsProvidersV2: Component<{
             <SettingsListV2>
               <For each={connected()}>
                 {(item) => (
-                  <div class="settings-v2-provider-row group">
+                  <div class="settings-v2-provider-row">
                     <div class="settings-v2-provider-lead">
                       <ProviderIcon
                         id={item.id}
@@ -207,7 +207,13 @@ export const SettingsProvidersV2: Component<{
                       </Show>
                     </div>
                   </div>
-                  <ButtonV2 size="normal" variant="neutral" icon="plus" onClick={() => connect(item.id)}>
+                  <ButtonV2
+                    size="normal"
+                    variant="ghost"
+                    class="settings-v2-tonal"
+                    icon="plus"
+                    onClick={() => connect(item.id)}
+                  >
                     {language.t("common.connect")}
                   </ButtonV2>
                 </div>
@@ -235,7 +241,7 @@ export const SettingsProvidersV2: Component<{
                 </div>
                 <ButtonV2
                   size="normal"
-                  variant="neutral"
+                  variant="outline"
                   icon="plus"
                   onClick={() => {
                     dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
@@ -247,9 +253,14 @@ export const SettingsProvidersV2: Component<{
             </Show>
           </SettingsListV2>
 
-          <button type="button" class="settings-v2-providers-view-all" onClick={() => connect()}>
+          <ButtonV2
+            size="large"
+            variant="ghost"
+            class="settings-v2-tonal settings-v2-providers-view-all"
+            onClick={() => connect()}
+          >
             {language.t("dialog.provider.viewAll")}
-          </button>
+          </ButtonV2>
         </div>
       </div>
     </>
