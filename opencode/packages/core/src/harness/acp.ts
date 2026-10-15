@@ -208,7 +208,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   yield* Queue.clear(items)
   const session = loaded ?? (yield* createSession(client, params))
   const selector = sessionModels(session.response)
-  const state = { currentModel: selector.current }
+  const state: { currentModel: string | undefined; sessionCost?: number } = { currentModel: selector.current }
 
   const setModel = (model: string | undefined) =>
     !model || model === state.currentModel
@@ -234,7 +234,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
       Effect.gen(function* () {
         yield* setModel(turnInput.model)
         yield* Queue.clear(items)
-        const parser = acpState()
+        const parser = acpState(state.sessionCost)
         yield* client
           .request("session/prompt", { sessionId: session.sessionId, prompt: [{ type: "text", text: turnInput.text }] })
           .pipe(
@@ -254,11 +254,12 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
         )
         return Stream.concat(Stream.make(LLMEvent.stepStart({ index: 0 })), body).pipe(
           Stream.ensuring(
-            Effect.suspend(() =>
-              parser.finished
+            Effect.suspend(() => {
+              if (parser.sessionCost !== undefined) state.sessionCost = parser.sessionCost
+              return parser.finished
                 ? Effect.void
-                : client.notify("session/cancel", { sessionId: session.sessionId }).pipe(Effect.ignore),
-            ),
+                : client.notify("session/cancel", { sessionId: session.sessionId }).pipe(Effect.ignore)
+            }),
           ),
         )
       }).pipe(Effect.mapError((error) => llmError(errorMessage(error)))),
@@ -290,9 +291,18 @@ export interface AcpState {
   reasoning?: { readonly id: string; readonly messageId?: string }
   blocks: number
   finished: boolean
+  /** Cumulative session cost reported before this turn, so the turn records only its own share. */
+  readonly previousCost?: number
+  usage?: { readonly used?: number; readonly size?: number; readonly cost?: number }
+  sessionCost?: number
 }
 
-export const acpState = (): AcpState => ({ tools: new Map(), blocks: 0, finished: false })
+export const acpState = (previousCost?: number): AcpState => ({
+  tools: new Map(),
+  blocks: 0,
+  finished: false,
+  previousCost,
+})
 
 export function parseAcpNotification(
   notification: Notification,
@@ -339,6 +349,11 @@ export function parseAcpNotification(
       }),
     ]
   }
+  if (kind === "usage_update") {
+    const cost = isRecord(update.cost) && update.cost.currency === "USD" ? number(update.cost.amount) : undefined
+    state.usage = { used: number(update.used), size: number(update.size), cost }
+    return []
+  }
   return []
 }
 
@@ -356,8 +371,21 @@ export function finishAcpTurn(exit: Exit.Exit<unknown, ProtocolError>, state: Ac
   }
   const response = isRecord(exit.value) ? exit.value : {}
   const reason = finishReason(string(response.stopReason))
-  const usage = normalizeUsage(isRecord(response.usage) ? response.usage : undefined)
+  const harness = harnessUsage(state)
+  const usage = normalizeUsage(isRecord(response.usage) ? response.usage : undefined, harness)
   return [...closed, LLMEvent.stepFinish({ index: 0, reason, usage }), LLMEvent.finish({ reason, usage })]
+}
+
+/** ACP reports the session's cumulative cost; the turn's cost is the increase since the last turn. */
+function harnessUsage(state: AcpState) {
+  if (!state.usage) return undefined
+  const amount = state.usage.cost
+  if (amount !== undefined) state.sessionCost = amount
+  return {
+    contextUsed: state.usage.used,
+    contextSize: state.usage.size,
+    ...(amount === undefined ? {} : { cost: Math.max(0, amount - (state.previousCost ?? 0)), sessionCost: amount }),
+  }
 }
 
 function openText(state: AcpState, messageId: string | undefined): ReadonlyArray<LLMEvent> {
@@ -456,18 +484,28 @@ function finishReason(stopReason: string | undefined): FinishReason {
   return "unknown"
 }
 
-function normalizeUsage(value: Record<string, unknown> | undefined) {
-  if (!value) return undefined
-  const inputTokens = number(value.inputTokens)
-  const cached = number(value.cachedReadTokens) ?? 0
+function normalizeUsage(value: Record<string, unknown> | undefined, harness?: Record<string, unknown>) {
+  if (!value && !harness) return undefined
+  const reported = number(value?.inputTokens)
+  const read = number(value?.cachedReadTokens) ?? 0
+  const write = number(value?.cachedWriteTokens)
+  const output = number(value?.outputTokens)
+  const total = number(value?.totalTokens)
+  // OpenCode reports inputTokens without cache reads (total = input + cache + output + thought).
+  // Agents that report it inclusively fail this check and keep the subtraction.
+  const exclusive =
+    reported !== undefined &&
+    (reported < read || (total !== undefined && total >= reported + read + (write ?? 0) + (output ?? 0)))
+  const nonCached = reported === undefined ? undefined : exclusive ? reported : Math.max(0, reported - read)
   return {
-    inputTokens,
-    nonCachedInputTokens: inputTokens === undefined ? undefined : Math.max(0, inputTokens - cached),
-    cacheReadInputTokens: cached,
-    cacheWriteInputTokens: number(value.cachedWriteTokens),
-    outputTokens: number(value.outputTokens),
-    reasoningTokens: number(value.thoughtTokens),
-    totalTokens: number(value.totalTokens),
+    inputTokens: nonCached === undefined ? undefined : nonCached + read + (write ?? 0),
+    nonCachedInputTokens: nonCached,
+    cacheReadInputTokens: read,
+    cacheWriteInputTokens: write,
+    outputTokens: output,
+    reasoningTokens: number(value?.thoughtTokens),
+    totalTokens: total,
+    ...(harness ? { providerMetadata: { harness } } : {}),
   }
 }
 

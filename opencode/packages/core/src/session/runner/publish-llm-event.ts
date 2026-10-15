@@ -30,6 +30,12 @@ const tokens = (usage: Usage | undefined) => {
   }
 }
 
+/** Harness drivers that know the turn's cost put it in `usage.providerMetadata.harness.cost` (USD). */
+const harnessCost = (usage: Usage | undefined) => {
+  const cost = usage?.providerMetadata?.harness?.cost
+  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : 0
+}
+
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
 
@@ -72,7 +78,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantActive = false
   let assistantFailed = false
   let providerFailed = false
-  let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
+  let stepSettlement:
+    | { readonly finish: string; readonly tokens: ReturnType<typeof tokens>; readonly cost: number }
+    | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
@@ -400,7 +408,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* flush()
         assistantActive = false
         if (stepSettlement) return yield* Effect.die("Duplicate step finish")
-        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
+        stepSettlement = { finish: event.reason, tokens: tokens(event.usage), cost: harnessCost(event.usage) }
         return
       case "finish":
         return
