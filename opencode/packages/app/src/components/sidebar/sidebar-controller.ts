@@ -585,7 +585,7 @@ export function createSidebarController() {
     },
   ])
 
-  // opencode://open-project and opencode://new-session, formerly handled by the legacy layout.
+  // tenon://open-project and tenon://new-session, formerly handled by the legacy layout.
   const handleDeepLinks = (urls: string[]) => {
     if (!server.isLocal()) return
     for (const directory of collectOpenProjectDeepLinks(urls)) void openFolder(directory)

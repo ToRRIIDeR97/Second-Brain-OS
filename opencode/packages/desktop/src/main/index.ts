@@ -13,7 +13,7 @@ import contextMenu from "electron-context-menu"
 
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
-import { CHANNEL } from "./constants"
+import { CHANNEL, DEEP_LINK_SCHEME } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { createGoogleCalendarService } from "./google-calendar"
@@ -46,7 +46,7 @@ import {
 import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
-import { migrate } from "./migrate"
+import { migrateUserData } from "./user-data-migration"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
@@ -56,11 +56,14 @@ const APP_NAMES: Record<string, string> = {
   beta: "Tenon Workbench Beta",
   prod: "Tenon Workbench",
 }
+// Tenon Workbench's own identity. The former `ai.opencode.desktop*` IDs belong to upstream OpenCode
+// Desktop; only the dev channel ever shipped under one of them (see migrateUserData below).
 const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "io.github.torriider97.tenonworkbench.dev",
+  beta: "io.github.torriider97.tenonworkbench.beta",
+  prod: "io.github.torriider97.tenonworkbench",
 }
+const LEGACY_DEV_APP_ID = "ai.opencode.desktop.dev"
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const SIDECAR_VERSION = process.env.OPENCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
@@ -123,7 +126,8 @@ const main = Effect.gen(function* () {
 
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
+  const channel = app.isPackaged ? CHANNEL : "dev"
+  const appId = APP_IDS[channel]
   const onboardingTestRoot = ((): string | undefined => {
     if (!TEST_ONBOARDING) return
 
@@ -139,15 +143,29 @@ const main = Effect.gen(function* () {
     process.env.XDG_STATE_HOME = join(root, "state")
     return root
   })()
-  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : APP_NAMES.dev)
+  const userData = onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId)
+  // Beta and prod never shipped under the old IDs, so their old folders are upstream's and stay unread.
+  const userDataMigration = (() => {
+    if (onboardingTestRoot) return
+    try {
+      return migrateUserData(
+        channel === "dev" ? join(app.getPath("appData"), LEGACY_DEV_APP_ID) : undefined,
+        userData,
+      )
+    } catch (error) {
+      // No marker is written, so the copy is retried on the next start.
+      return error instanceof Error ? error : new Error(String(error))
+    }
+  })()
+  app.setName(APP_NAMES[channel])
   app.setAppUserModelId(appId)
-  app.setPath(
-    "userData",
-    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
-  )
+  app.setPath("userData", userData)
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
   initializeOldLayoutEligibility(app.getPath("userData"))
   logger = initLogging()
+  if (userDataMigration instanceof Error)
+    logger.error("user data migration failed; retrying on next start", { error: userDataMigration.message })
+  else if (userDataMigration) logger.log("user data migration", { result: userDataMigration })
   initCrashReporter()
 
   const wslServers = createWslServersController(
@@ -204,7 +222,7 @@ const main = Effect.gen(function* () {
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = argv.filter((arg: string) => arg.startsWith(`${DEEP_LINK_SCHEME}://`))
     if (urls.length) {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
@@ -255,7 +273,6 @@ const main = Effect.gen(function* () {
 
   yield* Effect.promise(() => app.whenReady())
 
-  if (!TEST_ONBOARDING) migrate()
   yield* Effect.promise(() => cleanupStoreFiles(app.getPath("userData"))).pipe(
     Effect.tap((result) =>
       Effect.sync(() => {
@@ -269,7 +286,7 @@ const main = Effect.gen(function* () {
       }),
     ),
   )
-  app.setAsDefaultProtocolClient("opencode")
+  app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME)
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)

@@ -9,7 +9,13 @@ import { app } from "electron"
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
 const stateHome = process.env.XDG_STATE_HOME
-const desktopStateNames = ["ai.opencode.desktop.dev", "ai.opencode.desktop.beta", "ai.opencode.desktop"]
+// Only Tenon Workbench's own userData folders; the old `ai.opencode.desktop*` ones can hold upstream
+// OpenCode Desktop's background service, which this app must not attach to.
+const desktopStateNames = [
+  "io.github.torriider97.tenonworkbench.dev",
+  "io.github.torriider97.tenonworkbench.beta",
+  "io.github.torriider97.tenonworkbench",
+]
 
 type Logger = {
   log(message: string, meta?: Record<string, unknown>): void
