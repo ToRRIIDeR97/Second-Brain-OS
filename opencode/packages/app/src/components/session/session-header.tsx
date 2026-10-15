@@ -1,4 +1,3 @@
-import { Icon } from "@opencode-ai/ui/icon"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -139,7 +138,7 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           aria-label={props.state.terminalLabel}
           aria-expanded={props.state.terminalOpened}
           aria-controls="terminal-panel"
-          icon={<Icon name="terminal" size="small" />}
+          icon={<IconV2 name="terminal" />}
         />
       </TooltipV2>
       <Show when={props.state.reviewVisible}>

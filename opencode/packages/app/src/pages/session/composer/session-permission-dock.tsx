@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { useLanguage } from "@/context/language"
 
 export function SessionPermissionDock(props: {
@@ -27,7 +27,7 @@ export function SessionPermissionDock(props: {
     >
       <div class="flex items-center gap-2.5">
         <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-v2-background-bg-base text-v2-state-fg-warning">
-          <Icon name="warning" size="normal" />
+          <Icon name="warning" size="large" />
         </span>
         <h2 id="permission-dock-title" class="min-w-0 text-[14px] leading-5 text-v2-state-fg-warning [font-weight:560]">
           {language.t("notification.permission.title")}

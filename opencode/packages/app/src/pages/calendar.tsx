@@ -1,6 +1,6 @@
 import { useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"

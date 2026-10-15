@@ -102,7 +102,7 @@ export const DialogConnectProvider: Component<{
             variant="ghost-muted"
             size="small"
             class="-my-1"
-            icon={<Icon name="chevron-down" class="rotate-90" />}
+            icon={<Icon name="chevron-left" />}
             onClick={() => back.current()}
             aria-label={language.t("common.goBack")}
           />

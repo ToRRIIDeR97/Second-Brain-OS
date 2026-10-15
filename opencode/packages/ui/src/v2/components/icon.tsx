@@ -169,6 +169,70 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M1.5 8H4.5L6.5 3L9.5 13L11.5 8H14.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
   },
+  "arrow-up": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M8 13.5V2.5M3.5 7L8 2.5L12.5 7" stroke="currentColor"/>`,
+  },
+  "arrow-left": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M13.5 8H2.5M7 3.5L2.5 8L7 12.5" stroke="currentColor"/>`,
+  },
+  "chevron-left": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M9.5 5L6.5 8L9.5 11" stroke="currentColor"/>`,
+  },
+  "chevron-right": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M6.5 5L9.5 8L6.5 11" stroke="currentColor"/>`,
+  },
+  sidebar: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 2.5H14.5V13.5H1.5V2.5Z" stroke="currentColor"/><path d="M6 2.5V13.5" stroke="currentColor"/>`,
+  },
+  "sidebar-active": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 2.5H6V13.5H1.5V2.5Z" fill="currentColor" fill-opacity="0.1"/><path d="M1.5 2.5H14.5V13.5H1.5V2.5Z" stroke="currentColor"/><path d="M6 2.5V13.5" stroke="currentColor"/>`,
+  },
+  keyboard: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 3.5H14.5V12.5H1.5V3.5Z" stroke="currentColor"/><path d="M4 6.5H5M7.5 6.5H8.5M11 6.5H12M5.5 9.5H10.5" stroke="currentColor"/>`,
+  },
+  server: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2.5 2.5H13.5V6.5H2.5V2.5ZM2.5 9.5H13.5V13.5H2.5V9.5Z" stroke="currentColor"/><path d="M10 4.5H11M10 11.5H11" stroke="currentColor"/>`,
+  },
+  providers: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M4.5 4.5H11.5V11.5H4.5V4.5Z" stroke="currentColor"/><path d="M6.5 2V4.5M9.5 2V4.5M6.5 11.5V14M9.5 11.5V14M2 6.5H4.5M2 9.5H4.5M11.5 6.5H14M11.5 9.5H14" stroke="currentColor"/>`,
+  },
+  models: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M14 8C9.83333 8 8 9.83333 8 14C8 9.83333 6.16667 8 2 8C6.16667 8 8 6.16667 8 2C8 6.16667 9.83333 8 14 8Z" stroke="currentColor" stroke-linejoin="round"/>`,
+  },
+  console: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3 4.5L6.5 8L3 11.5M8 11.5H13" stroke="currentColor"/>`,
+  },
+  terminal: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 2.5H14.5V13.5H1.5V2.5Z" stroke="currentColor"/><path d="M5 6L7 8L5 10M8.5 10.5H11" stroke="currentColor"/>`,
+  },
+  warning: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M8 2L1.5 13.5H14.5L8 2Z" stroke="currentColor" stroke-linejoin="round"/><path d="M8 6.5V9.5M8 10.75V11.75" stroke="currentColor"/>`,
+  },
+  download: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M8 2V10.5M4.5 7L8 10.5L11.5 7M2.5 13.5H13.5" stroke="currentColor"/>`,
+  },
+  photo: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2.5 2.5H13.5V13.5H2.5V2.5Z" stroke="currentColor"/><path d="M2.5 11L6 7.5L9 10.5L10.5 9L13.5 12" stroke="currentColor"/><circle cx="10.25" cy="5.75" r="1" stroke="currentColor"/>`,
+  },
+  link: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M6.5 9.5L9.5 6.5M7 4.5L8 3.5C9.10457 2.39543 10.8954 2.39543 12 3.5L12.5 4C13.6046 5.10457 13.6046 6.89543 12.5 8L11.5 9M9 11.5L8 12.5C6.89543 13.6046 5.10457 13.6046 4 12.5L3.5 12C2.39543 10.8954 2.39543 9.10457 3.5 8L4.5 7" stroke="currentColor"/>`,
+  },
 }
 
 const spriteID = "opencode-v2-icon-sprite"
@@ -216,6 +280,7 @@ export function Icon(props: IconProps) {
     <svg
       {...rest}
       data-slot="icon-svg"
+      data-directional={["arrow-left", "chevron-left", "chevron-right"].includes(iconName()) || undefined}
       width={pixelSize}
       height={pixelSize}
       viewBox={icon().viewBox}

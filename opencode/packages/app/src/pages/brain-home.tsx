@@ -1,5 +1,5 @@
 import { useNavigate } from "@solidjs/router"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
@@ -172,7 +172,7 @@ export default function BrainHomePage() {
             size="large"
             class="!size-9"
             aria-label={language.t("secondBrain.home.openWorkspace")}
-            icon={<Icon name="folder-add-left" size="small" />}
+            icon={<Icon name="folder-add-left" />}
             onClick={() => command.trigger("project.open")}
           />
         </TooltipV2>
@@ -246,7 +246,7 @@ export default function BrainHomePage() {
                 size="large"
                 class="!size-10"
                 aria-label={language.t("secondBrain.home.start")}
-                icon={<Icon name="arrow-up" size="small" />}
+                icon={<Icon name="arrow-up" />}
                 disabled={!state.prompt.trim() || state.starting || harnessQuery.isPending}
               />
             </div>

@@ -1,7 +1,7 @@
 import { Component, createMemo, createSignal, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { SettingsGeneralV2 } from "./general"
@@ -59,7 +59,7 @@ export const DialogSettings: Component<{
                   <TabsV2.SectionTitle>{language.t("settings.section.desktop")}</TabsV2.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
                     <TabsV2.Trigger value="general">
-                      <Icon name="sliders" />
+                      <Icon name="outline-sliders" />
                       {language.t("settings.tab.general")}
                     </TabsV2.Trigger>
                     <TabsV2.Trigger value="shortcuts">

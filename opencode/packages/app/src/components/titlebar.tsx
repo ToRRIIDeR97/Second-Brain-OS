@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, on, onMount, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
@@ -171,7 +171,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             variant="ghost-muted"
             size="large"
             class="shrink-0"
-            icon={<Icon size="small" name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />}
+            icon={<Icon name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />}
             onClick={layout.sidebar.toggle}
             aria-label={language.t("command.sidebar.toggle")}
             aria-expanded={layout.sidebar.opened()}
@@ -183,7 +183,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             variant="ghost-muted"
             size="large"
             class="shrink-0"
-            icon={<Icon size="small" name="chevron-left" />}
+            icon={<Icon name="chevron-left" />}
             disabled={!canBack()}
             onClick={back}
             aria-label={language.t("common.goBack")}
@@ -193,7 +193,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             variant="ghost-muted"
             size="large"
             class="shrink-0"
-            icon={<Icon size="small" name="chevron-right" />}
+            icon={<Icon name="chevron-right" />}
             disabled={!canForward()}
             onClick={forward}
             aria-label={language.t("common.goForward")}
