@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { Exit, Schema } from "effect"
-import { LLM, Model } from "@opencode-ai/llm"
+import { Effect, Exit, Schema, Stream } from "effect"
+import { LLM, LLMEvent, Model } from "@opencode-ai/llm"
 import { route } from "@opencode-ai/llm/protocols/openai-chat"
 import { Harness } from "@opencode-ai/schema/harness"
-import { configuredInstances, continuationFor, renderCodexPrompt } from "@opencode-ai/core/harness"
+import { configuredInstances, continuationFor, failEmptyTurn, renderCodexPrompt } from "@opencode-ai/core/harness"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigHarness } from "@opencode-ai/core/config/harness"
 import { AcpHarness } from "@opencode-ai/core/harness/acp"
 import os from "os"
 import path from "path"
+import { testEffect } from "./lib/effect"
 
 const update = (value: Record<string, unknown>) => ({
   method: "session/update",
@@ -148,5 +151,112 @@ describe("ACP harness", () => {
       files.map(async (file) => ((await Bun.file(path.join(dir, file)).text()).match(/\bBun\./) ? file : undefined)),
     )
     expect(offenders.filter(Boolean)).toEqual([])
+  })
+})
+
+const it = testEffect(LayerNode.compile(AppProcess.node))
+
+// A minimal ACP agent: answers initialize, and session/new with the models in argv (or an error when none).
+const fakeAgent = String.raw`
+const models = JSON.parse(process.argv[1])
+let buffer = ""
+process.stdin.on("data", (chunk) => {
+  buffer += chunk
+  let index
+  while ((index = buffer.indexOf("\n")) >= 0) {
+    const message = JSON.parse(buffer.slice(0, index))
+    buffer = buffer.slice(index + 1)
+    const reply = (body) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, ...body }) + "\n")
+    if (message.method === "initialize") reply({ result: { protocolVersion: 1, agentInfo: { name: "fake", version: "9.9" } } })
+    else if (message.method === "session/new" && models.length === 0) reply({ error: { code: -32000, message: "no session" } })
+    else if (message.method === "session/new")
+      reply({ result: { sessionId: "s1", models: { currentModelId: models[0], availableModels: models.map((modelId) => ({ modelId, name: modelId })) } } })
+  }
+})
+`
+
+const agentSettings = (models: ReadonlyArray<string>, configured: ReadonlyArray<string> = []) => ({
+  command: process.execPath,
+  args: ["-e", fakeAgent, JSON.stringify(models)],
+  env: {},
+  models: configured,
+})
+
+const acpInstance = { id: Harness.OpenCodeAcp, driver: Harness.AcpDriver, name: "OpenCode" }
+
+describe("ACP model discovery", () => {
+  it.live("probe lists the agent's models from session/new", () =>
+    Effect.gen(function* () {
+      const process = yield* AppProcess.Service
+      const result = yield* AcpHarness.probe(
+        process,
+        acpInstance,
+        agentSettings(["opencode/big-pickle", "opencode-go/glm-5.2"], ["custom/model"]),
+        os.tmpdir(),
+      )
+      expect(result.error).toBeUndefined()
+      expect(result.status).toBe("available")
+      expect(result.version).toBe("9.9")
+      expect(result.models.map((model) => `${model.id}:${model.isDefault}`)).toEqual([
+        "opencode/big-pickle:true",
+        "opencode-go/glm-5.2:false",
+        "custom/model:false",
+      ])
+    }),
+  )
+
+  it.live("probe with known models only handshakes", () =>
+    Effect.gen(function* () {
+      const process = yield* AppProcess.Service
+      const known = AcpHarness.configuredModels(["cached/model"])
+      const result = yield* AcpHarness.probe(process, acpInstance, agentSettings(["fresh/model"]), os.tmpdir(), known)
+      expect(result.models.map((model) => model.id)).toEqual(["cached/model"])
+    }),
+  )
+
+  it.live("a failed session/new still reports the agent available", () =>
+    Effect.gen(function* () {
+      const process = yield* AppProcess.Service
+      const result = yield* AcpHarness.probe(process, acpInstance, agentSettings([], ["custom/model"]), os.tmpdir())
+      expect(result.status).toBe("available")
+      expect(result.models.map((model) => model.id)).toEqual(["custom/model"])
+    }),
+  )
+})
+
+describe("empty harness turns", () => {
+  const run = (events: ReadonlyArray<LLMEvent>) =>
+    Effect.runPromise(Stream.runCollect(failEmptyTurn(Stream.fromIterable(events), "OpenCode"))).then((chunk) =>
+      Array.from(chunk),
+    )
+
+  test("a turn with no content and no output tokens becomes an error", async () => {
+    const events = await run([
+      LLMEvent.stepStart({ index: 0 }),
+      LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 0, outputTokens: 0 } }),
+      LLMEvent.finish({ reason: "stop" }),
+    ])
+    expect(events.map((event) => event.type)).toEqual(["step-start", "provider-error", "step-finish", "finish"])
+    expect(events[1]).toMatchObject({ message: "OpenCode returned nothing. Check its model and credentials." })
+    expect(events.slice(2)).toMatchObject([{ reason: "error" }, { reason: "error" }])
+  })
+
+  test("turns with text, tools or output tokens pass through", async () => {
+    const finish = [LLMEvent.stepFinish({ index: 0, reason: "stop" }), LLMEvent.finish({ reason: "stop" })]
+    const text = await run([LLMEvent.textStart({ id: "t" }), LLMEvent.textDelta({ id: "t", text: "hi" }), ...finish])
+    const tool = await run([
+      LLMEvent.toolCall({ id: "c", name: "acp_read", input: {}, providerExecuted: true }),
+      ...finish,
+    ])
+    const tokens = await run([
+      LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { outputTokens: 3 } }),
+      LLMEvent.finish({ reason: "stop", usage: { outputTokens: 3 } }),
+    ])
+    expect([text, tool, tokens].map((events) => events.at(-1))).toMatchObject([
+      { reason: "stop" },
+      { reason: "stop" },
+      { reason: "stop" },
+    ])
+    expect([...text, ...tool, ...tokens].some((event) => event.type === "provider-error")).toBe(false)
   })
 })

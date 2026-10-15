@@ -244,6 +244,23 @@ the legacy `models` field or as a `configOptions` select of category `model`.
 The driver switches models with `session/set_model` or
 `session/set_config_option` to match.
 
+The picker's model list for an ACP instance comes from the agent. The first
+probe (`AcpHarness.probe`, 8-second budget) runs `initialize` and one
+`session/new` and reads the reported models; configured `models` are appended.
+`HarnessRuntime` keeps that list for the process lifetime and refreshes it from
+each real session, so later probes (cached 30 seconds) only handshake. Upstream
+OpenCode reports about a thousand models, so the composer opens a searchable
+dialog for lists over 20 entries. The app remembers the last model the user
+picked per harness (`Persist.global("harness.model")` in
+`harness-controller.ts`) and uses it ahead of the agent's own default. This
+matters for upstream OpenCode, whose default free-tier model rejects
+non-OpenCode clients and answers with an empty `end_turn`.
+
+`failEmptyTurn` in `harness.ts` wraps Codex and ACP turns. A turn that ends
+without text, reasoning, tool calls or output tokens becomes a provider error
+("… returned nothing. Check its model and credentials.") instead of a blank
+assistant message.
+
 ### Harness handoff
 
 The `opencode` driver reads the Run's native messages, so it needs no

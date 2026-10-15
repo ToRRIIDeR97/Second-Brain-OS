@@ -1,8 +1,10 @@
 import { createEffect, createMemo, createResource, createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Harness } from "@opencode-ai/schema/harness"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
+import { Persist, persisted } from "@/utils/persist"
 import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
 import type { PromptInputHarnessController } from "./harness-controls"
 
@@ -14,9 +16,14 @@ type HarnessSelection = {
   fallbackUnavailable?: boolean
 }
 
-const defaultModel = (instance: Harness.Instance) => {
+// The last model the user picked for a harness wins over the agent's own default, which may be one
+// the agent can't serve to this client (upstream OpenCode defaults to a free tier that rejects it).
+const defaultModel = (instance: Harness.Instance, remembered?: string) => {
   if (instance.driver === Harness.OpenCodeDriver) return
-  const model = instance.models.find((item) => item.isDefault) ?? instance.models[0]
+  const model =
+    instance.models.find((item) => item.id === remembered) ??
+    instance.models.find((item) => item.isDefault) ??
+    instance.models[0]
   return model
     ? {
         id: model.id,
@@ -42,10 +49,15 @@ export function createPromptHarnessController(selection: HarnessSelection) {
       ),
   )
   const instance = createMemo(() => instances()?.find((item) => item.id === selection.current()))
+  const [picked, setPicked, , pickedReady] = persisted(
+    Persist.global("harness.model"),
+    createStore({ models: {} as Record<string, string> }),
+  )
+  const preferred = (instance: Harness.Instance) => defaultModel(instance, picked.models[instance.id])
 
   createEffect(() => {
     const available = instances()
-    if (!available) return
+    if (!available || !pickedReady()) return
     const current = available.find((item) => item.id === selection.current())
     const selected =
       current?.status === "available"
@@ -55,7 +67,7 @@ export function createPromptHarnessController(selection: HarnessSelection) {
           : available.find((item) => item.status === "available")
     if (!selected) return
     if (selected.id !== selection.current()) {
-      selection.set(selected.id, defaultModel(selected))
+      selection.set(selected.id, preferred(selected))
       return
     }
     if (selected.driver === Harness.OpenCodeDriver) {
@@ -64,7 +76,7 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     }
     const currentModel = selection.model.current()
     if (selected.models.some((model) => model.id === currentModel?.id)) return
-    selection.model.set(defaultModel(selected))
+    selection.model.set(preferred(selected))
   })
 
   return {
@@ -77,10 +89,17 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     current: selection.current,
     select(instanceID: Harness.InstanceID) {
       const next = instances()?.find((item) => item.id === instanceID)
-      selection.set(instanceID, next ? defaultModel(next) : undefined)
+      selection.set(instanceID, next ? preferred(next) : undefined)
       void refetch()
     },
-    model: selection.model,
+    model: {
+      current: selection.model.current,
+      // Only explicit picks land here; automatic defaults go through `selection.model` directly.
+      set: (model: Harness.ModelSelection | undefined) => {
+        if (model) setPicked("models", selection.current(), model.id)
+        selection.model.set(model)
+      },
+    },
   } satisfies PromptInputHarnessController & {
     instance: () => Harness.Instance | undefined
     driver: () => Harness.DriverKind | undefined
