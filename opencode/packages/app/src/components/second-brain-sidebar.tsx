@@ -212,7 +212,7 @@ function SectionHeader(props: {
 function Chevron(props: { open: boolean }) {
   return (
     <span
-      class="flex size-4 items-center justify-center text-v2-icon-icon-muted transition-transform duration-[120ms]"
+      class="flex size-4 items-center justify-center text-v2-icon-icon-muted transition-transform duration-150 ease-standard motion-reduce:transition-none"
       classList={{ "-rotate-90": !props.open }}
     >
       <Icon name="chevron-down" size="small" />
@@ -432,7 +432,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
         >
           <input
             ref={(el) => queueMicrotask(() => el.select())}
-            class="mx-1 h-7 min-w-0 rounded-full bg-v2-background-bg-base px-3 px-1.5 text-[13px] text-v2-text-text-base outline-none [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
+            class="mx-1 h-7 min-w-0 rounded-full bg-v2-background-bg-base px-3 text-[13px] text-v2-text-text-base outline-none [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)]"
             value={session().title ?? ""}
             aria-label={language.t("secondBrain.sidebar.renameThread")}
             onKeyDown={(event) => {

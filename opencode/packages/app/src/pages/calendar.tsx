@@ -963,7 +963,7 @@ export default function CalendarPage() {
                               {(event) => (
                                 <button
                                   type="button"
-                                  class="min-h-6 shrink-0 cursor-pointer truncate rounded-[10px] bg-v2-background-bg-accent-container px-2 text-left text-[11px] text-v2-text-text-on-accent-container transition-[filter,border-radius] duration-150 ease-standard hover:brightness-95 active:rounded-[8px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                                  class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] bg-v2-background-bg-accent-container px-2 text-left text-[11px] text-v2-text-text-on-accent-container transition-[filter,border-radius] duration-300 ease-standard hover:brightness-95 active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                                   title={event.title}
                                   onClick={() => openEvent(event)}
                                 >
@@ -978,7 +978,7 @@ export default function CalendarPage() {
                               {(task) => (
                                 <button
                                   type="button"
-                                  class="min-h-6 shrink-0 cursor-pointer truncate rounded-[10px] px-2 text-left text-[11px] text-v2-text-text-muted shadow-[inset_0_0_0_1px_var(--v2-border-border-base)] transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                                  class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] px-2 text-left text-[11px] text-v2-text-text-muted shadow-[inset_0_0_0_1px_var(--v2-border-border-base)] transition-[background-color,border-radius] duration-300 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                                   title={task.title}
                                   onClick={() => openTask(task.id)}
                                 >
@@ -1400,7 +1400,7 @@ const fieldClass = "flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted"
 const noteClass = "rounded-[12px] bg-v2-background-bg-base px-3 py-2 text-[12px] leading-5 text-v2-text-text-muted"
 
 const dateInputClass =
-  "h-9 rounded-[12px] border border-v2-border-border-base bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-colors duration-150 ease-standard focus-visible:border-v2-border-border-focus motion-reduce:transition-none"
+  "h-9 w-full min-w-0 rounded-[12px] border-0 bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-shadow duration-150 ease-standard focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
 
 function calendarView(value?: string): CalendarView {
   if (

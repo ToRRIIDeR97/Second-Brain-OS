@@ -7,6 +7,7 @@ import { File } from "@opencode-ai/session-ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -357,7 +358,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
         </Show>
       </Show>
       <Show when={loading()}>
-        <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background-base">
+        <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-v2-background-bg-deep">
           <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       </Show>
@@ -377,37 +378,79 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   onCleanup(() => clearInterval(timer))
 
   return (
-    <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base gap-6 p-6">
-      <div class="flex flex-col items-center max-w-md text-center">
-        <Splash class="w-12 h-15 mb-4" />
-        <p class="text-14-regular text-text-base">
-          {unreachable()[0]}
-          <span class="text-text-strong font-medium">{name()}</span>
-          {unreachable()[1]}
-        </p>
-        <p class="mt-1 text-12-regular text-text-weak">{language.t("app.server.retrying")}</p>
-      </div>
-      <Show when={others().length > 0}>
-        <div class="flex flex-col gap-2 w-full max-w-sm">
-          <span class="text-12-regular text-text-base text-center">{language.t("app.server.otherServers")}</span>
-          <div class="flex flex-col gap-1 bg-surface-base rounded-lg p-2">
-            <For each={others()}>
-              {(conn) => {
-                const key = ServerConnection.key(conn)
-                return (
-                  <button
-                    type="button"
-                    class="flex items-center gap-3 w-full px-3 py-2 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
-                    onClick={() => props.onServerSelected?.(key)}
-                  >
-                    <span class="text-14-regular text-text-strong truncate">{serverName(conn)}</span>
-                  </button>
-                )
-              }}
-            </For>
-          </div>
+    <div class="flex h-dvh w-screen overflow-y-auto bg-v2-background-bg-deep px-4 py-10">
+      <main class="m-auto flex w-full max-w-[440px] flex-col items-center gap-5 text-center">
+        <span class="flex size-16 items-center justify-center rounded-[16px] bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container">
+          <svg
+            width="30"
+            height="30"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+            <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+            <path d="M12 5v13" />
+          </svg>
+        </span>
+        <div class="flex flex-col gap-1.5">
+          <h1 class="text-[20px] text-v2-text-text-base [font-weight:560]">
+            {unreachable()[0]}
+            <span class="font-mono text-[18px]">{name()}</span>
+            {unreachable()[1]}
+          </h1>
+          <p role="status" class="inline-flex items-center justify-center gap-2 text-[13px] text-v2-text-text-muted">
+            <LoaderV2 class="text-v2-icon-icon-accent" />
+            {language.t("app.server.retrying")}
+          </p>
         </div>
-      </Show>
+        <Show when={others().length > 0}>
+          <section aria-labelledby="connection-other-servers" class="flex w-full flex-col gap-1 text-left">
+            <h2
+              id="connection-other-servers"
+              class="flex h-8 items-center pl-3 text-[13px] text-v2-text-text-muted [font-weight:530]"
+            >
+              {language.t("app.server.otherServers")}
+            </h2>
+            <div class="flex flex-col gap-0.5 overflow-hidden rounded-[24px]">
+              <For each={others()}>
+                {(conn) => {
+                  const key = ServerConnection.key(conn)
+                  return (
+                    <button
+                      type="button"
+                      class="flex min-h-14 w-full items-center gap-3 bg-v2-background-bg-layer-01 px-5 py-2 text-left transition-[background-color,border-radius] duration-300 ease-standard hover:bg-v2-background-bg-layer-02 active:rounded-[16px] focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
+                      onClick={() => props.onServerSelected?.(key)}
+                    >
+                      <span class="min-w-0 flex-1 truncate text-[13px] text-v2-text-text-base [font-weight:530]">
+                        {serverName(conn)}
+                      </span>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        class="shrink-0 text-v2-icon-icon-muted"
+                      >
+                        <path d="m9 6 6 6-6 6" />
+                      </svg>
+                    </button>
+                  )
+                }}
+              </For>
+            </div>
+          </section>
+        </Show>
+      </main>
     </div>
   )
 }

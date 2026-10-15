@@ -509,6 +509,9 @@ const statuses: ProjectStatus[] = ["active", "paused", "archived"]
 const views: ProjectView[] = ["overview", "plan", "work", "files", "activity", "map"]
 const panelClass = "mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 pb-10 pt-4"
 const labelClass = "flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted"
+// M3 slider: a 16px pill track filled to the value and a thin vertical handle. The native range input keeps keyboard and screen reader support.
+const sliderClass =
+  "h-4 w-full cursor-pointer appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:h-10 [&::-webkit-slider-thumb]:w-1 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-v2-background-bg-accent [&::-webkit-slider-thumb]:[box-shadow:0_0_0_5px_var(--v2-background-bg-base)] focus-visible:[&::-webkit-slider-thumb]:[box-shadow:0_0_0_5px_var(--v2-background-bg-base),0_0_0_7px_var(--v2-border-border-focus)] [&::-moz-range-thumb]:h-10 [&::-moz-range-thumb]:w-1 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-v2-background-bg-accent [&::-moz-range-thumb]:[box-shadow:0_0_0_5px_var(--v2-background-bg-base)] focus-visible:[&::-moz-range-thumb]:[box-shadow:0_0_0_5px_var(--v2-background-bg-base),0_0_0_7px_var(--v2-border-border-focus)]"
 const summaryClass =
   "-ml-3 w-fit cursor-pointer rounded-full px-3 py-1.5 text-[13px] text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
 
@@ -974,15 +977,20 @@ function ProjectOverview(props: {
           </label>
           <output for="project-progress">{props.state.progress}%</output>
         </div>
-        <input
-          id="project-progress"
-          type="range"
-          min="0"
-          max="100"
-          value={props.state.progress}
-          class="h-6 w-full cursor-pointer accent-v2-icon-icon-accent"
-          onInput={(event) => props.setState("progress", Number(event.currentTarget.value))}
-        />
+        <div class="flex h-11 items-center px-1">
+          <input
+            id="project-progress"
+            type="range"
+            min="0"
+            max="100"
+            value={props.state.progress}
+            class={sliderClass}
+            style={{
+              background: `linear-gradient(to right, var(--v2-background-bg-accent) ${props.state.progress}%, var(--v2-background-bg-layer-02) ${props.state.progress}%)`,
+            }}
+            onInput={(event) => props.setState("progress", Number(event.currentTarget.value))}
+          />
+        </div>
       </section>
       <div class="grid gap-4 md:grid-cols-2">
         <label class={labelClass} for="project-next-milestone">

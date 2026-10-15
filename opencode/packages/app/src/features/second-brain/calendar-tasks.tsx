@@ -1,5 +1,5 @@
-import { Icon } from "@opencode-ai/ui/icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
@@ -291,7 +291,7 @@ export function CalendarTasks(props: {
                       onChange={() => void toggleComplete(task)}
                     />
                     <Icon
-                      name="check-small"
+                      name="check"
                       size="small"
                       class="pointer-events-none absolute text-v2-icon-icon-contrast opacity-0 peer-checked:opacity-100"
                     />
@@ -529,4 +529,4 @@ export function CalendarTasks(props: {
 }
 
 const dateInputClass =
-  "h-9 rounded-[12px] border border-v2-border-border-base bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-colors duration-150 ease-standard focus-visible:border-v2-border-border-focus motion-reduce:transition-none"
+  "h-9 w-full min-w-0 rounded-[12px] border-0 bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-shadow duration-150 ease-standard focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
