@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" role="img" aria-labelledby="t d" font-family="Inter, system-ui, sans-serif" font-size="12">
+<title id="t">Proposed session view data flow</title>
+<desc id="d">Proposed: ACP captures usage_update and fixes input tokens; harness cost travels in usage provider metadata into Step.Ended; a new step-kind module maps every harness's tool names to shared kinds used by a folded turn summary in the timeline and by a Session tab that replaces Context, backed by a new session-usage aggregator. Changed nodes are blue.</desc>
+<style>
+.n{fill:#ffffff;stroke:#c9c9c9}.c{fill:#ecf1fe;stroke:#3b5cf6}.h{font-weight:600;fill:#161616}.t{fill:#5c5c5c}.k{fill:#22388f}.a{stroke:#808080;fill:none;marker-end:url(#m)}.b{stroke:#3b5cf6;fill:none;marker-end:url(#m2)}.g{fill:#f2f2f2}
+@media (prefers-color-scheme:dark){.n{fill:#161616;stroke:#3a3a3a}.c{fill:#1c2e70;stroke:#7698fd}.h{fill:#fafafa}.t{fill:#aeaeae}.k{fill:#d7e2fc}.g{fill:#0d0d0d}}
+</style>
+<defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#808080"/></marker><marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b5cf6"/></marker></defs>
+<rect class="g" width="960" height="520" rx="16"/>
+<text class="h" x="24" y="32" font-size="14">Proposed · not implemented</text>
+<text class="t" x="300" y="32">blue = new or changed · grey = unchanged</text>
+
+<text class="t" x="24" y="64">HARNESS DRIVERS (core)</text>
+<rect class="n" x="24" y="74" width="250" height="56" rx="12"/><text class="h" x="36" y="96">Built-in loop</text><text class="t" x="36" y="114">unchanged · cost still 0 (AC-5)</text>
+<rect class="n" x="24" y="142" width="250" height="70" rx="12"/><text class="h" x="36" y="164">Codex app-server</text><text class="t" x="36" y="182">tool names unchanged; mapped</text><text class="t" x="36" y="198">in the renderer (AC-4)</text>
+<rect class="c" x="24" y="224" width="250" height="86" rx="12"/><text class="h" x="36" y="246">OpenCode over ACP</text><text class="k" x="36" y="264">+ usage_update → cost Δ, context</text><text class="k" x="36" y="281">~ inputTokens = non-cached</text><text class="k" x="36" y="298">→ usage.providerMetadata.harness (AC-7)</text>
+
+<rect class="c" x="330" y="120" width="250" height="120" rx="12"/><text class="h" x="342" y="142">Session runner</text><text class="k" x="342" y="162">~ stepSettlement().cost from</text><text class="k" x="342" y="178">usage.providerMetadata.harness.cost</text><text class="k" x="342" y="196">~ Step.Ended cost = that (else 0)</text><text class="t" x="342" y="214">projector applyUsage unchanged</text>
+
+<text class="t" x="640" y="64">RENDERER (app, session-ui)</text>
+<rect class="c" x="640" y="74" width="296" height="40" rx="12"/><text class="h" x="652" y="99">+ step-kind.ts · stepOf, summarizeTurn</text>
+<rect class="c" x="640" y="126" width="296" height="84" rx="12"/><text class="h" x="652" y="148">Timeline</text><text class="k" x="652" y="166">+ one summary line per finished turn (AC-3)</text><text class="k" x="652" y="183">failed turn opens · live turn expanded</text><text class="k" x="652" y="200">~ step rows: icon + verb + target (AC-4)</text>
+<rect class="c" x="640" y="222" width="296" height="88" rx="12"/><text class="h" x="652" y="244">Side panel · Session tab (was Context)</text><text class="k" x="652" y="262">+ session-usage.ts getSessionUsage (AC-6)</text><text class="k" x="652" y="279">tiles, context, subagents, tools,</text><text class="k" x="652" y="296">"Not reported" when missing (AC-5)</text>
+
+<path class="a" d="M274 102H300V170H330"/><path class="a" d="M274 177H330"/><path class="b" d="M274 267H300V200H330"/>
+<path class="a" d="M580 160H610V168H640"/><path class="b" d="M580 200H610V266H640"/>
+<path class="b" d="M788 114V126"/><path class="b" d="M910 114V222" />
+<text class="t" x="586" y="152" font-size="11">parts</text><text class="t" x="586" y="232" font-size="11">messages</text>
+
+<rect class="n" x="24" y="350" width="912" height="146" rx="12"/>
+<text class="h" x="40" y="374">Invariants kept</text>
+<text class="t" x="40" y="396">• Virtualized timeline; group keys stay stable while a turn streams; per-session open state still cached</text>
+<text class="t" x="40" y="416">• Persisted schemas unchanged: only the value of Step.Ended cost and ACP token fields change</text>
+<text class="t" x="40" y="436">• Everything the Context tab offers today (harness selector, breakdown, raw messages) stays reachable in Session</text>
+<text class="t" x="40" y="456">• Same Session rows for every harness; no hardcoded English; existing English copy unchanged</text>
+<text class="t" x="40" y="476">• Excluded: OpenCode model list fix, Codex/ACP context limit lookup, built-in pricing, Codex subagents</text>
+</svg>
