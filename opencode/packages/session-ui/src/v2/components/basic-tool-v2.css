@@ -42,7 +42,7 @@
   [data-slot="basic-tool-v2-trigger"]:focus-visible {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
-    border-radius: 8px;
+    border-radius: var(--v2-radius-sm);
   }
 
   [data-slot="basic-tool-v2-labels"] {
@@ -128,7 +128,7 @@
     width: 20px;
     height: 20px;
     padding: 2px;
-    border-radius: 999px;
+    border-radius: var(--v2-radius-full);
     color: var(--bt-chevron);
     user-select: none;
   }
@@ -138,7 +138,7 @@
     flex-shrink: 0;
     width: 16px;
     height: 16px;
-    transition: transform 0.15s ease-out;
+    transition: transform var(--v2-duration-short) var(--v2-ease-standard);
   }
 
   &[data-expanded] [data-slot="basic-tool-v2-chevron"] {
@@ -159,5 +159,11 @@
     letter-spacing: 0;
     color: var(--bt-content);
     font-variation-settings: "slnt" 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="basic-tool-v2"] [data-slot="basic-tool-v2-chevron"] {
+    transition: none;
   }
 }

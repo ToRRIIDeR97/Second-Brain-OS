@@ -36,7 +36,7 @@
     font-size: var(--font-size-large);
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
   }
 
   [data-slot="session-review-actions"] {
@@ -49,13 +49,13 @@
     [data-slot="radio-group-wrapper"],
     [data-slot="radio-group-indicator"],
     [data-slot="radio-group-item-control"] {
-      border-radius: 6px;
+      border-radius: var(--v2-radius-full);
     }
 
     [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
       + [data-slot="radio-group-item-label"]:hover
       [data-slot="radio-group-item-control"] {
-      border-radius: 4px;
+      border-radius: var(--v2-radius-full);
     }
   }
 
@@ -63,10 +63,62 @@
     --sticky-accordion-top: 0px;
   }
 
+  /* Each reviewed file is a tonal 16px card with no hairlines. The radii are !important because
+     the shared ui accordion rounds first/last items with higher-specificity :first-child/:last-child rules. */
+  [data-component="accordion"] {
+    gap: 4px;
+
+    [data-slot="accordion-item"] {
+      --opencode-diffs-bg: var(--v2-background-bg-layer-01);
+      border-radius: var(--v2-radius-lg);
+      background-color: var(--v2-background-bg-layer-01);
+    }
+
+    [data-slot="accordion-item"] + [data-slot="accordion-item"] {
+      margin-top: 0;
+    }
+
+    [data-component="sticky-accordion-header"] {
+      background-color: var(--v2-background-bg-base);
+      border-radius: var(--v2-radius-lg) var(--v2-radius-lg) 0 0;
+    }
+
+    [data-slot="accordion-item"] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+      border: none;
+      border-radius: var(--v2-radius-lg) !important;
+      background-color: var(--v2-background-bg-layer-01);
+
+      &:hover:not([data-disabled]) {
+        background-color: var(--v2-background-bg-layer-01);
+        background-image: linear-gradient(
+          var(--v2-overlay-simple-overlay-hover),
+          var(--v2-overlay-simple-overlay-hover)
+        );
+      }
+    }
+
+    [data-slot="accordion-item"][data-expanded] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+      border-end-start-radius: 0 !important;
+      border-end-end-radius: 0 !important;
+    }
+
+    [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
+      border: none;
+      border-radius: 0 0 var(--v2-radius-lg) var(--v2-radius-lg) !important;
+      background-color: transparent;
+    }
+  }
+
   [data-slot="session-review-accordion-item"][data-selected]
     [data-slot="accordion-header"]
     [data-slot="accordion-trigger"] {
-    background-color: var(--surface-base-active);
+    background-color: var(--v2-background-bg-accent-container);
+    color: var(--v2-text-text-on-accent-container);
+
+    [data-slot="session-review-directory"],
+    [data-slot="session-review-filename"] {
+      color: var(--v2-text-text-on-accent-container);
+    }
   }
 
   [data-slot="accordion-item"] {
@@ -117,7 +169,7 @@
   }
 
   [data-slot="session-review-directory"] {
-    color: var(--text-base);
+    color: var(--v2-text-text-muted);
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
@@ -126,7 +178,7 @@
   }
 
   [data-slot="session-review-filename"] {
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -141,17 +193,17 @@
     margin-left: 8px;
     border: none;
     background: transparent;
-    color: var(--text-base);
+    color: var(--v2-text-text-muted);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--v2-radius-full);
     opacity: 0;
     will-change: opacity;
     transform: translateZ(0);
-    transition: opacity 0.15s ease;
+    transition: opacity var(--v2-duration-short) var(--v2-ease-standard);
 
     &:hover {
-      color: var(--text-strong);
-      background: var(--surface-base);
+      color: var(--v2-text-text-base);
+      background: var(--v2-overlay-simple-overlay-hover);
     }
   }
 
@@ -169,9 +221,9 @@
 
   [data-slot="session-review-diff-chevron"] {
     display: inline-flex;
-    color: var(--icon-weaker);
+    color: var(--v2-icon-icon-muted);
     transform: rotate(-90deg);
-    transition: transform 0.15s ease;
+    transition: transform var(--v2-duration-short) var(--v2-ease-standard);
   }
 
   [data-slot="accordion-item"][data-expanded] [data-slot="session-review-diff-chevron"] {
@@ -191,15 +243,15 @@
   }
 
   [data-slot="session-review-change"][data-type="added"] {
-    color: var(--icon-diff-add-base);
+    color: var(--v2-state-fg-success);
   }
 
   [data-slot="session-review-change"][data-type="removed"] {
-    color: var(--icon-diff-delete-base);
+    color: var(--v2-state-fg-danger);
   }
 
   [data-slot="session-review-change"][data-type="modified"] {
-    color: var(--icon-diff-modified-base);
+    color: var(--v2-state-fg-warning);
   }
 
   [data-slot="session-review-diff-wrapper"] {
@@ -220,14 +272,14 @@
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     margin-bottom: 4px;
   }
 
   [data-slot="session-review-large-diff-meta"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
-    color: var(--text-weak);
+    color: var(--v2-text-text-muted);
     word-break: break-word;
   }
 
@@ -238,12 +290,8 @@
   }
 }
 
-body:not([data-new-layout]) [data-component="session-review"] {
-  [data-slot="session-review-header"] {
-    background-color: var(--background-stronger);
-  }
-
-  [data-slot="session-review-large-diff"] {
-    background: var(--background-stronger);
+@media (prefers-reduced-motion: reduce) {
+  [data-component="session-review"] [data-slot="session-review-diff-chevron"] {
+    transition: none;
   }
 }

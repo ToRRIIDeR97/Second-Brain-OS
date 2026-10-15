@@ -30,10 +30,10 @@ Interactive playground for animating the Shell tool subtitle ("submessage") in t
 const btn = (accent?: boolean) =>
   ({
     padding: "6px 14px",
-    "border-radius": "6px",
-    border: "1px solid var(--color-divider, #333)",
-    background: accent ? "var(--color-accent, #58f)" : "var(--color-fill-element, #222)",
-    color: "var(--color-text, #eee)",
+    "border-radius": "var(--v2-radius-sm)",
+    border: "1px solid var(--v2-border-border-base, #333)",
+    background: accent ? "var(--v2-background-bg-accent, #58f)" : "var(--v2-background-bg-layer-02, #222)",
+    color: "var(--v2-text-text-base, #eee)",
     cursor: "pointer",
     "font-size": "13px",
   }) as const
@@ -41,7 +41,7 @@ const btn = (accent?: boolean) =>
 const sliderLabel = {
   "font-size": "11px",
   "font-family": "monospace",
-  color: "var(--color-text-weak, #666)",
+  color: "var(--v2-text-text-muted, #666)",
   "min-width": "84px",
   "flex-shrink": "0",
   "text-align": "right",
@@ -50,7 +50,7 @@ const sliderLabel = {
 const sliderValue = {
   "font-family": "monospace",
   "font-size": "11px",
-  color: "var(--color-text-weak, #aaa)",
+  color: "var(--v2-text-text-muted, #aaa)",
   "min-width": "76px",
 }
 
@@ -218,12 +218,12 @@ export const Playground = {
           <div
             style={{
               "border-radius": "8px",
-              border: "1px solid var(--color-divider, #333)",
-              background: "var(--color-fill-secondary, #161616)",
+              border: "1px solid var(--v2-border-border-base, #333)",
+              background: "var(--v2-background-bg-layer-01, #161616)",
               padding: "14px 16px",
               "font-family": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
               "font-size": "18px",
-              color: "var(--color-text, #eee)",
+              color: "var(--v2-text-text-base, #eee)",
               "white-space": "pre-wrap",
             }}
           >
@@ -247,7 +247,7 @@ export const Playground = {
           style={{
             display: "grid",
             gap: "10px",
-            "border-top": "1px solid var(--color-divider, #333)",
+            "border-top": "1px solid var(--v2-border-border-base, #333)",
             "padding-top": "14px",
           }}
         >
@@ -260,10 +260,10 @@ export const Playground = {
                 width: "420px",
                 "max-width": "100%",
                 padding: "6px 8px",
-                "border-radius": "6px",
-                border: "1px solid var(--color-divider, #333)",
-                background: "var(--color-fill-element, #222)",
-                color: "var(--color-text, #eee)",
+                "border-radius": "var(--v2-radius-sm)",
+                border: "1px solid var(--v2-border-border-base, #333)",
+                background: "var(--v2-background-bg-layer-02, #222)",
+                color: "var(--v2-text-text-base, #eee)",
               }}
             />
           </div>

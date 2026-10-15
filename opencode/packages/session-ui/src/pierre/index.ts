@@ -16,7 +16,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 
 const unsafeCSS = `
 :host {
-  --diffs-bg: var(--opencode-diffs-bg, var(--color-background-stronger));
+  --diffs-bg: var(--opencode-diffs-bg, var(--v2-background-bg-base));
 }
 
 [data-diff],
@@ -75,11 +75,11 @@ const unsafeCSS = `
 }
 
 ::highlight(opencode-find) {
-  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  background-color: rgb(from var(--v2-state-border-warning) r g b / 0.35);
 }
 
 ::highlight(opencode-find-current) {
-  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  background-color: rgb(from var(--v2-state-fg-warning) r g b / 0.55);
 }
 
 [data-diff] [data-line][data-comment-selected]:not([data-selected-line]) {

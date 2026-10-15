@@ -34,10 +34,10 @@ function rand(min: number, max: number) {
 const btn = (accent?: boolean) =>
   ({
     padding: "6px 14px",
-    "border-radius": "6px",
-    border: "1px solid var(--color-divider, #333)",
-    background: accent ? "var(--color-danger-fill, #c33)" : "var(--color-fill-element, #222)",
-    color: "var(--color-text, #eee)",
+    "border-radius": "var(--v2-radius-sm)",
+    border: "1px solid var(--v2-border-border-base, #333)",
+    background: accent ? "var(--v2-state-fg-danger, #c33)" : "var(--v2-background-bg-layer-02, #222)",
+    color: "var(--v2-text-text-base, #eee)",
     cursor: "pointer",
     "font-size": "13px",
   }) as const
@@ -45,10 +45,10 @@ const btn = (accent?: boolean) =>
 const smallBtn = (active?: boolean) =>
   ({
     padding: "4px 12px",
-    "border-radius": "6px",
-    border: active ? "1px solid var(--color-accent, #58f)" : "1px solid var(--color-divider, #333)",
-    background: active ? "var(--color-accent, #58f)" : "var(--color-fill-element, #222)",
-    color: "var(--color-text, #eee)",
+    "border-radius": "var(--v2-radius-sm)",
+    border: active ? "1px solid var(--v2-background-bg-accent, #58f)" : "1px solid var(--v2-border-border-base, #333)",
+    background: active ? "var(--v2-background-bg-accent, #58f)" : "var(--v2-background-bg-layer-02, #222)",
+    color: "var(--v2-text-text-base, #eee)",
     cursor: "pointer",
     "font-size": "12px",
   }) as const
@@ -141,7 +141,7 @@ export const Playground = {
             gap: "8px",
             "font-size": "14px",
             "font-weight": "500",
-            color: "var(--text-strong, #eee)",
+            color: "var(--v2-text-text-base, #eee)",
             "min-width": "0",
           }}
         >
@@ -155,7 +155,7 @@ export const Playground = {
               "text-overflow": "ellipsis",
               "white-space": "nowrap",
               "font-weight": "400",
-              color: "var(--text-base, #ccc)",
+              color: "var(--v2-text-text-base, #ccc)",
             }}
           >
             <AnimatedCountList items={items()} fallback="" />
@@ -189,7 +189,7 @@ export const Playground = {
         <div
           style={{
             "font-size": "11px",
-            color: "var(--color-text-weak, #888)",
+            color: "var(--v2-text-text-muted, #888)",
             "font-family": "monospace",
           }}
         >
@@ -220,7 +220,7 @@ export const Done = {
   render: () => (
     <span style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "14px", "font-weight": "500" }}>
       <ToolStatusTitle active={false} activeText="Exploring" doneText="Explored" split={false} />
-      <span style={{ "font-weight": "400", color: "var(--text-base, #ccc)" }}>
+      <span style={{ "font-weight": "400", color: "var(--v2-text-text-base, #ccc)" }}>
         <AnimatedCountList
           items={[
             { key: "ui.messagePart.context.read", count: 5 },

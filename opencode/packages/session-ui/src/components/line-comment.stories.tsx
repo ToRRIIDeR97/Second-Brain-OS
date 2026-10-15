@@ -48,11 +48,11 @@ export const Default = {
         position: "relative",
         height: "160px",
         padding: "16px 16px 16px 40px",
-        border: "1px solid var(--border-weak)",
+        border: "1px solid var(--v2-border-border-muted)",
         "border-radius": "8px",
         "font-family": "var(--font-family-mono)",
         "font-size": "12px",
-        color: "var(--text-weak)",
+        color: "var(--v2-text-text-muted)",
       }}
     >
       <div>12 | const total = sum(values)</div>
@@ -71,11 +71,11 @@ export const Editor = {
           position: "relative",
           height: "220px",
           padding: "16px 16px 16px 40px",
-          border: "1px solid var(--border-weak)",
+          border: "1px solid var(--v2-border-border-muted)",
           "border-radius": "8px",
           "font-family": "var(--font-family-mono)",
           "font-size": "12px",
-          color: "var(--text-weak)",
+          color: "var(--v2-text-text-muted)",
         }}
       >
         <div>40 | if (values.length === 0) return 0</div>
@@ -99,11 +99,11 @@ export const AnchorOnly = {
         position: "relative",
         height: "120px",
         padding: "16px 16px 16px 40px",
-        border: "1px solid var(--border-weak)",
+        border: "1px solid var(--v2-border-border-muted)",
         "border-radius": "8px",
         "font-family": "var(--font-family-mono)",
         "font-size": "12px",
-        color: "var(--text-weak)",
+        color: "var(--v2-text-text-muted)",
       }}
     >
       <div>20 | const ready = true</div>

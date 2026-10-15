@@ -133,7 +133,7 @@ function ReviewCommentMenu(props: {
           icon="dot-grid"
           variant="ghost"
           size="small"
-          class="size-6 rounded-md"
+          class="size-6 rounded-full"
           aria-label={props.labels.moreLabel}
         />
         <DropdownMenu.Portal>
@@ -584,7 +584,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <Match when={!mounted() && !tooLarge()}>
                                   <div
                                     data-slot="session-review-diff-placeholder"
-                                    class="rounded-lg border border-border-weak-base bg-background-stronger/40"
+                                    class="rounded-[16px] bg-v2-background-bg-layer-01"
                                     style={{ height: "160px" }}
                                   />
                                 </Match>

@@ -3,7 +3,6 @@
   --markdown-inline-code-color: var(--v2-text-text-code-accent);
   --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
-  --markdown-shell-code-border: var(--v2-border-border-muted);
   --markdown-shell-code-color: var(--v2-text-text-base);
   --markdown-shell-code-token-color: currentColor;
 
@@ -83,7 +82,7 @@
 
   /* Links */
   a {
-    color: var(--text-interactive-base);
+    color: var(--v2-text-text-accent);
     text-decoration: none;
     font-weight: inherit;
   }
@@ -172,13 +171,13 @@
     margin: 32px 0;
   }
 
+  /* !important beats the inline background/color Shiki writes from the shared ui theme. */
   .shiki {
-    background: var(--color-background-stronger);
-    color: var(--text-base);
+    background: var(--v2-background-bg-layer-01) !important;
+    color: var(--v2-text-text-base) !important;
     font-size: 13px;
     padding: 12px 14px;
-    border-radius: 16px;
-    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: var(--v2-radius-md);
   }
 
   [data-component="markdown-code"] {
@@ -188,9 +187,8 @@
   }
 
   [data-component="markdown-code"][data-code-kind="shell"] .shiki {
-    background: var(--markdown-shell-code-background);
-    border-color: var(--markdown-shell-code-border);
-    color: var(--markdown-shell-code-color);
+    background: var(--markdown-shell-code-background) !important;
+    color: var(--markdown-shell-code-color) !important;
   }
 
   [data-component="markdown-code"][data-code-kind="shell"] code {
@@ -206,7 +204,7 @@
     top: 4px;
     inset-inline-end: 4px;
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--v2-duration-short) var(--v2-ease-standard);
     z-index: 1;
   }
 
@@ -246,7 +244,7 @@
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
     padding: 2px 5px;
-    border-radius: 6px;
+    border-radius: var(--v2-radius-sm);
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
 
@@ -296,7 +294,7 @@
   img {
     max-width: 100%;
     height: auto;
-    border-radius: 16px;
+    border-radius: var(--v2-radius-lg);
     margin: 1.5rem 0;
     display: block;
   }
@@ -315,7 +313,7 @@ body[data-new-layout] [data-component="markdown"] {
     gap: 6px;
     padding: 5px 8px;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--v2-radius-full);
     background: var(--v2-background-bg-layer-01);
     box-shadow: var(--v2-elevation-floating);
     color: var(--v2-text-text-base);
@@ -326,56 +324,6 @@ body[data-new-layout] [data-component="markdown"] {
     letter-spacing: 0.05px;
     font-variant-numeric: tabular-nums;
     font-variation-settings: "slnt" 0;
-  }
-}
-
-body:not([data-new-layout]) [data-component="markdown"] {
-  color: var(--text-strong);
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-size: 14px;
-    color: var(--text-strong);
-    font-weight: var(--font-weight-medium);
-  }
-
-  strong,
-  b {
-    color: var(--text-strong);
-  }
-
-  li::marker {
-    color: var(--text-weak);
-  }
-
-  blockquote {
-    border-inline-start: 2px solid var(--border-weak-base);
-    color: var(--text-weak);
-  }
-
-  .shiki {
-    border-color: var(--border-weak-base);
-  }
-
-  :not(pre) > code {
-    color: var(--syntax-string);
-    padding: 0;
-    border-radius: 0;
-    background: none;
-  }
-
-  th,
-  td {
-    border-bottom: 1px solid var(--border-weaker-base);
-  }
-
-  th {
-    color: var(--text-strong);
-    border-bottom-color: var(--border-weak-base);
   }
 }
 
