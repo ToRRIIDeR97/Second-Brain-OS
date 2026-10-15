@@ -1,0 +1,210 @@
+/*
+ * Thread view surfaces for the Material 3 remaster.
+ * v2 component CSS is unlayered, so each rule restates the component selector
+ * with a `.thread-*` class in front to win without !important.
+ */
+
+/* Pill tabs: side panel, file tabs, terminal tabs and the mobile switcher. */
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"] [data-slot="tabs-v2-list"] {
+  height: auto;
+  gap: 2px;
+  padding: 0;
+  align-items: center;
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"] [data-slot="tabs-v2-list"]::before {
+  display: none;
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-trigger-wrapper"] {
+  height: 32px;
+  max-width: 240px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--v2-radius-full);
+  background-color: transparent;
+  color: var(--v2-text-text-muted);
+  transition:
+    background-color var(--v2-duration-short) var(--v2-ease-standard),
+    color var(--v2-duration-short) var(--v2-ease-standard),
+    border-radius var(--v2-duration-medium) var(--v2-ease-standard);
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-trigger-wrapper"]:hover:not(:has([data-selected])) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-text-text-base);
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-trigger-wrapper"]:active {
+  border-radius: var(--v2-radius-sm);
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  border-bottom-color: transparent;
+  background-color: var(--v2-background-bg-accent-container);
+  color: var(--v2-text-text-on-accent-container);
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-trigger-wrapper"]:has([data-slot="tabs-v2-trigger"]:focus-visible) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"] [data-slot="tabs-v2-trigger"] {
+  flex: 1 1 auto;
+  justify-content: center;
+  height: 100%;
+  padding: 0 12px;
+  border-radius: inherit;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"] [data-slot="tabs-v2-close-button"] {
+  width: 20px;
+  height: 20px;
+  margin-inline-start: 2px;
+  border-radius: var(--v2-radius-full);
+  color: inherit;
+  opacity: 0;
+  transition:
+    opacity var(--v2-duration-short) var(--v2-ease-standard),
+    background-color var(--v2-duration-short) var(--v2-ease-standard);
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-trigger-wrapper"]:is(:hover, :focus-within, :has([data-selected]))
+  [data-slot="tabs-v2-close-button"] {
+  opacity: 0.8;
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-close-button"]:is(:hover, :focus-visible) {
+  opacity: 1;
+  background-color: var(--v2-overlay-simple-overlay-hover);
+  outline: none;
+}
+
+.thread-tabs[data-component="tabs-v2"][data-variant][data-orientation="horizontal"]
+  [data-slot="tabs-v2-trigger"]:has([data-slot="tabs-v2-close-button"]) {
+  padding-inline-end: 6px;
+}
+
+.thread-tabs [data-slot="tabs-v2-trigger-content"] {
+  min-width: 0;
+  gap: 6px;
+}
+
+/* File tabs show the monochrome icon until hovered or selected. */
+.thread-tabs .tab-fileicon-color,
+.thread-tabs .tab-fileicon-mono {
+  pointer-events: none;
+}
+
+.thread-tabs .tab-fileicon-color {
+  display: none;
+}
+
+.thread-tabs [data-slot="tabs-v2-trigger"]:is([data-selected], :hover) .tab-fileicon-color {
+  display: block;
+}
+
+.thread-tabs [data-slot="tabs-v2-trigger"]:is([data-selected], :hover) .tab-fileicon-mono {
+  display: none;
+}
+
+/* Tonal collapsibles: timeline diff lists and raw context messages. */
+.thread-collapsibles[data-component="accordion-v2"] {
+  gap: 8px;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.thread-collapsibles [data-component="accordion-v2-item"] {
+  overflow: clip;
+  border-radius: var(--v2-radius-lg);
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: none;
+}
+
+.thread-collapsibles [data-slot="accordion-v2-header"] {
+  position: sticky;
+  top: calc(var(--sticky-accordion-top, 0px) + var(--sticky-accordion-offset, 0px));
+  z-index: 10;
+  border-radius: var(--v2-radius-lg);
+  background: var(--v2-background-bg-layer-01);
+}
+
+.thread-collapsibles [data-component="accordion-v2-trigger"] {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: var(--v2-radius-lg);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color var(--v2-duration-short) var(--v2-ease-standard);
+}
+
+.thread-collapsibles [data-component="accordion-v2-trigger"]:hover {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+.thread-collapsibles [data-component="accordion-v2-trigger"]:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+}
+
+.thread-collapsibles [data-component="accordion-v2-trigger"] [data-slot="accordion-v2-trigger-content"] {
+  height: 40px;
+}
+
+.thread-collapsibles [data-component="accordion-v2-trigger"] [data-slot="accordion-v2-chevron"] {
+  color: var(--v2-icon-icon-muted);
+  transition: transform var(--v2-duration-medium) var(--v2-ease-standard);
+}
+
+.thread-collapsibles [data-component="accordion-v2-item"][data-expanded] [data-component="accordion-v2-trigger"] {
+  box-shadow: none;
+}
+
+.thread-collapsibles [data-component="accordion-v2-content"] [data-slot="accordion-v2-content-inner"] {
+  display: block;
+  padding: 0;
+}
+
+/* The in-progress todo pulses like a running thread. */
+[data-component="session-todo-dock"] [data-slot="checkbox-v2"][data-in-progress] [data-slot="checkbox-v2-control"] {
+  animation: thread-pulse 1.6s var(--v2-ease-standard) infinite;
+}
+
+@keyframes thread-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--v2-background-bg-accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--v2-background-bg-accent) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thread-tabs [data-slot="tabs-v2-trigger-wrapper"],
+  .thread-tabs [data-slot="tabs-v2-close-button"],
+  .thread-collapsibles [data-component="accordion-v2-trigger"],
+  .thread-collapsibles [data-slot="accordion-v2-chevron"] {
+    transition: none !important;
+  }
+
+  .thread-collapsibles [data-component="accordion-v2-content"],
+  [data-component="session-todo-dock"] [data-slot="checkbox-v2-control"] {
+    animation: none !important;
+  }
+}

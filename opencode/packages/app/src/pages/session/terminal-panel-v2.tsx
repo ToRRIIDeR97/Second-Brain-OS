@@ -7,9 +7,10 @@ import { isSortable } from "@dnd-kit/solid/sortable"
 import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToHorizontalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
-import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 
@@ -175,7 +176,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
         "min-w-0 h-full flex-1": isDesktop() && opened() && !stacked(),
         "w-0 h-full pointer-events-none": isDesktop() && !opened(),
         [pagePanelClass]: isDesktop(),
-        "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
+        "transition-[height] duration-300 ease-standard will-change-[height] motion-reduce:transition-none":
           !isDesktop() && !size.active(),
       }}
       style={{ height: panelHeight() }}
@@ -198,7 +199,6 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
       <div
         class="absolute inset-0 flex flex-col overflow-hidden"
         classList={{
-          "border-t border-border-weak-base": opened() && !isDesktop(),
           "pointer-events-none": !opened(),
         }}
         style={{ height: contentHeight() }}
@@ -207,21 +207,23 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
           when={terminal.ready()}
           fallback={
             <div class="flex flex-col h-full pointer-events-none">
-              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-v2-background-bg-base overflow-hidden">
+              <div class="flex h-12 shrink-0 items-center gap-0.5 overflow-hidden px-2.5 pt-2 pb-1">
                 <For each={handoff()}>
                   {(title) => (
-                    <div class="px-3 py-1 rounded-full bg-v2-background-bg-layer-01 text-14-regular text-text-weak truncate max-w-40">
+                    <div class="flex h-8 max-w-40 items-center truncate rounded-full px-3 text-[12px] text-v2-text-text-muted [font-weight:500]">
                       {title}
                     </div>
                   )}
                 </For>
                 <div class="flex-1" />
-                <div class="text-text-weak pr-2">
+                <div role="status" class="pr-2 text-[12px] text-v2-text-text-muted">
                   {language.t("common.loading")}
                   {language.t("common.loading.ellipsis")}
                 </div>
               </div>
-              <div class="flex-1 flex items-center justify-center text-text-weak">{language.t("terminal.loading")}</div>
+              <div class="mx-2.5 mb-2.5 flex flex-1 items-center justify-center rounded-[16px] bg-v2-background-bg-layer-01 text-[13px] text-v2-text-text-muted">
+                {language.t("terminal.loading")}
+              </div>
             </div>
           }
         >
@@ -231,7 +233,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                 activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
                 preventActivation: (event) =>
                   event.target instanceof Element &&
-                  !!event.target.closest('[data-slot="tabs-trigger-close-button"], input, [contenteditable="true"]'),
+                  !!event.target.closest('[data-slot="tabs-v2-close-button"], input, [contenteditable="true"]'),
               }),
             ]}
             modifiers={[RestrictToHorizontalAxis, RestrictToElement.configure({ element: () => tabList ?? null })]}
@@ -249,13 +251,12 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
             }}
           >
             <div class="flex flex-col h-full">
-              <Tabs
-                variant="normal"
+              <TabsV2
                 value={terminal.active()}
                 onChange={(id) => terminal.open(id)}
-                class="!h-[52px] !flex-none"
+                class="thread-tabs !h-auto !flex-none px-2.5 pt-2 pb-1"
               >
-                <Tabs.List
+                <TabsV2.List
                   ref={tabList}
                   onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
                     const active = document.activeElement
@@ -264,9 +265,9 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                   }}
                 >
                   <For each={all()}>
-                    {(pty, index) => <SortableTerminalTabV2 terminal={pty} index={index} newLayout onClose={close} />}
+                    {(pty, index) => <SortableTerminalTabV2 terminal={pty} index={index} onClose={close} />}
                   </For>
-                  <div class="h-full flex items-center justify-center">
+                  <div class="flex h-8 shrink-0 items-center justify-center pl-1">
                     <TooltipV2
                       value={
                         <>
@@ -279,18 +280,17 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                       placement="bottom"
                       class="flex items-center"
                     >
-                      <IconButton
-                        icon="plus-small"
-                        variant="ghost"
-                        iconSize="large"
+                      <IconButtonV2
+                        icon={<Icon name="plus" />}
+                        variant="ghost-muted"
                         onClick={() => terminal.new({ focus: true })}
                         aria-label={language.t("command.terminal.new")}
                       />
                     </TooltipV2>
                   </div>
-                </Tabs.List>
-              </Tabs>
-              <div class="flex-1 min-h-0 relative">
+                </TabsV2.List>
+              </TabsV2>
+              <div class="relative mx-2.5 mb-2.5 min-h-0 flex-1 overflow-hidden rounded-[16px]">
                 <Show when={opened() && terminal.active()} keyed>
                   {(id) => {
                     const ops = terminal.bind()

@@ -1,6 +1,6 @@
 import { createMemo, createSignal, createUniqueId, Show } from "solid-js"
 import { createQuery, keepPreviousData } from "@tanstack/solid-query"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
 import FileTreeV2, { type Kind } from "@/components/file-tree-v2"
@@ -125,7 +125,7 @@ export function SessionFileBrowserTab(props: {
             <Show
               when={!loading()}
               fallback={
-                <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
+                <div role="status" class="px-3 py-2 text-[13px] text-v2-text-text-muted">
                   {language.t("common.loading")}
                   {language.t("common.loading.ellipsis")}
                 </div>
@@ -134,7 +134,7 @@ export function SessionFileBrowserTab(props: {
               <Show
                 when={files().length > 0}
                 fallback={
-                  <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
+                  <div role="status" class="px-3 py-2 text-[13px] text-v2-text-text-muted">
                     {language.t("palette.empty")}
                   </div>
                 }
@@ -163,10 +163,12 @@ export function SessionFileBrowserTab(props: {
         when={!props.placeholder}
         fallback={
           <SessionFilePanelV2Empty>
-            <div class="flex flex-col items-center gap-3 text-center text-text-weak">
-              <Icon name="file-tree" size="large" />
-              <div class="text-14-medium text-text-strong">{language.t("command.file.open")}</div>
-              <div class="text-13-regular">{language.t("session.files.selectToOpen")}</div>
+            <div class="flex flex-col items-center gap-3 text-center text-v2-text-text-muted">
+              <span class="flex size-12 items-center justify-center rounded-[16px] bg-v2-background-bg-layer-01 text-v2-icon-icon-muted">
+                <Icon name="filetree" size="large" />
+              </span>
+              <div class="text-[14px] text-v2-text-text-base [font-weight:530]">{language.t("command.file.open")}</div>
+              <div class="text-[13px] leading-5">{language.t("session.files.selectToOpen")}</div>
             </div>
           </SessionFilePanelV2Empty>
         }

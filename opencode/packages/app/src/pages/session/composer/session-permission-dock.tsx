@@ -23,13 +23,13 @@ export function SessionPermissionDock(props: {
       data-component="dock-prompt"
       data-kind="permission"
       aria-labelledby="permission-dock-title"
-      class="mb-2 rounded-[24px] bg-v2-background-bg-base px-4 pt-4 pb-3 shadow-[0_0_0_0.5px_var(--v2-border-border-muted),0_8px_24px_-12px_rgb(0_0_0/0.18)] animate-in fade-in slide-in-from-bottom-1 duration-300 ease-emphasized motion-reduce:animate-none"
+      class="mb-2 rounded-[24px] bg-v2-state-bg-warning px-4 pt-3.5 pb-3 animate-in fade-in slide-in-from-bottom-1 duration-300 ease-emphasized motion-reduce:animate-none"
     >
       <div class="flex items-center gap-2.5">
-        <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-warning-weak text-icon-warning-base">
+        <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-v2-background-bg-base text-v2-state-fg-warning">
           <Icon name="warning" size="normal" />
         </span>
-        <h2 id="permission-dock-title" class="min-w-0 text-[14px] leading-5 text-v2-text-text-base [font-weight:530]">
+        <h2 id="permission-dock-title" class="min-w-0 text-[14px] leading-5 text-v2-state-fg-warning [font-weight:560]">
           {language.t("notification.permission.title")}
         </h2>
       </div>
@@ -39,15 +39,17 @@ export function SessionPermissionDock(props: {
       </Show>
 
       <Show when={props.request.patterns.length > 0}>
-        <div class="mt-3 ml-[42px] flex max-h-40 flex-col gap-1 overflow-y-auto rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2 no-scrollbar">
+        <div class="mt-3 ml-[42px] flex max-h-40 flex-col gap-1 overflow-y-auto rounded-[16px] bg-v2-background-bg-base px-3 py-2 no-scrollbar">
           <For each={props.request.patterns}>
-            {(pattern) => <code class="text-12-regular text-v2-text-text-base break-all">{pattern}</code>}
+            {(pattern) => (
+              <code class="font-mono text-[12px] leading-5 text-v2-text-text-muted break-all">{pattern}</code>
+            )}
           </For>
         </div>
       </Show>
 
       <div data-slot="permission-footer-actions" class="mt-4 justify-end">
-        <ButtonV2 variant="ghost" onClick={() => props.onDecide("reject")} disabled={props.responding}>
+        <ButtonV2 variant="outline" onClick={() => props.onDecide("reject")} disabled={props.responding}>
           {language.t("ui.permission.deny")}
         </ButtonV2>
         <ButtonV2 variant="neutral" onClick={() => props.onDecide("always")} disabled={props.responding}>
