@@ -86,6 +86,7 @@ export const DialogSelectMcp: Component = () => {
                 </div>
                 <div onClick={(e) => e.stopPropagation()}>
                   <Switch
+                    size="small"
                     checked={enabled()}
                     disabled={status() === "pending" || (toggle.isPending && toggle.variables === i.name)}
                     onChange={() => {

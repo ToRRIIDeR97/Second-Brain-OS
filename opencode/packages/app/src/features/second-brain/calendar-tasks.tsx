@@ -8,7 +8,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createEffect, createMemo, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { pageRowClass } from "@/components/page"
+import { PageEmpty, pageRowClass } from "@/components/page"
 import { useLanguage } from "@/context/language"
 import { localDateKey } from "./calendar-domain"
 import type { PlannerTask, ProjectRecord } from "./client"
@@ -244,12 +244,12 @@ export function CalendarTasks(props: {
       <section class="flex min-h-0 min-w-0 flex-col" aria-label={language.t("secondBrain.tasks.title")}>
         <div class="flex shrink-0 flex-wrap items-center gap-2 px-3 pb-2">
           <div class="min-w-0 flex-1">
-            <SegmentedControlV2 class="!w-auto" value={state.filter}>
+            <SegmentedControlV2 class="!w-fit" value={state.filter}>
               <For each={["today", "upcoming", "unscheduled", "completed"] as const}>
                 {(filter) => (
                   <SegmentedControlItemV2
                     value={filter}
-                    class="!flex-auto"
+                    class="!flex-auto whitespace-nowrap"
                     onClick={() => {
                       setState("filter", filter)
                       props.onFilterChange?.(filter)
@@ -273,12 +273,7 @@ export function CalendarTasks(props: {
           </ButtonV2>
         </div>
         <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-          <Show
-            when={visible().length > 0}
-            fallback={
-              <p class="px-3 py-4 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.tasks.empty")}</p>
-            }
-          >
+          <Show when={visible().length > 0} fallback={<PageEmpty>{language.t("secondBrain.tasks.empty")}</PageEmpty>}>
             <For each={visible()}>
               {(task) => (
                 <div class={`${pageRowClass} min-h-12 py-1.5`}>

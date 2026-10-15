@@ -9,7 +9,7 @@ import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { PageFrame, PageHeader, pageRowClass } from "@/components/page"
+import { PageEmpty, PageFrame, PageHeader, pageRowClass } from "@/components/page"
 import { createEffect, createMemo, createResource, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SetStoreFunction } from "solid-js/store"
@@ -288,9 +288,7 @@ export default function ProjectsPage() {
         fallback={
           <>
             <PageHeader id="projects-title" title={language.t("secondBrain.projects.title")} />
-            <p class="px-6 py-16 text-center text-[13px] text-v2-text-text-muted">
-              {language.t("secondBrain.empty.workspace")}
-            </p>
+            <PageEmpty>{language.t("secondBrain.empty.workspace")}</PageEmpty>
           </>
         }
       >
@@ -529,11 +527,7 @@ function ProjectList(props: {
       >
         <Show
           when={props.projects.length > 0}
-          fallback={
-            <p class="px-3 py-2 text-[13px] text-v2-text-text-faint">
-              {props.language.t("secondBrain.projects.empty")}
-            </p>
-          }
+          fallback={<PageEmpty>{props.language.t("secondBrain.projects.empty")}</PageEmpty>}
         >
           <For each={props.projects}>
             {(project) => (

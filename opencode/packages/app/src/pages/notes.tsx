@@ -22,7 +22,7 @@ import {
   type NoteSummary,
 } from "@/features/second-brain/client"
 import { NoteEditor } from "@/features/second-brain/note-editor"
-import { pageRowClass, pagePanelClass } from "@/components/page"
+import { PageEmpty, pageRowClass, pagePanelClass } from "@/components/page"
 
 const slugify = (value: string) =>
   value
@@ -293,14 +293,7 @@ export default function NotesPage() {
   return (
     <section class="flex size-full min-h-0 flex-col p-2 pl-0" aria-label={language.t("secondBrain.notes.title")}>
       <div class={`flex min-h-0 flex-1 flex-col overflow-hidden ${pagePanelClass}`}>
-        <Show
-          when={state.directory}
-          fallback={
-            <div class="flex min-h-0 flex-1 items-center justify-center text-[13px] text-v2-text-text-muted">
-              {language.t("secondBrain.empty.workspace")}
-            </div>
-          }
-        >
+        <Show when={state.directory} fallback={<PageEmpty>{language.t("secondBrain.empty.workspace")}</PageEmpty>}>
           <div class="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
             <aside class="flex max-h-[240px] w-full shrink-0 flex-col overflow-hidden md:max-h-none md:w-[248px]">
               <div class="flex h-14 shrink-0 items-center gap-2 pl-5 pr-3 pt-1">
@@ -397,9 +390,9 @@ export default function NotesPage() {
                   <Show
                     when={visibleNotes().length > 0}
                     fallback={
-                      <p class="px-3 py-2 text-[12px] text-v2-text-text-faint">
+                      <PageEmpty class="!px-3">
                         {language.t(state.search.trim() ? "secondBrain.notes.noMatches" : "secondBrain.notes.empty")}
-                      </p>
+                      </PageEmpty>
                     }
                   >
                     <For each={visibleNotes()}>

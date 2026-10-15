@@ -7,6 +7,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { PageEmpty } from "@/components/page"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { SessionTabAvatarView } from "@/pages/layout/session-tab-avatar"
@@ -131,7 +132,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
             </ButtonV2>
             <ButtonV2
               data-action="home-session-archive-selected"
-              variant="ghost-muted"
+              variant="outline"
               size="small"
               icon="archive"
               disabled={selectedCount() === 0 || archiving()}
@@ -147,7 +148,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
             <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex">
               <ButtonV2
                 data-action="home-new-session"
-                variant="ghost-muted"
+                variant="tonal"
                 size="normal"
                 icon="edit"
                 class="pointer-events-auto [font-weight:530]"
@@ -576,31 +577,21 @@ function HomeSessionProjectName(props: { name: string; search?: boolean }) {
 
 function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnType<typeof useLanguage> }) {
   return (
-    <div class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center">
-      <div
-        class={`
-          shrink-0 text-[13px] leading-[13px] tracking-[-0.04px]
-          text-v2-text-text-base [font-weight:530]
-        `}
-      >
-        {props.language.t("home.sessions.empty")}
-      </div>
-      <p
-        class={`
-          mb-1 text-center text-[13px] leading-5 tracking-[-0.04px]
-          text-v2-text-text-muted [font-weight:440]
-        `}
-      >
-        {props.language.t("home.sessions.empty.description")}
-      </p>
-      <Show when={props.onNewSession}>
-        {(onNewSession) => (
-          <ButtonV2 data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
-            {props.language.t("command.session.new")}
-          </ButtonV2>
-        )}
-      </Show>
-    </div>
+    <PageEmpty
+      class="min-h-full"
+      action={
+        <Show when={props.onNewSession}>
+          {(onNewSession) => (
+            <ButtonV2 data-action="home-new-session" variant="tonal" size="normal" icon="edit" onClick={onNewSession()}>
+              {props.language.t("command.session.new")}
+            </ButtonV2>
+          )}
+        </Show>
+      }
+    >
+      <span class="block text-v2-text-text-base [font-weight:530]">{props.language.t("home.sessions.empty")}</span>
+      <span class="mt-1 block">{props.language.t("home.sessions.empty.description")}</span>
+    </PageEmpty>
   )
 }
 

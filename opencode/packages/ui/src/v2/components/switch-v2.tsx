@@ -5,12 +5,14 @@ import "./switch-v2.css"
 
 export interface SwitchProps extends ParentProps<ComponentProps<typeof Kobalte>> {
   hideLabel?: boolean
+  /** `small` is the compact track for dense popover and dialog rows. */
+  size?: "normal" | "small"
 }
 
 export function Switch(props: SwitchProps) {
-  const [local, others] = splitProps(props, ["children", "class", "hideLabel"])
+  const [local, others] = splitProps(props, ["children", "class", "hideLabel", "size"])
   return (
-    <Kobalte {...others} class={local.class} data-component="switch">
+    <Kobalte {...others} class={local.class} data-component="switch" data-size={local.size ?? "normal"}>
       <Kobalte.Input data-slot="switch-input" />
       <Show when={local.children}>
         {(label) => (
