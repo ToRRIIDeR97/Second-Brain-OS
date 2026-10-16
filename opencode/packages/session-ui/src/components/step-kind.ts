@@ -104,9 +104,20 @@ export function toolStep(tool: string, input: Record<string, unknown> | undefine
 }
 
 /** i18n key for a step's verb, e.g. "Read", "Ran" or "Running". */
+// Present-tense verbs for steps still in progress; kinds without one keep their regular verb.
+const RUNNING_VERBS: Partial<Record<StepKind, string>> = {
+  read: "secondBrain.step.reading",
+  search: "secondBrain.step.searching",
+  edit: "secondBrain.step.editing",
+  run: "secondBrain.step.running",
+  fetch: "secondBrain.step.fetching",
+  mcp: "secondBrain.step.calling",
+  skill: "secondBrain.step.loadingSkill",
+  other: "secondBrain.step.calling",
+}
+
 export function stepVerbKey(kind: StepKind, running = false) {
-  if (kind === "run" && running) return "secondBrain.step.running"
-  return VERBS[kind]
+  return (running && RUNNING_VERBS[kind]) || VERBS[kind]
 }
 
 export function stepIcon(kind: StepKind) {

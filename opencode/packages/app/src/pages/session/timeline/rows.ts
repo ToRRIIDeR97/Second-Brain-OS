@@ -28,7 +28,7 @@ export type TimelineRowMap = {
     previousAssistantPart: boolean
     step?: true
   }
-  TurnSteps: { userMessageID: string; segment: number; tools: PartRef[]; failed: boolean; running: boolean }
+  TurnSteps: { userMessageID: string; segment: number; tools: PartRef[]; failed: boolean }
   Thinking: { userMessageID: string; reasoningHeading?: string }
   Retry: { userMessageID: string }
   DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
@@ -180,9 +180,7 @@ export namespace Timeline {
       const tools = refs.flatMap((ref) =>
         ref.part.type === "tool" ? [{ messageID: ref.messageID, partID: ref.part.id }] : [],
       )
-      const status = (state: string) => refs.some((ref) => ref.part.type === "tool" && ref.part.state.status === state)
-      const failed = status("error")
-      const running = status("pending") || status("running")
+      const failed = refs.some((ref) => ref.part.type === "tool" && ref.part.state.status === "error")
       // Tool and reasoning groups fold under one TurnSteps header; text and other parts stay visible in order.
       let header = false
       groupParts(refs).forEach((group) => {
@@ -190,7 +188,7 @@ export namespace Timeline {
         const step = foldSteps && (type === "tool" || type === "reasoning")
         if (step && !header) {
           header = true
-          rows.push(new TimelineRow.TurnSteps({ userMessageID: userMessage.id, segment, tools, failed, running }))
+          rows.push(new TimelineRow.TurnSteps({ userMessageID: userMessage.id, segment, tools, failed }))
         }
         rows.push(
           new TimelineRow.AssistantPart({

@@ -330,7 +330,7 @@ and 6 (tool rows and the composer status line). Implementer B did steps 4 and
 | AC-5 | Met, not checked by hand | acceptance + verification `session-usage` pass; manual check on three harnesses not done |
 | AC-6 | Met | acceptance + verification `session-usage` pass |
 | AC-7 | Met | acceptance + verification `harness-usage` pass (verifier) |
-| AC-8 | Met, not checked by hand | Implementer A. The line overlays the timeline bottom so the composer height stays constant; the jump-to-latest button moves up while the session is busy so the line doesn't cover it. No automated check |
+| AC-8 | Superseded | The composer status line was removed in `codex/live-step-ticker`: the turn header's live ticker shows the running step, its target and a timer instead |
 | AC-9 | Met | i18n keys are additions only; required checks pass and timeline stability is back to the baseline 40 pass / 4 fail (verifier) |
 
 Worker results (Implementer B; run from `opencode/packages/app`):
