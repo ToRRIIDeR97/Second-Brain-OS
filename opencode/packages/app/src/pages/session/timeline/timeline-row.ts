@@ -32,7 +32,6 @@ export namespace TimelineRow {
     segment: number
     tools: PartRef[]
     failed: boolean
-    running: boolean
   }> {}
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string

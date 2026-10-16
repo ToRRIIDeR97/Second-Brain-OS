@@ -55,7 +55,6 @@ test.describe("regression: session timeline context group resize", () => {
       [
         ...Array.from({ length: 8 }, (_, index) => turn(index, false)).flat(),
         ...turn(10, true, "running"),
-        // A turn with running tools is a busy session; an idle one would fold its finished steps.
       ],
       "busy",
     )
@@ -63,6 +62,8 @@ test.describe("regression: session timeline context group resize", () => {
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
     await expectSessionTitle(page, title)
+    // A working turn folds behind its live ticker; open it to reach the context group.
+    await expandTurnSteps(page)
     const devtools = await page.context().newCDPSession(page)
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: 4 })
     const context = page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first()

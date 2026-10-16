@@ -111,7 +111,7 @@ describe("reuseTimelineRows", () => {
 
 describe("foldTimelineRows", () => {
   const header = (segment: number) =>
-    new TimelineRow.TurnSteps({ userMessageID: "user-1", segment, tools: [], failed: false, running: false })
+    new TimelineRow.TurnSteps({ userMessageID: "user-1", segment, tools: [], failed: false })
   const step = (key: string) =>
     new TimelineRow.AssistantPart({
       userMessageID: "user-1",

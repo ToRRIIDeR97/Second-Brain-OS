@@ -174,6 +174,12 @@ export const dict: Record<string, string> = {
   "secondBrain.step.called": "Called",
   "secondBrain.step.loadedSkill": "Loaded skill",
   "secondBrain.step.thought": "Thought",
+  "secondBrain.step.reading": "Reading",
+  "secondBrain.step.searching": "Searching",
+  "secondBrain.step.editing": "Editing",
+  "secondBrain.step.fetching": "Fetching",
+  "secondBrain.step.calling": "Calling",
+  "secondBrain.step.loadingSkill": "Loading skill",
   "ui.toolErrorCard.failed": "Failed",
   "ui.toolErrorCard.copyError": "Copy error",
 

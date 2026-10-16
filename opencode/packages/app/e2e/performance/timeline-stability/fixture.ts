@@ -98,7 +98,7 @@ export async function setupTimeline(
     deviceScaleFactor?: number
     seedHistory?: boolean
     protocol?: "v1" | "v2"
-    /** Finished turns fold their steps; expand the rendered ones so specs can reach tool rows (default true). */
+    /** Turns fold their steps; open every turn header as it mounts so specs can reach tool rows (default true). */
     expandSteps?: boolean
   } = {},
 ) {
@@ -144,6 +144,23 @@ export async function setupTimeline(
       localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
     }
   }, input.settings ?? {})
+  // Default changes every stability spec's precondition: turns start expanded, not folded, including working
+  // turns whose live ticker would otherwise replace the step rows these specs measure. Opening each header
+  // as it mounts (before paint) keeps the rows' appearance identical to an expanded turn.
+  if (input.expandSteps !== false) {
+    await page.addInitScript(() => {
+      const open = () =>
+        document
+          .querySelectorAll<HTMLButtonElement>(
+            '[data-component="turn-steps-summary"][data-state="closed"]:not([data-auto-opened])',
+          )
+          .forEach((button) => {
+            button.dataset.autoOpened = ""
+            button.click()
+          })
+      new MutationObserver(open).observe(document, { subtree: true, childList: true })
+    })
+  }
   if (input.locale) {
     await page.addInitScript((locale) => {
       localStorage.setItem("opencode.global.dat:language", JSON.stringify({ locale }))
@@ -164,10 +181,6 @@ export async function setupTimeline(
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await transport.waitForConnection()
   await expectSessionTitle(page, title)
-  // Default changes every stability spec's precondition: rendered finished turns start expanded, not folded.
-  if (input.expandSteps !== false && messages.some((message) => message.info.role === "assistant")) {
-    await expandTurnSteps(page)
-  }
   if (input.cpuRate && input.cpuRate > 1) {
     const devtools = await page.context().newCDPSession(page)
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: input.cpuRate })
