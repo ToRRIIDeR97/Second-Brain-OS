@@ -145,7 +145,6 @@ export const dict: Record<string, string> = {
   "ui.tool.agent": "{{type}} agenti",
   "ui.tool.agent.default": "Agent",
   "ui.tool.skill": "Malaka",
-  "ui.basicTool.called": "`{{tool}}` deb ataladi",
   "ui.toolErrorCard.failed": "Muvaffaqiyatsiz",
   "ui.toolErrorCard.copyError": "Nusxa olish xatosi",
   "ui.common.file.one": "fayl",

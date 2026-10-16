@@ -1,8 +1,9 @@
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { createMemo, type Accessor } from "solid-js"
-import { reuseTimelineRows } from "./row-reconciliation"
+import { foldTimelineRows, reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"
+import { same } from "@/utils/same"
 
 export { reuseTimelineRows } from "./row-reconciliation"
 
@@ -14,6 +15,8 @@ export function createTimelineProjection(input: {
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
   inlineComments: Accessor<boolean>
+  /** Whether a turn's steps are folded; folded step rows leave the virtual list. */
+  folded?: (row: TimelineRow.TurnSteps, active: boolean) => boolean
 }) {
   const messageByID = createMemo(() => new Map(input.messages().map((message) => [message.id, message] as const)))
   const assistantMessagesByParent = createMemo(() => {
@@ -41,9 +44,12 @@ export function createTimelineProjection(input: {
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
-  const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
+  const allRows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
     reuseTimelineRows(previous, projection().rows),
   )
+  const rows = createMemo(() => foldTimelineRows(allRows(), input.folded, activeMessageID()), undefined, {
+    equals: same,
+  })
   const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row] as const)))
   const messageRowIndex = createMemo(() => {
     const result = new Map<string, number>()

@@ -315,16 +315,86 @@ Manual checks:
 
 ## Completion evidence
 
-Steps 1 and 2 are done (`104f9f4`): AC-7, plus the AC-1, AC-2 and AC-4
-mapping. Steps 3–6 remain. See [continuation.md](continuation.md) for the
-results, the remaining work and the known limitations.
+Steps 1 and 2 were committed in `104f9f4`. Steps 3–6 are in the working tree
+on `continue-implementation`, on top of `bacd937`. Implementer A did steps 3
+and 6 (tool rows and the composer status line). Implementer B did steps 4 and
+5 (folded turn rows and the Session tab) and the docs. See
+[continuation.md](continuation.md) for the implementation notes.
 
-Fill this in after the remaining steps:
+| ID | Status | Evidence |
+|---|---|---|
+| AC-1 | Met | acceptance + verification `step-kind` pass (verifier) |
+| AC-2 | Met | same |
+| AC-3 | Met, not checked by hand | timeline unit tests (fold header rows and `foldTimelineRows`); e2e specs updated for folded turns (worker); manual board-A comparison not done |
+| AC-4 | Met, not checked by hand | `step-kind` sets pass; generic "Called `<tool>`" fallback replaced (Implementer A); manual Codex turn not done |
+| AC-5 | Met, not checked by hand | acceptance + verification `session-usage` pass; manual check on three harnesses not done |
+| AC-6 | Met | acceptance + verification `session-usage` pass |
+| AC-7 | Met | acceptance + verification `harness-usage` pass (verifier) |
+| AC-8 | Met, not checked by hand | Implementer A. The line overlays the timeline bottom so the composer height stays constant; the jump-to-latest button moves up while the session is busy so the line doesn't cover it. No automated check |
+| AC-9 | Met | i18n keys are additions only; required checks pass and timeline stability is back to the baseline 40 pass / 4 fail (verifier) |
 
-- Criteria met, with the commands actually run and their results.
-- Benchmark numbers before and after.
-- Which results come from the worker and which were independently verified.
-- Remaining limitations.
+Worker results (Implementer B; run from `opencode/packages/app`):
+
+- `bun run typecheck`: clean. `bun run test:unit`: 790 pass, 0 fail.
+- `bun test` on `acceptance/session-usage.test.ts` and
+  `verification/session-usage.verify.test.ts`: 11 pass, 0 fail.
+- Timeline unit tests (`src/pages/session/timeline`, including
+  `measure.test.ts`): 38 pass.
+- E2E, the `session-timeline-*` regression specs plus
+  `subagent-child-navigation`, `smoke/session-timeline` and
+  `review-open-file`: 54 pass, 6 fail. The same 6 fail with folding disabled.
+- `scroll-interaction.spec.ts:137` passed 4/4 after the anchor wait was
+  fixed, and the full spec passed 7/7.
+
+Independent verifier results, against baseline `bacd937`:
+
+- All six acceptance and verification sets pass.
+- Root checks pass: `bun run typecheck`, `bun run lint` (0 errors),
+  `bun run test`, `bun run build`, `bun run test:engine` (core 1,141 and
+  opencode 2,795 pass) and `bun run test:routes` (10/10).
+- E2E regression and smoke specs: 55 pass, 6 fail. The same 6 fail at
+  baseline.
+- `bun run test:stability`, first run: 33 pass, 11 fail, against 40 pass and
+  4 fail at baseline. Six came from the status line changing the composer
+  height, one from the scroll-interaction spec's anchor timing.
+- After the fixes: 40 pass, 4 fail. The 4 are the baseline failures
+  (`adverse:82`, `adverse:167`, `lifecycle:26`, `tools.spec`).
+- The jump-button lift was added after that run; `scroll-interaction` and
+  `shell-matrix` were re-run (13/13).
+
+Timeline benchmark, details in `bench-baseline.txt`:
+
+- `bun run test:bench` can't complete. Its Playwright part aborts because
+  `e2e/performance/playwright.config.ts` loads
+  `timeline-stability/fixture.test.ts`, which imports `bun:test`. This
+  predates the change.
+- The scenarios were run with `PLAYWRIGHT_WORKERS=1 bunx playwright test
+  --config e2e/performance/playwright.config.ts e2e/performance/timeline/`.
+  - Before: 13 pass and 1 first-navigation timeout.
+  - After: 12 pass and 2 first-navigation timeouts.
+- Streaming completion was 8–15% slower than the baseline in single runs.
+- Back-to-back A/B of the two "v2 with review pane" scenarios, same machine:
+
+  | Scenario | Folding off | Folding on |
+  |---|---|---|
+  | Review pane closed | 125.2s | 107.9s |
+  | Review pane open | 142.2s | 105.0s |
+
+  So the folding is not the cause. The run-to-run noise on this machine is
+  large.
+
+Remaining limitations:
+
+- The turn block has no live "Working · 0:38" timer, no per-step durations
+  and no pulsing dot on running steps.
+- Subagent rows in the Session tab aren't links.
+- The manual checks on the built-in loop, Codex and OpenCode, and in light
+  and dark themes, weren't done.
+- The Playwright part of `test:bench` aborts, as described above. This
+  predates the change.
+- The limitations in [continuation.md](continuation.md) "Things to watch"
+  still apply: resumed ACP sessions, free models reading "Not reported", and
+  the input-token heuristic.
 
 The same author wrote this plan and both test sets. The verification set is
 separately designed, but its authorship isn't independent, and it isn't hidden

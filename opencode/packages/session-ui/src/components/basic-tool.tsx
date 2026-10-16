@@ -1,10 +1,25 @@
-import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import type { IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { useData } from "../context"
+import { Markdown } from "./markdown"
+import { stepIcon, stepVerbKey, toolStep } from "./step-kind"
 
 export type TriggerTitle = {
   title: string
@@ -301,43 +316,50 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-function label(input: Record<string, unknown> | undefined) {
-  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
-  return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
-}
-
-function args(input: Record<string, unknown> | undefined) {
-  if (!input) return []
-  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
-  return Object.entries(input)
-    .filter(([key]) => !skip.has(key))
-    .flatMap(([key, value]) => {
-      if (typeof value === "string") return [`${key}=${value}`]
-      if (typeof value === "number") return [`${key}=${value}`]
-      if (typeof value === "boolean") return [`${key}=${value}`]
-      return []
-    })
-    .slice(0, 3)
-}
-
+/** Fallback row for tools without a renderer (Codex, ACP, MCP): icon, verb and target from `stepOf`. */
 export function GenericTool(props: {
   tool: string
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
+  output?: string
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const i18n = useI18n()
+  const data = useData()
+  const step = createMemo(() => toolStep(props.tool, props.input, { mcpServers: Object.keys(data.store.mcp ?? {}) }))
+  const running = () => props.status === "pending" || props.status === "running"
+  const detail = createMemo(() => {
+    const input = props.input && Object.keys(props.input).length > 0 ? JSON.stringify(props.input, null, 2) : ""
+    return [input && "```json\n" + input + "\n```", props.output ?? ""].filter(Boolean).join("\n\n")
+  })
 
   return (
     <BasicTool
-      icon="mcp"
+      icon={stepIcon(step().kind)}
       status={props.status}
       trigger={{
-        title: i18n.t("ui.basicTool.called", { tool: props.tool }),
-        subtitle: label(props.input),
-        args: args(props.input),
+        title: i18n.t(stepVerbKey(step().kind, running())),
+        subtitle: step().target,
       }}
       hideDetails={props.hideDetails}
-    />
+      defaultOpen={props.defaultOpen}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    >
+      <Show when={detail()}>
+        <div
+          data-component="tool-output"
+          data-scrollable
+          tabIndex={0}
+          role="region"
+          aria-label={i18n.t("ui.scrollView.ariaLabel")}
+        >
+          <Markdown text={detail()} />
+        </div>
+      </Show>
+    </BasicTool>
   )
 }

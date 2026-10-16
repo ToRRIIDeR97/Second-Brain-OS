@@ -142,7 +142,6 @@ export const dict: Record<string, string> = {
   "ui.tool.agent": "{{type}} fulltrúi",
   "ui.tool.agent.default": "Fulltrúi",
   "ui.tool.skill": "Færni",
-  "ui.basicTool.called": "Kallast `{{tool}}`",
   "ui.toolErrorCard.failed": "Mistókst",
   "ui.toolErrorCard.copyError": "Afritunarvilla",
   "ui.common.file.one": "skrá",

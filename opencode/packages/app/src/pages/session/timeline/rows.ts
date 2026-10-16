@@ -2,7 +2,7 @@ import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { renderable } from "@opencode-ai/session-ui/message-part"
-import { groupParts, type PartGroup } from "@opencode-ai/session-ui/part-group"
+import { groupParts, type PartGroup, type PartRef } from "@opencode-ai/session-ui/part-group"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 import { compareMessages } from "@/utils/session-message"
@@ -26,7 +26,9 @@ export type TimelineRowMap = {
     userMessageID: string
     group: PartGroup
     previousAssistantPart: boolean
+    step?: true
   }
+  TurnSteps: { userMessageID: string; segment: number; tools: PartRef[]; failed: boolean; running: boolean }
   Thinking: { userMessageID: string; reasoningHeading?: string }
   Retry: { userMessageID: string }
   DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
@@ -43,13 +45,17 @@ export namespace Timeline {
     inlineComments: boolean,
     projectedUserMessages: UserMessage[],
   ) {
-    const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
+    const turns: { user: UserMessage; assistants: AssistantMessage[]; shell?: true }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
     messages.forEach((message) => {
       const projected = getMessage(message.id)
       if (message.type === "shell" && projected?.role === "user") {
         const assistant = getMessage(`${message.id}:assistant`)
-        const turn = { user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }
+        const turn = {
+          user: projected,
+          assistants: assistant?.role === "assistant" ? [assistant] : [],
+          shell: true as const,
+        }
         turns.push(turn)
         turnByUserID.set(projected.id, turn)
         return
@@ -94,6 +100,7 @@ export namespace Timeline {
           status,
           turn.user.id === activeMessageID,
           inlineComments,
+          !turn.shell,
         ),
       ),
     }
@@ -109,6 +116,8 @@ export namespace Timeline {
     isActive: boolean,
     // v2 renders comments inside the user message attachments row instead of a strip row
     inlineComments: boolean,
+    // A user-run shell command shows its output directly instead of folding it as an agent step.
+    foldSteps = true,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
 
@@ -126,24 +135,13 @@ export namespace Timeline {
         .filter((part) => renderable(part, showReasoning))
         .map((part) => ({ messageID: message.id, messageIndex, part })),
     )
-    const assistantItems =
+    const segments =
       interrupted && !compaction
         ? [
-            ...groupParts(assistantPartRefs.filter((ref) => ref.messageIndex <= interruptedMessageIndex)).map(
-              (group) => ({
-                type: "part" as const,
-                group,
-              }),
-            ),
-            { type: "interrupted" as const },
-            ...groupParts(assistantPartRefs.filter((ref) => ref.messageIndex > interruptedMessageIndex)).map(
-              (group) => ({
-                type: "part" as const,
-                group,
-              }),
-            ),
+            assistantPartRefs.filter((ref) => ref.messageIndex <= interruptedMessageIndex),
+            assistantPartRefs.filter((ref) => ref.messageIndex > interruptedMessageIndex),
           ]
-        : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
+        : [assistantPartRefs]
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: userMessage.id }))
 
     if (comments.length > 0 && !inlineComments)
@@ -170,25 +168,40 @@ export namespace Timeline {
     }
 
     let assistantGroupIndex = 0
-    assistantItems.forEach((item) => {
-      if (item.type === "interrupted") {
+    segments.forEach((refs, segment) => {
+      if (segment > 0)
         rows.push(
           new TimelineRow.TurnDivider({
             userMessageID: userMessage.id,
             label: "interrupted",
           }),
         )
-        return
-      }
-
-      rows.push(
-        new TimelineRow.AssistantPart({
-          userMessageID: userMessage.id,
-          group: item.group,
-          previousAssistantPart: assistantGroupIndex > 0,
-        }),
+      const partByID = new Map(refs.map((ref) => [ref.part.id, ref.part] as const))
+      const tools = refs.flatMap((ref) =>
+        ref.part.type === "tool" ? [{ messageID: ref.messageID, partID: ref.part.id }] : [],
       )
-      assistantGroupIndex += 1
+      const status = (state: string) => refs.some((ref) => ref.part.type === "tool" && ref.part.state.status === state)
+      const failed = status("error")
+      const running = status("pending") || status("running")
+      // Tool and reasoning groups fold under one TurnSteps header; text and other parts stay visible in order.
+      let header = false
+      groupParts(refs).forEach((group) => {
+        const type = group.type === "part" ? partByID.get(group.ref.partID)?.type : "tool"
+        const step = foldSteps && (type === "tool" || type === "reasoning")
+        if (step && !header) {
+          header = true
+          rows.push(new TimelineRow.TurnSteps({ userMessageID: userMessage.id, segment, tools, failed, running }))
+        }
+        rows.push(
+          new TimelineRow.AssistantPart({
+            userMessageID: userMessage.id,
+            group,
+            previousAssistantPart: assistantGroupIndex > 0,
+            ...(step ? { step: true as const } : {}),
+          }),
+        )
+        assistantGroupIndex += 1
+      })
     })
 
     if (isActive && status === "busy" && !error && (showReasoning ? assistantPartRefs.length === 0 : true)) {

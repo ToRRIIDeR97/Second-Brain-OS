@@ -65,6 +65,7 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
 import { partDefaultOpen } from "./part-default-open"
 import { groupParts, isContextGroupTool, sameGroups, toolGroupCounts, type PartGroup } from "./part-group"
+import { stepIcon, stepVerbKey, toolStep } from "./step-kind"
 import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
@@ -560,11 +561,15 @@ export function getToolInfo(
         icon: "brain",
         title: input.name || i18n.t("ui.tool.skill"),
       }
-    default:
+    default: {
+      // Codex, ACP and MCP names share the icon and verb of the built-in tool of the same kind.
+      const step = toolStep(tool, input)
       return {
-        icon: "mcp",
-        title: tool,
+        icon: stepIcon(step.kind),
+        title: i18n.t(stepVerbKey(step.kind)),
+        subtitle: step.target,
       }
+    }
   }
 }
 
@@ -1626,12 +1631,19 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   tool={part().tool}
                   error={error()}
                   title={
-                    part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider, i18n) : undefined
+                    part().tool === "websearch"
+                      ? webSearchProviderLabel(partMetadata().provider, i18n)
+                      : ToolRegistry.render(part().tool)
+                        ? undefined
+                        : getToolInfo(part().tool, input()).title
                   }
                   defaultOpen={props.defaultOpen}
                   open={controlledOpen()}
                   onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
-                  subtitle={taskSubtitle()}
+                  subtitle={
+                    taskSubtitle() ??
+                    (ToolRegistry.render(part().tool) ? undefined : getToolInfo(part().tool, input()).subtitle)
+                  }
                   href={taskHref()}
                   onSubtitleClick={(event) => {
                     if (!data.navigateToSession) return

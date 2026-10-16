@@ -167,3 +167,11 @@ folder as a Project) and `tenon://new-session?directory=<path>&prompt=<text>`
   thread list.
 - **Settings** contains General, Shortcuts, Servers, Providers, Models and
   Harnesses.
+- **Thread** shows the timeline and composer. Each finished agent turn folds
+  its tool and reasoning steps into one "Worked {duration}" row. The row stays
+  open while the turn or one of its steps runs, or when a step failed. The
+  side panel has **Review** and **Session** tabs, plus open files. Session
+  replaced the Context tab. It shows the session's totals per harness: input, output, cache
+  hit, cost, context window, subagents and tool counts. It also keeps the
+  context breakdown and raw messages. A value the harness doesn't report reads
+  "Not reported".

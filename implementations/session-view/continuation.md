@@ -27,6 +27,10 @@ Don't colour-code step kinds. Use an icon and a verb.
 |---|---|---|---|
 | 1. ACP usage and runner cost | AC-7 | `104f9f4` | acceptance `harness-usage` 6/6, verification 5/5, `core/test/harness-acp.test.ts` 7/7, core typecheck clean, `bun run test:engine` (core 1,136 pass, opencode 2,796 pass, 0 fail) |
 | 2. `step-kind.ts` | AC-1, AC-2, AC-4 (mapping) | `104f9f4` | acceptance `step-kind` 8/8, verification 11/11, `session-ui/src/components/step-kind.test.ts` 3/3, session-ui typecheck clean |
+| 3. Tool rows from `stepOf` | AC-4 | working tree (Implementer A) | `step-kind` sets pass; `secondBrain.step.*` verbs; `stepVerbKey`, `stepIcon`, `toolStep` exported |
+| 4. Folded turn rows | AC-3 | working tree (Implementer B) | `TurnSteps` header row, `foldTimelineRows`, `turn-steps-summary.tsx`; timeline unit tests 38 pass; e2e specs updated |
+| 5. Session tab | AC-5, AC-6 | working tree (Implementer B) | `session-usage` acceptance and verification 11/11; tab relabelled Session |
+| 6. Status line, i18n, docs, checks | AC-8, AC-9 | working tree (A: status line; B: docs) | root checks pass (verifier); stability regressions pending re-verification |
 
 All of these were run by the plan author, who also implemented the steps. They
 aren't independent verification.
@@ -45,11 +49,13 @@ What changed:
 - `runner/llm.ts`: publishes it on `Step.Ended`.
 - `session-ui/src/components/step-kind.ts`: `stepOf`, `summarizeTurn`.
 
-## Remaining steps
+## Implementation notes for steps 3–6 (done)
+
+All four steps are implemented. The notes below record the original plan. Results are in [implementation.md](implementation.md#completion-evidence).
 
 Paths are under `opencode/packages/`.
 
-### 3. Tool rows from `stepOf` (AC-4)
+### 3. Tool rows from `stepOf` (AC-4) — done
 
 - Unregistered tools fall through to `GenericTool` (`session-ui/src/components/basic-tool.tsx:323-343`). It renders `ui.basicTool.called` = "Called `{{tool}}`" (`ui/src/i18n/en.ts:168`) plus key=value args. Replace that fallback with a row showing an icon, a verb and a target from `stepOf`. Keep the expanded detail (input/output).
 - `ToolRegistry` is at `message-part.tsx:1514-1534`, and `getTool` aliases at 1528. `getToolInfo` (466–569) picks the icon and title; its `default` uses the `mcp` icon and the raw name. Route Codex names (`command_execution`, `file_change`, `mcp_tool_call`, `web_search`) and `acp_*` names through `stepOf` so they get the same icon and verb as the built-in tool of the same kind.
@@ -57,7 +63,7 @@ Paths are under `opencode/packages/`.
 - MCP server names for `stepOf(…, { mcpServers })`: the legacy server names MCP tools `sanitize(client) + "_" + sanitize(tool)` (`opencode/src/mcp/catalog.ts:119`). Pass the configured server names from wherever the app already lists MCP status. Without them, MCP calls show as "other", which is acceptable for now.
 - Verbs, as new i18n keys: Read, Searched, Edited, Ran / Running, Fetched, Called (MCP), Loaded skill, Thought. Subagent rows show the agent name.
 
-### 4. Folded turn rows (AC-3)
+### 4. Folded turn rows (AC-3) — done
 
 Record the timeline benchmark baseline before touching rows (app `AGENTS.md`):
 
@@ -84,7 +90,7 @@ Keep the `BENCHMARK` lines for comparison.
 - The virtualizer is `@tanstack/solid-virtual` (`message-timeline.tsx:409`). Collapsed rows change measured heights, so re-run `measure.test.ts` and `bun run test:stability`.
 - E2E specs to update for the new structure: `app/e2e/regression/session-timeline-{tool-projection,tool-state,collapse-state,reasoning-projection,lifecycle-state,projection}.spec.ts`, `subagent-child-navigation.spec.ts`, and `e2e/smoke/session-timeline.spec.ts`.
 
-### 5. Session tab (AC-5, AC-6)
+### 5. Session tab (AC-5, AC-6) — done
 
 - New `app/src/components/session/session-usage.ts`, with `getSessionUsage(messages, { harness? })` as specified in implementation.md. The tests are already in `implementations/session-view/{acceptance,verification}/session-usage*.ts` and currently fail because the module is missing.
 - Tabs are in `app/src/pages/session/session-side-panel.tsx`:
@@ -102,7 +108,7 @@ Keep the `BENCHMARK` lines for comparison.
   - the existing breakdown and Raw messages.
 - `session.cost` also feeds the tab trigger indicator and Home. ACP costs are now non-zero there.
 
-### 6. Status line, i18n, docs, checks (AC-8, AC-9)
+### 6. Status line, i18n, docs, checks (AC-8, AC-9) — done
 
 - Status line above the composer (`app/src/pages/session/composer/session-composer-region.tsx`): the first running step's verb + target from `stepOf`, plus "N subagents working". Hide it when the session is idle (`sync().data.session_status[id]`).
 - i18n: new keys only. Don't change existing English text. Strings go in `ui/src/i18n/en.ts` for session-ui and `app/src/i18n/en.ts` for the app.

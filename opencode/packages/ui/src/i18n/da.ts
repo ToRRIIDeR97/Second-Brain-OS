@@ -180,7 +180,6 @@ export const dict = {
   "ui.fileSearch.close": "Luk søgning",
   "ui.tool.task": "Opgave",
   "ui.tool.skill": "Færdighed",
-  "ui.basicTool.called": "Kaldte værktøjet `{{tool}}`",
   "ui.toolErrorCard.failed": "Mislykkedes",
   "ui.toolErrorCard.copyError": "Kopier fejl",
   "ui.message.duration.seconds": "{{count}}s",

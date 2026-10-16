@@ -144,7 +144,6 @@ export const dict: Record<string, string> = {
   "ui.tool.agent": "{{type}} ügynök",
   "ui.tool.agent.default": "Ügynök",
   "ui.tool.skill": "Képesség",
-  "ui.basicTool.called": "`{{tool}}` néven",
   "ui.toolErrorCard.failed": "Sikertelen",
   "ui.toolErrorCard.copyError": "Másolási hiba",
   "ui.common.file.one": "fájlt",

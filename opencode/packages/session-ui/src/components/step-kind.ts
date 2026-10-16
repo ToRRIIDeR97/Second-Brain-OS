@@ -1,4 +1,5 @@
 import type { Part, ToolPart } from "@opencode-ai/sdk/v2"
+import type { IconProps } from "@opencode-ai/ui/icon"
 
 /** What a tool call did, independent of which harness named it. */
 export type StepKind =
@@ -58,13 +59,58 @@ const KINDS: Record<string, StepKind> = {
   question: "question",
 }
 
+// Kinds share an icon and a verb whichever harness ran the step; kinds are never colour-coded.
+const ICONS: Record<StepKind, IconProps["name"]> = {
+  read: "glasses",
+  search: "magnifying-glass-menu",
+  edit: "code-lines",
+  run: "console",
+  fetch: "window-cursor",
+  mcp: "mcp",
+  skill: "brain",
+  subagent: "task",
+  todo: "checklist",
+  question: "bubble-5",
+  other: "mcp",
+}
+
+// Subagent rows show the agent name when the caller knows it; this is the fallback.
+const VERBS: Record<StepKind, string> = {
+  read: "secondBrain.step.read",
+  search: "secondBrain.step.searched",
+  edit: "secondBrain.step.edited",
+  run: "secondBrain.step.ran",
+  fetch: "secondBrain.step.fetched",
+  mcp: "secondBrain.step.called",
+  skill: "secondBrain.step.loadedSkill",
+  subagent: "ui.tool.agent.default",
+  todo: "ui.tool.todos",
+  question: "ui.tool.questions",
+  other: "secondBrain.step.called",
+}
+
 export function stepOf(part: ToolPart, options?: Options): Step {
-  const input = part.state.input ?? {}
-  const kind = KINDS[part.tool]
-  if (kind) return withTarget(kind, targetOf(kind, input))
-  const server = options?.mcpServers?.find((name) => part.tool.startsWith(`${name}_`))
-  if (server) return { kind: "mcp", target: `${server} · ${part.tool.slice(server.length + 1)}` }
-  return { kind: "other", target: part.tool }
+  return toolStep(part.tool, part.state.input, options)
+}
+
+/** `stepOf` for callers that hold a tool name and input rather than a part. */
+export function toolStep(tool: string, input: Record<string, unknown> | undefined, options?: Options): Step {
+  const kind = KINDS[tool]
+  if (kind) return withTarget(kind, targetOf(kind, input ?? {}))
+  // MCP tools are named `sanitize(server) + "_" + tool` (opencode/src/mcp/catalog.ts), so match on the sanitized name.
+  const server = options?.mcpServers?.find((name) => tool.startsWith(`${sanitize(name)}_`))
+  if (server) return { kind: "mcp", target: `${server} · ${tool.slice(sanitize(server).length + 1)}` }
+  return { kind: "other", target: tool }
+}
+
+/** i18n key for a step's verb, e.g. "Read", "Ran" or "Running". */
+export function stepVerbKey(kind: StepKind, running = false) {
+  if (kind === "run" && running) return "secondBrain.step.running"
+  return VERBS[kind]
+}
+
+export function stepIcon(kind: StepKind) {
+  return ICONS[kind]
 }
 
 export function summarizeTurn(
@@ -82,6 +128,10 @@ export function summarizeTurn(
   const durationMs =
     options?.startedAt !== undefined && options.endedAt !== undefined ? options.endedAt - options.startedAt : undefined
   return durationMs === undefined ? { counts, failed, running } : { counts, failed, running, durationMs }
+}
+
+function sanitize(name: string) {
+  return name.replace(/[^a-zA-Z0-9_-]/g, "_")
 }
 
 function withTarget(kind: StepKind, target: string | undefined): Step {

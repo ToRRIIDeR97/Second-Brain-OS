@@ -422,6 +422,40 @@ one "Ran N tools" summary row (`session-ui/src/components/part-group.ts`).
 File edits, questions, subagent tasks, errored tools and running tools stay as
 their own rows. Read-only runs keep the "Explored" context group.
 
+Each assistant turn also gets a `TurnSteps` header row
+(`app/src/pages/session/timeline/rows.ts`, one per segment when an interrupt
+splits the turn). It is inserted before the turn's first tool or reasoning
+group, and those group rows carry `step: true`. Text and other parts stay
+visible in their original order. `foldTimelineRows`
+(`timeline/row-reconciliation.ts`) removes a folded turn's step rows from the
+virtual list after row reuse, so group keys stay stable. A turn is open while
+the session is busy on it, while one of its tools is pending or running, or
+when one of them failed. Otherwise it is folded. `rows.ts` computes the
+`failed` and `running` flags on the header, so the fold check doesn't read
+parts. A user toggle wins and is cached per session in `toolOpen` under
+`turn:<userMessageID>:<segment>`. The header
+(`app/src/components/session/turn-steps-summary.tsx`) builds its "Worked
+{duration}" line and per-kind count phrases from `summarizeTurn`
+(`session-ui/src/components/step-kind.ts`). Each phrase is a complete i18n
+plural.
+
+The side panel's Session tab (`components/session/session-context-tab.tsx`,
+which replaced the Context tab) sums usage over every assistant message of the
+selected harness with `getSessionUsage` (`components/session/session-usage.ts`).
+Cache hit is `cacheRead / (input + cacheRead + cacheWrite)`. Cost is the sum
+of reported costs, and it reads "Not reported" when no message reported one
+above 0. ACP turns get a per-turn cost from `usage_update`
+(`core/src/harness/acp.ts`), which the runner publishes on `Step.Ended`. The
+context window still comes from `getSessionContext` (last message, provider
+limit). Subagents are built-in `task` parts. Tool counts come from
+`summarizeTurn` over the harness's parts.
+
+While the session is busy, a status line above the composer
+(`app/src/pages/session/composer/session-composer-region.tsx`) shows the
+latest turn's first pending or running step as a verb and target from
+`stepOf`, plus the number of subagents still working. It is hidden when the
+session is idle.
+
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the
 native destination picker and completes the file write before reporting

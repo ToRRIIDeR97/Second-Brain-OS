@@ -143,7 +143,6 @@ export const dict: Record<string, string> = {
   "ui.tool.agent": "{{type}} އޭޖެންޓް",
   "ui.tool.agent.default": "އޭޖެންޓު",
   "ui.tool.skill": "ހުނަރު",
-  "ui.basicTool.called": "`{{tool}}` ކޯލްކޮށްފިއެވެ",
   "ui.toolErrorCard.failed": "ފެއިލްވުން",
   "ui.toolErrorCard.copyError": "ކޮޕީ އެރަރ",
   "ui.common.file.one": "ފައިލް",

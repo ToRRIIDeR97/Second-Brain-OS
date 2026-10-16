@@ -143,7 +143,6 @@ export const dict = {
   "ui.tool.agent": "ភ្នាក់ងារ {{type}}",
   "ui.tool.agent.default": "ភ្នាក់ងារ",
   "ui.tool.skill": "ជំនាញ",
-  "ui.basicTool.called": "ហៅ `{{tool}}`",
   "ui.toolErrorCard.failed": "បរាជ័យ",
   "ui.toolErrorCard.copyError": "កំហុសក្នុងការចម្លង\nឯកសារ",
   "ui.common.file.one": "ឯកសារ",

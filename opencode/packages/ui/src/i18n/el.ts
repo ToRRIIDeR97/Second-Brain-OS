@@ -142,7 +142,6 @@ export const dict: Record<string, string> = {
   "ui.tool.agent": "Πράκτορας {{type}}",
   "ui.tool.agent.default": "Πράκτορας",
   "ui.tool.skill": "Ικανότητα",
-  "ui.basicTool.called": "Καλήθηκε `{{tool}}`",
   "ui.toolErrorCard.failed": "Απέτυχε",
   "ui.toolErrorCard.copyError": "Σφάλμα αντιγραφής",
   "ui.common.file.one": "αρχείο",

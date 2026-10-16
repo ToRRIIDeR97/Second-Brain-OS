@@ -54,3 +54,27 @@ function stabilizeContextKey(
     group: { ...row.group, key: existing.row.group.key },
   })
 }
+
+/**
+ * Drops a folded turn's step rows. A header governs the assistant rows after it until the next
+ * non-assistant row (divider, thinking, diff summary, next turn); text rows in between stay.
+ */
+export function foldTimelineRows(
+  rows: TimelineRow.TimelineRow[],
+  folded: ((row: TimelineRow.TurnSteps, active: boolean) => boolean) | undefined,
+  activeMessageID?: string,
+) {
+  if (!folded) return rows
+  let hiding = false
+  return rows.filter((row) => {
+    if (row._tag === "TurnSteps") {
+      hiding = folded(row, row.userMessageID === activeMessageID)
+      return true
+    }
+    if (row._tag !== "AssistantPart") {
+      hiding = false
+      return true
+    }
+    return !(hiding && row.step)
+  })
+}

@@ -154,6 +154,19 @@ test("tracks keyboard scrolling from a focused timeline descendant", async ({ pa
   await expect
     .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
     .toBeGreaterThan(5)
+  // Long PageUp travel can still be settling under CPU throttle; pick the anchor only once scrollTop holds still.
+  await page.waitForFunction(() => {
+    const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+      element.querySelector("[data-timeline-row]"),
+    )
+    if (!root) return false
+    const top = root.scrollTop
+    return new Promise<boolean>((resolve) =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(Math.abs(root.scrollTop - top) <= 0.5))),
+      ),
+    )
+  })
   const anchor = await scroller.evaluate((element) => {
     const view = element.getBoundingClientRect()
     return [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((row) => {

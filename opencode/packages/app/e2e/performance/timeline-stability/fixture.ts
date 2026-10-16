@@ -98,6 +98,8 @@ export async function setupTimeline(
     deviceScaleFactor?: number
     seedHistory?: boolean
     protocol?: "v1" | "v2"
+    /** Finished turns fold their steps; expand the rendered ones so specs can reach tool rows (default true). */
+    expandSteps?: boolean
   } = {},
 ) {
   const sessions = input.sessions ?? [session()]
@@ -162,6 +164,10 @@ export async function setupTimeline(
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await transport.waitForConnection()
   await expectSessionTitle(page, title)
+  // Default changes every stability spec's precondition: rendered finished turns start expanded, not folded.
+  if (input.expandSteps !== false && messages.some((message) => message.info.role === "assistant")) {
+    await expandTurnSteps(page)
+  }
   if (input.cpuRate && input.cpuRate > 1) {
     const devtools = await page.context().newCDPSession(page)
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: input.cpuRate })
@@ -265,6 +271,13 @@ export function validateTimelineMessages(input: readonly TimelineMessage[]): Tim
     })
   })
   return messages
+}
+
+/** Opens every rendered, folded turn-steps header. */
+export async function expandTurnSteps(page: Page) {
+  await expect(page.locator("[data-timeline-row]").first()).toBeVisible()
+  const closed = page.locator('[data-component="turn-steps-summary"][data-state="closed"]')
+  for (let attempt = 0; attempt < 50 && (await closed.count()) > 0; attempt++) await closed.first().click()
 }
 
 export async function waitForVisualSettle(page: Page, selectors: string[], stableFrames = 3) {

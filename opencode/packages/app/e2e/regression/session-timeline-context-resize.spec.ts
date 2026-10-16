@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { expandTurnSteps } from "../performance/timeline-stability/fixture"
 import {
   analyzeVisualObservations,
   defineVisualRegions,
@@ -32,6 +33,7 @@ test.describe("regression: session timeline context group resize", () => {
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
     await expectSessionTitle(page, title)
+    await expandTurnSteps(page)
     await expectAppVisible(page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first())
     await expectAppVisible(page.locator(`[data-timeline-part-id="${followingTextID}"]`).first())
     await settle(page)
@@ -47,10 +49,16 @@ test.describe("regression: session timeline context group resize", () => {
   test("paints a stable exploring to explored transition", async ({ page }) => {
     const events: { directory: string; payload: Record<string, unknown> }[] = []
     await page.setViewportSize({ width: 1400, height: 900 })
-    await mockServer(page, events, [
-      ...Array.from({ length: 8 }, (_, index) => turn(index, false)).flat(),
-      ...turn(10, true, "running"),
-    ])
+    await mockServer(
+      page,
+      events,
+      [
+        ...Array.from({ length: 8 }, (_, index) => turn(index, false)).flat(),
+        ...turn(10, true, "running"),
+        // A turn with running tools is a busy session; an idle one would fold its finished steps.
+      ],
+      "busy",
+    )
     await configurePage(page)
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
@@ -312,8 +320,10 @@ async function mockServer(
   page: Page,
   events: { directory: string; payload: Record<string, unknown> }[] = [],
   fixtureMessages = messages,
+  status?: "busy",
 ) {
   await mockOpenCodeServer(page, {
+    ...(status ? { sessionStatus: { [sessionID]: { type: status } } } : {}),
     directory,
     project: project(),
     provider: provider(),

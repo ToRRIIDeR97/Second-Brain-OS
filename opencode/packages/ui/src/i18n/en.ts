@@ -165,7 +165,15 @@ export const dict: Record<string, string> = {
   "ui.tool.agent.default": "Agent",
   "ui.tool.skill": "Skill",
 
-  "ui.basicTool.called": "Called `{{tool}}`",
+  "secondBrain.step.read": "Read",
+  "secondBrain.step.searched": "Searched",
+  "secondBrain.step.edited": "Edited",
+  "secondBrain.step.ran": "Ran",
+  "secondBrain.step.running": "Running",
+  "secondBrain.step.fetched": "Fetched",
+  "secondBrain.step.called": "Called",
+  "secondBrain.step.loadedSkill": "Loaded skill",
+  "secondBrain.step.thought": "Thought",
   "ui.toolErrorCard.failed": "Failed",
   "ui.toolErrorCard.copyError": "Copy error",
 
