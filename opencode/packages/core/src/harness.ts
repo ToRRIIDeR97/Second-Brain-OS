@@ -142,6 +142,19 @@ const layer = Layer.effect(
         )
       })
     }
+    // ACP model lists come from `session/new`, which some agents persist as an empty session.
+    // Keep the list for the process lifetime so later probes only handshake; refresh it from real sessions.
+    const acpModels = new Map<string, ReadonlyArray<Harness.Model>>()
+    const acpModelKey = (instance: InstanceConfig) => `${instance.id}:${JSON.stringify(instance.config)}`
+    const probeAcp = (instance: InstanceConfig, settings: AcpHarness.Settings) =>
+      AcpHarness.probe(process, instance, settings, location.directory, acpModels.get(acpModelKey(instance))).pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            if (result.status === "available" && result.models.length > 0)
+              acpModels.set(acpModelKey(instance), result.models)
+          }),
+        ),
+      )
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
@@ -321,6 +334,11 @@ const layer = Layer.effect(
         Effect.provideService(Scope.Scope, runtimeScope),
         Effect.onError(() => Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)),
       )
+      if (session.models.length > 0)
+        acpModels.set(
+          acpModelKey(instance),
+          AcpHarness.mergeModels(session.models, AcpHarness.configuredModels(settings.models)),
+        )
       if (session.sessionId !== continuation?.nativeID) {
         yield* events.publish(SessionEvent.HarnessContinuationSet, {
           sessionID: input.sessionID,
@@ -368,13 +386,16 @@ const layer = Layer.effect(
             const text = renderCodexPrompt(input.request, runtime.handoff)
             runtime.handoff = "none"
             return onTurnSuccess(
-              runtime.session
-                .turn({ text, model: input.model?.id })
-                .pipe(
-                  Stream.catch((error) =>
-                    Stream.unwrap(discardAcpRuntime(instance, input, runtime).pipe(Effect.as(Stream.fail(error)))),
+              failEmptyTurn(
+                runtime.session
+                  .turn({ text, model: input.model?.id })
+                  .pipe(
+                    Stream.catch((error) =>
+                      Stream.unwrap(discardAcpRuntime(instance, input, runtime).pipe(Effect.as(Stream.fail(error)))),
+                    ),
                   ),
-                ),
+                instance.name,
+              ),
               markSeen(instance, input, runtime.session.sessionId),
             )
           }),
@@ -426,11 +447,14 @@ const layer = Layer.effect(
             : unavailable(instance, "Disabled in configuration.", customModels(settings.customModels)),
           stream: (input) =>
             instance.enabled
-              ? codexStream(
-                  getRuntime(instance, input),
-                  input,
-                  (runtime) => discardRuntime(instance, input, runtime),
-                  (runtime) => markSeen(instance, input, runtime.threadID),
+              ? failEmptyTurn(
+                  codexStream(
+                    getRuntime(instance, input),
+                    input,
+                    (runtime) => discardRuntime(instance, input, runtime),
+                    (runtime) => markSeen(instance, input, runtime.threadID),
+                  ),
+                  instance.name,
                 )
               : Stream.fail(llmError("CodexHarness", "stream", `${instance.name} is disabled.`)),
         }
@@ -448,7 +472,7 @@ const layer = Layer.effect(
           instanceID: instance.id,
           kind: instance.driver,
           snapshot: instance.enabled
-            ? cachedProbe(instance, AcpHarness.probe(process, instance, settings, location.directory))
+            ? cachedProbe(instance, probeAcp(instance, settings))
             : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
           stream: (input) =>
             instance.enabled
@@ -1368,6 +1392,39 @@ function onTurnSuccess<E, R, E2, R2>(stream: Stream.Stream<LLMEvent, E, R>, effe
         }),
       ),
       Stream.onEnd(Effect.suspend(() => (state.failed ? Effect.void : effect))),
+    )
+  })
+}
+
+/**
+ * An external agent that ends a turn without text, reasoning, tools or output tokens has usually
+ * failed upstream (wrong model, missing credentials) without saying so. Report that instead of
+ * storing a blank assistant message.
+ */
+export function failEmptyTurn<E, R>(stream: Stream.Stream<LLMEvent, E, R>, name: string) {
+  return Stream.suspend(() => {
+    const state = { produced: false }
+    const message = `${name} returned nothing. Check its model and credentials.`
+    return stream.pipe(
+      Stream.flatMap((event) => {
+        if (
+          LLMEvent.is.textDelta(event) ||
+          LLMEvent.is.reasoningDelta(event) ||
+          LLMEvent.is.toolCall(event) ||
+          LLMEvent.is.toolResult(event) ||
+          LLMEvent.is.providerError(event)
+        )
+          state.produced = true
+        const finished = LLMEvent.is.stepFinish(event) || LLMEvent.is.finish(event)
+        if (!finished || state.produced || event.reason === "error" || (event.usage?.outputTokens ?? 0) > 0)
+          return Stream.make(event)
+        return LLMEvent.is.stepFinish(event)
+          ? Stream.make(
+              LLMEvent.providerError({ message }),
+              LLMEvent.stepFinish({ index: event.index, reason: "error", usage: event.usage }),
+            )
+          : Stream.make(LLMEvent.finish({ reason: "error", usage: event.usage }))
+      }),
     )
   })
 }

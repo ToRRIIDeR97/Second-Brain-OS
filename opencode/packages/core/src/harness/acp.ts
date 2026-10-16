@@ -164,24 +164,60 @@ export const verify = (process: Process, settings: Settings, directory: string, 
     }),
   )
 
+/**
+ * Availability check for the picker. Without `known` models it also runs `session/new` once to
+ * read the agent's own model list; callers cache that list so later probes only handshake.
+ */
 export function probe(
   process: Process,
   instance: { readonly id: Harness.InstanceID; readonly driver: Harness.DriverKind; readonly name: string },
   settings: Settings,
   directory: string,
+  known: ReadonlyArray<Harness.Model> = [],
 ): Effect.Effect<Harness.Instance> {
-  const base = {
-    id: instance.id,
-    driver: instance.driver,
-    name: instance.name,
-    models: configuredModels(settings.models),
-  }
-  return handshake(process, settings, directory).pipe(
-    Effect.map((agent) => Harness.Instance.make({ ...base, status: "available", version: agent.version })),
+  const base = { id: instance.id, driver: instance.driver, name: instance.name }
+  const configured = configuredModels(settings.models)
+  const check =
+    known.length > 0
+      ? handshake(process, settings, directory).pipe(Effect.map((agent) => ({ ...agent, models: known })))
+      : Effect.scoped(
+          Effect.gen(function* () {
+            const { client, initialize } = yield* connect(process, settings, directory)
+            // A failed session/new still leaves a reachable agent; it just reports no models.
+            const session = yield* createSession(client, { cwd: directory, mcpServers: [] }).pipe(Effect.option)
+            const models = Option.match(session, {
+              onNone: () => [],
+              onSome: (value) => sessionModels(value.response).models,
+            })
+            return { ...agentInfo(initialize), models }
+          }),
+        ).pipe(
+          Effect.timeoutOrElse({
+            duration: "8 seconds",
+            orElse: () => Effect.fail(new ProtocolError("The ACP agent did not answer within 8 seconds.")),
+          }),
+        )
+  return check.pipe(
+    Effect.map((agent) =>
+      Harness.Instance.make({
+        ...base,
+        status: "available",
+        version: agent.version,
+        models: mergeModels(agent.models, configured),
+      }),
+    ),
     Effect.catch((error) =>
-      Effect.succeed(Harness.Instance.make({ ...base, status: "unavailable", error: errorMessage(error) })),
+      Effect.succeed(
+        Harness.Instance.make({ ...base, status: "unavailable", error: errorMessage(error), models: configured }),
+      ),
     ),
   )
+}
+
+/** Agent-reported models first, then configured IDs the agent did not list. */
+export function mergeModels(reported: ReadonlyArray<Harness.Model>, configured: ReadonlyArray<Harness.Model>) {
+  const ids = new Set(reported.map((model) => model.id))
+  return [...reported, ...configured.filter((model) => !ids.has(model.id))]
 }
 
 export const open = Effect.fn("AcpHarness.open")(function* (process: Process, input: OpenInput) {
