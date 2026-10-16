@@ -315,7 +315,11 @@ Manual checks:
 
 ## Completion evidence
 
-Not started. Fill this in after implementation:
+Steps 1 and 2 are done (`104f9f4`): AC-7, plus the AC-1, AC-2 and AC-4
+mapping. Steps 3–6 remain. See [continuation.md](continuation.md) for the
+results, the remaining work and the known limitations.
+
+Fill this in after the remaining steps:
 
 - Criteria met, with the commands actually run and their results.
 - Benchmark numbers before and after.
