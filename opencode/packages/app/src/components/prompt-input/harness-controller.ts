@@ -3,7 +3,8 @@ import { Harness } from "@opencode-ai/schema/harness"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
-import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
+import { useSettings, withVisibleModels } from "@/context/settings"
+import { fallbackHarnesses, listHarnessesForServer, refreshHarnesses } from "@/utils/server"
 import type { PromptInputHarnessController } from "./harness-controls"
 
 type HarnessSelection = {
@@ -34,13 +35,28 @@ export function createPromptHarnessController(selection: HarnessSelection) {
   const sdk = useSDK()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
-  const [instances, { refetch }] = createResource(
+  const settings = useSettings()
+  const server = () => ({ server: serverSDK().server.http, fetch: platform.fetch })
+  const [loaded, { refetch, mutate }] = createResource(
     () => ({ directory: sdk().directory, version: settingsVersion() }),
-    ({ directory }) =>
-      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory).catch(
-        fallbackHarnesses,
-      ),
+    ({ directory }) => listHarnessesForServer(server(), directory).catch(fallbackHarnesses),
   )
+  // Models hidden in Settings never reach the picker or the default-model choice.
+  const instances = createMemo(() =>
+    loaded()?.map((item) => withVisibleModels(item, settings.harnesses.hiddenModels(item.id))),
+  )
+  const [refreshing, setRefreshing] = createSignal(false)
+  // The refresh button asks the harness again instead of reading the server's recent check.
+  const refresh = () => {
+    if (refreshing()) return
+    setRefreshing(true)
+    return refreshHarnesses(server(), sdk().directory, selection.current())
+      .then(
+        (next) => mutate(next),
+        () => refetch(),
+      )
+      .finally(() => setRefreshing(false))
+  }
   const instance = createMemo(() => instances()?.find((item) => item.id === selection.current()))
 
   createEffect(() => {
@@ -71,9 +87,9 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     instances,
     instance,
     driver: () => instance()?.driver,
-    loading: () => instances.loading,
+    loading: () => loaded.loading || refreshing(),
     disabled: selection.disabled,
-    refresh: refetch,
+    refresh,
     current: selection.current,
     select(instanceID: Harness.InstanceID) {
       const next = instances()?.find((item) => item.id === instanceID)

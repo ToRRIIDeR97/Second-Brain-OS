@@ -73,6 +73,12 @@ import type {
   HarnessesUpdateOutput,
   HarnessesRemoveInput,
   HarnessesRemoveOutput,
+  HarnessesRefreshInput,
+  HarnessesRefreshOutput,
+  HarnessesUpdatesInput,
+  HarnessesUpdatesOutput,
+  HarnessesUpgradeInput,
+  HarnessesUpgradeOutput,
   IntegrationsListInput,
   IntegrationsListOutput,
   IntegrationsGetInput,
@@ -746,6 +752,43 @@ export function make(options: ClientOptions) {
           {
             method: "DELETE",
             path: `/api/harness/registry/${encodeURIComponent(input.id)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      refresh: (input?: HarnessesRefreshInput, requestOptions?: RequestOptions) =>
+        request<HarnessesRefreshOutput>(
+          {
+            method: "POST",
+            path: `/api/harness/refresh`,
+            query: { location: input?.["location"] },
+            body: { id: input?.["id"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      updates: (input?: HarnessesUpdatesInput, requestOptions?: RequestOptions) =>
+        request<HarnessesUpdatesOutput>(
+          {
+            method: "GET",
+            path: `/api/harness/updates`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      upgrade: (input: HarnessesUpgradeInput, requestOptions?: RequestOptions) =>
+        request<HarnessesUpgradeOutput>(
+          {
+            method: "POST",
+            path: `/api/harness/upgrade/${encodeURIComponent(input.id)}`,
             query: { location: input["location"] },
             successStatus: 200,
             declaredStatuses: [400, 404, 409, 500, 401],

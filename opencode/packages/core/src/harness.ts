@@ -34,6 +34,7 @@ import {
   type ServerRequest,
 } from "./harness/codex-app-server"
 import { HarnessRegistry } from "./harness/registry"
+import { HarnessUpdate } from "./harness/update"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
 import { PermissionV2 } from "./permission"
@@ -61,6 +62,12 @@ export interface StreamInput {
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Harness.Instance>>
+  /** Drops cached checks and model lists, for one harness or all, and lists again. */
+  readonly refresh: (id?: string) => Effect.Effect<ReadonlyArray<Harness.Instance>>
+  /** Installed and latest CLI versions for the enabled harnesses that run an external command. */
+  readonly updates: () => Effect.Effect<ReadonlyArray<Harness.UpdateStatus>>
+  /** Updates one harness CLI with the package manager that installed it, then restarts its processes. */
+  readonly upgrade: (id: string) => Effect.Effect<Harness.UpdateStatus, HarnessUpdate.UpdateError>
   readonly driver: (instanceID: Harness.InstanceID) => Harness.DriverKind | undefined
   readonly stream: (
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
@@ -102,6 +109,8 @@ interface AcpRuntime {
 }
 
 const probeTTL = 30_000
+// A failed check is retried sooner, so a slow cold start doesn't hide a harness for long.
+const failedProbeTTL = 5_000
 
 const layer = Layer.effect(
   Service,
@@ -128,19 +137,48 @@ const layer = Layer.effect(
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
     const probes = new Map<string, { readonly expires: number; readonly instance: Harness.Instance }>()
-    const cachedProbe = (instance: InstanceConfig, probe: Effect.Effect<Harness.Instance>) => {
-      const key = `${instance.id}:${JSON.stringify([instance.name, instance.config])}`
+    // Models each harness reported, kept until the app restarts or the user refreshes. A failed check
+    // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
+    const catalogs = new Map<string, ReadonlyArray<Harness.Model>>()
+    const instanceKey = (instance: InstanceConfig) =>
+      `${instance.id}:${JSON.stringify([instance.name, instance.config])}`
+    const cachedProbe = (
+      instance: InstanceConfig,
+      probe: (
+        known: ReadonlyArray<Harness.Model> | undefined,
+      ) => Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }>,
+    ) => {
+      const key = instanceKey(instance)
       return Effect.suspend(() => {
         const cached = probes.get(key)
         if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
-        return probe.pipe(
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              probes.set(key, { expires: Date.now() + probeTTL, instance: result })
-            }),
-          ),
+        return probe(catalogs.get(key)).pipe(
+          Effect.map((result) => {
+            if (result.discovered) catalogs.set(key, result.discovered)
+            const ttl = result.instance.status === "available" ? probeTTL : failedProbeTTL
+            probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
+            return result.instance
+          }),
         )
       })
+    }
+    // Ends the harness processes behind open threads; each reconnects on its next message.
+    const closeRuntimes = (id: string) =>
+      Effect.forEach(
+        [runtimes, acpRuntimes] as const,
+        (map) =>
+          Effect.forEach(
+            [...map.entries()].filter(([key]) => key.startsWith(`${id}:`)),
+            ([key, runtime]) =>
+              Effect.sync(() => map.delete(key)).pipe(Effect.andThen(Scope.close(runtime.scope, Exit.void))),
+            { discard: true },
+          ),
+        { discard: true },
+      )
+    const forget = (id?: string) => {
+      const matches = (key: string) => id === undefined || key.startsWith(`${id}:`)
+      for (const key of probes.keys()) if (matches(key)) probes.delete(key)
+      for (const key of catalogs.keys()) if (matches(key)) catalogs.delete(key)
     }
 
     yield* Effect.addFinalizer(() =>
@@ -329,6 +367,11 @@ const layer = Layer.effect(
           continuation: session.sessionId,
         })
       }
+      // Each opened session reports the agent's current models; the picker shows them on its next check.
+      if (session.models.length > 0) {
+        catalogs.set(instanceKey(instance), session.models)
+        probes.delete(instanceKey(instance))
+      }
       return {
         session,
         scope: runtimeScope,
@@ -422,7 +465,7 @@ const layer = Layer.effect(
           instanceID: instance.id,
           kind: instance.driver,
           snapshot: instance.enabled
-            ? cachedProbe(instance, probeCodex(process, instance, settings, location.directory))
+            ? cachedProbe(instance, (known) => probeCodex(process, instance, settings, location.directory, known))
             : unavailable(instance, "Disabled in configuration.", customModels(settings.customModels)),
           stream: (input) =>
             instance.enabled
@@ -448,7 +491,7 @@ const layer = Layer.effect(
           instanceID: instance.id,
           kind: instance.driver,
           snapshot: instance.enabled
-            ? cachedProbe(instance, AcpHarness.probe(process, instance, settings, location.directory))
+            ? cachedProbe(instance, (known) => AcpHarness.probe(process, instance, settings, location.directory, known))
             : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
           stream: (input) =>
             instance.enabled
@@ -464,13 +507,50 @@ const layer = Layer.effect(
       }
     }
 
+    const list = () =>
+      instances.pipe(
+        Effect.flatMap((current) =>
+          Effect.forEach(current, (instance) => driverFor(instance).snapshot, { concurrency: "unbounded" }),
+        ),
+      )
+
+    const updateStatus = (instance: InstanceConfig, command: string) =>
+      HarnessUpdate.check(process, command, probes.get(instanceKey(instance))?.instance.version).pipe(
+        Effect.map((check) => Harness.UpdateStatus.make({ id: instance.id, name: instance.name, ...check })),
+      )
+
     return Service.of({
-      list: () =>
+      list,
+      updates: () =>
         instances.pipe(
           Effect.flatMap((current) =>
-            Effect.forEach(current, (instance) => driverFor(instance).snapshot, { concurrency: "unbounded" }),
+            Effect.forEach(
+              current.flatMap((instance) => {
+                const command = instance.enabled ? cliCommand(instance) : undefined
+                return command ? [{ instance, command }] : []
+              }),
+              ({ instance, command }) => updateStatus(instance, command),
+              { concurrency: 4 },
+            ),
           ),
         ),
+      upgrade: (id) =>
+        instances.pipe(
+          Effect.flatMap((current) => {
+            const instance = current.find((item) => item.id === id)
+            const command = instance ? cliCommand(instance) : undefined
+            if (!instance || !command)
+              return Effect.fail(
+                new HarnessUpdate.UpdateError({ reason: "not-found", message: `No harness CLI has ID "${id}".` }),
+              )
+            return HarnessUpdate.upgrade(process, command).pipe(
+              Effect.andThen(closeRuntimes(instance.id)),
+              Effect.andThen(Effect.sync(() => forget(instance.id))),
+              Effect.andThen(updateStatus(instance, command)),
+            )
+          }),
+        ),
+      refresh: (id) => Effect.sync(() => forget(id)).pipe(Effect.andThen(list())),
       driver: (instanceID) => latest.find((instance) => instance.id === instanceID)?.driver,
       stream(input) {
         // Known instances stream without touching the registry; only a newly registered ID needs a re-read.
@@ -633,6 +713,12 @@ export function configuredInstances(
 
 const decodeCodex = Schema.decodeUnknownOption(ConfigHarness.Codex)
 
+/** The external command a harness runs, when it has one. The in-process loop has none. */
+function cliCommand(instance: InstanceConfig) {
+  if (instance.driver === Harness.CodexDriver) return decodeCodexSettings(instance.config).binaryPath?.trim() || "codex"
+  if (instance.driver === Harness.AcpDriver) return AcpHarness.decodeSettings(instance.config)?.command
+}
+
 function decodeCodexSettings(input: Readonly<Record<string, unknown>>) {
   return (
     Option.getOrUndefined(decodeCodex(input)) ??
@@ -680,44 +766,47 @@ function probeCodex(
   instance: InstanceConfig,
   settings: CodexSettings,
   directory: string,
-): Effect.Effect<Harness.Instance> {
+  known?: ReadonlyArray<Harness.Model>,
+): Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }> {
   const probe = Effect.scoped(
     Effect.gen(function* () {
       const opened = yield* openCodex(process, settings, directory)
       const account = yield* opened.client.request("account/read", {})
       const auth = readAccount(account)
-      const models = auth.available
-        ? appendCustomModels(yield* requestModels(opened.client), settings.customModels)
-        : customModels(settings.customModels)
-      return Harness.Instance.make({
-        id: instance.id,
-        driver: instance.driver,
-        name: instance.name,
-        status: auth.available ? "available" : "unavailable",
-        version: readVersion(opened.initialize),
-        authenticated: auth.authenticated,
-        error: auth.available ? undefined : "Codex sign-in is required.",
-        models,
-      })
+      const discovered = auth.available ? yield* requestModels(opened.client) : undefined
+      return {
+        instance: Harness.Instance.make({
+          id: instance.id,
+          driver: instance.driver,
+          name: instance.name,
+          status: auth.available ? "available" : "unavailable",
+          version: readVersion(opened.initialize),
+          authenticated: auth.authenticated,
+          error: auth.available ? undefined : "Codex sign-in is required.",
+          models: appendCustomModels(discovered ?? known ?? [], settings.customModels),
+        }),
+        discovered: discovered?.length ? discovered : undefined,
+      }
     }),
   ).pipe(
+    // A cold start of `codex app-server` plus a paged model list can take longer than a warm check.
     Effect.timeoutOrElse({
-      duration: "8 seconds",
+      duration: "15 seconds",
       orElse: () => Effect.fail(new ProtocolError("Codex availability check timed out.")),
     }),
   )
   return probe.pipe(
     Effect.catch((error) =>
-      Effect.succeed(
-        Harness.Instance.make({
+      Effect.succeed({
+        instance: Harness.Instance.make({
           id: instance.id,
           driver: instance.driver,
           name: instance.name,
           status: "unavailable",
           error: error instanceof Error ? error.message : "Codex is unavailable.",
-          models: customModels(settings.customModels),
+          models: appendCustomModels(known ?? [], settings.customModels),
         }),
-      ),
+      }),
     ),
     Effect.orDie,
   )

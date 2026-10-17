@@ -5255,6 +5255,20 @@ export type HarnessSettingsInput = {
   models?: Array<string>
 }
 
+export type HarnessRefreshInput = {
+  id?: string
+}
+
+export type HarnessUpdateStatus = {
+  id: HarnessInstanceId
+  name: string
+  version?: string
+  latest?: string
+  updateAvailable: boolean
+  method?: "npm" | "bun" | "brew"
+  error?: string
+}
+
 export type IntegrationWhen = {
   key: string
   op: "eq" | "neq"
@@ -13889,6 +13903,131 @@ export type V2HarnessUpdateResponses = {
 }
 
 export type V2HarnessUpdateResponse = V2HarnessUpdateResponses[keyof V2HarnessUpdateResponses]
+
+export type V2HarnessRefreshData = {
+  body: HarnessRefreshInput
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/refresh"
+}
+
+export type V2HarnessRefreshErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2HarnessRefreshError = V2HarnessRefreshErrors[keyof V2HarnessRefreshErrors]
+
+export type V2HarnessRefreshResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<HarnessInstance>
+  }
+}
+
+export type V2HarnessRefreshResponse = V2HarnessRefreshResponses[keyof V2HarnessRefreshResponses]
+
+export type V2HarnessUpdatesData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/updates"
+}
+
+export type V2HarnessUpdatesErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2HarnessUpdatesError = V2HarnessUpdatesErrors[keyof V2HarnessUpdatesErrors]
+
+export type V2HarnessUpdatesResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<HarnessUpdateStatus>
+  }
+}
+
+export type V2HarnessUpdatesResponse = V2HarnessUpdatesResponses[keyof V2HarnessUpdatesResponses]
+
+export type V2HarnessUpgradeData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/harness/upgrade/{id}"
+}
+
+export type V2HarnessUpgradeErrors = {
+  /**
+   * HarnessSettingsInvalidError | InvalidRequestError
+   */
+  400: HarnessSettingsInvalidError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * HarnessSettingsNotFoundError
+   */
+  404: HarnessSettingsNotFoundError
+  /**
+   * HarnessSettingsExistsError
+   */
+  409: HarnessSettingsExistsError
+  /**
+   * HarnessSettingsWriteError
+   */
+  500: HarnessSettingsWriteError
+}
+
+export type V2HarnessUpgradeError = V2HarnessUpgradeErrors[keyof V2HarnessUpgradeErrors]
+
+export type V2HarnessUpgradeResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: HarnessUpdateStatus
+  }
+}
+
+export type V2HarnessUpgradeResponse = V2HarnessUpgradeResponses[keyof V2HarnessUpgradeResponses]
 
 export type V2IntegrationListData = {
   body?: never
