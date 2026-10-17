@@ -213,6 +213,26 @@ export async function removeHarness(input: HarnessServer, directory: string, id:
   await harnessSettingsRequest(input, directory, `/registry/${encodeURIComponent(id)}`, { method: "DELETE" })
 }
 
+/** Re-reads harness availability and models, for one harness or all, skipping the server's cache. */
+export async function refreshHarnesses(input: HarnessServer, directory: string, id?: string) {
+  return decodeHarnessResponse(
+    await harnessSettingsRequest(input, directory, "/refresh", { method: "POST", body: JSON.stringify({ id }) }),
+  ).data
+}
+
+const decodeUpdates = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.UpdateStatus)))
+const decodeUpdate = Schema.decodeUnknownSync(Location.response(HarnessSchema.UpdateStatus))
+
+export async function listHarnessUpdates(input: HarnessServer, directory: string) {
+  return decodeUpdates(await harnessSettingsRequest(input, directory, "/updates")).data
+}
+
+export async function upgradeHarness(input: HarnessServer, directory: string, id: string) {
+  return decodeUpdate(
+    await harnessSettingsRequest(input, directory, `/upgrade/${encodeURIComponent(id)}`, { method: "POST" }),
+  ).data
+}
+
 export async function createSessionForServer(
   input: {
     server: ServerConnection.HttpBase

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner, onCleanup } from "solid-js"
-import { draftHref, draftsFromLegacyTabs, mergeDrafts, migrateDrafts, sessionStateKey } from "./drafts"
+import { canSendOnOpen, draftHref, draftsFromLegacyTabs, mergeDrafts, migrateDrafts, sessionStateKey } from "./drafts"
+import type { Harness } from "@opencode-ai/schema/harness"
 import type { ServerConnection } from "./server"
 import { createStateMemory } from "./state-memory"
 
@@ -51,6 +52,17 @@ describe("draft store data", () => {
     expect(draftHref({ draftID: "d1", projectID: "prj_1" })).toBe("/new-thread?project=prj_1&draftId=d1")
     expect(draftHref({ draftID: "d 1" })).toBe("/new-thread?draftId=d+1")
     expect(sessionStateKey(server, "ses_1")).toBe(`session:${server}\nses_1`)
+  })
+})
+
+describe("send on open", () => {
+  const codex = "codex" as Harness.InstanceID
+  test("sends only with the requested harness while it is available", () => {
+    expect(canSendOnOpen(codex, { id: codex, status: "available" })).toBe(true)
+    expect(canSendOnOpen(undefined, { id: codex, status: "available" })).toBe(true)
+    expect(canSendOnOpen(codex, { id: codex, status: "unavailable" })).toBe(false)
+    expect(canSendOnOpen(codex, { id: "opencode" as Harness.InstanceID, status: "available" })).toBe(false)
+    expect(canSendOnOpen(codex, undefined)).toBe(false)
   })
 })
 

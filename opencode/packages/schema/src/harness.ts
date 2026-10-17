@@ -117,6 +117,24 @@ export const Verification = Schema.Struct({
 }).annotate({ identifier: "Harness.Verification" })
 export interface Verification extends Schema.Schema.Type<typeof Verification> {}
 
+// Installed and latest version of a harness CLI. `method` is set only when the app can update it
+// itself (a global npm or Bun package, or a Homebrew formula or cask).
+export const UpdateStatus = Schema.Struct({
+  id: InstanceID,
+  name: Schema.String,
+  version: Schema.String.pipe(optional),
+  latest: Schema.String.pipe(optional),
+  updateAvailable: Schema.Boolean,
+  method: Schema.Literals(["npm", "bun", "brew"]).pipe(optional),
+  error: Schema.String.pipe(optional),
+}).annotate({ identifier: "Harness.UpdateStatus" })
+export interface UpdateStatus extends Schema.Schema.Type<typeof UpdateStatus> {}
+
+export const RefreshInput = Schema.Struct({
+  id: Schema.String.pipe(optional),
+}).annotate({ identifier: "Harness.RefreshInput" })
+export interface RefreshInput extends Schema.Schema.Type<typeof RefreshInput> {}
+
 // `opencode` is the stored ID of Tenon Workbench's in-process loop, kept so existing sessions keep
 // routing there. Upstream OpenCode runs as an external ACP harness under `opencode-acp`.
 export const OpenCode = InstanceID.make("opencode")
