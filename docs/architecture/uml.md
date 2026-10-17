@@ -186,6 +186,10 @@ Later turns in the same runtime send only the user message. See
 | Desktop startup and dev-channel `userData` migration | Critical workflow | Sequence: startup; Deployment | `desktop/src/main/index.ts`, `desktop/src/main/user-data-migration.ts` |
 | Session timeline (folded turn steps) and side-panel Session tab (session usage) | Subsystem | Text only ([README](README.md#session-compatibility-and-review)) | `app/src/pages/session/timeline/rows.ts`, `timeline/row-reconciliation.ts` (`foldTimelineRows`), `timeline/message-timeline.tsx`, `app/src/components/session/turn-steps-summary.tsx`, `app/src/components/session/session-usage.ts`, `app/src/components/session/session-context-tab.tsx`, `session-ui/src/components/step-kind.ts` |
 | Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
+| Harness model lists (live discovery, refresh, hidden models) | Critical workflow | Text in [README](README.md#harness-model-lists) | `core/src/harness.ts` (`cachedProbe`, `refresh`), `core/src/harness/acp.ts` (`probe`), `app/src/components/prompt-input/harness-controller.ts`, `app/src/context/settings.tsx` (`harnesses.hiddenModels`), `app/src/components/settings-v2/harnesses.tsx` |
+| Harness CLI updates (check, notify, update) | Critical workflow | Deployment, trust boundaries; text in [README](README.md#harness-cli-updates) | `core/src/harness/update.ts`, `core/src/harness.ts` (`updates`, `upgrade`), `server/src/handlers/harness.ts`, `app/src/components/harness-update-notifier.tsx`, `app/src/components/settings-v2/harnesses.tsx` |
+| npm registry, Homebrew | External integration | Deployment, trust boundaries | `core/src/harness/update.ts` |
+| Home one-step start (draft sends on open) | Critical workflow | Text in [README](README.md#home-navigation) | `app/src/pages/brain-home.tsx`, `app/src/context/drafts.tsx` (`takeSend`, `canSendOnOpen`), `app/src/pages/new-session/new-session-draft-controller.ts` |
 
 ## Unverified relationships and assumptions
 

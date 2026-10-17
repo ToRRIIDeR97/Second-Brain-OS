@@ -1,5 +1,6 @@
 import { HarnessRuntime } from "@opencode-ai/core/harness"
 import { HarnessRegistry } from "@opencode-ai/core/harness/registry"
+import { HarnessUpdate } from "@opencode-ai/core/harness/update"
 import {
   HarnessSettingsExistsError,
   HarnessSettingsInvalidError,
@@ -18,6 +19,27 @@ export const HarnessHandler = HttpApiBuilder.group(Api, "server.harness", (handl
       Effect.fn(function* () {
         const harnesses = yield* HarnessRuntime.Service
         return yield* response(harnesses.list())
+      }),
+    )
+    .handle(
+      "harness.refresh",
+      Effect.fn(function* (ctx) {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.refresh(ctx.payload.id))
+      }),
+    )
+    .handle(
+      "harness.updates",
+      Effect.fn(function* () {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.updates())
+      }),
+    )
+    .handle(
+      "harness.upgrade",
+      Effect.fn(function* (ctx) {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.upgrade(ctx.params.id)).pipe(Effect.mapError(httpError))
       }),
     )
     .handle(
@@ -75,8 +97,9 @@ export const HarnessHandler = HttpApiBuilder.group(Api, "server.harness", (handl
     ),
 )
 
-function httpError(error: HarnessRegistry.RegisterError) {
+function httpError(error: HarnessRegistry.RegisterError | HarnessUpdate.UpdateError) {
   const fields = { reason: error.reason, message: error.message }
+  if (error.reason === "update-failed") return new HarnessSettingsWriteError(fields)
   if (error.reason === "not-found") return new HarnessSettingsNotFoundError(fields)
   if (error.reason === "exists") return new HarnessSettingsExistsError(fields)
   if (error.reason === "write-failed") return new HarnessSettingsWriteError(fields)

@@ -143,6 +143,51 @@ export const HarnessGroup = HttpApiGroup.make("server.harness")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(annotate("v2.harness.remove", "Remove harness", "Remove a saved harness from harnesses.json.")),
   )
+  .add(
+    HttpApiEndpoint.post("harness.refresh", "/api/harness/refresh", {
+      query: LocationQuery,
+      payload: Harness.RefreshInput,
+      success: Location.response(Schema.Array(Harness.Instance)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.refresh",
+          "Refresh harnesses",
+          "Drop cached availability checks and model lists, for one harness or all, and list again.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("harness.updates", "/api/harness/updates", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(Harness.UpdateStatus)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.updates",
+          "Check harness updates",
+          "Compare each harness CLI's installed version with the latest release from its package manager.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("harness.upgrade", "/api/harness/upgrade/:id", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      success: Location.response(Harness.UpdateStatus),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.upgrade",
+          "Update harness CLI",
+          "Update a harness CLI with the package manager that installed it and restart its processes.",
+        ),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "harnesses",

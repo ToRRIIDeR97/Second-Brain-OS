@@ -136,11 +136,13 @@ export default function BrainHomePage() {
     if (!prompt || !state.directory || state.starting || harnessQuery.isPending) return
     setState("starting", true)
     try {
+      // The draft page sends the prompt as soon as its composer is ready.
       await drafts.create(
         { server: server.key, directory: state.directory },
         prompt,
         undefined,
         state.harnessInstanceID,
+        { send: true },
       )
     } finally {
       setState("starting", false)

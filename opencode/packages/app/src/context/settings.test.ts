@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { hasExistingWebState, initialAgentVisibility } from "./settings"
+import { hasExistingWebState, initialAgentVisibility, withVisibleModels } from "./settings"
 
 describe("agent visibility", () => {
   test("shows the picker for existing profiles and hides it for first-time installs", () => {
@@ -22,5 +22,13 @@ describe("web profile classification", () => {
     expect(hasExistingWebState("{}", undefined)).toBe(true)
     expect(hasExistingWebState(null, "1.17.19")).toBe(true)
     expect(hasExistingWebState(null, undefined)).toBe(false)
+  })
+})
+
+describe("harness model visibility", () => {
+  test("leaves out hidden models and keeps new ones visible", () => {
+    const instance = { id: "codex", models: [{ id: "a" }, { id: "b" }, { id: "new" }] }
+    expect(withVisibleModels(instance, ["b"]).models.map((model) => model.id)).toEqual(["a", "new"])
+    expect(withVisibleModels(instance, undefined)).toBe(instance)
   })
 })
