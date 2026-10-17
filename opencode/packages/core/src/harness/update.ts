@@ -138,8 +138,7 @@ export const upgrade = Effect.fn("HarnessUpdate.upgrade")(function* (
 ) {
   const resolved = yield* resolve(command)
   const source = resolved?.source
-  if (!resolved)
-    return yield* new UpdateError({ reason: "not-updatable", message: `${command} is not on PATH.` })
+  if (!resolved) return yield* new UpdateError({ reason: "not-updatable", message: `${command} is not on PATH.` })
   if (!source)
     return yield* new UpdateError({
       reason: "not-updatable",
