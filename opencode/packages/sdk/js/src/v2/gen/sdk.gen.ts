@@ -91,6 +91,7 @@ import type {
   HarnessDiscoverInput,
   HarnessInstanceId,
   HarnessModelSelection,
+  HarnessRefreshInput,
   HarnessSettingsInput,
   HarnessVerifyInput,
   InstanceDisposeErrors,
@@ -318,12 +319,18 @@ import type {
   V2HarnessDiscoverResponses,
   V2HarnessListErrors,
   V2HarnessListResponses,
+  V2HarnessRefreshErrors,
+  V2HarnessRefreshResponses,
   V2HarnessRemoveErrors,
   V2HarnessRemoveResponses,
   V2HarnessSettingsErrors,
   V2HarnessSettingsResponses,
   V2HarnessUpdateErrors,
   V2HarnessUpdateResponses,
+  V2HarnessUpdatesErrors,
+  V2HarnessUpdatesResponses,
+  V2HarnessUpgradeErrors,
+  V2HarnessUpgradeResponses,
   V2HarnessVerifyErrors,
   V2HarnessVerifyResponses,
   V2HealthGetErrors,
@@ -6850,6 +6857,99 @@ export class Harness extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Refresh harnesses
+   *
+   * Drop cached availability checks and model lists, for one harness or all, and list again.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      harnessRefreshInput: HarnessRefreshInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { key: "harnessRefreshInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2HarnessRefreshResponses, V2HarnessRefreshErrors, ThrowOnError>({
+      url: "/api/harness/refresh",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Check harness updates
+   *
+   * Compare each harness CLI's installed version with the latest release from its package manager.
+   */
+  public updates<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2HarnessUpdatesResponses, V2HarnessUpdatesErrors, ThrowOnError>({
+      url: "/api/harness/updates",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update harness CLI
+   *
+   * Update a harness CLI with the package manager that installed it and restart its processes.
+   */
+  public upgrade<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2HarnessUpgradeResponses, V2HarnessUpgradeErrors, ThrowOnError>({
+      url: "/api/harness/upgrade/{id}",
+      ...options,
+      ...params,
     })
   }
 }

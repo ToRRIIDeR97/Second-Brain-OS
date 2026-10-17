@@ -164,24 +164,51 @@ export const verify = (process: Process, settings: Settings, directory: string, 
     }),
   )
 
+/**
+ * Availability check for the picker. Without a known model list it also opens a session to read the
+ * agent's own models, falling back to the handshake alone when the agent can't open one (for example
+ * before sign-in). `discovered` is set only when the agent reported its models.
+ */
 export function probe(
   process: Process,
   instance: { readonly id: Harness.InstanceID; readonly driver: Harness.DriverKind; readonly name: string },
   settings: Settings,
   directory: string,
-): Effect.Effect<Harness.Instance> {
-  const base = {
-    id: instance.id,
-    driver: instance.driver,
-    name: instance.name,
-    models: configuredModels(settings.models),
-  }
-  return handshake(process, settings, directory).pipe(
-    Effect.map((agent) => Harness.Instance.make({ ...base, status: "available", version: agent.version })),
+  known?: ReadonlyArray<Harness.Model>,
+): Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }> {
+  const base = { id: instance.id, driver: instance.driver, name: instance.name }
+  const available = (version: string | undefined, models: ReadonlyArray<Harness.Model>) =>
+    Harness.Instance.make({ ...base, status: "available", version, models: withConfigured(models, settings.models) })
+  const handshakeOnly = handshake(process, settings, directory).pipe(
+    Effect.map((agent) => ({ instance: available(agent.version, known ?? []) })),
+  )
+  const check = known
+    ? handshakeOnly
+    : discover(process, settings, directory).pipe(
+        // An empty list is still recorded, so later checks don't open a session each time.
+        Effect.map((agent) => ({ instance: available(agent.version, agent.models), discovered: agent.models })),
+        Effect.catch(() => handshakeOnly),
+      )
+  return check.pipe(
     Effect.catch((error) =>
-      Effect.succeed(Harness.Instance.make({ ...base, status: "unavailable", error: errorMessage(error) })),
+      Effect.succeed({
+        instance: Harness.Instance.make({
+          ...base,
+          status: "unavailable",
+          error: errorMessage(error),
+          models: withConfigured(known ?? [], settings.models),
+        }),
+      }),
     ),
   )
+}
+
+/**
+ * The agent's own models when it reports any. Saved model IDs are only a fallback: entries added
+ * before live discovery stored a snapshot, which would otherwise keep models the agent dropped.
+ */
+export function withConfigured(models: ReadonlyArray<Harness.Model>, configured: ReadonlyArray<string>) {
+  return models.length > 0 ? [...models] : configuredModels(configured)
 }
 
 export const open = Effect.fn("AcpHarness.open")(function* (process: Process, input: OpenInput) {

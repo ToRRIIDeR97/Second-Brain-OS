@@ -130,6 +130,14 @@ availability uses the renderer query cache, keyed by server and workspace
 directory, with 30 seconds of freshness and background refresh on stale
 re-entry. Projects and calendar data still reload on each visit.
 
+Home's composer starts a Run in one step. `startSession` in
+`pages/brain-home.tsx` creates a draft with the prompt, the chosen harness, and
+`send: true`, then opens it. `context/drafts.tsx` keeps that request in memory
+only, so a reload never sends twice. Once the draft's prompt and harness list
+have loaded, `new-session-draft-controller.ts` submits through the normal
+composer path. If the chosen harness is no longer available, the prompt stays
+in the composer instead (`canSendOnOpen`).
+
 ## Startup and request flow
 
 1. Electron starts the bundled server in a utility process and gives the
@@ -293,6 +301,63 @@ uses `packages/core/src/harness/registry.ts`:
 Built-ins and config-file entries are read-only. After each change the runtime
 refreshes its cached instance list, so the next turn and the picker see it.
 Agents have no tool for registering harnesses.
+
+### Harness model lists
+
+The picker shows the models each harness reports, not a list saved when the
+harness was added. `HarnessRuntime` in `core/src/harness.ts` keeps two
+in-memory caches per instance configuration:
+
+- An availability check, reused for 30 seconds, or 5 seconds after a failure.
+- The last model list the harness reported, kept until the server stops, so
+  every app launch reads it again.
+
+On the first check for an ACP harness, `AcpHarness.probe` runs the handshake
+and `session/new` and reads the agent's models. Later checks run only the
+handshake. If `session/new` fails (for example before sign-in), the probe falls
+back to the handshake. Codex checks call `model/list` each time, with a
+15-second timeout for a cold start. A failed check keeps the last model list.
+Each ACP session that opens for a Run also updates the list. Saved model IDs in
+`harnesses.json` are used only when an agent reports none, and Settings no
+longer saves them when adding a harness.
+
+`POST /api/harness/refresh` (`{ id? }`) clears both caches for one harness or
+all, then lists again. The composer's refresh button and Settings → Harnesses
+→ Refresh models call it. Settings also lists each harness's models with an
+on/off switch. Hidden model IDs are stored per harness in the renderer's
+`settings.v3` (`harnesses.hiddenModels`). `createPromptHarnessController` leaves
+them out of the picker and the default-model choice. New models show by
+default.
+
+### Harness CLI updates
+
+`core/src/harness/update.ts` finds where a harness CLI was installed from by
+resolving its command on `PATH` to a real path:
+
+- `<prefix>/lib/node_modules/<pkg>` (or `npm\node_modules`, `nodejs\node_modules`
+  on Windows) is a global npm package.
+- `~/.bun/install/global/node_modules/<pkg>` is a global Bun package.
+- `<brew>/Cellar/<formula>/<version>` or `Caskroom/<cask>/<version>` is
+  Homebrew.
+
+Other installs, such as a standalone binary or a curl-script copy, show their
+version only and are updated outside the app. The latest version comes from
+the npm registry configured in the user's `.npmrc` (`/<pkg>/latest`) or from
+`brew info --json=v2`. Results are cached for six hours per executable.
+
+`GET /api/harness/updates` lists installed and latest versions for enabled
+Codex and ACP harnesses. The renderer's `HarnessUpdateNotifier` (mounted in the
+app shell) checks once per server connection. It shows a toast for each
+available update with Update and Later. Later hides that version until a newer
+one comes out (`harness-updates` global key). Settings → Harnesses shows the
+version, an update badge, and an Update button.
+
+`POST /api/harness/upgrade/:id` runs `npm install --global --prefix <prefix>
+<pkg>@latest`, `bun add --global <pkg>@latest`, or `brew upgrade [--cask]
+<name>`, with a 5-minute timeout. It then closes that harness's open runtimes
+and clears its caches, so the next turn and the picker start the new version.
+A turn in progress on that harness stops, and its thread reconnects on the next
+message.
 
 The page also offers a setup assistant
 (`app/src/components/settings-v2/harness-assistant.tsx`). It is an ordinary

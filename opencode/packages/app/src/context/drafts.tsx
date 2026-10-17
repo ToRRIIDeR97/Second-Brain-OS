@@ -78,6 +78,15 @@ export function draftsFromLegacyTabs(value: unknown, fallback: ServerConnection.
   })
 }
 
+/** A Home draft sends on arrival only with the harness it was started with, and only while that harness is available. */
+export function canSendOnOpen(
+  requested: Harness.InstanceID | undefined,
+  instance: Pick<Harness.Instance, "id" | "status"> | undefined,
+) {
+  if (instance?.status !== "available") return false
+  return !requested || instance.id === requested
+}
+
 export function mergeDrafts(current: Draft[], incoming: Draft[]) {
   const known = new Set(current.map((draft) => draft.draftID))
   return [...current, ...incoming.filter((draft) => !known.has(draft.draftID))]
@@ -132,6 +141,9 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
       }
     })
 
+    // Drafts started from Home send on arrival. Kept in memory only, so a reload never re-sends.
+    const pendingSend = new Map<string, Harness.InstanceID | undefined>()
+
     const isActive = (draftID: string) =>
       location.pathname === NEW_THREAD_PATH && location.query.draftId === draftID
 
@@ -142,8 +154,15 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
         if (!draftID) return
         return store.find((draft) => draft.draftID === draftID)
       },
-      async create(input: DraftInput, prompt?: string, model?: PromptModel, harnessInstanceID?: Harness.InstanceID) {
+      async create(
+        input: DraftInput,
+        prompt?: string,
+        model?: PromptModel,
+        harnessInstanceID?: Harness.InstanceID,
+        options?: { send?: boolean },
+      ) {
         const draft: Draft = { draftID: uuid(), ...input }
+        if (options?.send && prompt?.trim()) pendingSend.set(draft.draftID, harnessInstanceID)
         memory.ensure(draftStateKey(draft.draftID), "prompt", () =>
           createDraftPromptSession(draft.draftID, { prompt, model, harnessInstanceID }),
         )
@@ -156,6 +175,13 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
           navigate(draftHref(draft))
         })
         return draft
+      },
+      /** Consumes the send-on-open request for a draft. Returns the harness it was started with. */
+      takeSend(draftID: string) {
+        if (!pendingSend.has(draftID)) return
+        const harnessInstanceID = pendingSend.get(draftID)
+        pendingSend.delete(draftID)
+        return { harnessInstanceID }
       },
       update(draftID: string, patch: Partial<DraftInput>) {
         setStore(

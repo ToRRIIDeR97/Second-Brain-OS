@@ -155,7 +155,8 @@ folder as a Project) and `tenon://new-session?directory=<path>&prompt=<text>`
 ## Pages
 
 - **Home** is a dashboard: start a Run, today's events and tasks, active
-  Projects, resume and running threads.
+  Projects, resume and running threads. Sending from Home's composer opens
+  the new thread and sends the message in one step.
 - **Projects** lists Project cards by status and opens a card with Overview,
   Plan, Work, Files, Activity and Map views.
 - **Calendar** shows events and tasks; account setup lives in Settings.

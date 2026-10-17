@@ -3,6 +3,7 @@ import { createEffect, untrack } from "solid-js"
 import { usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useComments } from "@/context/comments"
 import { useLocal } from "@/context/local"
+import { canSendOnOpen, useDrafts } from "@/context/drafts"
 import { usePrompt } from "@/context/prompt"
 import { useServerSync } from "@/context/server-sync"
 import { createPromptInputController, createPromptProjectControls } from "@/pages/session/composer"
@@ -15,6 +16,7 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
   const prompt = usePrompt()
   const serverSync = useServerSync()
   const comments = useComments()
+  const drafts = useDrafts()
   const local = useLocal()
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
@@ -64,6 +66,18 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
       setSearchParams({ ...searchParams, prompt: undefined })
+    })
+  })
+
+  // A draft started from Home sends once the prompt and harness list have loaded. If the harness it
+  // was started with is no longer available, the prompt stays in the composer instead.
+  createEffect(() => {
+    const draftID = searchParams.draftId
+    if (!draftID || !prompt.ready() || !harness.instances() || harness.loading()) return
+    const pending = drafts.takeSend(draftID)
+    if (!pending) return
+    untrack(() => {
+      if (canSendOnOpen(pending.harnessInstanceID, harness.instance())) input.submit()
     })
   })
 

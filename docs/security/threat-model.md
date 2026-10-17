@@ -92,6 +92,31 @@ the OpenCode console, and share or install endpoints (`github`, `pr`,
 runs only from source for development (`serve`, `generate`, `mcp`, `debug`,
 `providers`, `agent`, `models`, `session`, `db`) and isn't shipped.
 
+## Harness CLI updates
+
+Checking and installing harness CLI updates adds two capabilities:
+
+- **Outbound calls.** The server fetches `<registry>/<pkg>/latest` from the
+  user's configured npm registry, or runs `brew info`, for each enabled Codex
+  or ACP harness, about once every six hours.
+- **Package-manager runs.** The server runs `npm`, `bun`, or `brew` as the user.
+
+The renderer sends only a harness ID to `POST /api/harness/upgrade/:id`. The
+server derives the package name, prefix, and package manager from the resolved
+path of that harness's configured command, and validates the name against npm
+or Homebrew naming rules. Arguments are passed as an array with no shell.
+Updates run only when the user clicks Update, and agents have no tool for them.
+
+The package manager gets the app's full environment, not the harness allowlist,
+because npm and brew need the user's proxy and registry settings. It runs
+outside any workspace (cwd is the home directory). Output is not logged. A
+failure shows the exit code and the last three lines of stderr.
+
+Known gap: an update trusts the user's package registry and Homebrew taps the
+same way a manual `npm install -g` or `brew upgrade` would. A harness whose
+command path points into a `node_modules` folder the user doesn't control would
+be updated from that package's registry entry.
+
 ## Harness registration
 
 A registered harness is a command that the app later runs as the user, with
@@ -111,7 +136,8 @@ capability. The following limits still apply:
 - The handshake times out and the process is stopped afterwards.
 
 Test also calls `session/new` to list models, so some agents record an empty
-session in their own history.
+session in their own history. The picker's first availability check after each
+launch does the same once per harness.
 
 The setup assistant's functional test (`/api/harness/verify`) also sends one
 short prompt to the proposed agent. That costs one model call on the agent's

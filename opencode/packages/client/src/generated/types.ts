@@ -3021,6 +3021,91 @@ export type HarnessesRemoveOutput = {
   readonly data: { readonly id: string }
 }
 
+export type HarnessesRefreshInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly id?: { readonly id?: string }["id"]
+}
+
+export type HarnessesRefreshOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly driver: string
+    readonly name: string
+    readonly status: "available" | "unavailable"
+    readonly version?: string
+    readonly authenticated?: boolean
+    readonly error?: string
+    readonly models: ReadonlyArray<{
+      readonly id: string
+      readonly name: string
+      readonly description?: string
+      readonly reasoningEfforts: ReadonlyArray<string>
+      readonly serviceTiers: ReadonlyArray<{
+        readonly id: string
+        readonly name: string
+        readonly description?: string
+      }>
+      readonly defaultReasoningEffort?: string
+      readonly defaultServiceTier?: string
+      readonly isDefault: boolean
+    }>
+  }>
+}
+
+export type HarnessesUpdatesInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesUpdatesOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly name: string
+    readonly version?: string
+    readonly latest?: string
+    readonly updateAvailable: boolean
+    readonly method?: "npm" | "bun" | "brew"
+    readonly error?: string
+  }>
+}
+
+export type HarnessesUpgradeInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesUpgradeOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly version?: string
+    readonly latest?: string
+    readonly updateAvailable: boolean
+    readonly method?: "npm" | "bun" | "brew"
+    readonly error?: string
+  }
+}
+
 export type IntegrationsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined

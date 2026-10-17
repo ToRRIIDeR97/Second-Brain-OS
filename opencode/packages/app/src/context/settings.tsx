@@ -46,6 +46,20 @@ export interface Settings {
   }
   notifications: NotificationSettings
   sounds: SoundSettings
+  harnesses?: {
+    /** Model IDs left out of each harness's picker, by harness instance ID. New models show by default. */
+    hiddenModels?: Record<string, string[]>
+  }
+}
+
+/** A harness with the models the user hid in Settings left out. */
+export function withVisibleModels<T extends { id: string; models: ReadonlyArray<{ id: string }> }>(
+  instance: T,
+  hidden: ReadonlyArray<string> | undefined,
+): T {
+  if (!hidden?.length) return instance
+  const skip = new Set(hidden)
+  return { ...instance, models: instance.models.filter((model) => !skip.has(model.id)) }
 }
 
 export const monoDefault = "System Mono"
@@ -326,6 +340,17 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: withFallback(() => store.notifications?.errors, defaultSettings.notifications.errors),
         setErrors(value: boolean) {
           setStore("notifications", "errors", value)
+        },
+      },
+      harnesses: {
+        hiddenModels: (instanceID: string) => store.harnesses?.hiddenModels?.[instanceID] ?? [],
+        setModelHidden(instanceID: string, modelID: string, hidden: boolean) {
+          const current = store.harnesses?.hiddenModels?.[instanceID] ?? []
+          const next = hidden ? [...new Set([...current, modelID])] : current.filter((item) => item !== modelID)
+          setStore("harnesses", (value) => ({
+            ...value,
+            hiddenModels: { ...value?.hiddenModels, [instanceID]: next },
+          }))
         },
       },
       sounds: {
