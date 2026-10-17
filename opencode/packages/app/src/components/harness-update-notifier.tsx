@@ -29,7 +29,9 @@ export function HarnessUpdateNotifier() {
     () => layout.home.selection().directory || layout.projects.list()[0]?.worktree || serverSync().data.path.home,
   )
 
-  const offer = (update: Harness.UpdateStatus) => {
+  // Harnesses that run the same CLI report the same update; one toast covers them all.
+  const offer = (group: Harness.UpdateStatus[]) => {
+    const update = group[0]!
     const id = showToast({
       title: language.t("harness.update.toast.title", { name: update.name, latest: update.latest ?? "" }),
       description: update.method
@@ -43,7 +45,7 @@ export function HarnessUpdateNotifier() {
         {
           label: language.t("harness.update.toast.later"),
           onClick: () => {
-            setPrefs("dismissed", update.id, update.latest ?? "")
+            for (const item of group) setPrefs("dismissed", item.id, item.latest ?? "")
             dismissToast(id)
           },
         },
@@ -79,11 +81,15 @@ export function HarnessUpdateNotifier() {
     if (checked || !dir || !ready()) return
     checked = true
     void listHarnessUpdates(server(), dir)
-      .then((updates) =>
-        updates
-          .filter((update) => update.updateAvailable && prefs.dismissed[update.id] !== update.latest)
-          .forEach(offer),
-      )
+      .then((updates) => {
+        const groups = new Map<string, Harness.UpdateStatus[]>()
+        for (const update of updates) {
+          if (!update.updateAvailable || prefs.dismissed[update.id] === update.latest) continue
+          const key = [update.method, update.version, update.latest].join("|")
+          groups.set(key, [...(groups.get(key) ?? []), update])
+        }
+        groups.forEach(offer)
+      })
       .catch(() => undefined)
   })
 
