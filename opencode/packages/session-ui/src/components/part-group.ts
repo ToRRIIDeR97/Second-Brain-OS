@@ -1,10 +1,9 @@
 import type { Part as PartType, ToolPart } from "@opencode-ai/sdk/v2"
+import { stepOf } from "./step-kind"
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 // File changes, questions and subagents stay visible as their own rows.
 const UNGROUPED_TOOLS = new Set(["edit", "write", "patch", "apply_patch", "multiedit", "question", "task", "todowrite"])
-const SEARCH_TOOLS = new Set(["glob", "grep", "list", "websearch", "codesearch"])
-const COMMAND_TOOLS = new Set(["bash", "shell"])
 
 export type PartRef = {
   messageID: string
@@ -109,9 +108,10 @@ export type ToolGroupCounts = { read: number; search: number; command: number; o
 export function toolGroupCounts(parts: readonly ToolPart[]): ToolGroupCounts {
   const counts = { read: 0, search: 0, command: 0, other: 0 }
   for (const part of parts) {
-    if (part.tool === "read") counts.read++
-    else if (SEARCH_TOOLS.has(part.tool)) counts.search++
-    else if (COMMAND_TOOLS.has(part.tool)) counts.command++
+    const kind = stepOf(part).kind
+    if (kind === "read") counts.read++
+    else if (kind === "search") counts.search++
+    else if (kind === "run") counts.command++
     else counts.other++
   }
   return counts

@@ -142,7 +142,6 @@ export const dict: Record<string, string> = {
   "ui.tool.agent": "Tác nhân {{type}}",
   "ui.tool.agent.default": "Tác nhân",
   "ui.tool.skill": "Kỹ năng",
-  "ui.basicTool.called": "Đã gọi `{{tool}}`",
   "ui.toolErrorCard.failed": "Thất bại",
   "ui.toolErrorCard.copyError": "Sao chép lỗi",
   "ui.common.file.one": "tệp",

@@ -207,7 +207,6 @@ export const dict = {
   "ui.fileSearch.close": "Aramayı kapat",
   "ui.tool.task": "Görev",
   "ui.tool.skill": "Beceri",
-  "ui.basicTool.called": "`{{tool}}` çağrıldı",
   "ui.toolErrorCard.failed": "Başarısız",
   "ui.toolErrorCard.copyError": "Hatayı kopyala",
   "ui.message.duration.seconds": "{{count}} sn",

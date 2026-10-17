@@ -180,7 +180,6 @@ export const dict: Record<Keys, string> = {
   "ui.fileSearch.close": "Lukk søk",
   "ui.tool.task": "Oppgave",
   "ui.tool.skill": "Ferdighet",
-  "ui.basicTool.called": "Kjørte `{{tool}}`",
   "ui.toolErrorCard.failed": "Mislyktes",
   "ui.toolErrorCard.copyError": "Kopier feil",
   "ui.message.duration.seconds": "{{count}} s",

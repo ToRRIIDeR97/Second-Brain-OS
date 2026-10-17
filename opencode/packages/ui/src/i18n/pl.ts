@@ -209,7 +209,6 @@ export const dict = {
   "ui.fileSearch.close": "Zamknij wyszukiwanie",
   "ui.tool.task": "Zadanie",
   "ui.tool.skill": "Umiejętność",
-  "ui.basicTool.called": "Wywołano `{{tool}}`",
   "ui.toolErrorCard.failed": "Błąd",
   "ui.toolErrorCard.copyError": "Kopiuj błąd",
   "ui.message.duration.seconds": "{{count}} s",

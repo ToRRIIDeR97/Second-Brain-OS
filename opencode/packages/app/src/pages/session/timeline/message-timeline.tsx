@@ -69,6 +69,7 @@ import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
+import { TurnStepsSummary } from "@/components/session/turn-steps-summary"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -80,6 +81,8 @@ type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 const timelineFallbackItemSize = 60
+// Matches the TurnSteps row: a 36px summary button plus 8px bottom padding.
+const turnStepsRowSize = 44
 const timelineCache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
 
 const taskDescription = (part: PartType, sessionID: string) => {
@@ -323,6 +326,11 @@ export function MessageTimeline(props: {
     return language.t("command.session.new")
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
+  // A user toggle wins; otherwise steps stay open while the turn works, a step runs, or a step failed.
+  const turnStepsOpen = (row: TimelineRow.TurnSteps, active: boolean) =>
+    toolOpen[`turn:${row.userMessageID}:${row.segment}`] ??
+    ((active && sessionStatus().type !== "idle") || row.running || row.failed)
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
@@ -331,6 +339,7 @@ export function MessageTimeline(props: {
     status: sessionStatus,
     showReasoningSummaries: settings.general.showReasoningSummaries,
     inlineComments: () => true,
+    folded: (row, active) => !turnStepsOpen(row, active),
   })
   const activeMessageID = projection.activeMessageID
   const assistantMessagesByParent = projection.assistantMessagesByParent
@@ -401,7 +410,6 @@ export function MessageTimeline(props: {
     prependAnchorFrame = requestAnimationFrame(apply)
   }
 
-  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
   const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length || coldBottomMount ? 6 : 20)
   let resizePinnedIndexes: number[] = []
   let resizePinFrame: number | undefined
@@ -414,7 +422,9 @@ export function MessageTimeline(props: {
     observeElementOffset: observeElementOffsetReconnectAware,
     initialOffset: () => (props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
-    estimateSize: () => timelineFallbackItemSize,
+    // A turn-steps header has a fixed height; estimating it exactly keeps the rows below it from shifting on mount.
+    estimateSize: (index) =>
+      timelineRows()[index]?._tag === "TurnSteps" ? turnStepsRowSize : timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
       // Expose the computed range before core writes an anchor correction so the browser does not clamp it to the old height.
       if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
@@ -1077,6 +1087,32 @@ export function MessageTimeline(props: {
           </TimelineRowFrame>
         )
       }
+      case "TurnSteps": {
+        const turnStepsRow = row as Accessor<TimelineRowByTag<"TurnSteps">>
+        const parts = createMemo(() =>
+          turnStepsRow().tools.flatMap((ref) => {
+            const part = getMsgPart(ref.messageID, ref.partID)
+            return part ? [part] : []
+          }),
+        )
+        const active = () => activeMessageID() === turnStepsRow().userMessageID
+        return (
+          <TimelineRowFrame row={turnStepsRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 pb-2 md:px-5">
+              <TurnStepsSummary
+                parts={parts()}
+                working={workingTurn(turnStepsRow().userMessageID)}
+                durationMs={turnDurationMs(turnStepsRow().userMessageID)}
+                open={turnStepsOpen(turnStepsRow(), active())}
+                onToggle={(open) => {
+                  setToolOpen(`turn:${turnStepsRow().userMessageID}:${turnStepsRow().segment}`, open)
+                  onSizeChange?.()
+                }}
+              />
+            </div>
+          </TimelineRowFrame>
+        )
+      }
       case "Thinking": {
         const thinkingRow = row as Accessor<TimelineRowByTag<"Thinking">>
         return (
@@ -1201,8 +1237,11 @@ export function MessageTimeline(props: {
   return (
     <div class="relative w-full h-full min-w-0">
       <div
-        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-300 ease-emphasized bottom-8 motion-reduce:transition-none"
+        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-300 ease-emphasized motion-reduce:transition-none"
         classList={{
+          // Clear the composer status line, which overlays the timeline bottom while the session is busy.
+          "bottom-8": sessionStatus().type === "idle",
+          "bottom-[4.5rem]": sessionStatus().type !== "idle",
           "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
           "opacity-0 translate-y-2 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
           "scale-[0.8]": !props.scroll.overflow || !props.scroll.jump,

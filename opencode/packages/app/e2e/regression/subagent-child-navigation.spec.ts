@@ -2,6 +2,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
+import { expandTurnSteps } from "../performance/timeline-stability/fixture"
 
 const directory = "C:/OpenCode/SubagentNavigation"
 const projectID = "proj_subagent_navigation"
@@ -93,6 +94,7 @@ async function setup(page: Page, events?: () => EventPayload[]) {
 async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
+  await expandTurnSteps(page)
 
   const card = page.locator(`a[href="${sessionHref(childID)}"]`)
   await expect(card).toBeVisible()

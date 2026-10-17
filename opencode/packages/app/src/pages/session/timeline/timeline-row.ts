@@ -1,5 +1,5 @@
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import type { PartGroup } from "@opencode-ai/session-ui/message-part"
+import type { PartGroup, PartRef } from "@opencode-ai/session-ui/part-group"
 import { Data, Equal } from "effect"
 
 export type SummaryDiff = SnapshotFileDiff & { file: string }
@@ -23,6 +23,16 @@ export namespace TimelineRow {
     userMessageID: string
     group: PartGroup
     previousAssistantPart: boolean
+    /** Set on tool and reasoning groups, which fold into the turn's TurnSteps row. */
+    step?: true
+  }> {}
+  /** Fold header for one assistant turn's steps; `segment` counts interrupts within the turn. */
+  export class TurnSteps extends Data.TaggedClass("TurnSteps")<{
+    userMessageID: string
+    segment: number
+    tools: PartRef[]
+    failed: boolean
+    running: boolean
   }> {}
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
@@ -46,6 +56,7 @@ export namespace TimelineRow {
     | UserMessage
     | TurnDivider
     | AssistantPart
+    | TurnSteps
     | Thinking
     | DiffSummary
     | Error
@@ -63,6 +74,8 @@ export namespace TimelineRow {
         return `turn-divider:${row.userMessageID}:${row.label}`
       case "AssistantPart":
         return `assistant-part:${row.userMessageID}:${row.group.key}`
+      case "TurnSteps":
+        return `turn-steps:${row.userMessageID}:${row.segment}`
       case "Thinking":
         return `thinking:${row.userMessageID}`
       case "DiffSummary":

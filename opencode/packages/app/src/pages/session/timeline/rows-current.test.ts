@@ -50,6 +50,7 @@ describe("current session timeline rows", () => {
       "assistant-part:msg_1:part:msg_2:msg_2:text:0",
       "turn-gap:msg_3",
       "user-message:msg_3",
+      "turn-steps:msg_3:0",
       "assistant-part:msg_3:part:msg_4:msg_4:reasoning:0",
     ])
   })
@@ -218,10 +219,57 @@ describe("current session timeline rows", () => {
 
     expect(rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_u",
+      "turn-steps:msg_u:0",
       "assistant-part:msg_u:tools:t1",
       "assistant-part:msg_u:part:msg_a:t3",
       "assistant-part:msg_u:tools:t4",
       "assistant-part:msg_u:part:msg_a:t6",
     ])
+  })
+
+  test("puts one steps header before a turn's first tool or reasoning group and leaves text unmarked", () => {
+    const user = { id: "msg_u", sessionID: "ses_1", role: "user", time: { created: 1 } } as UserMessage
+    const assistant = { id: "msg_a", sessionID: "ses_1", role: "assistant", time: { created: 2 } } as AssistantMessage
+    const parts = [
+      { id: "x1", messageID: "msg_a", sessionID: "ses_1", type: "text", text: "Looking" },
+      {
+        id: "t1",
+        messageID: "msg_a",
+        sessionID: "ses_1",
+        type: "tool",
+        callID: "t1",
+        tool: "bash",
+        state: { status: "error" },
+      },
+      { id: "x2", messageID: "msg_a", sessionID: "ses_1", type: "text", text: "Done" },
+      {
+        id: "t2",
+        messageID: "msg_a",
+        sessionID: "ses_1",
+        type: "tool",
+        callID: "t2",
+        tool: "read",
+        state: { status: "completed" },
+      },
+    ] as Part[]
+
+    const rows = Timeline.constructMessageRows(user, () => parts, [assistant], 0, true, "idle", true, true)
+
+    expect(rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_u",
+      "assistant-part:msg_u:part:msg_a:x1",
+      "turn-steps:msg_u:0",
+      "assistant-part:msg_u:part:msg_a:t1",
+      "assistant-part:msg_u:part:msg_a:x2",
+      "assistant-part:msg_u:context:t2",
+    ])
+    expect(rows.flatMap((row) => (row._tag === "AssistantPart" && row.step ? [row.group.key] : []))).toEqual([
+      "part:msg_a:t1",
+      "context:t2",
+    ])
+    const header = rows.find((row) => row._tag === "TurnSteps")
+    expect(header?._tag === "TurnSteps" ? header.tools.map((ref) => ref.partID) : []).toEqual(["t1", "t2"])
+    expect(header?._tag === "TurnSteps" && header.failed).toBe(true)
+    expect(header?._tag === "TurnSteps" && header.running).toBe(false)
   })
 })

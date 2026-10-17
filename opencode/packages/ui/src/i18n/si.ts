@@ -142,7 +142,6 @@ export const dict: Record<string, string> = {
   "ui.tool.agent": "{{type}} නියෝජිතයා",
   "ui.tool.agent.default": "නියෝජිතයා",
   "ui.tool.skill": "දක්ෂතාවය",
-  "ui.basicTool.called": "`{{tool}}` ලෙස හැඳින්වේ",
   "ui.toolErrorCard.failed": "අසාර්ථකයි",
   "ui.toolErrorCard.copyError": "පිටපත් කිරීමේ දෝෂයකි",
   "ui.common.file.one": "ගොනුව",

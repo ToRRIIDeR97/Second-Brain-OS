@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" role="img" aria-labelledby="t d" font-family="Inter, system-ui, sans-serif" font-size="12">
+<title id="t">Current session view data flow</title>
+<desc id="d">Three harness drivers feed LLM events to the session runner and store; the renderer groups parts and renders tools by name, falling back to a generic "Called tool" row for Codex and ACP names; the Context tab reads only the last assistant message. Problems are marked with an x.</desc>
+<style>
+.n{fill:#ffffff;stroke:#c9c9c9}.p{fill:#fcecec;stroke:#e0a3a7}.h{font-weight:600;fill:#161616}.t{fill:#5c5c5c}.x{fill:#b82d35}.a{stroke:#808080;fill:none;marker-end:url(#m)}.g{fill:#f2f2f2}
+@media (prefers-color-scheme:dark){.n{fill:#161616;stroke:#3a3a3a}.p{fill:#461516;stroke:#7a3236}.h{fill:#fafafa}.t{fill:#aeaeae}.x{fill:#f17471}.g{fill:#0d0d0d}}
+</style>
+<defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#808080"/></marker></defs>
+<rect class="g" width="960" height="520" rx="16"/>
+<text class="h" x="24" y="32" font-size="14">Current · main @ 7ec9575</text>
+
+<text class="t" x="24" y="64">HARNESS DRIVERS (core)</text>
+<rect class="n" x="24" y="74" width="250" height="56" rx="12"/><text class="h" x="36" y="96">Built-in loop</text><text class="t" x="36" y="114">llm.stream · real tool names</text>
+<rect class="p" x="24" y="142" width="250" height="70" rx="12"/><text class="h" x="36" y="164">Codex app-server</text><text class="t" x="36" y="182">harness.ts codexToolName →</text><text class="t" x="36" y="198">command_execution, file_change…</text>
+<rect class="p" x="24" y="224" width="250" height="86" rx="12"/><text class="h" x="36" y="246">OpenCode over ACP</text><text class="t" x="36" y="264">acp.ts parseAcpNotification</text><text class="x" x="36" y="281">✗ usage_update ignored (cost, size)</text><text class="x" x="36" y="298">✗ normalizeUsage subtracts cache again</text>
+
+<rect class="p" x="330" y="120" width="250" height="120" rx="12"/><text class="h" x="342" y="142">Session runner</text><text class="t" x="342" y="160">publish-llm-event.ts → tokens()</text><text class="t" x="342" y="178">llm.ts Step.Ended</text><text class="x" x="342" y="196">✗ cost: 0 for every harness</text><text class="t" x="342" y="214">projector applyUsage → session</text><text class="t" x="342" y="230">row cost + tokens</text>
+
+<text class="t" x="640" y="64">RENDERER (app, session-ui)</text>
+<rect class="p" x="640" y="74" width="296" height="116" rx="12"/><text class="h" x="652" y="96">Timeline</text><text class="t" x="652" y="114">rows.ts → part-group.ts groupParts</text><text class="t" x="652" y="132">ContextToolGroup / ToolGroup / Part</text><text class="x" x="652" y="150">✗ no per-turn summary; steps never fold</text><text class="x" x="652" y="168">✗ ToolRegistry misses Codex/ACP names</text><text class="x" x="652" y="184">→ GenericTool "Called `command_execution`"</text>
+<rect class="p" x="640" y="212" width="296" height="98" rx="12"/><text class="h" x="652" y="234">Side panel · Context tab</text><text class="t" x="652" y="252">session-context-metrics.ts</text><text class="x" x="652" y="270">✗ last assistant message only</text><text class="x" x="652" y="288">✗ no cache hit, subagents, tool counts</text><text class="x" x="652" y="304">✗ cost always shown as $ amount</text>
+
+<path class="a" d="M274 102H300V170H330"/><path class="a" d="M274 177H330"/><path class="a" d="M274 267H300V200H330"/>
+<text class="t" x="280" y="96" font-size="11">LLMEvent</text>
+<path class="a" d="M580 160H610V132H640"/><path class="a" d="M580 200H610V260H640"/>
+<text class="t" x="586" y="150" font-size="11">parts</text><text class="t" x="586" y="230" font-size="11">messages</text>
+
+<rect class="n" x="24" y="350" width="912" height="146" rx="12"/>
+<text class="h" x="40" y="374">Observed on 2026-10-16</text>
+<text class="t" x="40" y="396">• Codex turn in the app shows the raw row: Called `command_execution` command="C:\\WINDOWS\\…"  (GenericTool, basic-tool.tsx:323)</text>
+<text class="t" x="40" y="416">• Live opencode acp 1.2.27: usage_update {used:23237,size:1000000,cost:{amount:0.0300,currency:USD}} is cumulative per session</text>
+<text class="t" x="40" y="436">• Same run, turn 2: inputTokens 39, cachedReadTokens 23198 → Tenon stores input 0 (39 − 23198 clamped)</text>
+<text class="t" x="40" y="456">• Step.Ended cost is hard-coded 0 (llm.ts:378), so session.cost is 0 for every harness</text>
+<text class="t" x="40" y="476">• No "Worked for" summary exists; turn duration only appears in the last text part's copy metadata</text>
+</svg>

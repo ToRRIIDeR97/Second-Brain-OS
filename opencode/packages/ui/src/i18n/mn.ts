@@ -142,7 +142,6 @@ export const dict = {
   "ui.tool.agent": "{{type}} Агент",
   "ui.tool.agent.default": "Агент",
   "ui.tool.skill": "Ур чадвар",
-  "ui.basicTool.called": "`{{tool}}` дуудсан",
   "ui.toolErrorCard.failed": "Амжилтгүй",
   "ui.toolErrorCard.copyError": "Хуулбарлах алдаа",
   "ui.common.file.one": "файл",
