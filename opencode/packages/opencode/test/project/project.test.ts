@@ -8,6 +8,8 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+import { PermissionTable } from "@opencode-ai/core/permission/sql"
+import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { SessionID } from "@/session/schema"
@@ -216,6 +218,12 @@ describe("Project.fromDirectory", () => {
         .values({ id: workspaceID, type: "local", name: "test", project_id: rootProject.id })
         .run()
         .pipe(Effect.orDie)
+      const permissionID = PermissionSaved.ID.create()
+      yield* db
+        .insert(PermissionTable)
+        .values({ id: permissionID, project_id: rootProject.id, action: "bash", resource: "git status" })
+        .run()
+        .pipe(Effect.orDie)
       yield* Effect.promise(() => $`git remote add origin git@github.com:acme/app.git`.cwd(tmp).quiet())
 
       const result = yield* projects.fromDirectory(tmp)
@@ -230,6 +238,10 @@ describe("Project.fromDirectory", () => {
       ).toBe(remoteID)
       expect(
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(remoteID)
+      expect(
+        (yield* db.select().from(PermissionTable).where(eq(PermissionTable.id, permissionID)).get().pipe(Effect.orDie))
           ?.project_id,
       ).toBe(remoteID)
     }),
