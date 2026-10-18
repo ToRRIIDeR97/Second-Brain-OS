@@ -94,7 +94,7 @@ export function fallbackHarnesses(): ReadonlyArray<Harness.Instance> {
     HarnessSchema.Instance.make({
       id: HarnessSchema.OpenCode,
       driver: HarnessSchema.OpenCodeDriver,
-      name: "Tenon Workbench",
+      name: "Default agent",
       status: "available",
       models: [],
     }),

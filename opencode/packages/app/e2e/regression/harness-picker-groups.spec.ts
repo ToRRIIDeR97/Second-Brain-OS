@@ -27,7 +27,7 @@ test("Harness picker puts external agents in one group with an add action", asyn
         // Server order puts a built-in external agent before the native loop; the picker regroups it.
         data: [
           harness("codex", "codex", "Codex"),
-          harness("opencode", "opencode", "Tenon Workbench"),
+          harness("opencode", "opencode", "Default agent"),
           harness("opencode-acp", "acp", "OpenCode"),
           harness("gemini", "acp", "Gemini"),
         ],
@@ -41,7 +41,7 @@ test("Harness picker puts external agents in one group with an add action", asyn
   await selector.click()
 
   const list = page.getByRole("listbox")
-  await expect(list.getByRole("option")).toHaveText(["Tenon Workbench", "Codex", "OpenCode", "Gemini", "Add harness"])
+  await expect(list.getByRole("option")).toHaveText(["Default agent", "Codex", "OpenCode", "Gemini", "Add harness"])
   await expect(list.getByText("External agents", { exact: true })).toBeVisible()
   const add = list.getByRole("option", { name: "Add harness", exact: true })
   await page.screenshot({ path: testInfo.outputPath("harness-picker-groups.png") })
