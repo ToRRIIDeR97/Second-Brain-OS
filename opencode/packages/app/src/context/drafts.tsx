@@ -144,8 +144,7 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
     // Drafts started from Home send on arrival. Kept in memory only, so a reload never re-sends.
     const pendingSend = new Map<string, Harness.InstanceID | undefined>()
 
-    const isActive = (draftID: string) =>
-      location.pathname === NEW_THREAD_PATH && location.query.draftId === draftID
+    const isActive = (draftID: string) => location.pathname === NEW_THREAD_PATH && location.query.draftId === draftID
 
     return {
       ready,
@@ -159,12 +158,17 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
         prompt?: string,
         model?: PromptModel,
         harnessInstanceID?: Harness.InstanceID,
-        options?: { send?: boolean },
+        options?: { send?: boolean; harnessModel?: Harness.ModelSelection },
       ) {
         const draft: Draft = { draftID: uuid(), ...input }
         if (options?.send && prompt?.trim()) pendingSend.set(draft.draftID, harnessInstanceID)
         memory.ensure(draftStateKey(draft.draftID), "prompt", () =>
-          createDraftPromptSession(draft.draftID, { prompt, model, harnessInstanceID }),
+          createDraftPromptSession(draft.draftID, {
+            prompt,
+            model,
+            harnessInstanceID,
+            harnessModel: options?.harnessModel,
+          }),
         )
         await startTransition(() => {
           setStore(

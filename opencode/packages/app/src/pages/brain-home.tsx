@@ -21,17 +21,18 @@ import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeSessionsController } from "@/pages/home/home-sessions-controller"
 import { Harness } from "@opencode-ai/schema/harness"
 import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
-import { isExternalHarness, openHarnessSettings, orderHarnesses } from "@/components/prompt-input/harness-controls"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-
-// Always the last entry of the external group, so new ACP agents can be registered from the picker.
-const addHarness = { kind: "add-harness" } as const
+import {
+  PromptInputHarnessControls,
+  type PromptInputHarnessController,
+} from "@/components/prompt-input/harness-controls"
+import { defaultModel } from "@/components/prompt-input/harness-controller"
+import { useSettings, withVisibleModels } from "@/context/settings"
 
 type TodayItem = { kind: "event"; value: CalendarEvent } | { kind: "task"; value: PlannerTask; overdue: boolean }
 
 export default function BrainHomePage() {
   const language = useLanguage()
-  const dialog = useDialog()
+  const settings = useSettings()
   const layout = useLayout()
   const navigate = useNavigate()
   const platform = usePlatform()
@@ -44,7 +45,8 @@ export default function BrainHomePage() {
   const [state, setState] = createStore({
     directory: "",
     prompt: "",
-    harnessInstanceID: Harness.OpenCode,
+    harnessInstanceID: Harness.OpenCode as Harness.InstanceID,
+    harnessModel: undefined as Harness.ModelSelection | undefined,
     starting: false,
   })
   const locations = layout.projects.list
@@ -83,16 +85,40 @@ export default function BrainHomePage() {
     refetchOnMount: true,
     retry: false,
   }))
-  const harnesses = () => harnessQuery.data
+  // Models hidden in Settings never reach the picker or the default-model choice, as in the thread composer.
+  // Reading `data` suspends, so callers outside the controls' Suspense boundary check `isPending` first.
+  const harnesses = () =>
+    harnessQuery.data?.map((item) => withVisibleModels(item, settings.harnesses.hiddenModels(item.id)))
+  const selectHarness = (instanceID: Harness.InstanceID) => {
+    const next = harnesses()?.find((instance) => instance.id === instanceID)
+    setState({ harnessInstanceID: instanceID, harnessModel: next ? defaultModel(next) : undefined })
+  }
+  // Fall back to an available harness, and keep the model valid for the selected one.
   createEffect(() => {
     if (harnessQuery.isPending) return
     const available = harnesses()
     if (!available) return
     const current = available.find((instance) => instance.id === state.harnessInstanceID)
-    if (current?.status === "available") return
-    const fallback = available.find((instance) => instance.status === "available")
-    if (fallback) setState("harnessInstanceID", fallback.id)
+    if (current?.status !== "available") {
+      const fallback = available.find((instance) => instance.status === "available")
+      if (fallback) selectHarness(fallback.id)
+      return
+    }
+    if (current.models.some((model) => model.id === state.harnessModel?.id)) return
+    setState("harnessModel", defaultModel(current))
   })
+  const harness: PromptInputHarnessController = {
+    instances: harnesses,
+    // Only the first load blocks the picker; a stale list stays usable while it refreshes.
+    loading: () => harnessQuery.isPending,
+    refresh: () => harnessQuery.refetch(),
+    current: () => state.harnessInstanceID,
+    select: selectHarness,
+    model: {
+      current: () => state.harnessModel,
+      set: (model) => setState("harnessModel", model),
+    },
+  }
   const today = localDateKey(new Date())
   const activeProjects = createMemo(() =>
     (projects.loading ? [] : (projects() ?? []))
@@ -142,7 +168,7 @@ export default function BrainHomePage() {
         prompt,
         undefined,
         state.harnessInstanceID,
-        { send: true },
+        { send: true, harnessModel: state.harnessModel },
       )
     } finally {
       setState("starting", false)
@@ -223,7 +249,9 @@ export default function BrainHomePage() {
                 void startSession()
               }}
             />
-            <div class="flex items-center gap-2">
+            <div class="flex min-w-0 flex-wrap items-center gap-1">
+              {/* The thread composer's controls: harness, then model and reasoning for external agents.
+                  The harness query suspends while it loads; this boundary keeps the rest of Home on screen. */}
               <Suspense
                 fallback={
                   <span class="flex h-8 items-center px-2 text-[12px] text-v2-text-text-faint">
@@ -231,28 +259,7 @@ export default function BrainHomePage() {
                   </span>
                 }
               >
-                <SelectV2<Harness.Instance | typeof addHarness>
-                  aria-label={language.t("harness.label")}
-                  class="!h-8 !w-auto max-w-[220px]"
-                  appearance="inline"
-                  options={[...(orderHarnesses(harnesses()) ?? []), addHarness]}
-                  current={harnesses()?.find((instance) => instance.id === state.harnessInstanceID)}
-                  value={(item) => ("kind" in item ? item.kind : item.id)}
-                  label={(item) =>
-                    "kind" in item
-                      ? language.t("harness.settings.add")
-                      : `${item.name}${item.status === "unavailable" ? ` - ${language.t("harness.unavailable")}` : ""}`
-                  }
-                  groupBy={(item) => ("kind" in item || isExternalHarness(item) ? language.t("harness.group.external") : "")}
-                  optionDisabled={(item) => !("kind" in item) && item.status === "unavailable"}
-                  placeholder={language.t("harness.checking")}
-                  disabled={harnessQuery.isPending}
-                  onSelect={(item) => {
-                    if (!item) return
-                    if ("kind" in item) return void openHarnessSettings(dialog)
-                    setState("harnessInstanceID", item.id)
-                  }}
-                />
+                <PromptInputHarnessControls controller={harness} />
               </Suspense>
               <span class="flex-1" />
               <IconButtonV2

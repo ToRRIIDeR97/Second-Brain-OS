@@ -130,9 +130,14 @@ availability uses the renderer query cache, keyed by server and workspace
 directory, with 30 seconds of freshness and background refresh on stale
 re-entry. Projects and calendar data still reload on each visit.
 
-Home's composer starts a Run in one step. `startSession` in
-`pages/brain-home.tsx` creates a draft with the prompt, the chosen harness, and
-`send: true`, then opens it. `context/drafts.tsx` keeps that request in memory
+Home's composer starts a Run in one step. It renders the thread composer's
+`PromptInputHarnessControls`, so an external harness offers its model, effort
+and service tier there too; the default model comes from `defaultModel`
+(`components/prompt-input/harness-controller.ts`). `startSession` in
+`pages/brain-home.tsx` creates a draft with the prompt, the chosen harness, its
+model selection (`harnessModel`) and `send: true`, then opens it. The harness
+query suspends while it loads, so the controls sit in their own `Suspense`
+boundary and the rest of Home stays on screen. `context/drafts.tsx` keeps that request in memory
 only, so a reload never sends twice. Once the draft's prompt and harness list
 have loaded, `new-session-draft-controller.ts` submits through the normal
 composer path. If the chosen harness is no longer available, the prompt stays

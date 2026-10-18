@@ -15,7 +15,8 @@ type HarnessSelection = {
   fallbackUnavailable?: boolean
 }
 
-const defaultModel = (instance: Harness.Instance) => {
+/** The model a harness starts with: its marked default, else its first model. The built-in loop uses the app's own picker. */
+export const defaultModel = (instance: Harness.Instance) => {
   if (instance.driver === Harness.OpenCodeDriver) return
   const model = instance.models.find((item) => item.isDefault) ?? instance.models[0]
   return model

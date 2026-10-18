@@ -36,14 +36,14 @@ test("Harness picker puts external agents in one group with an add action", asyn
   )
 
   await page.goto("/")
-  const selector = page.getByRole("group", { name: "Harness", exact: true }).getByRole("button")
+  const selector = page.getByRole("button", { name: "Harness", exact: true })
   await expect(selector).toBeEnabled()
   await selector.click()
 
-  const list = page.getByRole("listbox")
-  await expect(list.getByRole("option")).toHaveText(["Default agent", "Codex", "OpenCode", "Gemini", "Add harness"])
+  const list = page.getByRole("menu")
+  await expect(list.getByRole("menuitemradio")).toHaveText(["Default agent", "Codex", "OpenCode", "Gemini"])
   await expect(list.getByText("External agents", { exact: true })).toBeVisible()
-  const add = list.getByRole("option", { name: "Add harness", exact: true })
+  const add = list.getByRole("menuitem", { name: "Add harness", exact: true })
   await page.screenshot({ path: testInfo.outputPath("harness-picker-groups.png") })
 
   await add.click()

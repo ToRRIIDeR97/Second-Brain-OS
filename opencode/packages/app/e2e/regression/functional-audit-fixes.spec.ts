@@ -213,7 +213,7 @@ test("Spanish Brain navigation and harness names are localized", async ({ page }
   await page.goto("/")
   await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "Conocimiento", exact: true })).toBeVisible()
-  await expect(page.getByRole("group", { name: "Motor de agente" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Motor de agente" })).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath("spanish-home.png"), fullPage: true })
 })
 
