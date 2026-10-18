@@ -57,6 +57,65 @@ const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode
 
 const serverUrl = () => HttpServer.HttpServer.use((server) => Effect.succeed(HttpServer.formatAddress(server.address)))
 
+// Under full-suite load PTY spawn, exit, and websocket delivery can take seconds. Waits are bounded by
+// a condition plus a generous deadline that still fails well inside the 30s per-test timeout, so a
+// real hang reports what was missing instead of an opaque test timeout.
+const WAIT_MS = 15_000
+
+// The meta frame (0x00 + JSON cursor) is the first frame the server sends after attaching. Receiving it
+// proves the server socket is open and reading, so input written afterwards cannot be dropped.
+const META_FRAME = '\u0000{"cursor"'
+
+const createPty = (dir: string, input: Record<string, unknown>) =>
+  Effect.acquireRelease(
+    HttpClientRequest.post("/api/pty").pipe(
+      directoryHeader(dir),
+      HttpClientRequest.bodyJson(input),
+      Effect.flatMap(HttpClient.execute),
+      Effect.tap((created) => Effect.sync(() => expect(created.status).toBe(200))),
+      Effect.flatMap((created) => created.json),
+      Effect.flatMap(Schema.decodeUnknownEffect(Location.response(Pty.Info))),
+      Effect.map((body) => body.data),
+    ),
+    // Always remove the session, even when an assertion fails, so a long-running PTY never outlives its
+    // test. A 404 after the test already removed it is expected.
+    (info) =>
+      HttpClientRequest.delete(`/api/pty/${info.id}`).pipe(directoryHeader(dir), HttpClient.execute, Effect.ignore),
+  )
+
+const connectPty = (dir: string, id: string, cursor: number) =>
+  Effect.gen(function* () {
+    const socket = yield* Socket.makeWebSocket(
+      `${(yield* serverUrl()).replace(/^http/, "ws")}/api/pty/${id}/connect?cursor=${cursor}&location[directory]=${encodeURIComponent(dir)}`,
+      { closeCodeIsError: () => false },
+    )
+    const messages = yield* Queue.unbounded<string>()
+    yield* socket
+      .runRaw((message) =>
+        Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
+      )
+      .pipe(
+        Effect.catch(() => Effect.void),
+        Effect.forkScoped,
+      )
+    const write = yield* socket.writer
+    let seen = ""
+    const takeUntil = (expected: string): Effect.Effect<string, unknown> =>
+      Effect.gen(function* () {
+        while (!seen.includes(expected)) seen += yield* Queue.take(messages)
+        return seen
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: WAIT_MS,
+          orElse: () =>
+            Effect.fail(
+              new Error(`timed out waiting for ${JSON.stringify(expected)}; received ${JSON.stringify(seen)}`),
+            ),
+        }),
+      )
+    return { write, takeUntil }
+  })
+
 afterEach(async () => {
   await disposeAllInstances()
   await resetDatabase()
@@ -81,7 +140,7 @@ describe("v2 pty HttpApi", () => {
     expect(body.data.title).toBe("v2")
 
     // The canonical surface keeps exited sessions observable with their exit code.
-    const deadline = Date.now() + 5_000
+    const deadline = Date.now() + WAIT_MS
     let info: { status: string; exitCode?: number } | undefined
     while (Date.now() < deadline) {
       const found = await request(`/api/pty/${body.data.id}`, tmp.path)
@@ -105,7 +164,7 @@ describe("v2 pty HttpApi", () => {
     const created = await request("/api/pty", tmp.path, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "sleep 5"] }),
+      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "sleep 30"] }),
     })
     expect(created.status).toBe(200)
     const info = Schema.decodeUnknownSync(Location.response(Pty.Info))(await created.json()).data
@@ -134,35 +193,10 @@ describe("v2 pty HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const dir = yield* tmpdirScoped({ git: true, config: { formatter: false, lsp: false } })
-        const created = yield* HttpClientRequest.post("/api/pty").pipe(
-          directoryHeader(dir),
-          HttpClientRequest.bodyJson({ command: "/bin/cat", title: "v2-websocket" }),
-          Effect.flatMap(HttpClient.execute),
-        )
-        expect(created.status).toBe(200)
-        const body = yield* Schema.decodeUnknownEffect(Location.response(Pty.Info))(yield* created.json)
-        const info = body.data
+        const info = yield* createPty(dir, { command: "/bin/cat", title: "v2-websocket" })
+        const { write, takeUntil } = yield* connectPty(dir, info.id, -1)
 
-        const socket = yield* Socket.makeWebSocket(
-          `${(yield* serverUrl()).replace(/^http/, "ws")}/api/pty/${info.id}/connect?cursor=-1&location[directory]=${encodeURIComponent(dir)}`,
-          { closeCodeIsError: () => false },
-        )
-        const messages = yield* Queue.unbounded<string>()
-        yield* socket
-          .runRaw((message) =>
-            Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
-          )
-          .pipe(Effect.catch(() => Effect.void))
-          .pipe(Effect.forkScoped)
-        const write = yield* socket.writer
-
-        const takeUntil = (expected: string, seen = ""): Effect.Effect<string, unknown> =>
-          Effect.gen(function* () {
-            const next = seen + (yield* Queue.take(messages).pipe(Effect.timeout("5 seconds")))
-            if (next.includes(expected)) return next
-            return yield* takeUntil(expected, next)
-          })
-
+        yield* takeUntil(META_FRAME)
         yield* write("ping-v2\n")
         expect(yield* takeUntil("ping-v2")).toContain("ping-v2")
         yield* write(new Socket.CloseEvent(1000, "done")).pipe(Effect.catch(() => Effect.void))
@@ -205,46 +239,18 @@ describe("v2 pty HttpApi", () => {
           ),
         )
 
-        const created = yield* HttpClientRequest.post("/api/pty").pipe(
-          directoryHeader(dir),
-          HttpClientRequest.bodyJson({
-            command: "/bin/sh",
-            args: ["-c", 'printf "%s|%s|%s|%s|%s\\n" "$CALLER" "$SHARED" "$PLUGIN" "$TERM" "$HOOK_CWD"; sleep 5'],
-            cwd,
-            env: { CALLER: "caller", SHARED: "caller", TERM: "caller" },
-          }),
-          Effect.flatMap(HttpClient.execute),
-        )
-        expect(created.status).toBe(200)
-        const info = (yield* Schema.decodeUnknownEffect(Location.response(Pty.Info))(yield* created.json)).data
-
-        const socket = yield* Socket.makeWebSocket(
-          `${(yield* serverUrl()).replace(/^http/, "ws")}/api/pty/${info.id}/connect?cursor=0&location[directory]=${encodeURIComponent(dir)}`,
-          { closeCodeIsError: () => false },
-        )
-        const messages = yield* Queue.unbounded<string>()
-        yield* socket
-          .runRaw((message) =>
-            Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
-          )
-          .pipe(
-            Effect.catch(() => Effect.void),
-            Effect.forkScoped,
-          )
-        const write = yield* socket.writer
-
-        const takeUntil = (expected: string, seen = ""): Effect.Effect<string, unknown> =>
-          Effect.gen(function* () {
-            const next = seen + (yield* Queue.take(messages).pipe(Effect.timeout("5 seconds")))
-            if (next.includes(expected)) return next
-            return yield* takeUntil(expected, next)
-          })
+        const info = yield* createPty(dir, {
+          command: "/bin/sh",
+          args: ["-c", 'printf "%s|%s|%s|%s|%s\\n" "$CALLER" "$SHARED" "$PLUGIN" "$TERM" "$HOOK_CWD"; sleep 30'],
+          cwd,
+          env: { CALLER: "caller", SHARED: "caller", TERM: "caller" },
+        })
+        const { write, takeUntil } = yield* connectPty(dir, info.id, 0)
 
         expect(yield* takeUntil(`caller|plugin|plugin|xterm-256color|${cwd}`)).toContain(
           `caller|plugin|plugin|xterm-256color|${cwd}`,
         )
         yield* write(new Socket.CloseEvent(1000, "done")).pipe(Effect.catch(() => Effect.void))
-        yield* HttpClientRequest.delete(`/api/pty/${info.id}`).pipe(directoryHeader(dir), HttpClient.execute)
       }),
   )
 })
