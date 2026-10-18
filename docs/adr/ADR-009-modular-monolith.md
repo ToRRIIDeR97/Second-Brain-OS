@@ -1,6 +1,10 @@
 # ADR-009: Start as a modular monolith
 
-- Status: accepted
+- Status: accepted, partially superseded by ADR-010
+- Status note: The broad `workspace`, `knowledge`, `agents`, `planner`,
+  `terminal`, and `platform` domains and the evidence bar for extraction still
+  hold and now apply to OpenCode's TypeScript packages. The Rust modules and
+  the MCP sidecar do not.
 - Date: 2026-07-27
 - Supersedes: none
 

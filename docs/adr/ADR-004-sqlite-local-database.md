@@ -1,6 +1,10 @@
 # ADR-004: Use one local SQLite database
 
-- Status: accepted
+- Status: superseded by ADR-010
+- Status note: The active app has no single rebuildable app database. Sessions
+  live in OpenCode's `opencode.db` and unsent drafts in a desktop
+  `drafts.sqlite`; neither is rebuildable from workspace files. Canonical
+  workspace files still stay outside any database.
 - Date: 2026-07-27
 - Supersedes: none
 

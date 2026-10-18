@@ -17,7 +17,8 @@ Start with the root [README](../README.md) for setup and commands, and
 | [records/](records/) | Dated cleanup and audit records for the Electron app |
 | [archive/tauri/](archive/tauri/README.md) | Retired Tauri app: plans, checkpoints, handovers, contracts, and evidence |
 
-ADR-004, ADR-005, ADR-006, and ADR-009 and some security policies still use
-Tauri-era wording. Where they disagree with the architecture document or threat
-model, those documents win. The latest scope audit is
+ADR-004 and ADR-006 are superseded by ADR-010. ADR-005 and ADR-009 are
+partially superseded; their status notes say what still holds. Some security
+policies still use Tauri-era wording. Where they disagree with the architecture
+document or threat model, those documents win. The latest scope audit is
 [records/scope-audit-2026-10-02.md](records/scope-audit-2026-10-02.md).
