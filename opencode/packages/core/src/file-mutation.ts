@@ -84,23 +84,37 @@ const layer = Layer.effect(
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         locks.withLock(target.canonical)(Effect.uninterruptible(effect))
 
-    // Returns whether the target existed. A rename swaps in a new inode, so the
-    // existing permission bits are copied to keep what an in-place write kept.
+    // Returns whether the target existed. A rename swaps in a new inode and
+    // ignores the target's own permissions, so a read-only target is refused
+    // up front (as an in-place write was) and its permission bits are copied.
     const replace = (path: string, content: string | Uint8Array) =>
       Effect.gen(function* () {
         const existing = yield* fs
           .stat(path)
           .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+        if (existing) yield* fs.access(path, { writable: true })
         if (!existing) yield* fs.ensureDir(dirname(path))
         const temp = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`)
-        yield* Effect.gen(function* () {
-          yield* typeof content === "string"
+        const removeTemp = () => fs.remove(temp).pipe(Effect.ignore)
+        const staged = yield* (
+          typeof content === "string"
             ? fs.writeFileString(temp, content, { flag: "wx" })
             : fs.writeFile(temp, content, { flag: "wx" })
+        ).pipe(
+          Effect.as(true),
+          // A directory that refuses new files can still hold a writable target: write it in place.
+          Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(false)),
+          Effect.onError(removeTemp),
+        )
+        if (!staged) {
+          yield* typeof content === "string" ? fs.writeFileString(path, content) : fs.writeFile(path, content)
+          return existing !== undefined
+        }
+        yield* Effect.gen(function* () {
           yield* Effect.scoped(fs.open(temp, { flag: "r+" }).pipe(Effect.flatMap((file) => file.sync)))
           if (existing) yield* fs.chmod(temp, existing.mode & 0o7777)
           yield* fs.rename(temp, path)
-        }).pipe(Effect.onError(() => fs.remove(temp).pipe(Effect.ignore)))
+        }).pipe(Effect.onError(removeTemp))
         return existing !== undefined
       })
 

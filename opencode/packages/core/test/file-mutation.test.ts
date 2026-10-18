@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer } from "effect"
+import { systemError } from "effect/PlatformError"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -334,6 +335,73 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("refuses to replace a read-only target", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        // Root bypasses file modes, so only the access-check test below applies there.
+        if (process.platform === "win32" || process.getuid?.() === 0) return
+        const targetPath = path.join(directory, "locked.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "locked"))
+        yield* Effect.promise(() => fs.chmod(targetPath, 0o444))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "locked.txt" })
+
+        const error = yield* (yield* FileMutation.Service).write({ target, content: "changed" }).pipe(Effect.flip)
+        expect(error).toMatchObject({ _tag: "PlatformError", reason: { _tag: "PermissionDenied" } })
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("locked")
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("checks that an existing target is writable before replacing it", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "locked.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "locked"))
+        const checked: Array<{ path: string; writable?: boolean }> = []
+        const filesystem = overrideFilesystem(() => ({
+          access: (target, options) =>
+            Effect.sync(() => checked.push({ path: target, writable: options?.writable })).pipe(
+              Effect.andThen(Effect.fail(denied(target))),
+            ),
+        }))
+
+        const error = yield* Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: "locked.txt" })
+          return yield* (yield* FileMutation.Service)
+            .writeIfUnchanged({ target, expected: new TextEncoder().encode("locked"), content: "changed" })
+            .pipe(Effect.flip)
+        }).pipe(provide(directory, filesystem))
+
+        expect(error).toMatchObject({ _tag: "PlatformError", reason: { _tag: "PermissionDenied" } })
+        expect(checked).toEqual([{ path: targetPath, writable: true }])
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("locked")
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["locked.txt"])
+      }),
+    ),
+  )
+
+  it.live("writes a writable target in place when its directory refuses new files", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "shared.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "before"))
+        const filesystem = overrideFilesystem((real) => ({
+          writeFileString: (target, content, options) =>
+            target.endsWith(".tmp") ? Effect.fail(denied(target)) : real.writeFileString(target, content, options),
+        }))
+
+        const result = yield* Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: "shared.txt" })
+          return yield* (yield* FileMutation.Service).write({ target, content: "after" })
+        }).pipe(provide(directory, filesystem))
+
+        expect(result.existed).toBe(true)
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("after")
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["shared.txt"])
+      }),
+    ),
+  )
+
   it.live("keeps the original content and removes the temp file when a write fails", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -408,4 +476,18 @@ function instrumentWrites(run: <E>(write: Effect.Effect<void, E>, target: string
       })
     }),
   ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+}
+
+function overrideFilesystem(override: (filesystem: FSUtil.Interface) => Partial<FSUtil.Interface>) {
+  return Layer.effect(
+    FSUtil.Service,
+    Effect.gen(function* () {
+      const filesystem = yield* FSUtil.Service
+      return FSUtil.Service.of({ ...filesystem, ...override(filesystem) })
+    }),
+  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+}
+
+function denied(target: string) {
+  return systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "test", pathOrDescriptor: target })
 }

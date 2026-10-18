@@ -180,4 +180,25 @@ describe("second brain errors and recovery HttpApi", () => {
       expect(reloaded.revision).toBe(saved.revision)
     }),
   )
+
+  it.instance("keeps a calendar that parses but fails validation instead of moving it aside", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+      const directory = path.join(test.directory, ".second-brain")
+      const event = { id: "event_a", title: "Kickoff", date: "2026-08-30", source: "local", syncState: "local" }
+      const duplicated = JSON.stringify({ version: 2, revision: "r", events: [event, event], tasks: [] })
+      yield* Effect.promise(() => mkdir(directory, { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(directory, "calendar-v1.json"), duplicated))
+
+      const saved = yield* request("/second-brain/calendar", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ events: [event], tasks: [] }),
+      })
+      expect(saved.status).toBe(400)
+      expect(yield* saved.json).toEqual({ name: "SecondBrainInvalidError", data: { message: "duplicate_id" } })
+      expect(yield* Effect.promise(() => readdir(directory))).toEqual(["calendar-v1.json"])
+    }),
+  )
 })

@@ -227,15 +227,19 @@ const saveCalendar = Effect.fn("SecondBrain.saveCalendar")(function* (input: Pla
         : new PlannerCalendar.InvalidError({ reason: "invalid_document" }),
   })
   const current = yield* decodeCalendar(file.bytes).pipe(
-    Effect.catchTag("PlannerCalendar.InvalidError", (error) =>
-      Effect.gen(function* () {
-        yield* fs.rename(file.target.canonical, `${file.target.canonical}.corrupt-${Date.now()}`)
-        yield* Effect.logWarning("Moved an undecodable Second Brain calendar aside", {
-          path: CALENDAR_PATH,
-          reason: error.reason,
-        })
-        return undefined
-      }),
+    Effect.catchIf(
+      // Only a file that is not a calendar document at all is moved aside; a document
+      // that parses but fails validation (for example too_many_events) still fails the save.
+      (error) => error.reason === "invalid_json" || error.reason === "invalid_document",
+      (error) =>
+        Effect.gen(function* () {
+          yield* fs.rename(file.target.canonical, `${file.target.canonical}.corrupt-${Date.now()}`)
+          yield* Effect.logWarning("Moved an undecodable Second Brain calendar aside", {
+            path: CALENDAR_PATH,
+            reason: error.reason,
+          })
+          return undefined
+        }),
     ),
   )
   if (current && input.expectedRevision !== undefined && input.expectedRevision !== current.revision) {

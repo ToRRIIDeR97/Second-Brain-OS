@@ -116,8 +116,11 @@ Some details of the write path:
   failures are a logged 500. Logs carry the error tag, reason and relative
   path, never content.
 - `FileMutation` replaces a file through a synced sibling temp file and a
-  rename, keeping the old permission bits. A calendar file that no longer
-  decodes is moved aside to `calendar-v1.json.corrupt-<time>` on the next save.
+  rename, keeping the old permission bits. It refuses a target that isn't
+  writable, and writes in place when the directory refuses new files. A
+  calendar file that isn't JSON or isn't a calendar document is moved aside to
+  `calendar-v1.json.corrupt-<time>` on the next save; one that only fails
+  validation still fails the save.
 - Calendar saves (with their timeline sync), Project create and update, and the
   Workspace migration share one lock per Brain directory. The timeline sync
   rewrites only `projects/<id>/timeline/calendar.json` files whose items
