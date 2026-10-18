@@ -1,8 +1,9 @@
-import { app, ipcMain } from "electron"
+import { app } from "electron"
 import type { IpcMainInvokeEvent } from "electron"
 import type { WslServersController } from "./servers"
-import { requireWslIpcString, requireWslIpcStrings } from "./policy"
+import { requireWslDistro, requireWslDistros, requireWslIpcString } from "./policy"
 import type { WslServersState } from "../../preload/types"
+import { trustedHandle } from "../ipc"
 import { nativeT } from "../native-translations"
 
 export function registerWslIpcHandlers(controller: WslServersController) {
@@ -24,7 +25,7 @@ export function registerWslIpcHandlers(controller: WslServersController) {
     subscriptions.clear()
   })
 
-  ipcMain.handle("wsl-servers-subscribe", (event) => {
+  trustedHandle("wsl-servers-subscribe", (event) => {
     const id = event.sender.id
     if (subscriptions.has(id)) return
     subscriptions.set(
@@ -39,27 +40,27 @@ export function registerWslIpcHandlers(controller: WslServersController) {
     )
     event.sender.once("destroyed", () => unsubscribe(id))
   })
-  ipcMain.handle("wsl-servers-unsubscribe", (event) => unsubscribe(event.sender.id))
-  ipcMain.handle("wsl-servers-get-state", () => controller.getState())
-  ipcMain.handle("wsl-servers-probe-runtime", () => controller.probeRuntime())
-  ipcMain.handle("wsl-servers-refresh-distros", () => controller.refreshDistros())
-  ipcMain.handle("wsl-servers-install-wsl", () => controller.installWsl())
-  ipcMain.handle("wsl-servers-install-distro", (_event: IpcMainInvokeEvent, name: string) =>
-    controller.installDistro(requireWslIpcString("distro", name)),
+  trustedHandle("wsl-servers-unsubscribe", (event) => unsubscribe(event.sender.id))
+  trustedHandle("wsl-servers-get-state", () => controller.getState())
+  trustedHandle("wsl-servers-probe-runtime", () => controller.probeRuntime())
+  trustedHandle("wsl-servers-refresh-distros", () => controller.refreshDistros())
+  trustedHandle("wsl-servers-install-wsl", () => controller.installWsl())
+  trustedHandle("wsl-servers-install-distro", (_event: IpcMainInvokeEvent, name: unknown) =>
+    controller.installDistro(requireWslDistro(name)),
   )
-  ipcMain.handle("wsl-servers-probe-addable", (_event: IpcMainInvokeEvent, distros: string[]) =>
-    controller.probeAddable(requireWslIpcStrings("distro", distros)),
+  trustedHandle("wsl-servers-probe-addable", (_event: IpcMainInvokeEvent, distros: unknown) =>
+    controller.probeAddable(requireWslDistros(distros)),
   )
-  ipcMain.handle("wsl-servers-open-terminal", (_event: IpcMainInvokeEvent, name: string) =>
-    controller.openTerminal(requireWslIpcString("distro", name)),
+  trustedHandle("wsl-servers-open-terminal", (_event: IpcMainInvokeEvent, name: unknown) =>
+    controller.openTerminal(requireWslDistro(name)),
   )
-  ipcMain.handle("wsl-servers-add", (_event: IpcMainInvokeEvent, distro: string) =>
-    controller.addServer(requireWslIpcString("distro", distro)),
+  trustedHandle("wsl-servers-add", (_event: IpcMainInvokeEvent, distro: unknown) =>
+    controller.addServer(requireWslDistro(distro)),
   )
-  ipcMain.handle("wsl-servers-remove", (_event: IpcMainInvokeEvent, id: string) =>
+  trustedHandle("wsl-servers-remove", (_event: IpcMainInvokeEvent, id: unknown) =>
     controller.removeServer(requireWslIpcString("server id", id)),
   )
-  ipcMain.handle("wsl-servers-start", (_event: IpcMainInvokeEvent, id: string) =>
+  trustedHandle("wsl-servers-start", (_event: IpcMainInvokeEvent, id: unknown) =>
     controller.startServer(requireWslIpcString("server id", id)),
   )
 }
@@ -83,18 +84,18 @@ function registerUnavailableWslIpcHandlers() {
     job: null,
   })
 
-  ipcMain.handle("wsl-servers-subscribe", (event) => {
+  trustedHandle("wsl-servers-subscribe", (event) => {
     event.sender.send("wsl-servers-event", { type: "state", state: state() })
   })
-  ipcMain.handle("wsl-servers-unsubscribe", () => undefined)
-  ipcMain.handle("wsl-servers-get-state", () => state())
-  ipcMain.handle("wsl-servers-probe-runtime", unavailable)
-  ipcMain.handle("wsl-servers-refresh-distros", unavailable)
-  ipcMain.handle("wsl-servers-install-wsl", unavailable)
-  ipcMain.handle("wsl-servers-install-distro", unavailable)
-  ipcMain.handle("wsl-servers-probe-addable", unavailable)
-  ipcMain.handle("wsl-servers-open-terminal", unavailable)
-  ipcMain.handle("wsl-servers-add", unavailable)
-  ipcMain.handle("wsl-servers-remove", unavailable)
-  ipcMain.handle("wsl-servers-start", unavailable)
+  trustedHandle("wsl-servers-unsubscribe", () => undefined)
+  trustedHandle("wsl-servers-get-state", () => state())
+  trustedHandle("wsl-servers-probe-runtime", unavailable)
+  trustedHandle("wsl-servers-refresh-distros", unavailable)
+  trustedHandle("wsl-servers-install-wsl", unavailable)
+  trustedHandle("wsl-servers-install-distro", unavailable)
+  trustedHandle("wsl-servers-probe-addable", unavailable)
+  trustedHandle("wsl-servers-open-terminal", unavailable)
+  trustedHandle("wsl-servers-add", unavailable)
+  trustedHandle("wsl-servers-remove", unavailable)
+  trustedHandle("wsl-servers-start", unavailable)
 }

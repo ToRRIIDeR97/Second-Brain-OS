@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test"
 import {
   clearWslDistroState,
+  requireWslDistro,
+  requireWslDistros,
   requireWslIpcString,
-  requireWslIpcStrings,
   wslServerIdToRestart,
   wslTerminalArgs,
 } from "./policy"
@@ -67,8 +68,11 @@ test("clears cached distro probes when removing a WSL server", () => {
   ).toEqual({ distroProbes: {}, opencodeChecks: {} })
 })
 
-test("opens terminals for distro names containing spaces", () => {
-  expect(wslTerminalArgs("Ubuntu Preview")).toEqual(["/c", "start", "", "wsl", "-d", "Ubuntu Preview"])
+test("opens terminals only for allowlisted distro names", () => {
+  expect(wslTerminalArgs("Ubuntu-24.04")).toEqual(["/c", "start", "", "wsl.exe", "-d", "Ubuntu-24.04"])
+  expect(wslTerminalArgs()).toEqual(["/c", "start", "", "wsl.exe"])
+  expect(() => wslTerminalArgs("x&calc")).toThrow("Invalid distro")
+  expect(() => wslTerminalArgs("Ubuntu Preview")).toThrow("Invalid distro")
 })
 
 test("stops health polling when sidecar startup settles", async () => {
@@ -92,11 +96,18 @@ test("stops health polling when sidecar startup settles", async () => {
 })
 
 test("validates WSL IPC identifiers at the module boundary", () => {
-  expect(requireWslIpcString("distro", "Debian")).toBe("Debian")
-  expect(requireWslIpcStrings("distro", ["Debian", "Ubuntu"])).toEqual(["Debian", "Ubuntu"])
-  expect(() => requireWslIpcString("distro", "")).toThrow("Invalid distro")
+  expect(requireWslDistro("Debian")).toBe("Debian")
+  expect(requireWslDistro("OracleLinux_9_1")).toBe("OracleLinux_9_1")
+  expect(requireWslDistros(["Debian", "Ubuntu-24.04"])).toEqual(["Debian", "Ubuntu-24.04"])
+  expect(() => requireWslDistro("")).toThrow("Invalid distro")
+  expect(() => requireWslDistro(42)).toThrow("Invalid distro")
+  expect(() => requireWslDistro("-d")).toThrow("Invalid distro")
+  expect(() => requireWslDistro('Debian"&calc')).toThrow("Invalid distro")
+  expect(() => requireWslDistro("Debian%PATH%")).toThrow("Invalid distro")
+  expect(() => requireWslDistros([])).toThrow("Invalid distro")
+  expect(() => requireWslDistros(["Debian", "a|b"])).toThrow("Invalid distro")
+  expect(requireWslIpcString("server id", "wsl:Debian")).toBe("wsl:Debian")
   expect(() => requireWslIpcString("server id", undefined)).toThrow("Invalid server id")
-  expect(() => requireWslIpcStrings("distro", [])).toThrow("Invalid distro")
 })
 
 test("derives a required Windows restart from the post-install runtime probe", () => {

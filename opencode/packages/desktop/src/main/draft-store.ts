@@ -13,7 +13,28 @@ const blobs = sqliteTable("blob", {
   data: blob({ mode: "buffer" }).notNull(),
 })
 
-export function createDesktopDraftStore(filename: string) {
+// One pasted or dropped attachment; larger blobs are refused before they reach
+// SQLite or main-process memory.
+export const MAX_DRAFT_BLOB_BYTES = 64 * 1024 * 1024
+
+export function requireDraftKey(value: unknown) {
+  if (typeof value === "string" && value.length > 0) return value
+  throw new Error("Invalid draft key")
+}
+
+export function requireDraftValue(value: unknown) {
+  if (typeof value === "string") return value
+  throw new Error("Invalid draft value")
+}
+
+export function requireDraftBlob(value: unknown) {
+  if (!(value instanceof ArrayBuffer) && !ArrayBuffer.isView(value)) throw new Error("Invalid draft blob")
+  if (value.byteLength > MAX_DRAFT_BLOB_BYTES) throw new Error("Draft blob too large")
+  if (value instanceof ArrayBuffer) return new Uint8Array(value)
+  return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+}
+
+export function createDesktopDraftStore(filename: string, onFlushError?: (error: unknown) => void) {
   const native = new DatabaseSync(filename)
   native.exec(
     "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS document (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS blob (id TEXT PRIMARY KEY, data BLOB NOT NULL);",
@@ -29,11 +50,14 @@ export function createDesktopDraftStore(filename: string) {
         return item
       }),
     )
-  db.select({ id: blobs.id })
-    .from(blobs)
-    .all()
-    .filter(({ id }) => !used.has(id))
-    .forEach(({ id }) => db.delete(blobs).where(eq(blobs.id, id)).run())
+  db.transaction((tx) =>
+    tx
+      .select({ id: blobs.id })
+      .from(blobs)
+      .all()
+      .filter(({ id }) => !used.has(id))
+      .forEach(({ id }) => tx.delete(blobs).where(eq(blobs.id, id)).run()),
+  )
   const pending = new Map<string, string | null>()
   let timer: ReturnType<typeof setTimeout> | undefined
   const flush = () => {
@@ -41,16 +65,26 @@ export function createDesktopDraftStore(filename: string) {
     timer = undefined
     const writes = [...pending]
     pending.clear()
-    db.transaction((tx) => {
-      writes.forEach(([key, value]) => {
-        if (value === null) tx.delete(documents).where(eq(documents.key, key)).run()
-        else
-          tx.insert(documents)
-            .values({ key, value })
-            .onConflictDoUpdate({ target: documents.key, set: { value } })
-            .run()
+    try {
+      db.transaction((tx) => {
+        writes.forEach(([key, value]) => {
+          if (value === null) tx.delete(documents).where(eq(documents.key, key)).run()
+          else
+            tx.insert(documents)
+              .values({ key, value })
+              .onConflictDoUpdate({ target: documents.key, set: { value } })
+              .run()
+        })
       })
-    })
+    } catch (error) {
+      // A timer flush runs outside any caller, so a throw here would be
+      // uncaught. Keep the failed batch, unless a newer write replaced a key,
+      // and retry it with the next write or the quit flush.
+      writes.forEach(([key, value]) => {
+        if (!pending.has(key)) pending.set(key, value)
+      })
+      onFlushError?.(error)
+    }
   }
   const schedule = () => {
     if (!timer) timer = setTimeout(flush, 500)

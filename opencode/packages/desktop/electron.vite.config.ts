@@ -95,7 +95,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {
-      sourcemap: true,
+      // Hidden maps stay available for Sentry upload but carry no
+      // sourceMappingURL; electron-builder also leaves *.map out of the asar.
+      sourcemap: "hidden",
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",

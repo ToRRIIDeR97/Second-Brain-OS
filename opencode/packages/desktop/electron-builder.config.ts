@@ -62,7 +62,7 @@ const getBase = (appId: string): Configuration => ({
     name: PACKAGE_NAMES[channel],
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
+  files: ["out/**/*", "!out/**/*.map", "resources/**/*", "!resources/opencode-cli*"],
   extraResources: [
     ...(channel === "dev"
       ? [
