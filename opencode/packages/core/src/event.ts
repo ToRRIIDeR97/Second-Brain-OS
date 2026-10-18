@@ -458,16 +458,14 @@ export const layerWith = (options?: LayerOptions) =>
               strictOwner: options?.strictOwner,
             })
             if (committed && options?.publish) {
-              yield* notify(
-                {
-                  ...payload,
-                  durable: {
-                    aggregateID: committed.aggregateID,
-                    seq: committed.seq,
-                    version: definition.durable.version,
-                  },
+              yield* notify({
+                ...payload,
+                durable: {
+                  aggregateID: committed.aggregateID,
+                  seq: committed.seq,
+                  version: definition.durable.version,
                 },
-              )
+              })
             }
           }
         })

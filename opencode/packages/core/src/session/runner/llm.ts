@@ -27,19 +27,21 @@ import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
+import { Tool } from "../../tool/tool"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
-import { MAX_STEPS_PROMPT } from "./max-steps"
+import { DEFAULT_MAX_STEPS, DOOM_LOOP_THRESHOLD, MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -63,8 +65,8 @@ const harnessRequestModel = (session: SessionSchema.Info) =>
  *   - [ ] Replace local ownership with durable multi-node ownership when clustered.
  *   - [ ] Mark busy, retrying, idle, interrupted, or terminal-failure status durably.
  *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
- *   - [x] Honor optional agent step limits.
- *   - [ ] Bound provider retries and repeated identical tool calls.
+ *   - [x] Honor agent step limits, defaulting to DEFAULT_MAX_STEPS.
+ *   - [x] Bound provider retries and repeated identical tool calls.
  *
  * - Runtime context assembly
  *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
@@ -117,6 +119,7 @@ const layer = Layer.effect(
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
+    const permissions = yield* PermissionV2.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
@@ -228,8 +231,9 @@ const layer = Layer.effect(
         : harnessRequestModel(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
-      const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
+      const isLastStep = currentStep >= (agent.info?.steps ?? DEFAULT_MAX_STEPS)
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
+      const recentCalls = localToolCallsSinceLastUser(context)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
@@ -278,49 +282,89 @@ const layer = Layer.effect(
           revision: session.harnessRevision ?? 0,
         }),
       ).pipe(
-          Stream.runForEach((event) =>
-            Effect.gen(function* () {
-              if (overflowFailure || publisher.hasProviderError()) return
-              if (LLMEvent.is.providerError(event)) {
-                if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
-                  overflowFailure = event
-                  return
-                }
-              }
-              yield* publish(event)
-              if (event.type !== "tool-call" || event.providerExecuted) return
-              if (!toolMaterialization) {
-                yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            if (overflowFailure || publisher.hasProviderError()) return
+            if (LLMEvent.is.providerError(event)) {
+              if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
+                overflowFailure = event
                 return
               }
-              needsContinuation = true
-              const assistantMessageID = yield* publisher.assistantMessageID(event.id)
-              yield* Effect.uninterruptibleMask((restore) =>
-                restore(
-                  toolMaterialization.settle({
+            }
+            yield* publish(event)
+            if (event.type !== "tool-call" || event.providerExecuted) return
+            if (!toolMaterialization) {
+              yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
+              return
+            }
+            needsContinuation = true
+            const assistantMessageID = yield* publisher.assistantMessageID(event.id)
+            const input = JSON.stringify(event.input)
+            const repeated =
+              recentCalls.length >= DOOM_LOOP_THRESHOLD - 1 &&
+              recentCalls
+                .slice(-(DOOM_LOOP_THRESHOLD - 1))
+                .every((call) => call.name === event.name && call.input === input)
+            recentCalls.push({ name: event.name, input })
+            // Like V1, ask before running the same call a third time in a row; a denial becomes the tool result.
+            const guard = repeated
+              ? permissions
+                  .assert({
                     sessionID: session.id,
                     agent: agent.id,
-                    assistantMessageID,
-                    call: event,
-                  }),
-                ).pipe(
-                  Effect.flatMap((settlement) =>
-                    publish(
-                      LLMEvent.toolResult({
-                        id: event.id,
-                        name: event.name,
-                        result: settlement.result,
-                        output: settlement.output,
+                    action: "doom_loop",
+                    resources: [event.name],
+                    save: [event.name],
+                    metadata: { tool: event.name, input: event.input },
+                    source: { type: "tool", messageID: assistantMessageID, callID: event.id },
+                  })
+                  .pipe(
+                    Effect.as(undefined),
+                    Effect.catch((error) =>
+                      Effect.succeed({
+                        result: {
+                          type: "error" as const,
+                          value:
+                            error._tag === "Session.NotFoundError"
+                              ? `Repeated ${event.name} call was not allowed`
+                              : Tool.permissionFailure(error).message,
+                        },
                       }),
-                      settlement.outputPaths ?? [],
                     ),
+                  )
+              : Effect.succeed(undefined)
+            yield* Effect.uninterruptibleMask((restore) =>
+              restore(
+                guard.pipe(
+                  Effect.flatMap((denied) =>
+                    denied
+                      ? Effect.succeed<ToolRegistry.Settlement>(denied)
+                      : toolMaterialization.settle({
+                          sessionID: session.id,
+                          agent: agent.id,
+                          assistantMessageID,
+                          call: event,
+                        }),
                   ),
                 ),
-              ).pipe(FiberSet.run(toolFibers))
-            }),
-          ),
-          Effect.ensuring(withPublication(publisher.flush())),
-        )
+              ).pipe(
+                Effect.flatMap((settlement) =>
+                  publish(
+                    LLMEvent.toolResult({
+                      id: event.id,
+                      name: event.name,
+                      result: settlement.result,
+                      output: settlement.output,
+                    }),
+                    settlement.outputPaths ?? [],
+                  ),
+                ),
+              ),
+            ).pipe(FiberSet.run(toolFibers))
+          }),
+        ),
+        Effect.ensuring(withPublication(publisher.flush())),
+      )
       // Retry a failed provider call only while nothing was published for it, so a retry never
       // duplicates assistant output. Harness drivers own their own transport and are not retried here.
       const runProvider = (attempt: number): typeof providerStream =>
@@ -346,9 +390,9 @@ const layer = Layer.effect(
 
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const stream = yield* restore(
-            runProvider(0).pipe(Effect.provideService(RequestExecutor.MaxRetries, 0)),
-          ).pipe(Effect.exit)
+          const stream = yield* restore(runProvider(0).pipe(Effect.provideService(RequestExecutor.MaxRetries, 0))).pipe(
+            Effect.exit,
+          )
           const failure =
             stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
           if (
@@ -494,6 +538,20 @@ const layer = Layer.effect(
   }),
 )
 
+/** Local tool calls after the latest user message, oldest first, for the repeated-call guard. */
+const localToolCallsSinceLastUser = (context: ReadonlyArray<SessionMessage.Message>) =>
+  context
+    .slice(context.findLastIndex((message) => message.type === "user") + 1)
+    .flatMap((message) =>
+      message.type !== "assistant"
+        ? []
+        : message.content.flatMap((part) =>
+            part.type === "tool" && part.state.status !== "pending" && part.provider?.executed !== true
+              ? [{ name: part.name, input: JSON.stringify(part.state.input) }]
+              : [],
+          ),
+    )
+
 const PROVIDER_RETRY_LIMIT = 5
 const PROVIDER_RETRY_BASE_MS = 2_000
 const PROVIDER_RETRY_MAX_BACKOFF_MS = 30_000
@@ -530,6 +588,7 @@ export const node = makeLocationNode({
     SkillGuidance.node,
     ReferenceGuidance.node,
     Config.node,
+    PermissionV2.node,
     Snapshot.node,
     Database.node,
   ],

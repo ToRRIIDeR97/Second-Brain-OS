@@ -54,11 +54,16 @@ and plugin initialization can therefore affect both access and startup time.
 Review plugin origins and package changes, retain the Bun lockfile and local
 patches, and do not treat a plugin as sandboxed workspace content. Build and
 packaging scripts also download upstream binaries, as described in
-[release operations](../release-operations.md).
+[release operations](../release-operations.md). A plugin hook that throws or
+runs longer than 30 seconds is logged and skipped, except `tool.execute.before`
+and `command.execute.before`, which fail closed so a plugin can still block a
+call by throwing.
 
 Workspace validation and agent tool permissions are different controls.
 Keep the existing permission checks on tool execution; a user opening a note
-does not authorize instructions embedded inside it. Destructive recovery must
+does not authorize instructions embedded inside it. The V2 runner asks for the
+`doom_loop` permission (default `ask`) before a third identical tool call in a
+row, and returns the user's rejection feedback or the deny rule to the model. Destructive recovery must
 preserve both canonical workspace files and session/draft profile state.
 
 ## Outbound network endpoints

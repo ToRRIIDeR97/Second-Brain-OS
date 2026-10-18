@@ -112,10 +112,11 @@ const recoveryModel = Model.make({
 })
 const authorizations: Tool.Context[] = []
 const executions: string[] = []
+let permissionAssert: PermissionV2.Interface["assert"] = () => Effect.die("unused")
 const permission = Layer.succeed(
   PermissionV2.Service,
   PermissionV2.Service.of({
-    assert: () => Effect.die("unused"),
+    assert: (input, options) => permissionAssert(input, options),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
     get: () => Effect.die("unused"),
@@ -331,6 +332,7 @@ const setup = Effect.gen(function* () {
   toolExecutionsReady = 5
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
+  permissionAssert = () => Effect.die("unused")
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -2340,7 +2342,9 @@ describe("SessionRunnerLLM", () => {
       })
       const retried = yield* Deferred.make<void>()
       yield* events.listen((event) =>
-        event.type === SessionEvent.Retried.type ? Deferred.succeed(retried, undefined).pipe(Effect.asVoid) : Effect.void,
+        event.type === SessionEvent.Retried.type
+          ? Deferred.succeed(retried, undefined).pipe(Effect.asVoid)
+          : Effect.void,
       )
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
@@ -3289,6 +3293,60 @@ describe("SessionRunnerLLM", () => {
       expect(requests[1]?.tools).not.toEqual([])
       expect(requests[2]?.toolChoice).toMatchObject({ type: "none" })
       expect(executions).toEqual(["before", "after"])
+    }),
+  )
+
+  it.effect("asks doom_loop permission before a third identical tool call in a row", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Loop" }), resume: false })
+
+      const asked: PermissionV2.AssertInput[] = []
+      permissionAssert = (input) =>
+        Effect.sync(() => asked.push(input)).pipe(
+          Effect.andThen(Effect.fail(new PermissionV2.BlockedError({ rules: [] }))),
+        )
+      const repeat = (id: string) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id, name: "echo", input: { text: "same" } }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]
+      requests.length = 0
+      executions.length = 0
+      responses = [
+        repeat("call-repeat-1"),
+        repeat("call-repeat-2"),
+        repeat("call-repeat-3"),
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(executions).toEqual(["same", "same"])
+      expect(asked).toMatchObject([{ action: "doom_loop", resources: ["echo"], metadata: { tool: "echo" } }])
+      expect(requests).toHaveLength(4)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Loop" },
+        { type: "assistant", content: [{ type: "tool", id: "call-repeat-1", state: { status: "completed" } }] },
+        { type: "assistant", content: [{ type: "tool", id: "call-repeat-2", state: { status: "completed" } }] },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-repeat-3",
+              state: { status: "error", error: { message: expect.stringContaining("prevents you from using") } },
+            },
+          ],
+        },
+        { type: "assistant" },
+      ])
     }),
   )
 

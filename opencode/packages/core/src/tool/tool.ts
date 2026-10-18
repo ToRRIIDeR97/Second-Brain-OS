@@ -145,7 +145,8 @@ export const mapError =
   <A, R>(self: Effect.Effect<A, E, R>) =>
     Effect.mapError(self, (error) => (isPermissionError(error) ? error : failure(error)))
 
-function permissionFailure(error: ToolFailure | PermissionV2.Error) {
+/** Model-facing failure for a permission outcome, matching the V1 wording. */
+export function permissionFailure(error: ToolFailure | PermissionV2.Error) {
   if (Predicate.isTagged(error, "PermissionV2.CorrectedError"))
     return new ToolFailure({
       message: `The user rejected permission to use this specific tool call with the following feedback: ${error.feedback}`,
