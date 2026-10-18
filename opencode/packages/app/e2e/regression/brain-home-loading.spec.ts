@@ -76,7 +76,7 @@ test("Home remains usable during loading and reuses fresh harness availability",
   })
   const home = page.getByRole("heading", { name: "Home", exact: true })
   const prompt = page.getByRole("textbox", { name: "Start a Run", exact: true })
-  const selector = page.getByRole("group", { name: "Harness", exact: true }).getByRole("button")
+  const selector = page.getByRole("button", { name: "Harness", exact: true })
   const start = page.getByRole("button", { name: "Start", exact: true })
   try {
     await page.goto("/")
