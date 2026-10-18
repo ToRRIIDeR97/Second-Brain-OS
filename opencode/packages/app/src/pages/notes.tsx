@@ -5,7 +5,8 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { createEffect, createMemo, createResource, For, on, onCleanup, Show } from "solid-js"
+import { debounce } from "@solid-primitives/scheduled"
+import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { noteKeys, normalizeWikiTarget, previewNoteLinks } from "@/features/second-brain/note-links"
 import { useLanguage } from "@/context/language"
@@ -110,8 +111,22 @@ export default function NotesPage() {
     () => state.directory || undefined,
     (directory) => listProjects(client(directory)),
   )
+  // The input stays bound to state.search; the server search keys on a debounced copy so typing does not
+  // re-read the note files on every keystroke. Clearing the search applies immediately.
+  const [query, setQuery] = createSignal("")
+  const scheduleQuery = debounce((value: string) => setQuery(value), 250)
+  createEffect(
+    on(
+      () => state.search.trim(),
+      (value) => {
+        if (value) return scheduleQuery(value)
+        scheduleQuery.clear()
+        setQuery("")
+      },
+    ),
+  )
   const [matches, matchActions] = createResource(
-    () => (state.directory && state.search.trim() ? ([state.directory, state.search.trim()] as const) : undefined),
+    () => (state.directory && query() ? ([state.directory, query()] as const) : undefined),
     ([directory, query]) => listNotes(client(directory), query),
   )
   const [loadedNote] = createResource(
@@ -119,7 +134,7 @@ export default function NotesPage() {
     ([directory, path]) => readNote(client(directory), path),
   )
   const visibleNotes = createMemo(() => {
-    return (state.search.trim() ? (matches() ?? []) : (notes() ?? [])).filter(
+    return (query() ? (matches() ?? []) : (notes() ?? [])).filter(
       (note) => !state.filterProjectId || note.projectIds.includes(state.filterProjectId),
     )
   })
