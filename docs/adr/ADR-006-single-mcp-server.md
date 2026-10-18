@@ -1,6 +1,9 @@
 # ADR-006: Use one local MCP server
 
-- Status: accepted
+- Status: superseded by ADR-010
+- Status note: No `agent-os-mcp` sidecar or app-owned MCP server exists in the
+  active app; OpenCode only acts as an MCP client. App capabilities are exposed
+  through the bundled OpenCode server's HTTP API.
 - Date: 2026-07-27
 - Supersedes: none
 
