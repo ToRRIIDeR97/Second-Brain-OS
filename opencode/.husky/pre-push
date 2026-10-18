@@ -1,5 +1,7 @@
 #!/bin/sh
 set -e
+# Git runs hooks from the repository root; the paths below are relative to opencode/.
+cd "$(dirname -- "$0")/.."
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '
@@ -18,3 +20,4 @@ if (process.versions.bun !== expectedBunVersion) {
 }
 '
 bun typecheck
+bun run lint
