@@ -13,6 +13,7 @@ import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Shell } from "@opencode-ai/core/shell"
+import { ChildEnv } from "@opencode-ai/core/child-env"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
@@ -420,7 +421,7 @@ export const ShellTool = Tool.define(
         { env: {} },
       )
       return {
-        ...process.env,
+        ...ChildEnv.from(),
         ...extra.env,
       }
     })

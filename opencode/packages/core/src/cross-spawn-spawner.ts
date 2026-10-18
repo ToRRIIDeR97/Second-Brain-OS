@@ -24,6 +24,7 @@ import {
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
+import { ChildEnv } from "./child-env"
 import { makeGlobalNode } from "./effect/app-node"
 import { filesystem, path } from "./effect/app-node-platform"
 
@@ -106,8 +107,9 @@ export const make = Effect.gen(function* () {
     return path.resolve(opts.cwd)
   })
 
+  // Children never receive the server credentials, even when they inherit the parent environment.
   const env = (opts: ChildProcess.CommandOptions) =>
-    opts.extendEnv ? { ...globalThis.process.env, ...opts.env } : opts.env
+    ChildEnv.from(opts.extendEnv || !opts.env ? { ...globalThis.process.env, ...opts.env } : opts.env)
 
   const input = (x: ChildProcess.CommandInput | undefined): NodeChildProcess.IOType | undefined =>
     Stream.isStream(x) ? "pipe" : x
