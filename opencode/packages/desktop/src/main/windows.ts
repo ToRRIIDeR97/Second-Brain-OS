@@ -15,7 +15,7 @@ import { createUnresponsiveSampler } from "./unresponsive"
 import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
-import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { redactURL, resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -236,7 +236,7 @@ export function createMainWindow(id: string = randomUUID()) {
 export function openExternalURL(value: string) {
   const url = resolveExternalURL(value)
   if (!url) {
-    writeLog("window", "blocked external target", { url: value }, "warn")
+    writeLog("window", "blocked external target", { url: redactURL(value) }, "warn")
     return
   }
   void shell.openExternal(url)
@@ -245,7 +245,7 @@ export function openExternalURL(value: string) {
 export function openLocalFileURL(value: string) {
   const path = resolveLocalFilePath(value)
   if (!path) {
-    writeLog("window", "blocked local file target", { url: value }, "warn")
+    writeLog("window", "blocked local file target", { url: redactURL(value) }, "warn")
     return
   }
   void shell.openPath(path).then((error) => {
@@ -294,14 +294,14 @@ export function registerRendererProtocol() {
   protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
-      writeLog("protocol", "rejected host", { url: request.url }, "warn")
+      writeLog("protocol", "rejected host", { url: redactURL(request.url) }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
     const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
     const rel = relative(rendererRoot, file)
     if (rel.startsWith("..") || isAbsolute(rel)) {
-      writeLog("protocol", "rejected path", { url: request.url, file }, "warn")
+      writeLog("protocol", "rejected path", { url: redactURL(request.url), file }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
@@ -315,7 +315,7 @@ export function registerRendererProtocol() {
           "protocol",
           "fetch failed",
           {
-            url: request.url,
+            url: redactURL(request.url),
             file,
             status: response.status,
             statusText: response.statusText,
@@ -325,7 +325,7 @@ export function registerRendererProtocol() {
       }
       return addDocumentPolicy(response, file)
     } catch (error) {
-      writeLog("protocol", "fetch error", { url: request.url, file, error }, "error")
+      writeLog("protocol", "fetch error", { url: redactURL(request.url), file, error }, "error")
       return new Response("Not found", { status: 404 })
     }
   })

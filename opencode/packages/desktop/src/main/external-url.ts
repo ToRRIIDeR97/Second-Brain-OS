@@ -17,3 +17,14 @@ export function resolveLocalFilePath(value: string) {
     return undefined
   }
 }
+
+export const unparseableURL = "<unparseable>"
+
+// Log-safe form of a URL: scheme and host only, never the path, query string,
+// hash, or credentials,
+// because the server accepts an `auth_token` query parameter.
+export function redactURL(value: string) {
+  if (!URL.canParse(value)) return unparseableURL
+  const url = new URL(value)
+  return url.host ? `${url.protocol}//${url.host}` : url.protocol
+}
