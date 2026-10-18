@@ -2,7 +2,8 @@ export * as FileMutation from "./file-mutation"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { dirname } from "path"
+import { randomUUID } from "crypto"
+import { basename, dirname, join } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "./fs-util"
 
@@ -69,7 +70,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /**
  * Serialize file changes by canonical target. Conditional writes compare and
  * write under the same process-local lock so cooperating OpenCode mutations do
- * not overwrite changes made from the same stale content.
+ * not overwrite changes made from the same stale content. Replacing writes go
+ * through a synced sibling temp file and a rename, so a crash leaves either the
+ * old or the new content, never a truncated file.
  */
 const layer = Layer.effect(
   Service,
@@ -80,6 +83,26 @@ const layer = Layer.effect(
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         locks.withLock(target.canonical)(Effect.uninterruptible(effect))
+
+    // Returns whether the target existed. A rename swaps in a new inode, so the
+    // existing permission bits are copied to keep what an in-place write kept.
+    const replace = (path: string, content: string | Uint8Array) =>
+      Effect.gen(function* () {
+        const existing = yield* fs
+          .stat(path)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+        if (!existing) yield* fs.ensureDir(dirname(path))
+        const temp = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`)
+        yield* Effect.gen(function* () {
+          yield* typeof content === "string"
+            ? fs.writeFileString(temp, content, { flag: "wx" })
+            : fs.writeFile(temp, content, { flag: "wx" })
+          yield* Effect.scoped(fs.open(temp, { flag: "r+" }).pipe(Effect.flatMap((file) => file.sync)))
+          if (existing) yield* fs.chmod(temp, existing.mode & 0o7777)
+          yield* fs.rename(temp, path)
+        }).pipe(Effect.onError(() => fs.remove(temp).pipe(Effect.ignore)))
+        return existing !== undefined
+      })
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
@@ -98,9 +121,7 @@ const layer = Layer.effect(
     const write = Effect.fn("FileMutation.write")((input: WriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const existed = yield* fs.exists(input.target.canonical)
-          yield* fs.writeWithDirs(input.target.canonical, input.content)
-          return writeResult(input.target, existed)
+          return writeResult(input.target, yield* replace(input.target.canonical, input.content))
         }),
       ),
     )
@@ -112,7 +133,7 @@ const layer = Layer.effect(
           const current = yield* fs
             .readFile(input.target.canonical)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
-          yield* fs.writeWithDirs(
+          yield* replace(
             input.target.canonical,
             joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom),
           )
@@ -148,9 +169,7 @@ const layer = Layer.effect(
           if (!sameBytes(current, input.expected)) {
             return yield* new StaleContentError({ path: input.target.canonical })
           }
-          yield* typeof input.content === "string"
-            ? fs.writeFileString(input.target.canonical, input.content)
-            : fs.writeFile(input.target.canonical, input.content)
+          yield* replace(input.target.canonical, input.content)
           return writeResult(input.target, true)
         }),
       ),
@@ -187,8 +206,7 @@ function hasUtf8Bom(content: Uint8Array) {
 }
 
 function sameBytes(left: Uint8Array, right: Uint8Array) {
-  if (left.length !== right.length) return false
-  return left.every((byte, index) => byte === right[index])
+  return Buffer.from(left.buffer, left.byteOffset, left.byteLength).equals(right)
 }
 
 export const locationLayer = layer

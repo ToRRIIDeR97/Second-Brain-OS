@@ -314,12 +314,55 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("replaces through a temp file, keeps the file mode and leaves no temp file", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "script.sh")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "before"))
+        yield* Effect.promise(() => fs.chmod(targetPath, 0o751))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "script.sh" })
+        const files = yield* FileMutation.Service
+
+        yield* files.writeIfUnchanged({ target, expected: new TextEncoder().encode("before"), content: "after" })
+
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("after")
+        if (process.platform !== "win32") {
+          expect((yield* Effect.promise(() => fs.stat(targetPath))).mode & 0o777).toBe(0o751)
+        }
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["script.sh"])
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("keeps the original content and removes the temp file when a write fails", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "keep.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "original"))
+        const filesystem = instrumentWrites((write, target) =>
+          Effect.promise(() => fs.writeFile(target, "partial")).pipe(
+            Effect.andThen(Effect.die(new Error("disk full"))),
+            Effect.andThen(write),
+          ),
+        )
+
+        const exit = yield* Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: "keep.txt" })
+          return yield* (yield* FileMutation.Service).write({ target, content: "replacement" }).pipe(Effect.exit)
+        }).pipe(provide(directory, filesystem))
+
+        expect(exit._tag).toBe("Failure")
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("original")
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["keep.txt"])
+      }),
+    ),
+  )
+
   it.live("allows distinct canonical targets to proceed independently", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
-        const secondFinished = yield* Deferred.make<void>()
         const secondPath = path.join(directory, "second.txt")
         let writes = 0
         const filesystem = instrumentWrites((write) =>
@@ -328,7 +371,7 @@ describe("FileMutation", () => {
                 Effect.andThen(Deferred.await(releaseFirst)),
                 Effect.andThen(write),
               )
-            : write.pipe(Effect.andThen(Deferred.succeed(secondFinished, undefined))),
+            : write,
         )
 
         yield* Effect.gen(function* () {
@@ -339,12 +382,12 @@ describe("FileMutation", () => {
           const first = yield* files.write({ target: firstPlan, content: "first" }).pipe(Effect.forkChild)
           yield* Deferred.await(firstStarted)
           const second = yield* files.write({ target: secondPlan, content: "second" }).pipe(Effect.forkChild)
-          yield* Deferred.await(secondFinished)
+          // The second write completes (temp write and rename) while the first is still held.
+          yield* Fiber.join(second)
           expect(yield* Effect.promise(() => fs.readFile(secondPath, "utf8"))).toBe("second")
 
           yield* Deferred.succeed(releaseFirst, undefined)
           yield* Fiber.join(first)
-          yield* Fiber.join(second)
         }).pipe(provide(directory, filesystem))
       }),
     ),
