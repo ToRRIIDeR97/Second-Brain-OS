@@ -10,6 +10,7 @@ import {
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
+import { RequestExecutor } from "@opencode-ai/llm/route"
 import { Harness } from "@opencode-ai/schema/harness"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
@@ -266,16 +267,17 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = harnesses
-        .stream({
+      // Suspended so each retry attempt opens a fresh provider stream.
+      const providerStream = Stream.suspend(() =>
+        harnesses.stream({
           instanceID: session.harnessInstanceID,
           sessionID: session.id,
           directory: session.location.directory,
           request,
           model: session.harnessModel,
           revision: session.harnessRevision ?? 0,
-        })
-        .pipe(
+        }),
+      ).pipe(
           Stream.runForEach((event) =>
             Effect.gen(function* () {
               if (overflowFailure || publisher.hasProviderError()) return
@@ -319,10 +321,34 @@ const layer = Layer.effect(
           ),
           Effect.ensuring(withPublication(publisher.flush())),
         )
+      // Retry a failed provider call only while nothing was published for it, so a retry never
+      // duplicates assistant output. Harness drivers own their own transport and are not retried here.
+      const runProvider = (attempt: number): typeof providerStream =>
+        providerStream.pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              const delay =
+                usesHostModel && !publisher.hasAssistantStarted() && !publisher.hasProviderError() && !overflowFailure
+                  ? providerRetryDelay(error, attempt)
+                  : undefined
+              if (delay === undefined || !(error instanceof LLMError)) return yield* Effect.fail(error)
+              yield* events.publish(SessionEvent.Retried, {
+                sessionID: session.id,
+                timestamp: yield* DateTime.now,
+                attempt: attempt + 1,
+                error: { message: error.reason.message, statusCode: providerStatus(error), isRetryable: true },
+              })
+              yield* Effect.sleep(delay)
+              return yield* runProvider(attempt + 1)
+            }),
+          ),
+        )
 
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const stream = yield* restore(providerStream).pipe(Effect.exit)
+          const stream = yield* restore(
+            runProvider(0).pipe(Effect.provideService(RequestExecutor.MaxRetries, 0)),
+          ).pipe(Effect.exit)
           const failure =
             stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
           if (
@@ -457,6 +483,26 @@ const layer = Layer.effect(
     })
   }),
 )
+
+const PROVIDER_RETRY_LIMIT = 5
+const PROVIDER_RETRY_BASE_MS = 2_000
+const PROVIDER_RETRY_MAX_BACKOFF_MS = 30_000
+// A provider asking for a longer pause fails the turn instead of holding the Session busy.
+const PROVIDER_RETRY_MAX_WAIT_MS = 5 * 60_000
+
+/** Milliseconds to wait before retrying a failed provider call, or undefined when it must not be retried. */
+const providerRetryDelay = (error: unknown, attempt: number) => {
+  if (!(error instanceof LLMError) || !error.retryable || attempt >= PROVIDER_RETRY_LIMIT) return undefined
+  const backoff =
+    Math.min(PROVIDER_RETRY_BASE_MS * 2 ** attempt, PROVIDER_RETRY_MAX_BACKOFF_MS) * (0.8 + Math.random() * 0.4)
+  const delay = Math.max(error.retryAfterMs ?? 0, Math.round(backoff))
+  return delay > PROVIDER_RETRY_MAX_WAIT_MS ? undefined : delay
+}
+
+const providerStatus = (error: LLMError) => {
+  if ("status" in error.reason && error.reason.status !== undefined) return error.reason.status
+  return "http" in error.reason ? error.reason.http?.response?.status : undefined
+}
 
 export const node = makeLocationNode({
   service: Service,

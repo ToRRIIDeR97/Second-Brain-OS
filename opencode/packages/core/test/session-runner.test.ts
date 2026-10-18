@@ -6,6 +6,7 @@ import {
   Model,
   TransportReason,
   InvalidRequestReason,
+  RateLimitReason,
   type LLMClientShape,
   type LLMRequest,
 } from "@opencode-ai/llm"
@@ -56,6 +57,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -2277,6 +2279,100 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[1]!)).toEqual(["Start working", "Recover with this"])
+    }),
+  )
+
+  it.effect("retries a retryable provider failure before output starts, honoring Retry-After", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-retried", ["Recovered"]).completeEvents
+      responseStream = Stream.fail(
+        new LLMError({
+          module: "test",
+          method: "stream",
+          reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 5_000 }),
+        }),
+      )
+      const retried = yield* Deferred.make<EventV2.Payload>()
+      yield* events.listen((event) =>
+        event.type === SessionEvent.Retried.type ? Deferred.succeed(retried, event).pipe(Effect.asVoid) : Effect.void,
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      expect((yield* Deferred.await(retried)).data).toMatchObject({
+        sessionID,
+        attempt: 1,
+        error: { message: "Slow down", isRetryable: true },
+      })
+      yield* Effect.yieldNow
+      yield* TestClock.adjust(4_999)
+      yield* Effect.yieldNow
+      expect(requests).toHaveLength(1)
+
+      yield* TestClock.adjust(1)
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Hi" },
+        { type: "assistant", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("cancels a pending provider retry when interrupted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      streamFailure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 60_000 }),
+      })
+      const retried = yield* Deferred.make<void>()
+      yield* events.listen((event) =>
+        event.type === SessionEvent.Retried.type ? Deferred.succeed(retried, undefined).pipe(Effect.asVoid) : Effect.void,
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(retried)
+      yield* Fiber.interrupt(run)
+
+      expect(requests).toHaveLength(1)
+    }),
+  )
+
+  it.effect("does not retry a provider failure after assistant output started", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 0 }),
+      })
+      responseStream = Stream.fromIterable(fragmentFixture("text", "text-partial", ["Half"]).partialEvents).pipe(
+        Stream.concat(Stream.fail(failure)),
+      )
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Hi" },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Slow down" } },
+      ])
     }),
   )
 
