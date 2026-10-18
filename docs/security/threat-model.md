@@ -309,5 +309,6 @@ fix lands.
 - IPC handlers now check `event.senderFrame` against the trusted main frame
   through the shared `trustedHandle`/`trustedOn` wrappers in `ipc.ts`.
 - Server authorization also accepts an `auth_token` query parameter, so the
-  credential can appear in URLs. `windows.ts` logs full blocked URLs.
+  credential can appear in URLs. Desktop main-process logs record only the
+  scheme and host of blocked and rejected URLs, never the query string.
 - `drafts.sqlite` stores unsent draft content unencrypted in the profile.

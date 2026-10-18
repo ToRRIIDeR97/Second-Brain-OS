@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
-import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { redactURL, resolveExternalURL, resolveLocalFilePath, unparseableURL } from "./external-url"
 
 describe("external URLs", () => {
   test("opens web URLs externally", () => {
@@ -25,5 +25,15 @@ describe("external URLs", () => {
     expect(resolveLocalFilePath(pathToFileURL(path).href)).toBe(path)
     expect(resolveLocalFilePath("file://example.com/share/index.html")).toBeUndefined()
     expect(resolveLocalFilePath("https://example.com/index.html")).toBeUndefined()
+  })
+
+  test("redacts URLs for logging", () => {
+    expect(redactURL("https://example.com/a/b?auth_token=secret#frag")).toBe("https://example.com")
+    expect(redactURL("http://user:pass@127.0.0.1:4096/x?auth_token=secret")).toBe("http://127.0.0.1:4096")
+    expect(redactURL("file:///home/me/secret.txt?auth_token=secret")).toBe("file:")
+    expect(redactURL("oc://renderer/index.html?auth_token=secret")).toBe("oc://renderer")
+    expect(redactURL("mailto:someone@example.com")).toBe("mailto:")
+    expect(redactURL("javascript:alert('auth_token=secret')")).toBe("javascript:")
+    expect(redactURL("not a url auth_token=secret")).toBe(unparseableURL)
   })
 })
