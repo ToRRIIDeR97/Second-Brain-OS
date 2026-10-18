@@ -386,11 +386,11 @@ export const layerWith = (options?: LayerOptions) =>
                   version: definition.durable.version,
                 },
               }
-              yield* notify(event as Payload, true)
+              yield* notify(event as Payload)
               return event
             }
           }
-          yield* notify(event as Payload, false)
+          yield* notify(event as Payload)
           return event
         })
       }
@@ -403,13 +403,10 @@ export const layerWith = (options?: LayerOptions) =>
           ),
         )
 
-      function notify(event: Payload, isolateListeners: boolean) {
+      // A failing listener must not abort the publisher or starve later listeners, durable or not.
+      function notify(event: Payload) {
         return Effect.gen(function* () {
-          yield* Effect.forEach(
-            listeners,
-            (listener) => (isolateListeners ? observe(event, listener) : listener(event)),
-            { discard: true },
-          )
+          yield* Effect.forEach(listeners, (listener) => observe(event, listener), { discard: true })
           const typed = pubsub.typed.get(event.type)
           if (typed) yield* PubSub.publish(typed, event)
           yield* PubSub.publish(pubsub.all, event)
@@ -470,7 +467,6 @@ export const layerWith = (options?: LayerOptions) =>
                     version: definition.durable.version,
                   },
                 },
-                true,
               )
             }
           }
