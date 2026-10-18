@@ -338,7 +338,7 @@ const layer = Layer.effect(
                 guard.pipe(
                   Effect.flatMap((denied) =>
                     denied
-                      ? Effect.succeed<ToolRegistry.Settlement>(denied)
+                      ? Effect.succeed(denied)
                       : toolMaterialization.settle({
                           sessionID: session.id,
                           agent: agent.id,
