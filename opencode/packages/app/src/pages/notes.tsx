@@ -302,7 +302,9 @@ export default function NotesPage() {
       })
       applyDocument(document)
       storeSummary(directory, document.info)
-      if (state.search.trim()) await matchActions.refetch()
+      // Patch the open search results in place instead of re-reading every note file.
+      if (state.directory === directory)
+        matchActions.mutate((items) => items?.map((item) => (item.path === document.info.path ? document.info : item)))
     } catch (error) {
       report(error)
     } finally {
