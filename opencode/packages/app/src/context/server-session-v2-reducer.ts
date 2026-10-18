@@ -59,6 +59,8 @@ export function createV2SessionReducer() {
       })
     }
 
+    if (eventType.startsWith("session.next.")) return reduceNext(source, event as unknown as NextEvent, sessionID)
+
     switch (event.type) {
       case "session.input.admitted":
         pending.set(key(sessionID, event.data.inputID), event.data.input)
@@ -447,6 +449,196 @@ export function createV2SessionReducer() {
         if (id.startsWith(`${sessionID}:`)) pending.delete(id)
       }
     },
+  }
+}
+
+// The runner publishes `session.next.*` events, which the vendored client types predate. These cases mirror
+// core's message-updater, writing the shapes `normalizeSessionMessages` reads, so steps render as they stream
+// instead of only when `session.next.step.ended` reloads the message.
+type NextData = {
+  timestamp: number
+  assistantMessageID: string
+  agent: string
+  model: Assistant["model"]
+  snapshot?: string
+  textID: string
+  reasoningID: string
+  callID: string
+  name: string
+  delta: string
+  text: string
+  input: Record<string, unknown>
+  provider: { executed: boolean; metadata?: unknown }
+  structured: Record<string, unknown>
+  content: unknown[]
+  result: unknown
+  error: { message: string }
+  finish: string
+  cost: number
+  tokens: unknown
+  files: string[]
+}
+type NextEvent = { type: string; metadata?: Assistant["metadata"]; data: NextData }
+type Tool = Extract<Assistant["content"][number], { type: "tool" }>
+type LooseTool = Tool & { provider?: NextData["provider"] }
+
+function reduceNext(
+  source: readonly SessionMessageInfo[],
+  event: NextEvent,
+  sessionID: string,
+): V2SessionReduction | undefined {
+  const data = event.data
+  const assistant = (apply: (item: Assistant) => Assistant) =>
+    updateAssistant(source, data.assistantMessageID, sessionID, apply)
+  const content = (type: "text" | "reasoning", id: string, apply: (item: Record<string, unknown>) => object) =>
+    assistant((item) => ({
+      ...item,
+      content: item.content.map((part) =>
+        part.type === type && (part as { id?: string }).id === id ? (apply(part) as typeof part) : part,
+      ),
+    }))
+  const tool = (apply: (item: LooseTool) => LooseTool) =>
+    updateTool(source, data.assistantMessageID, data.callID, sessionID, (item) => apply(item))
+
+  switch (event.type) {
+    case "session.next.step.started": {
+      const current = source.findLast((item): item is Assistant => item.type === "assistant" && !item.time.completed)
+      const closed = current
+        ? update(source, current.id, (item) =>
+            item.type === "assistant" ? { ...item, time: { ...item.time, completed: data.timestamp } } : item,
+          )
+        : [...source]
+      if (closed.some((item) => item.id === data.assistantMessageID))
+        return { sessionID, messages: closed, touched: current ? [current.id] : [] }
+      const next = {
+        id: data.assistantMessageID,
+        type: "assistant",
+        metadata: event.metadata,
+        agent: data.agent,
+        model: data.model,
+        content: [],
+        snapshot: data.snapshot ? { start: data.snapshot } : undefined,
+        time: { created: data.timestamp },
+      } as Assistant
+      return { sessionID, messages: [...closed, next], touched: current ? [current.id, next.id] : [next.id] }
+    }
+    case "session.next.step.ended":
+      return assistant((item) => ({
+        ...item,
+        finish: data.finish as Assistant["finish"],
+        cost: data.cost,
+        tokens: data.tokens as Assistant["tokens"],
+        snapshot:
+          data.snapshot || data.files ? { ...item.snapshot, end: data.snapshot, files: data.files } : item.snapshot,
+        time: { ...item.time, completed: data.timestamp },
+      }))
+    case "session.next.step.failed":
+      return assistant((item) => ({
+        ...item,
+        finish: "error",
+        error: data.error as Assistant["error"],
+        time: { ...item.time, completed: data.timestamp },
+      }))
+    case "session.next.text.started":
+      return assistant((item) => ({
+        ...item,
+        content: [...item.content, { type: "text", id: data.textID, text: "" } as Assistant["content"][number]],
+      }))
+    case "session.next.text.delta":
+      return content("text", data.textID, (item) => ({ ...item, text: `${item.text ?? ""}${data.delta}` }))
+    case "session.next.text.ended":
+      return content("text", data.textID, (item) => ({ ...item, text: data.text }))
+    case "session.next.reasoning.started":
+      return assistant((item) => ({
+        ...item,
+        content: [
+          ...item.content,
+          {
+            type: "reasoning",
+            id: data.reasoningID,
+            text: "",
+            time: { created: data.timestamp },
+          } as Assistant["content"][number],
+        ],
+      }))
+    case "session.next.reasoning.delta":
+      return content("reasoning", data.reasoningID, (item) => ({ ...item, text: `${item.text ?? ""}${data.delta}` }))
+    case "session.next.reasoning.ended":
+      return content("reasoning", data.reasoningID, (item) => ({
+        ...item,
+        text: data.text,
+        time: {
+          created: (item.time as { created?: number } | undefined)?.created ?? data.timestamp,
+          completed: data.timestamp,
+        },
+      }))
+    case "session.next.tool.input.started":
+      return assistant((item) =>
+        item.content.some((part) => part.type === "tool" && part.id === data.callID)
+          ? item
+          : {
+              ...item,
+              content: [
+                ...item.content,
+                {
+                  type: "tool",
+                  id: data.callID,
+                  name: data.name,
+                  state: { status: "streaming", input: "" },
+                  time: { created: data.timestamp },
+                } as Tool,
+              ],
+            },
+      )
+    case "session.next.tool.input.delta":
+      return tool((item) =>
+        item.state.status === "streaming"
+          ? { ...item, state: { ...item.state, input: item.state.input + data.delta } }
+          : item,
+      )
+    case "session.next.tool.input.ended":
+      return tool((item) =>
+        item.state.status === "streaming" ? { ...item, state: { ...item.state, input: data.text } } : item,
+      )
+    case "session.next.tool.called":
+      return tool((item) => ({
+        ...item,
+        provider: data.provider,
+        state: { status: "running", input: data.input, metadata: {} } as Tool["state"],
+        time: { ...item.time, ran: data.timestamp },
+      }))
+    case "session.next.tool.success":
+      return tool((item) =>
+        item.state.status === "running"
+          ? {
+              ...item,
+              state: {
+                status: "completed",
+                input: item.state.input,
+                structured: data.structured,
+                content: data.content,
+                result: data.result,
+              } as unknown as Tool["state"],
+              time: { ...item.time, completed: data.timestamp },
+            }
+          : item,
+      )
+    case "session.next.tool.failed":
+      return tool((item) =>
+        item.state.status === "streaming" || item.state.status === "running"
+          ? {
+              ...item,
+              state: {
+                status: "error",
+                input: typeof item.state.input === "string" ? {} : item.state.input,
+                content: [],
+                error: data.error,
+                result: data.result,
+              } as unknown as Tool["state"],
+              time: { ...item.time, completed: data.timestamp },
+            }
+          : item,
+      )
   }
 }
 
