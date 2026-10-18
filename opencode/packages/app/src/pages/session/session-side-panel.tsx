@@ -298,7 +298,7 @@ export function SessionSidePanel(props: {
     <Show when={contextOpen()}>
       <TabsV2.Trigger value="context" onMiddleClick={() => tabs().close("context")}>
         <SessionContextUsage variant="indicator" />
-        <span>{language.t("session.tab.context")}</span>
+        <span>{language.t("secondBrain.sessionTab.title")}</span>
         {closeButton("context")}
       </TabsV2.Trigger>
     </Show>

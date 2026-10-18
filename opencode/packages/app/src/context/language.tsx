@@ -3,6 +3,7 @@ import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
+import type { StepKind } from "@opencode-ai/session-ui/step-kind"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
@@ -33,6 +34,10 @@ type PluralKey =
   | "session.question.pending"
   | "session.followupDock.summary"
   | "session.revertDock.summary"
+  | "secondBrain.sessionTab.messages"
+  | "secondBrain.turnSteps.failed"
+  | `secondBrain.turnSteps.${StepKind}`
+  | "secondBrain.session.status.subagents"
 type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {

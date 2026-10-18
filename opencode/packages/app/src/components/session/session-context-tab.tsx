@@ -11,7 +11,8 @@ import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { File } from "@opencode-ai/session-ui/file"
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2/client"
+import { summarizeTurn } from "@opencode-ai/session-ui/step-kind"
 import { Harness } from "@opencode-ai/schema/harness"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
@@ -23,6 +24,8 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { getSessionContext, getSessionHarnesses } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
+import { getSessionUsage } from "./session-usage"
+import { stepCountPhrases } from "./turn-steps-summary"
 
 const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
   system: "var(--syntax-info)",
@@ -138,6 +141,7 @@ export function SessionContextTab() {
       }),
   )
 
+  const getParts = (id: string) => (sync().data.part[id] ?? []) as Part[]
   const harnesses = createMemo(() => getSessionHarnesses(messages()))
   const [selectedHarness, setSelectedHarness] = createSignal<string>()
   createEffect(() => {
@@ -155,9 +159,59 @@ export function SessionContextTab() {
   const ctx = createMemo(() => getSessionContext(messages(), [...providers.all().values()], selectedHarness()))
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
-  const cost = createMemo(() => {
-    return usd().format(info()?.cost ?? 0)
-  })
+  const usage = createMemo(() => getSessionUsage(messages(), { harness: selectedHarness() }))
+  const notReported = () => language.t("secondBrain.sessionTab.notReported")
+  const harnessParts = createMemo(() =>
+    messages()
+      .filter(
+        (message) =>
+          message.role === "assistant" &&
+          (!selectedHarness() ||
+            ((message as Message & { harnessInstanceID?: string }).harnessInstanceID ?? Harness.OpenCode) ===
+              selectedHarness()),
+      )
+      .flatMap((message) => getParts(message.id)),
+  )
+  const toolPhrases = createMemo(() => stepCountPhrases(language, summarizeTurn(harnessParts()).counts))
+  // Built-in `task` subagents; Codex and ACP don't expose theirs.
+  const subagents = createMemo(() =>
+    harnessParts().flatMap((part) => {
+      if (part.type !== "tool" || part.tool !== "task") return []
+      const tool = part as ToolPart
+      const input = tool.state.input ?? {}
+      const metadata = ("metadata" in tool.state ? tool.state.metadata : undefined) ?? {}
+      const sessionID = typeof metadata.sessionId === "string" ? metadata.sessionId : undefined
+      const description = typeof input.description === "string" ? input.description : undefined
+      return [
+        {
+          id: tool.id,
+          title: description ?? (sessionID ? sync().session.get(sessionID)?.title : undefined) ?? tool.tool,
+          agent: typeof input.subagent_type === "string" ? input.subagent_type : undefined,
+          status: tool.state.status,
+        },
+      ]
+    }),
+  )
+  const tiles = [
+    { label: "secondBrain.sessionTab.input", value: () => formatter().number(usage().input) },
+    { label: "secondBrain.sessionTab.output", value: () => formatter().number(usage().output) },
+    {
+      label: "secondBrain.sessionTab.cacheHit",
+      value: () => {
+        const hit = usage().cacheHit
+        if (hit === undefined) return notReported()
+        return hit.toLocaleString(language.intl(), { style: "percent", maximumFractionDigits: 0 })
+      },
+    },
+    {
+      label: "secondBrain.sessionTab.cost",
+      value: () => {
+        const cost = usage().cost
+        if (cost === undefined) return notReported()
+        return usd().format(cost)
+      },
+    },
+  ] satisfies { label: string; value: () => JSX.Element }[]
 
   const counts = createMemo(() => {
     const all = messages()
@@ -220,9 +274,7 @@ export function SessionContextTab() {
     { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
     { label: "context.stats.provider", value: providerLabel },
     { label: "context.stats.model", value: modelLabel },
-    { label: "context.stats.limit", value: () => formatter().number(ctx()?.limit) },
     { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
-    { label: "context.stats.usage", value: () => formatter().percent(ctx()?.usage) },
     { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
     { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.message.tokens.output) },
     { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.message.tokens.reasoning) },
@@ -233,7 +285,6 @@ export function SessionContextTab() {
     },
     { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
     { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
-    { label: "context.stats.totalCost", value: cost },
     { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
     { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
@@ -271,7 +322,6 @@ export function SessionContextTab() {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
-  const getParts = (id: string) => (sync().data.part[id] ?? []) as Part[]
 
   const restoreScroll = () => {
     const el = scroll
@@ -343,7 +393,116 @@ export function SessionContextTab() {
           </div>
         </Show>
 
-        <div class="grid grid-cols-2 @[32rem]:grid-cols-3 gap-2">
+        <div
+          data-slot="session-tab-heading"
+          class="flex min-w-0 items-center gap-1.5 text-[13px] text-v2-text-text-muted"
+        >
+          <span class="truncate text-v2-text-text-base [font-weight:530]">
+            {selectedHarness() ? harnessLabel(selectedHarness()!) : notReported()}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span class="truncate">{ctx() ? modelLabel() : notReported()}</span>
+          <span aria-hidden="true">·</span>
+          <span class="shrink-0">
+            {language.plural("secondBrain.sessionTab.messages", counts().all, {
+              count: counts().all.toLocaleString(language.intl()),
+            })}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <For each={tiles}>
+            {(tile) => <Stat label={language.t(tile.label as Parameters<typeof language.t>[0])} value={tile.value()} />}
+          </For>
+        </div>
+
+        <div
+          data-slot="session-tab-context"
+          class="flex flex-col gap-2 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5"
+        >
+          <div class="flex items-center justify-between gap-3 text-[11px] leading-4 text-v2-text-text-muted">
+            <span>{language.t("secondBrain.sessionTab.contextWindow")}</span>
+            <Show when={ctx()?.limit}>
+              <span>{formatter().percent(ctx()?.usage)}</span>
+            </Show>
+          </div>
+          <Show
+            when={ctx()?.limit}
+            fallback={<div class="text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">{notReported()}</div>}
+          >
+            {(limit) => (
+              <>
+                <div class="text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">
+                  {language.t("secondBrain.sessionTab.contextUsed", {
+                    used: formatter().number(ctx()?.total),
+                    limit: formatter().number(limit()),
+                  })}
+                </div>
+                <div class="h-1.5 w-full overflow-hidden rounded-full bg-v2-background-bg-layer-02">
+                  <div
+                    class="h-full rounded-full bg-v2-background-bg-accent"
+                    style={{ width: `${Math.min(100, ctx()?.usage ?? 0)}%` }}
+                  />
+                </div>
+              </>
+            )}
+          </Show>
+        </div>
+
+        <div data-slot="session-tab-subagents" class="flex flex-col gap-2">
+          <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
+            {language.t("secondBrain.sessionTab.subagents")}
+          </div>
+          <Show
+            when={subagents().length > 0}
+            fallback={
+              <div class="text-[13px] text-v2-text-text-muted">{language.t("secondBrain.sessionTab.none")}</div>
+            }
+          >
+            <div class="flex flex-col gap-1">
+              <For each={subagents()}>
+                {(agent) => (
+                  <div
+                    class="flex min-w-0 items-center gap-2 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2 text-[13px]"
+                    data-status={agent.status}
+                  >
+                    <span class="min-w-0 flex-1 truncate text-v2-text-text-base">{agent.title}</span>
+                    <Show when={agent.agent}>
+                      <span class="shrink-0 text-v2-text-text-muted">{agent.agent}</span>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+
+        <div data-slot="session-tab-tools" class="flex flex-col gap-2">
+          <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
+            {language.t("secondBrain.sessionTab.tools")}
+          </div>
+          <Show
+            when={toolPhrases().length > 0}
+            fallback={
+              <div class="text-[13px] text-v2-text-text-muted">{language.t("secondBrain.sessionTab.none")}</div>
+            }
+          >
+            <div class="flex flex-wrap gap-1.5">
+              <For each={toolPhrases()}>
+                {(phrase) => (
+                  <span class="rounded-full bg-v2-background-bg-layer-01 px-2.5 py-1 text-[12px] text-v2-text-text-base">
+                    {phrase}
+                  </span>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+
+        <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
+          {language.t("secondBrain.sessionTab.details")}
+        </div>
+        <div class="-mt-4 grid grid-cols-2 @[32rem]:grid-cols-3 gap-2">
           <For each={stats}>
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
           </For>

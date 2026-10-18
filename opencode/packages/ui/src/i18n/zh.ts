@@ -205,7 +205,6 @@ export const dict = {
   "ui.fileSearch.close": "关闭搜索",
   "ui.tool.task": "任务",
   "ui.tool.skill": "技能",
-  "ui.basicTool.called": "调用了 `{{tool}}`",
   "ui.toolErrorCard.failed": "失败",
   "ui.toolErrorCard.copyError": "复制错误",
   "ui.message.duration.seconds": "{{count}} 秒",

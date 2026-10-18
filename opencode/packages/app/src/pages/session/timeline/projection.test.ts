@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PartGroup } from "@opencode-ai/session-ui/message-part"
-import { reuseTimelineRows } from "./row-reconciliation"
+import { foldTimelineRows, reuseTimelineRows } from "./row-reconciliation"
 import { TimelineRow } from "./timeline-row"
 
 const context = (key: string, partIDs: string[], userMessageID = "user-1", type: "context" | "tools" = "context") =>
@@ -106,5 +106,54 @@ describe("reuseTimelineRows", () => {
     expect(keys(result)).toEqual([...expected])
     expect(new Set(keys(result)).size).toBe(result.length)
     reused.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).toBe(previous[previousIndex]))
+  })
+})
+
+describe("foldTimelineRows", () => {
+  const header = (segment: number) =>
+    new TimelineRow.TurnSteps({ userMessageID: "user-1", segment, tools: [], failed: false, running: false })
+  const step = (key: string) =>
+    new TimelineRow.AssistantPart({
+      userMessageID: "user-1",
+      group: { key, type: "part", ref: { messageID: "assistant-1", partID: key } },
+      previousAssistantPart: true,
+      step: true,
+    })
+  const text = (key: string) =>
+    new TimelineRow.AssistantPart({
+      userMessageID: "user-1",
+      group: { key, type: "part", ref: { messageID: "assistant-1", partID: key } },
+      previousAssistantPart: true,
+    })
+  const rows = [
+    user(),
+    header(0),
+    step("a"),
+    text("b"),
+    step("c"),
+    new TimelineRow.TurnDivider({ userMessageID: "user-1", label: "interrupted" }),
+    header(1),
+    step("d"),
+  ]
+
+  test("keeps every row without a fold predicate", () => {
+    expect(foldTimelineRows(rows, undefined)).toBe(rows)
+  })
+
+  test("hides only the folded segment's step rows and keeps its text", () => {
+    expect(keys(foldTimelineRows(rows, (row) => row.segment === 0, "user-1"))).toEqual([
+      "user-message:user-1",
+      "turn-steps:user-1:0",
+      "assistant-part:user-1:b",
+      "turn-divider:user-1:interrupted",
+      "turn-steps:user-1:1",
+      "assistant-part:user-1:d",
+    ])
+  })
+
+  test("passes whether the header belongs to the active turn", () => {
+    const seen: boolean[] = []
+    foldTimelineRows(rows, (_, active) => (seen.push(active), false), "user-1")
+    expect(seen).toEqual([true, true])
   })
 })

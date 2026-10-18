@@ -147,7 +147,6 @@ export const dict = {
   "ui.tool.agent": "{{type}} Агент",
   "ui.tool.agent.default": "Агент",
   "ui.tool.skill": "Вештина",
-  "ui.basicTool.called": "зове се `{{tool}}`",
   "ui.toolErrorCard.failed": "Неуспешно",
   "ui.toolErrorCard.copyError": "грешка при копирању",
   "ui.common.file.one": "датотека",

@@ -90,4 +90,16 @@ describe("groupParts", () => {
     const parts = [tool("a", "read"), tool("b", "bash"), tool("c", "glob"), tool("d", "webfetch"), tool("e", "read")]
     expect(toolGroupCounts(parts as ToolPart[])).toEqual({ read: 2, search: 1, command: 1, other: 1 })
   })
+
+  test("counts Codex and ACP tools by the kind of the built-in tool", () => {
+    const parts = [
+      tool("a", "command_execution"),
+      tool("b", "acp_execute"),
+      tool("c", "acp_read"),
+      tool("d", "acp_search"),
+      tool("e", "file_change"),
+      tool("f", "mcp_tool_call"),
+    ]
+    expect(toolGroupCounts(parts as ToolPart[])).toEqual({ read: 1, search: 1, command: 2, other: 2 })
+  })
 })

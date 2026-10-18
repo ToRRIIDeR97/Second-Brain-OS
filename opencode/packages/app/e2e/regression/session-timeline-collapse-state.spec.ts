@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { expandTurnSteps } from "../performance/timeline-stability/fixture"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
 const projectID = "proj_timeline_state_regression"
@@ -108,6 +109,7 @@ test.describe("regression: session timeline local row state", () => {
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
     await expectSessionTitle(page, title)
+    await expandTurnSteps(page)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
     await expectAppVisible(wrapper)
@@ -144,6 +146,7 @@ test.describe("regression: session timeline local row state", () => {
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
     await expectSessionTitle(page, title)
+    await expandTurnSteps(page)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
     await expectAppVisible(wrapper)
@@ -221,6 +224,7 @@ test.describe("regression: session timeline local row state", () => {
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
     await expectSessionTitle(page, title)
+    await expandTurnSteps(page)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
     const trigger = wrapper.locator('[data-slot="collapsible-trigger"]').first()

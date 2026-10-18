@@ -290,12 +290,15 @@ export const fixture = {
     targetMessageIDs: targetMessages
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
+    // Every seeded turn has finished without a failed step, so its tool and reasoning rows start folded.
     targetPartIDs: targetMessages.flatMap((message) =>
       orderedParts(message)
-        .filter(renderable)
+        .filter((part) => renderable(part) && part.type !== "tool" && part.type !== "reasoning")
         .map((part) => part.id),
     ),
     expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!.id,
+    expandedShellTurnID: targetMessages.find((message) => message.parts.some((part) => part.tool === "bash"))!.info
+      .parentID!,
   },
 }
 

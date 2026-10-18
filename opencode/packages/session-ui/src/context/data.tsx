@@ -40,6 +40,10 @@ type Data = {
   part_text_accum_delta?: {
     [partID: string]: string
   }
+  // Configured MCP server names name MCP tools `<server>_<tool>`.
+  mcp?: {
+    [name: string]: unknown
+  }
 }
 
 export type NavigateToSessionFn = (sessionID: string) => void

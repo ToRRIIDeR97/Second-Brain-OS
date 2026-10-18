@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="t d" font-family="Inter, system-ui, sans-serif" font-size="12">
+<title id="t">Implementation detail: ACP cost sequence and renderer derivations</title>
+<desc id="d">Left: sequence for one ACP turn from usage_update through finishAcpTurn, the publisher's step settlement and Step.Ended, to the session cost, with the cumulative cost carried to the next turn. Right: how timeline rows and the Session tab derive from parts and messages through stepOf, summarizeTurn and getSessionUsage, each tied to its acceptance criterion.</desc>
+<style>
+.n{fill:#ffffff;stroke:#c9c9c9}.c{fill:#ecf1fe;stroke:#3b5cf6}.h{font-weight:600;fill:#161616}.t{fill:#5c5c5c}.k{fill:#22388f}.l{stroke:#c9c9c9;stroke-dasharray:4 4}.a{stroke:#808080;fill:none;marker-end:url(#m)}.g{fill:#f2f2f2}
+@media (prefers-color-scheme:dark){.n{fill:#161616;stroke:#3a3a3a}.c{fill:#1c2e70;stroke:#7698fd}.h{fill:#fafafa}.t{fill:#aeaeae}.k{fill:#d7e2fc}.l{stroke:#3a3a3a}.g{fill:#0d0d0d}}
+</style>
+<defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#808080"/></marker></defs>
+<rect class="g" width="960" height="600" rx="16"/>
+<text class="h" x="24" y="32" font-size="14">Implementation detail · proposed</text>
+
+<text class="h" x="24" y="64">A. One ACP turn (AC-7)</text>
+<rect class="n" x="24" y="76" width="96" height="30" rx="8"/><text class="h" x="36" y="96">opencode acp</text>
+<rect class="c" x="140" y="76" width="120" height="30" rx="8"/><text class="h" x="150" y="96">AcpHarness</text>
+<rect class="c" x="280" y="76" width="96" height="30" rx="8"/><text class="h" x="290" y="96">publisher</text>
+<rect class="n" x="396" y="76" width="96" height="30" rx="8"/><text class="h" x="406" y="96">runner/store</text>
+<path class="l" d="M72 106V560M200 106V560M328 106V560M444 106V560"/>
+<path class="a" d="M72 140H200"/><text class="t" x="78" y="134" font-size="11">usage_update</text>
+<text class="k" x="206" y="148" font-size="11">state.usage = {used,size,cost}</text><text class="k" x="206" y="162" font-size="11">other session / non-USD: no cost</text>
+<path class="a" d="M72 196H200"/><text class="t" x="78" y="190" font-size="11">prompt result</text>
+<text class="k" x="206" y="212" font-size="11">finishAcpTurn:</text><text class="k" x="206" y="226" font-size="11">nonCached = inputTokens</text><text class="k" x="206" y="240" font-size="11">input = nonCached + cacheRead</text><text class="k" x="206" y="254" font-size="11">cost = max(0, amount − previous)</text>
+<path class="a" d="M200 286H328"/><text class="t" x="206" y="280" font-size="11">step-finish usage</text>
+<text class="k" x="334" y="302" font-size="11">stepSettlement()</text><text class="k" x="334" y="316" font-size="11">.cost = harness.cost ?? 0</text>
+<path class="a" d="M328 346H444"/><text class="t" x="334" y="340" font-size="11">Step.Ended cost</text>
+<text class="t" x="450" y="362" font-size="11">applyUsage →</text><text class="t" x="450" y="376" font-size="11">session.cost</text>
+<path class="a" d="M200 420H140V444H200"/><text class="k" x="206" y="430" font-size="11">open() keeps sessionCost →</text><text class="k" x="206" y="444" font-size="11">next turn's acpState(previous)</text>
+<text class="t" x="24" y="500" font-size="11">Files: core/src/harness/acp.ts (acpState, parseAcpNotification,</text>
+<text class="t" x="24" y="516" font-size="11">finishAcpTurn, normalizeUsage, open) · core/src/session/runner/</text>
+<text class="t" x="24" y="532" font-size="11">publish-llm-event.ts (stepSettlement) · runner/llm.ts:378</text>
+
+<text class="h" x="540" y="64">B. Renderer derivations</text>
+<rect class="n" x="540" y="76" width="180" height="44" rx="10"/><text class="h" x="552" y="96">turn parts</text><text class="t" x="552" y="112">rows.ts per user turn</text>
+<rect class="c" x="740" y="76" width="196" height="44" rx="10"/><text class="h" x="752" y="96">stepOf(part, mcpServers)</text><text class="k" x="752" y="112">kind + target · AC-1, AC-4</text>
+<rect class="c" x="740" y="140" width="196" height="58" rx="10"/><text class="h" x="752" y="160">summarizeTurn(parts)</text><text class="k" x="752" y="176">counts, failed, running,</text><text class="k" x="752" y="190">durationMs · AC-2</text>
+<rect class="c" x="540" y="140" width="180" height="96" rx="10"/><text class="h" x="552" y="160">Turn row · AC-3</text><text class="k" x="552" y="178">busy → expanded, rows live</text><text class="k" x="552" y="194">idle → one summary line</text><text class="k" x="552" y="210">failed &gt; 0 → opens</text><text class="k" x="552" y="226">user toggle wins, cached</text>
+<path class="a" d="M720 98H740"/><path class="a" d="M838 120V140"/><path class="a" d="M740 170H720"/>
+<rect class="n" x="540" y="270" width="180" height="44" rx="10"/><text class="h" x="552" y="290">session messages</text><text class="t" x="552" y="306">sync store</text>
+<rect class="c" x="740" y="262" width="196" height="60" rx="10"/><text class="h" x="752" y="282">getSessionUsage(msgs)</text><text class="k" x="752" y="298">totals, cacheHit, cost?</text><text class="k" x="752" y="312">AC-5, AC-6</text>
+<rect class="c" x="540" y="350" width="396" height="128" rx="10"/><text class="h" x="552" y="370">Session tab (session-side-panel.tsx, replaces Context) · AC-5</text>
+<text class="k" x="552" y="390">harness · model · message count (existing selector kept)</text>
+<text class="k" x="552" y="406">tiles: input, output, cache hit, cost or "Not reported"</text>
+<text class="k" x="552" y="422">context window: getSessionContext (unchanged), else "Not reported"</text>
+<text class="k" x="552" y="438">subagents: task parts → child session links, status, calls</text>
+<text class="k" x="552" y="454">tools: summarizeTurn over all turns · breakdown + raw messages kept</text>
+<path class="a" d="M720 292H740"/><path class="a" d="M838 322V350"/><path class="a" d="M838 198V230H930V350"/>
+<rect class="c" x="540" y="500" width="396" height="60" rx="10"/><text class="h" x="552" y="520">Status line above composer · AC-8</text><text class="k" x="552" y="538">first running step: verb + target; "+ N subagents working"</text><text class="k" x="552" y="552">hidden when the session is idle</text>
+</svg>
