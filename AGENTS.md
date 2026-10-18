@@ -47,7 +47,8 @@
 
 ## Required checks
 
-Run from the repository root, locally, before requesting a merge:
+Run from the repository root, locally, before requesting a merge. `bun run check`
+runs these in order and stops at the first failure:
 
 ```sh
 bun run typecheck
