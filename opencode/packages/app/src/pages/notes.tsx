@@ -222,6 +222,18 @@ export default function NotesPage() {
     ),
   )
 
+  // Update the loaded list from the write result instead of re-reading every note; same order as the server.
+  const storeSummary = (directory: string, info: NoteSummary) => {
+    if (state.directory !== directory) return
+    noteActions.mutate((items) =>
+      items
+        ? [...items.filter((item) => item.path !== info.path), info].sort(
+            (left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.title.localeCompare(right.title),
+          )
+        : items,
+    )
+  }
+
   const createNote = async () => {
     const title = state.newTitle.trim()
     const slug = slugify(title)
@@ -230,9 +242,10 @@ export default function NotesPage() {
       return
     }
     const path = state.filterProjectId ? `projects/${state.filterProjectId}/notes/${slug}.md` : `notes/${slug}.md`
+    const directory = state.directory
     setState({ saving: true, error: "" })
     try {
-      const document = await writeNote(client(state.directory), {
+      const document = await writeNote(client(directory), {
         path,
         title,
         body: "",
@@ -240,7 +253,7 @@ export default function NotesPage() {
         tags: [],
         create: true,
       })
-      await noteActions.refetch()
+      storeSummary(directory, document.info)
       if (state.search.trim()) await matchActions.refetch()
       setState({ path, newTitle: "", creating: false })
       applyDocument(document)
@@ -258,9 +271,10 @@ export default function NotesPage() {
       setState("error", language.t("secondBrain.notes.error.title"))
       return
     }
+    const directory = state.directory
     setState({ saving: true, error: "" })
     try {
-      const document = await writeNote(client(state.directory), {
+      const document = await writeNote(client(directory), {
         path: state.path,
         body: state.body,
         title,
@@ -272,7 +286,7 @@ export default function NotesPage() {
         expectedRevision: state.revision,
       })
       applyDocument(document)
-      await noteActions.refetch()
+      storeSummary(directory, document.info)
       if (state.search.trim()) await matchActions.refetch()
     } catch (error) {
       report(error)
