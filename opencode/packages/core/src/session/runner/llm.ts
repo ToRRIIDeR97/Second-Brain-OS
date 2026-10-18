@@ -365,6 +365,16 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
           }
+          // Defects and non-provider failures must still close the step, or the Session shows a reply that never ends.
+          if (
+            stream._tag === "Failure" &&
+            !llmFailure &&
+            !Cause.hasInterrupts(stream.cause) &&
+            !publisher.hasProviderError()
+          ) {
+            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* withPublication(publisher.failAssistant("Internal error while processing the provider response"))
+          }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
           if (settled._tag === "Failure" && isUserDeclined(settled.cause)) {

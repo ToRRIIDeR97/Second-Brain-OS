@@ -2351,6 +2351,29 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("fails the open assistant step when the provider stream defects", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      responseStream = Stream.fromIterable(fragmentFixture("text", "text-defect", ["Half"]).partialEvents).pipe(
+        Stream.concat(Stream.die(new Error("parser bug"))),
+      )
+
+      expect(Exit.isFailure(yield* session.resume(sessionID).pipe(Effect.exit))).toBe(true)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Hi" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "Internal error while processing the provider response" },
+          content: [{ type: "text", text: "Half" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("does not retry a provider failure after assistant output started", () =>
     Effect.gen(function* () {
       yield* setup

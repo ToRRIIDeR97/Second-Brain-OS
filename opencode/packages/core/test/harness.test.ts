@@ -33,6 +33,23 @@ describe("Codex harness", () => {
     expect(message.map((event) => event.type)).toEqual(["text-start", "text-delta", "text-end"])
   })
 
+  test("emits each item start once when Codex repeats or reorders item/started", () => {
+    const state = codexState()
+    const started = (item: Record<string, unknown>) =>
+      parseCodexNotification({ method: "item/started", params: { item } }, state).map((event) => event.type)
+
+    const delta = parseCodexNotification(
+      { method: "item/agentMessage/delta", params: { itemId: "message_1", delta: "Hi" } },
+      state,
+    )
+    expect(delta.map((event) => event.type)).toEqual(["text-start", "text-delta"])
+    expect(started({ id: "message_1", type: "agentMessage" })).toEqual([])
+    expect(started({ id: "reasoning_1", type: "reasoning" })).toEqual(["reasoning-start"])
+    expect(started({ id: "reasoning_1", type: "reasoning" })).toEqual([])
+    expect(started({ id: "tool_1", type: "commandExecution", command: "ls" })).toEqual(["tool-call"])
+    expect(started({ id: "tool_1", type: "commandExecution", command: "ls" })).toEqual([])
+  })
+
   test("normalizes turn usage and completes the stream", () => {
     const state = codexState()
     parseCodexNotification(
