@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -10,6 +10,7 @@ import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/fixture"
+import { PlannerCalendar } from "../../src/planner/calendar"
 import { BrainProject } from "../../src/project/brain"
 
 /** Real file mutations except `create`, which always reports the target as existing. */
@@ -32,19 +33,34 @@ const failingCreateLayer = Layer.succeed(
       Effect.sync(() => {
         mkdirSync(path.dirname(input.target.canonical), { recursive: true })
         writeFileSync(input.target.canonical, input.content)
-        return { operation: "write" as const, target: input.target.canonical, resource: input.target.resource, existed: false }
+        return {
+          operation: "write" as const,
+          target: input.target.canonical,
+          resource: input.target.resource,
+          existed: false,
+        }
       }),
     writeIfUnchanged: (input) =>
       Effect.sync(() => {
         mkdirSync(path.dirname(input.target.canonical), { recursive: true })
         writeFileSync(input.target.canonical, input.content)
-        return { operation: "write" as const, target: input.target.canonical, resource: input.target.resource, existed: true }
+        return {
+          operation: "write" as const,
+          target: input.target.canonical,
+          resource: input.target.resource,
+          existed: true,
+        }
       }),
     remove: (input) =>
       Effect.sync(() => {
         const existed = existsSync(input.target.canonical)
         if (existed) rmSync(input.target.canonical)
-        return { operation: "remove" as const, target: input.target.canonical, resource: input.target.resource, existed }
+        return {
+          operation: "remove" as const,
+          target: input.target.canonical,
+          resource: input.target.resource,
+          existed,
+        }
       }),
   }),
 )
@@ -121,7 +137,9 @@ Keep this body intact.
         Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
         Effect.provide(LayerNode.compile(FSUtil.node)),
         Effect.provide(LayerNode.compile(FileMutation.node)),
-        Effect.catch((error) => (error instanceof BrainProject.InvalidError ? Effect.succeed("typed") : Effect.succeed("defect"))),
+        Effect.catch((error) =>
+          error instanceof BrainProject.InvalidError ? Effect.succeed("typed") : Effect.succeed("defect"),
+        ),
       ),
     )
     expect(outcome).toBe("typed")
@@ -139,7 +157,9 @@ Keep this body intact.
         Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
         Effect.provide(LayerNode.compile(FSUtil.node)),
         Effect.provide(LayerNode.compile(FileMutation.node)),
-        Effect.catch((error) => (error instanceof BrainProject.InvalidError ? Effect.succeed("typed") : Effect.succeed("defect"))),
+        Effect.catch((error) =>
+          error instanceof BrainProject.InvalidError ? Effect.succeed("typed") : Effect.succeed("defect"),
+        ),
       ),
     )
     expect(outcome).toBe("typed")
@@ -261,9 +281,96 @@ describe("BrainProject workspace threads", () => {
       brainDirectory: tmp.path,
     })
     expect(candidates.map((workspace) => workspace.id)).toEqual(["proj_busy"])
-    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({ created: 1, linked: 0, failed: 0 })
-    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({ created: 0, linked: 1, failed: 0 })
+    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({
+      created: 1,
+      linked: 0,
+      failed: 0,
+    })
+    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({
+      created: 0,
+      linked: 1,
+      failed: 0,
+    })
     const projects = await run(tmp.path, BrainProject.list())
     expect(projects.map((project) => project.location?.workspaceId)).toEqual(["proj_busy"])
+  })
+
+  test("list skips stray and malformed cards, prefers the managed card, and ignores mismatched ids", async () => {
+    await using tmp = await tmpdir()
+    const created = await run(tmp.path, BrainProject.create({ name: "Valid", outcome: "Keep listing" }))
+    const projects = path.join(tmp.path, "projects")
+    const card = (id: string, title: string) =>
+      `---\nversion: 2\nid: ${id}\ntitle: ${title}\nstatus: active\n---\n${title} outcome.\n`
+    writeFileSync(path.join(projects, "README.md"), "# Projects\n\nHand-written index.\n")
+    writeFileSync(path.join(projects, "project_01BAD.md"), "---\ntitle: [unclosed\n---\nBroken\n")
+    writeFileSync(path.join(projects, "project_01DUP.md"), card("project_01DUP", "Flat copy"))
+    mkdirSync(path.join(projects, "project_01DUP"))
+    writeFileSync(path.join(projects, "project_01DUP", "project.md"), card("project_01DUP", "Managed copy"))
+    writeFileSync(path.join(projects, "project_01WRONG.md"), card("project_01OTHER", "Wrong id"))
+
+    const listed = await run(tmp.path, BrainProject.list())
+    expect(listed.map((project) => project.name).toSorted()).toEqual(["Managed copy", "Valid"])
+    expect(listed.find((project) => project.id === created.id)?.name).toBe("Valid")
+    const wrong = await Effect.runPromiseExit(
+      BrainProject.get("project_01WRONG").pipe(
+        Effect.provide(LocationMutation.locationLayer),
+        Effect.provideService(Location.Service, {
+          directory: AbsolutePath.make(tmp.path),
+          project: { id: ProjectV2.ID.global, directory: AbsolutePath.make(tmp.path) },
+        }),
+        Effect.provide(LayerNode.compile(FSUtil.node)),
+      ),
+    )
+    expect(Exit.isFailure(wrong) ? Cause.squash(wrong.cause) : undefined).toBeInstanceOf(BrainProject.NotFoundError)
+  })
+
+  test("list sorts every card before applying the cap", async () => {
+    await using tmp = await tmpdir()
+    const projects = path.join(tmp.path, "projects")
+    mkdirSync(projects)
+    const count = 1_001
+    // The oldest card also sorts first by path, so a cap applied before sorting would keep it.
+    Array.from({ length: count }, (_, index) => {
+      const id = `project_${String(index).padStart(5, "0")}`
+      writeFileSync(
+        path.join(projects, `${id}.md`),
+        `---\nversion: 2\nid: ${id}\ntitle: Card ${index}\nstatus: active\nupdated_at: ${new Date(Date.UTC(2026, 0, 1) + index * 60_000).toISOString()}\n---\nOutcome.\n`,
+      )
+    })
+    const listed = await run(tmp.path, BrainProject.list())
+    expect(listed).toHaveLength(1_000)
+    expect(listed[0]?.name).toBe(`Card ${count - 1}`)
+    expect(listed.map((project) => project.name)).not.toContain("Card 0")
+  })
+
+  test("syncTimelines rewrites only timelines whose items changed", async () => {
+    await using tmp = await tmpdir()
+    const alpha = await run(tmp.path, BrainProject.create({ name: "Alpha", outcome: "A" }))
+    const beta = await run(tmp.path, BrainProject.create({ name: "Beta", outcome: "B" }))
+    const timeline = (id: string) =>
+      PlannerCalendar.decode(readFileSync(path.join(tmp.path, "projects", id, "timeline", "calendar.json"), "utf8"))
+    const event = (title: string) => ({
+      id: "event_a",
+      title,
+      date: "2026-08-30",
+      projectId: alpha.id,
+      source: "local" as const,
+      syncState: "local" as const,
+    })
+    const sync = (revision: string, title: string) =>
+      run(tmp.path, BrainProject.syncTimelines({ version: 2, revision, events: [event(title)], tasks: [] }))
+
+    await sync("rev_1", "Kickoff")
+    expect(timeline(alpha.id)).toMatchObject({ revision: "rev_1", events: [{ id: "event_a" }] })
+    // Beta's slice is still empty, as create wrote it, so its file is left untouched.
+    expect(timeline(beta.id)).toMatchObject({ revision: "", events: [] })
+
+    // Only the global revision changed: nothing is rewritten.
+    await sync("rev_2", "Kickoff")
+    expect(timeline(alpha.id).revision).toBe("rev_1")
+
+    await sync("rev_3", "Renamed kickoff")
+    expect(timeline(alpha.id)).toMatchObject({ revision: "rev_3", events: [{ title: "Renamed kickoff" }] })
+    expect(timeline(beta.id).revision).toBe("")
   })
 })

@@ -4,6 +4,7 @@ import { PlannerCalendar } from "@/planner/calendar"
 import { BrainProject } from "@/project/brain"
 import { Project } from "@/project/project"
 import { Database } from "@opencode-ai/core/database/database"
+import { KeyedMutex } from "@opencode-ai/core/effect/keyed-mutex"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
@@ -11,21 +12,29 @@ import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { Effect, Layer, Semaphore } from "effect"
+import { Effect, Layer } from "effect"
+import { PlatformError } from "effect/PlatformError"
 import path from "node:path"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { SecondBrainConflictError } from "../groups/second-brain"
+import { SecondBrainConflictError, SecondBrainInvalidError } from "../groups/second-brain"
 
 const CALENDAR_PATH = ".second-brain/calendar-v1.json"
+
+type ApiFailure =
+  | SecondBrainInvalidError
+  | HttpApiError.NotFound
+  | SecondBrainConflictError
+  | HttpApiError.InternalServerError
 
 export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "secondBrain", (handlers) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
     const opencodeProjects = yield* Project.Service
     const database = yield* Database.Service
-    // Serializes Project creation from Workspaces so concurrent requests cannot duplicate cards.
-    const ensureLock = Semaphore.makeUnsafe(1)
+    // One lock per Brain directory serializes calendar saves (with their timeline sync),
+    // Project mutations and the Workspace migration, so none of them interleave.
+    const brainLocks = KeyedMutex.makeUnsafe<string>()
     // Brain directories whose one-shot Workspace migration ran in this server process.
     const migrated = new Set<string>()
     const filesystem = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
@@ -35,185 +44,48 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
         ),
       )
     })
-    const projectConflict = <A, E, R>(
-      effect: Effect.Effect<A, E, R>,
-    ): Effect.Effect<A, HttpApiError.BadRequest | SecondBrainConflictError, R> =>
-      effect.pipe(
-        Effect.catch((error): Effect.Effect<never, HttpApiError.BadRequest | SecondBrainConflictError> => {
-          if (error instanceof BrainProject.ConflictError) {
-            return Effect.fail(
-              new SecondBrainConflictError({
-                name: "SecondBrainConflictError",
-                data: { message: error.reason },
-              }),
-            )
-          }
-          return Effect.fail(new HttpApiError.BadRequest({}))
-        }),
-      )
-    const projectRead = <A, E, R>(
-      effect: Effect.Effect<A, E, R>,
-    ): Effect.Effect<A, HttpApiError.BadRequest | HttpApiError.NotFound, R> =>
-      effect.pipe(
-        Effect.catch((error): Effect.Effect<never, HttpApiError.BadRequest | HttpApiError.NotFound> => {
-          if (error instanceof BrainProject.NotFoundError) return Effect.fail(new HttpApiError.NotFound({}))
-          return Effect.fail(new HttpApiError.BadRequest({}))
-        }),
-      )
-    const projectUpdate = <A, E, R>(
-      effect: Effect.Effect<A, E, R>,
-    ): Effect.Effect<A, HttpApiError.BadRequest | HttpApiError.NotFound | SecondBrainConflictError, R> =>
-      effect.pipe(
-        Effect.catch(
-          (error): Effect.Effect<never, HttpApiError.BadRequest | HttpApiError.NotFound | SecondBrainConflictError> => {
-            if (error instanceof BrainProject.NotFoundError) return Effect.fail(new HttpApiError.NotFound({}))
-            if (error instanceof BrainProject.ConflictError) {
-              return Effect.fail(
-                new SecondBrainConflictError({
-                  name: "SecondBrainConflictError",
-                  data: { message: error.reason },
-                }),
-              )
-            }
-            return Effect.fail(new HttpApiError.BadRequest({}))
-          },
-        ),
-      )
-
-    const noteRead = <A, E, R>(
-      effect: Effect.Effect<A, E, R>,
-    ): Effect.Effect<A, HttpApiError.BadRequest | HttpApiError.NotFound, R> =>
-      effect.pipe(
-        Effect.catch((error): Effect.Effect<never, HttpApiError.BadRequest | HttpApiError.NotFound> => {
-          if (error instanceof KnowledgeNote.NotFoundError) return Effect.fail(new HttpApiError.NotFound({}))
-          return Effect.fail(new HttpApiError.BadRequest({}))
-        }),
-      )
-    const noteWrite = <A, E, R>(
-      effect: Effect.Effect<A, E, R>,
-    ): Effect.Effect<A, HttpApiError.BadRequest | HttpApiError.NotFound | SecondBrainConflictError, R> =>
-      effect.pipe(
-        Effect.catch(
-          (error): Effect.Effect<never, HttpApiError.BadRequest | HttpApiError.NotFound | SecondBrainConflictError> => {
-            if (error instanceof KnowledgeNote.NotFoundError) return Effect.fail(new HttpApiError.NotFound({}))
-            if (error instanceof KnowledgeNote.ConflictError) {
-              return Effect.fail(
-                new SecondBrainConflictError({
-                  name: "SecondBrainConflictError",
-                  data: { message: error.reason },
-                }),
-              )
-            }
-            return Effect.fail(new HttpApiError.BadRequest({}))
-          },
-        ),
-      )
+    const serialized = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
+      return yield* brainLocks.withLock((yield* InstanceState.context).directory)(effect)
+    })
 
     const listNotes = Effect.fn("SecondBrain.listNotes")(function* (ctx: { query: { search?: string } }) {
-      return yield* filesystem(KnowledgeNote.list(ctx.query.search)).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      return yield* filesystem(KnowledgeNote.list(ctx.query.search)).pipe(failure("listNotes"))
     })
 
     const readNote = Effect.fn("SecondBrain.readNote")(function* (ctx: { query: { path: string } }) {
-      return yield* noteRead(filesystem(KnowledgeNote.read(ctx.query.path)))
+      return yield* filesystem(KnowledgeNote.read(ctx.query.path)).pipe(failure("readNote", ctx.query.path))
     })
 
     const writeNote = Effect.fn("SecondBrain.writeNote")(function* (ctx: {
       query: { path: string }
       payload: KnowledgeNote.WriteInput
     }) {
-      return yield* noteWrite(filesystem(KnowledgeNote.write(ctx.query.path, ctx.payload)))
-    })
-
-    const calendarFile = Effect.fn("SecondBrain.calendarFile")(function* () {
-      const target = yield* filesystem(
-        LocationMutation.Service.use((mutation) => mutation.resolve({ path: CALENDAR_PATH, kind: "file" })),
-      ).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
-      const source = yield* filesystem(FSUtil.Service.use((fs) => fs.readFileStringSafe(target.canonical))).pipe(
-        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      return yield* filesystem(KnowledgeNote.write(ctx.query.path, ctx.payload)).pipe(
+        failure("writeNote", ctx.query.path),
       )
-      const snapshot = yield* Effect.try({
-        try: () => PlannerCalendar.decode(source),
-        catch: () => new HttpApiError.BadRequest({}),
-      })
-      return { target, source, snapshot }
     })
 
     const readCalendar = Effect.fn("SecondBrain.readCalendar")(function* () {
-      return (yield* calendarFile()).snapshot
+      return yield* filesystem(calendarFile().pipe(Effect.flatMap((file) => decodeCalendar(file.bytes)))).pipe(
+        failure("readCalendar", CALENDAR_PATH),
+      )
     })
 
     const writeCalendar = Effect.fn("SecondBrain.writeCalendar")(function* (ctx: {
       payload: PlannerCalendar.WriteInput
     }) {
-      const current = yield* calendarFile()
-      if (ctx.payload.expectedRevision !== undefined && ctx.payload.expectedRevision !== current.snapshot.revision) {
-        return yield* new SecondBrainConflictError({
-          name: "SecondBrainConflictError",
-          data: { message: "stale" },
-        })
-      }
-      const next = yield* Effect.try({
-        try: () => PlannerCalendar.encode(ctx.payload.events, ctx.payload.tasks),
-        catch: () => new HttpApiError.BadRequest({}),
-      })
-      yield* filesystem(
-        FileMutation.Service.use((mutation) =>
-          current.source === undefined
-            ? mutation.create({ target: current.target, content: next.source }).pipe(
-                Effect.catchTag("FileMutation.TargetExistsError", () =>
-                  Effect.fail(
-                    new SecondBrainConflictError({
-                      name: "SecondBrainConflictError",
-                      data: { message: "stale" },
-                    }),
-                  ),
-                ),
-              )
-            : mutation
-                .writeIfUnchanged({
-                  target: current.target,
-                  content: next.source,
-                  expected: new TextEncoder().encode(current.source),
-                })
-                .pipe(
-                  Effect.catchTag("FileMutation.StaleContentError", () =>
-                    Effect.fail(
-                      new SecondBrainConflictError({
-                        name: "SecondBrainConflictError",
-                        data: { message: "stale" },
-                      }),
-                    ),
-                  ),
-                ),
-        ),
-      ).pipe(
-        Effect.catchTag("PlatformError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-        Effect.catchTag("FileSystemError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-      )
-      const snapshot = { version: next.version, revision: next.revision, events: next.events, tasks: next.tasks }
-      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(
-        Effect.catch(() =>
-          Effect.logWarning("Second Brain project timeline sync failed; project timelines may be stale"),
-        ),
-      )
-      return snapshot
+      return yield* serialized(filesystem(saveCalendar(ctx.payload))).pipe(failure("writeCalendar", CALENDAR_PATH))
     })
 
     const listProjects = Effect.fn("SecondBrain.listProjects")(function* () {
-      return yield* filesystem(BrainProject.list()).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      return yield* filesystem(BrainProject.list()).pipe(failure("listProjects"))
     })
 
+    // A new Project has no calendar items yet, so creating one does not re-sync timelines.
     const createProject = Effect.fn("SecondBrain.createProject")(function* (ctx: {
       payload: BrainProject.CreateInput
     }) {
-      const project = yield* projectConflict(filesystem(BrainProject.create(ctx.payload)))
-      const snapshot = (yield* calendarFile()).snapshot
-      yield* filesystem(BrainProject.syncTimelines(snapshot)).pipe(
-        Effect.catch(() =>
-          Effect.logWarning("Second Brain project timeline sync failed; project timelines may be stale"),
-        ),
-      )
-      return project
+      return yield* serialized(filesystem(BrainProject.create(ctx.payload))).pipe(failure("createProject"))
     })
 
     const workspaces = Effect.fn("SecondBrain.workspaces")(function* () {
@@ -236,13 +108,14 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       )
       const candidates = BrainProject.migrationCandidates({ workspaces: known, withThreads, brainDirectory })
       const counts = yield* filesystem(BrainProject.migrateWorkspaces(candidates))
-      migrated.add(brainDirectory)
+      // A partial pass is retried on the next listing; ensureForWorkspace is idempotent.
+      if (counts.failed === 0) migrated.add(brainDirectory)
       yield* Effect.logInfo("Second Brain workspace migration", { candidates: candidates.length, ...counts })
     })
 
     const listProjectThreads = Effect.fn("SecondBrain.listProjectThreads")(function* () {
       const known = yield* workspaces()
-      yield* ensureLock.withPermits(1)(migrateOnce(known)).pipe(
+      yield* serialized(migrateOnce(known)).pipe(
         Effect.catch(() => Effect.logWarning("Second Brain workspace migration failed; it will retry")),
       )
       return yield* filesystem(
@@ -250,7 +123,8 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
           const projects = yield* BrainProject.list()
           const resolved = yield* Effect.forEach(
             projects,
-            (project) => BrainProject.threadDirectory(project, known).pipe(Effect.map((thread) => ({ project, thread }))),
+            (project) =>
+              BrainProject.threadDirectory(project, known).pipe(Effect.map((thread) => ({ project, thread }))),
             { concurrency: 8 },
           )
           const stats = yield* BrainProject.threadStats(resolved.map((item) => item.thread.directory)).pipe(
@@ -268,35 +142,35 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
             }
           })
         }),
-      ).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      ).pipe(failure("listProjectThreads"))
     })
 
     const ensureWorkspaceProject = Effect.fn("SecondBrain.ensureWorkspaceProject")(function* (ctx: {
       payload: BrainProject.EnsureWorkspaceInput
     }) {
       const id = ctx.payload.workspaceId.trim()
-      if (!id || id === "global") return yield* new HttpApiError.BadRequest({})
+      if (!id || id === "global") return yield* invalid("invalid_workspace")
       const workspace = yield* opencodeProjects.get(ProjectV2.ID.make(id))
       if (!workspace) return yield* new HttpApiError.NotFound({})
       const brainDirectory = (yield* InstanceState.context).directory
-      if (path.resolve(workspace.worktree) === path.resolve(brainDirectory)) return yield* new HttpApiError.BadRequest({})
-      const result = yield* ensureLock.withPermits(1)(
-        projectConflict(
-          filesystem(BrainProject.ensureForWorkspace({ id: workspace.id, worktree: workspace.worktree })),
-        ),
-      )
+      if (path.resolve(workspace.worktree) === path.resolve(brainDirectory)) return yield* invalid("invalid_workspace")
+      const result = yield* serialized(
+        filesystem(BrainProject.ensureForWorkspace({ id: workspace.id, worktree: workspace.worktree })),
+      ).pipe(failure("ensureWorkspaceProject"))
       return result.project
     })
 
     const readProject = Effect.fn("SecondBrain.readProject")(function* (ctx: { query: { id: string } }) {
-      return yield* projectRead(filesystem(BrainProject.get(ctx.query.id)))
+      return yield* filesystem(BrainProject.get(ctx.query.id)).pipe(failure("readProject", ctx.query.id))
     })
 
     const updateProject = Effect.fn("SecondBrain.updateProject")(function* (ctx: {
       query: { id: string }
       payload: BrainProject.UpdateInput
     }) {
-      return yield* projectUpdate(filesystem(BrainProject.update(ctx.query.id, ctx.payload)))
+      return yield* serialized(filesystem(BrainProject.update(ctx.query.id, ctx.payload))).pipe(
+        failure("updateProject", ctx.query.id),
+      )
     })
 
     return handlers
@@ -313,3 +187,134 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       .handle("updateProject", updateProject)
   }),
 ).pipe(Layer.provide(locationServiceMapLayer))
+
+/** Read the calendar bytes; only a missing file reads as absent, so permission errors are not an empty calendar. */
+const calendarFile = Effect.fn("SecondBrain.calendarFile")(function* () {
+  const mutation = yield* LocationMutation.Service
+  const fs = yield* FSUtil.Service
+  const target = yield* mutation.resolve({ path: CALENDAR_PATH, kind: "file" })
+  const bytes = yield* fs
+    .readFile(target.canonical)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+  return { target, bytes }
+})
+
+const decodeCalendar = (bytes: Uint8Array | undefined) =>
+  Effect.try({
+    // The default decoder drops a leading BOM, which JSON.parse would reject.
+    try: () => PlannerCalendar.decode(bytes && new TextDecoder().decode(bytes)),
+    catch: (error) =>
+      error instanceof PlannerCalendar.InvalidError
+        ? error
+        : new PlannerCalendar.InvalidError({ reason: "invalid_document" }),
+  })
+
+/**
+ * Compare-and-swap the whole calendar, then mirror it into Project timelines.
+ * An undecodable calendar file is moved aside to `calendar-v1.json.corrupt-<time>`
+ * and replaced, so a damaged file cannot block every later save.
+ */
+const saveCalendar = Effect.fn("SecondBrain.saveCalendar")(function* (input: PlannerCalendar.WriteInput) {
+  const fs = yield* FSUtil.Service
+  const files = yield* FileMutation.Service
+  const file = yield* calendarFile()
+  // Validate the new calendar before touching a damaged file.
+  const next = yield* Effect.try({
+    try: () => PlannerCalendar.encode(input.events, input.tasks),
+    catch: (error) =>
+      error instanceof PlannerCalendar.InvalidError
+        ? error
+        : new PlannerCalendar.InvalidError({ reason: "invalid_document" }),
+  })
+  const current = yield* decodeCalendar(file.bytes).pipe(
+    Effect.catchTag("PlannerCalendar.InvalidError", (error) =>
+      Effect.gen(function* () {
+        yield* fs.rename(file.target.canonical, `${file.target.canonical}.corrupt-${Date.now()}`)
+        yield* Effect.logWarning("Moved an undecodable Second Brain calendar aside", {
+          path: CALENDAR_PATH,
+          reason: error.reason,
+        })
+        return undefined
+      }),
+    ),
+  )
+  if (current && input.expectedRevision !== undefined && input.expectedRevision !== current.revision) {
+    return yield* conflict("stale")
+  }
+  yield* current === undefined || file.bytes === undefined
+    ? files
+        .create({ target: file.target, content: next.source })
+        .pipe(Effect.catchTag("FileMutation.TargetExistsError", () => Effect.fail(conflict("stale"))))
+    : files
+        .writeIfUnchanged({ target: file.target, content: next.source, expected: file.bytes })
+        .pipe(Effect.catchTag("FileMutation.StaleContentError", () => Effect.fail(conflict("stale"))))
+  const snapshot = { version: next.version, revision: next.revision, events: next.events, tasks: next.tasks }
+  yield* BrainProject.syncTimelines(snapshot).pipe(
+    Effect.catch((error) =>
+      Effect.logWarning("Second Brain project timeline sync failed; project timelines may be stale", {
+        error: error._tag,
+      }),
+    ),
+  )
+  return snapshot
+})
+
+/**
+ * Translate every Second Brain failure at one boundary: domain validation is a 400
+ * carrying its reason, a missing record 404, a stale write 409, and anything else
+ * (IO, permissions) a logged 500. Logs carry the error tag, reason and the
+ * request's relative path or id, never file content.
+ */
+function failure(operation: string, path?: string) {
+  return <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ApiFailure, R> =>
+    effect.pipe(Effect.catch((error) => toApiFailure(operation, path, error)))
+}
+
+function toApiFailure(operation: string, path: string | undefined, error: unknown): Effect.Effect<never, ApiFailure> {
+  if (
+    error instanceof SecondBrainInvalidError ||
+    error instanceof HttpApiError.NotFound ||
+    error instanceof SecondBrainConflictError ||
+    error instanceof HttpApiError.InternalServerError
+  ) {
+    return Effect.fail(error)
+  }
+  if (error instanceof KnowledgeNote.NotFoundError || error instanceof BrainProject.NotFoundError) {
+    return Effect.fail(new HttpApiError.NotFound({}))
+  }
+  if (error instanceof KnowledgeNote.ConflictError || error instanceof BrainProject.ConflictError) {
+    return Effect.fail(conflict(error.reason))
+  }
+  if (
+    error instanceof KnowledgeNote.InvalidError ||
+    error instanceof BrainProject.InvalidError ||
+    error instanceof PlannerCalendar.InvalidError ||
+    error instanceof LocationMutation.PathError
+  ) {
+    return Effect.logWarning("Second Brain request rejected", {
+      operation,
+      path,
+      error: error._tag,
+      reason: error.reason,
+    }).pipe(Effect.andThen(Effect.fail(invalid(error.reason))))
+  }
+  return Effect.logError("Second Brain request failed", {
+    operation,
+    path,
+    error: error instanceof PlatformError || error instanceof FSUtil.FileSystemError ? error._tag : "Unknown",
+    reason:
+      error instanceof PlatformError
+        ? error.reason._tag
+        : error instanceof FSUtil.FileSystemError
+          ? error.method
+          : undefined,
+  }).pipe(Effect.andThen(Effect.fail(new HttpApiError.InternalServerError({}))))
+}
+
+function invalid(reason: string) {
+  return new SecondBrainInvalidError({ name: "SecondBrainInvalidError", data: { message: reason } })
+}
+
+function conflict(reason: string) {
+  return new SecondBrainConflictError({ name: "SecondBrainConflictError", data: { message: reason } })
+}

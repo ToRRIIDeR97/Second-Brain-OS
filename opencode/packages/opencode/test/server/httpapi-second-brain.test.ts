@@ -1,6 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { mkdir } from "node:fs/promises"
+import { mkdir, readdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Config, Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
@@ -43,7 +43,8 @@ const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer, AppNodeBuilder.buil
 function request(route: string, init?: RequestInit) {
   const url = new URL(route, "http://localhost")
   return HttpClientRequest.fromWeb(new Request(url, init)).pipe(
-    HttpClientRequest.setUrl(url.pathname + url.search),
+    // fromWeb already carries the query parameters; repeating url.search would send them twice.
+    HttpClientRequest.setUrl(url.pathname),
     HttpClient.execute,
   )
 }
@@ -79,9 +80,7 @@ describe("second brain project threads HttpApi", () => {
         yield* Session.use.create({ title: "alpha thread" }).pipe(provideInstanceEffect(alphaDirectory))
 
         const list = () =>
-          request("/second-brain/project-threads", { headers }).pipe(
-            Effect.flatMap(json<BrainProject.ThreadSummary[]>),
-          )
+          request("/second-brain/project-threads", { headers }).pipe(Effect.flatMap(json<BrainProject.ThreadSummary[]>))
         const first = yield* list()
         expect(first).toHaveLength(2)
         const folder = first.find((item) => item.project.id === alpha.id)
@@ -106,7 +105,9 @@ describe("second brain project threads HttpApi", () => {
         })
 
         const second = yield* list()
-        expect(second.map((item) => item.project.id).toSorted()).toEqual(first.map((item) => item.project.id).toSorted())
+        expect(second.map((item) => item.project.id).toSorted()).toEqual(
+          first.map((item) => item.project.id).toSorted(),
+        )
 
         const ensure = (workspaceId: string) =>
           request("/second-brain/projects/workspace", {
@@ -121,5 +122,62 @@ describe("second brain project threads HttpApi", () => {
         expect((yield* list()).length).toBe(2)
       }),
     { git: true },
+  )
+})
+
+describe("second brain errors and recovery HttpApi", () => {
+  it.instance("returns the domain reason for rejected requests and lists past stray Project files", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+      const rejected = yield* request("/second-brain/note?path=outside.md", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ body: "x", create: true }),
+      })
+      expect(rejected.status).toBe(400)
+      expect(yield* rejected.json).toEqual({ name: "SecondBrainInvalidError", data: { message: "invalid_path" } })
+
+      yield* Effect.promise(() => mkdir(path.join(test.directory, "projects"), { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(test.directory, "projects", "README.md"), "# Projects\n"))
+      yield* request("/second-brain/projects", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name: "Alpha", outcome: "Ship alpha" }),
+      }).pipe(Effect.flatMap(json<BrainProject.Info>))
+      const projects = yield* request("/second-brain/projects", { headers }).pipe(
+        Effect.flatMap(json<BrainProject.Info[]>),
+      )
+      expect(projects.map((project) => project.name)).toEqual(["Alpha"])
+    }),
+  )
+
+  it.instance("moves an undecodable calendar aside on save instead of failing every save", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+      const directory = path.join(test.directory, ".second-brain")
+      yield* Effect.promise(() => mkdir(directory, { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(directory, "calendar-v1.json"), '{"version": 2, "events": ['))
+
+      const broken = yield* request("/second-brain/calendar", { headers })
+      expect(broken.status).toBe(400)
+      expect(yield* broken.json).toEqual({ name: "SecondBrainInvalidError", data: { message: "invalid_json" } })
+
+      const event = { id: "event_a", title: "Kickoff", date: "2026-08-30", source: "local", syncState: "local" }
+      const saved = yield* request("/second-brain/calendar", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ events: [event], tasks: [] }),
+      }).pipe(Effect.flatMap(json<{ revision: string; events: Array<{ id: string }> }>))
+      expect(saved.events.map((item) => item.id)).toEqual(["event_a"])
+      const files = yield* Effect.promise(() => readdir(directory))
+      expect(files.filter((file) => file.startsWith("calendar-v1.json.corrupt-"))).toHaveLength(1)
+
+      const reloaded = yield* request("/second-brain/calendar", { headers }).pipe(
+        Effect.flatMap(json<{ revision: string }>),
+      )
+      expect(reloaded.revision).toBe(saved.revision)
+    }),
   )
 })

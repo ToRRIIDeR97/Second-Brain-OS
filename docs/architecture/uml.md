@@ -110,6 +110,22 @@ Some details of the write path:
   - projects: `updatedAt`;
   - calendar: a ULID.
 - No delete endpoints exist for notes, projects or tasks.
+- One handler mapper turns failures into HTTP errors: a domain or path
+  rejection is a 400 `SecondBrainInvalidError` whose `data.message` is the
+  reason, a missing record is 404, a stale write is 409, and IO or permission
+  failures are a logged 500. Logs carry the error tag, reason and relative
+  path, never content.
+- `FileMutation` replaces a file through a synced sibling temp file and a
+  rename, keeping the old permission bits. A calendar file that no longer
+  decodes is moved aside to `calendar-v1.json.corrupt-<time>` on the next save.
+- Calendar saves (with their timeline sync), Project create and update, and the
+  Workspace migration share one lock per Brain directory. The timeline sync
+  rewrites only `projects/<id>/timeline/calendar.json` files whose items
+  changed; no code reads those files yet.
+- Note and Project listings skip an unreadable or malformed file with a
+  warning. Project cards are read only from `projects/project_*.md` and
+  `projects/project_*/project.md`; a managed card wins over a flat card with
+  the same id, and a card whose id differs from its path is ignored.
 
 ### State machines
 
@@ -197,13 +213,8 @@ The following were inferred from source and haven't been confirmed at runtime.
 
 - **Second Brain middleware order.** The middleware order for Second Brain
   routes (authorization outermost) was inferred from Effect layer types.
-- **Note and project validation errors.** Note and project `validate()` throws
-  synchronously inside `Effect.fn`. The handlers catch only typed failures,
-  so invalid titles, tags, names or progress values may return 500 instead of
-  400.
 - **Process-local write lock.** File compare-and-swap uses a process-local
-  mutex and writes in place rather than renaming a temporary file. A second
-  process writing the same workspace isn't excluded.
+  mutex. A second process writing the same workspace isn't excluded.
 - **Dead ACP runtimes.** An ACP agent that exits mid-turn is turned into
   error events, not a stream error. The dead runtime may stay cached until
   the harness revision changes.
