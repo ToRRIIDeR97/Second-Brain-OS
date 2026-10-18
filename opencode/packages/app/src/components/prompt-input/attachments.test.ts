@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import type { ContentPart } from "@/context/prompt"
+import { createDraftStore } from "@/utils/draft-store"
+import { createPromptAttachmentsCore } from "./attachments"
 import { attachmentMime, pickAttachmentFiles } from "./files"
 import { pasteMode } from "./paste"
 
@@ -104,5 +107,29 @@ describe("pasteMode", () => {
 
   test("uses manual paste for large text", () => {
     expect(pasteMode("x".repeat(8000))).toBe("manual")
+  })
+})
+
+describe("createPromptAttachmentsCore", () => {
+  test("keeps an attachment the draft store refuses", async () => {
+    let parts: ContentPart[] = []
+    const draftStore = createDraftStore({
+      get: async () => null,
+      set: async () => undefined,
+      remove: async () => undefined,
+      putBlob: () => Promise.reject(new Error("Draft blob too large")),
+      getBlob: async () => null,
+    })
+    const core = createPromptAttachmentsCore({
+      capture: () => ({ current: () => parts, cursor: () => 0, set: (next) => (parts = next) }),
+      editor: () => document.createElement("div"),
+      draftStore,
+    })
+    const file = new File(["hello"], "hello.txt", { type: "text/plain" })
+
+    expect(await core.addAttachment(file)).toBe(true)
+    expect(parts).toHaveLength(1)
+    const part = parts[0]
+    expect(part?.type === "image" && part.blob.url.startsWith("blob:")).toBe(true)
   })
 })

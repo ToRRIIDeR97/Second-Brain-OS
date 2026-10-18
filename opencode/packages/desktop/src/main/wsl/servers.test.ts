@@ -2,8 +2,8 @@ import { expect, test } from "bun:test"
 import {
   clearWslDistroState,
   requireWslDistro,
-  requireWslDistros,
   requireWslIpcString,
+  validWslDistros,
   wslServerIdToRestart,
   wslTerminalArgs,
 } from "./policy"
@@ -98,14 +98,15 @@ test("stops health polling when sidecar startup settles", async () => {
 test("validates WSL IPC identifiers at the module boundary", () => {
   expect(requireWslDistro("Debian")).toBe("Debian")
   expect(requireWslDistro("OracleLinux_9_1")).toBe("OracleLinux_9_1")
-  expect(requireWslDistros(["Debian", "Ubuntu-24.04"])).toEqual(["Debian", "Ubuntu-24.04"])
+  expect(validWslDistros(["Debian", "Ubuntu-24.04"])).toEqual(["Debian", "Ubuntu-24.04"])
+  expect(validWslDistros(["Debian", "a|b", 42, "Ubuntu Preview"])).toEqual(["Debian"])
+  expect(validWslDistros([])).toEqual([])
+  expect(() => validWslDistros("Debian")).toThrow("Invalid distro")
   expect(() => requireWslDistro("")).toThrow("Invalid distro")
   expect(() => requireWslDistro(42)).toThrow("Invalid distro")
   expect(() => requireWslDistro("-d")).toThrow("Invalid distro")
   expect(() => requireWslDistro('Debian"&calc')).toThrow("Invalid distro")
   expect(() => requireWslDistro("Debian%PATH%")).toThrow("Invalid distro")
-  expect(() => requireWslDistros([])).toThrow("Invalid distro")
-  expect(() => requireWslDistros(["Debian", "a|b"])).toThrow("Invalid distro")
   expect(requireWslIpcString("server id", "wsl:Debian")).toBe("wsl:Debian")
   expect(() => requireWslIpcString("server id", undefined)).toThrow("Invalid server id")
 })

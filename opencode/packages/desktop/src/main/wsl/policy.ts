@@ -33,9 +33,11 @@ export function requireWslDistro(value: unknown) {
   throw new Error("Invalid distro")
 }
 
-export function requireWslDistros(value: unknown) {
-  if (!Array.isArray(value) || value.length === 0) throw new Error("Invalid distro")
-  return value.map(requireWslDistro)
+// Probe lists come from the installed and online distro lists, so a name WSL
+// itself might accept but the allowlist doesn't is skipped, not fatal.
+export function validWslDistros(value: unknown) {
+  if (!Array.isArray(value)) throw new Error("Invalid distro")
+  return value.filter((item): item is string => typeof item === "string" && WSL_DISTRO_PATTERN.test(item))
 }
 
 export function requireWslIpcString(name: string, value: unknown) {

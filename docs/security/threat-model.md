@@ -311,7 +311,7 @@ fix lands.
   `trustedHandle`/`trustedOn` wrappers in `ipc.ts`. Before the 2026-10
   desktop IPC hardening, the WSL handlers used raw `ipcMain.handle`.
 - WSL distro names from the renderer must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`
-  (`wsl/policy.ts`). The "open terminal" action still goes through
+  (`wsl/policy.ts`); probe lists skip names that don't. The "open terminal" action still goes through
   `cmd.exe /c start` to get its own console window, so the allowlist is what
   keeps cmd metacharacters out of that command line.
 - Draft IPC accepts only string keys and values and caps one attachment blob

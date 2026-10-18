@@ -13,8 +13,9 @@ const blobs = sqliteTable("blob", {
   data: blob({ mode: "buffer" }).notNull(),
 })
 
-// One pasted or dropped attachment; larger blobs are refused before they reach
-// SQLite or main-process memory.
+// One pasted or dropped attachment. IPC has already copied a larger blob into
+// main-process memory, but it is refused before it is hashed or written to
+// SQLite; the renderer then keeps that attachment in memory only.
 export const MAX_DRAFT_BLOB_BYTES = 64 * 1024 * 1024
 
 export function requireDraftKey(value: unknown) {

@@ -93,7 +93,12 @@ function consumeInitialDeepLinks(sender: WebContents) {
   const id = sender.id
   if (!deepLinkSenders.has(sender)) {
     deepLinkSenders.add(sender)
-    sender.on("did-start-loading", () => deepLinks.forget(id))
+    // Only a full main-frame load drops the renderer's deep-link listener;
+    // in-app pushState and hash navigations keep it.
+    sender.on("did-start-navigation", (details) => {
+      if (details.isMainFrame && !details.isSameDocument) deepLinks.forget(id)
+    })
+    sender.on("render-process-gone", () => deepLinks.forget(id))
     sender.once("destroyed", () => deepLinks.forget(id))
   }
   return deepLinks.consume(id)

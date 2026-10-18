@@ -1,7 +1,7 @@
 import { app } from "electron"
 import type { IpcMainInvokeEvent } from "electron"
 import type { WslServersController } from "./servers"
-import { requireWslDistro, requireWslDistros, requireWslIpcString } from "./policy"
+import { requireWslDistro, requireWslIpcString, validWslDistros } from "./policy"
 import type { WslServersState } from "../../preload/types"
 import { trustedHandle } from "../ipc"
 import { nativeT } from "../native-translations"
@@ -49,7 +49,7 @@ export function registerWslIpcHandlers(controller: WslServersController) {
     controller.installDistro(requireWslDistro(name)),
   )
   trustedHandle("wsl-servers-probe-addable", (_event: IpcMainInvokeEvent, distros: unknown) =>
-    controller.probeAddable(requireWslDistros(distros)),
+    controller.probeAddable(validWslDistros(distros)),
   )
   trustedHandle("wsl-servers-open-terminal", (_event: IpcMainInvokeEvent, name: unknown) =>
     controller.openTerminal(requireWslDistro(name)),
