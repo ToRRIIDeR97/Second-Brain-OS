@@ -268,23 +268,27 @@ const layer = Layer.effect(
         }
         const thread = continuation
           ? yield* opened.client
-              .request("thread/resume", {
-                threadId: continuation.nativeID,
-                ...params,
-                excludeTurns: true,
-              })
+              .request(
+                "thread/resume",
+                {
+                  threadId: continuation.nativeID,
+                  ...params,
+                  excludeTurns: true,
+                },
+                THREAD_SETUP_TIMEOUT,
+              )
               .pipe(
                 Effect.map((response) => ({ response, resumed: true })),
                 Effect.catch((error) =>
                   recoverableResume(error)
                     ? opened.client
-                        .request("thread/start", params)
+                        .request("thread/start", params, THREAD_SETUP_TIMEOUT)
                         .pipe(Effect.map((response) => ({ response, resumed: false })))
                     : Effect.fail(error),
                 ),
               )
           : {
-              response: yield* opened.client.request("thread/start", params),
+              response: yield* opened.client.request("thread/start", params, THREAD_SETUP_TIMEOUT),
               resumed: false,
             }
         const threadID = responseThreadID(thread.response)
@@ -752,10 +756,14 @@ function openCodex(
       connection: { stdout: handle.stdout, stdin: handle.stdin },
       handleRequest,
     })
-    const initialize = yield* client.request("initialize", {
-      clientInfo: { name: "second_brain_os", title: "Tenon Workbench", version: "0.1.0" },
-      capabilities: { experimentalApi: true, requestAttestation: false },
-    })
+    const initialize = yield* client.request(
+      "initialize",
+      {
+        clientInfo: { name: "second_brain_os", title: "Tenon Workbench", version: "0.1.0" },
+        capabilities: { experimentalApi: true, requestAttestation: false },
+      },
+      THREAD_SETUP_TIMEOUT,
+    )
     yield* client.notify("initialized")
     return { client, initialize }
   })
@@ -1464,6 +1472,9 @@ function onTurnSuccess<E, R, E2, R2>(stream: Stream.Stream<LLMEvent, E, R>, effe
     )
   })
 }
+
+// A cold Codex start can be slow, but thread setup that never answers must not hang the turn forever.
+const THREAD_SETUP_TIMEOUT = "60 seconds"
 
 export function withProviderIdleTimeout<A, E, R>(stream: Stream.Stream<A, E, R>) {
   return stream.pipe(
