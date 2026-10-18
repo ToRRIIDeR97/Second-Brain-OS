@@ -12,7 +12,7 @@
     "lint": "oxlint",
     "typecheck": "bun turbo typecheck",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
-    "prepare": "husky",
+    "prepare": "cd .. && husky opencode/.husky",
     "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {

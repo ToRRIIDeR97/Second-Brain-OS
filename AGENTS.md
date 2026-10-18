@@ -58,7 +58,8 @@ bun run build
 
 Also run `bun run test:engine` when changing `opencode/packages/core` or
 `opencode/packages/opencode`, and `bun run test:routes` when changing
-navigation or routing.
+navigation or routing. `bun install` inside `opencode/` also installs a git
+pre-push hook (`opencode/.husky/pre-push`) that runs typecheck and lint.
 
 ## Merging
 
