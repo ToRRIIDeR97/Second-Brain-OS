@@ -93,3 +93,42 @@ test("note writes reject invalid project ids with a typed failure instead of a d
   )
   expect(outcome).toBe("typed")
 })
+
+test("list caps the filtered, sorted result instead of the raw glob slice", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const count = 520
+  const name = (index: number) => `note-${String(index).padStart(4, "0")}`
+  await Promise.all(
+    Array.from({ length: count }, (_, index) =>
+      writeFile(
+        path.join(tmp.path, "notes", `${name(index)}.md`),
+        `---\nupdated_at: ${new Date(Date.UTC(2026, 0, 1) + index * 60_000).toISOString()}\n---\n# ${name(index)}\n\n${index % 2 ? "Odd body" : "Even-needle body"}`,
+      ),
+    ),
+  )
+  // Oldest note and last by name, so it falls outside both the capped result and a name-ordered slice.
+  await writeFile(
+    path.join(tmp.path, "notes", "zzz-needle.md"),
+    "---\nupdated_at: 2025-01-01T00:00:00.000Z\n---\n# Needle\n\nCap-regression-needle",
+  )
+  const directory = AbsolutePath.make(tmp.path)
+  const run = (search: string) =>
+    Effect.runPromise(
+      KnowledgeNote.list(search).pipe(
+        Effect.provide(LocationMutation.locationLayer),
+        Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
+        Effect.provide(LayerNode.compile(FSUtil.node)),
+      ),
+    )
+
+  expect((await run("cap-regression-needle")).map((note) => note.title)).toEqual(["Needle"])
+  // Matches spread across every glob position must all be found, not only those in the first 500 paths.
+  expect(await run("even-needle")).toHaveLength(count / 2)
+
+  const all = await run("")
+  expect(all).toHaveLength(500)
+  expect(all[0]?.title).toBe(name(count - 1))
+  expect(all.at(-1)?.title).toBe(name(count - 500))
+  expect(all.map((note) => note.title)).not.toContain("Needle")
+})
