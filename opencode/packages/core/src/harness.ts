@@ -665,7 +665,7 @@ export function configuredInstances(
   const instances = new Map<Harness.InstanceID, InstanceConfig>([
     [
       Harness.OpenCode,
-      { id: Harness.OpenCode, driver: Harness.OpenCodeDriver, name: "Tenon Workbench", enabled: true, config: {} },
+      { id: Harness.OpenCode, driver: Harness.OpenCodeDriver, name: "Default agent", enabled: true, config: {} },
     ],
     [Harness.Codex, { id: Harness.Codex, driver: Harness.CodexDriver, name: "Codex", enabled: true, config: {} }],
     // Upstream OpenCode from PATH, over ACP. Its own config and credentials stay in its process.

@@ -191,8 +191,8 @@ otherwise. The upstream child gets only the harness environment allowlist from
 reach it. It uses its own credentials from `opencode auth login`.
 
 Both harness pickers (Home in `pages/brain-home.tsx` and the session composer in
-`components/prompt-input/harness-controls.tsx`) list the Tenon Workbench loop
-first, then every other instance under one "External agents" group: Codex,
+`components/prompt-input/harness-controls.tsx`) list the built-in loop, named
+"Default agent", first, then every other instance under one "External agents" group: Codex,
 OpenCode, and any `harnesses.json` or config-file agents. The group always ends
 with "Add harness", which opens Settings > Harnesses to register a new ACP agent.
 

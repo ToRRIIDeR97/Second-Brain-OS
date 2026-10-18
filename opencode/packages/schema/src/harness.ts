@@ -135,7 +135,7 @@ export const RefreshInput = Schema.Struct({
 }).annotate({ identifier: "Harness.RefreshInput" })
 export interface RefreshInput extends Schema.Schema.Type<typeof RefreshInput> {}
 
-// `opencode` is the stored ID of Tenon Workbench's in-process loop, kept so existing sessions keep
+// `opencode` is the stored ID of the in-process loop (shown as "Default agent"), kept so existing sessions keep
 // routing there. Upstream OpenCode runs as an external ACP harness under `opencode-acp`.
 export const OpenCode = InstanceID.make("opencode")
 export const OpenCodeAcp = InstanceID.make("opencode-acp")
