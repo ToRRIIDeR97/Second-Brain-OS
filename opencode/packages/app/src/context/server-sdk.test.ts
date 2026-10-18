@@ -4,6 +4,7 @@ import {
   adaptServerEvent,
   coalesceServerEvents,
   enqueueServerEvent,
+  reconnectDelay,
   resumeStreamAfterPageShow,
 } from "./server-sdk"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
@@ -18,6 +19,17 @@ describe("resumeStreamAfterPageShow", () => {
     resumeStreamAfterPageShow({ persisted: true } as PageTransitionEvent, start)
 
     expect(starts).toBe(1)
+  })
+})
+
+describe("reconnectDelay", () => {
+  test("backs off exponentially with jitter up to a cap", () => {
+    expect(reconnectDelay(0, () => 0)).toBe(125)
+    expect(reconnectDelay(0, () => 1)).toBe(250)
+    expect(reconnectDelay(3, () => 0)).toBe(1_000)
+    expect(reconnectDelay(3, () => 1)).toBe(2_000)
+    expect(reconnectDelay(20, () => 0)).toBe(10_000)
+    expect(reconnectDelay(20, () => 1)).toBe(20_000)
   })
 })
 

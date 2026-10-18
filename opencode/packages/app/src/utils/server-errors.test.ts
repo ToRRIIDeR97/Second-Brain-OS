@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionNotFoundError } from "@opencode-ai/sdk/v2/client"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
-import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./server-errors"
+import {
+  claimErrorToast,
+  formatServerError,
+  isSessionNotFoundError,
+  parseReadableConfigInvalidError,
+} from "./server-errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -182,5 +187,14 @@ describe("isSessionNotFoundError", () => {
         "ses_tab",
       ),
     ).toBe(false)
+  })
+})
+
+describe("claimErrorToast", () => {
+  test("shows one toast per error kind within the window", () => {
+    expect(claimErrorToast("local:list:offline", 1_000)).toBe(true)
+    expect(claimErrorToast("local:list:offline", 2_000)).toBe(false)
+    expect(claimErrorToast("remote:list:offline", 2_000)).toBe(true)
+    expect(claimErrorToast("local:list:offline", 11_000)).toBe(true)
   })
 })

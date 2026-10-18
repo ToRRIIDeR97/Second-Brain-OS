@@ -38,7 +38,7 @@ import {
   normalizeProjectInfo,
   normalizeProviderList,
 } from "./utils"
-import { formatServerError } from "@/utils/server-errors"
+import { claimErrorToast, formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
@@ -516,7 +516,6 @@ export async function bootstrapDirectory(input: {
             )
           }),
         ),
-      () => Promise.resolve(input.loadSessions(input.directory)),
       input.mcp &&
         (() =>
           input.queryClient.fetchQuery(
@@ -531,11 +530,12 @@ export async function bootstrapDirectory(input: {
         input.queryClient
           .fetchQuery(loadProvidersQuery(input.scope, input.directory, input.api, input.sdk, input.protocol))
           .catch((err) => {
-            const project = getFilename(input.directory)
+            const description = formatServerError(err, input.translate)
+            if (!claimErrorToast(`${input.scope}:toast.project.reloadFailed:${description}`)) return
             showToast({
               variant: "error",
-              title: input.translate("toast.project.reloadFailed.title", { project }),
-              description: formatServerError(err, input.translate),
+              title: input.translate("toast.project.reloadFailed.title", { project: getFilename(input.directory) }),
+              description,
             })
           }),
     ].filter(Boolean) as (() => Promise<any>)[]
@@ -544,12 +544,13 @@ export async function bootstrapDirectory(input: {
     const slowErrs = errors(await runAll(slow))
     if (slowErrs.length > 0) {
       console.error("Failed to finish bootstrap instance", slowErrs[0])
-      const project = getFilename(input.directory)
-      showToast({
-        variant: "error",
-        title: input.translate("toast.project.reloadFailed.title", { project }),
-        description: formatServerError(slowErrs[0], input.translate),
-      })
+      const description = formatServerError(slowErrs[0], input.translate)
+      if (claimErrorToast(`${input.scope}:toast.project.reloadFailed:${description}`))
+        showToast({
+          variant: "error",
+          title: input.translate("toast.project.reloadFailed.title", { project: getFilename(input.directory) }),
+          description,
+        })
     }
 
     if (loading && slowErrs.length === 0) input.setStore("status", "complete")

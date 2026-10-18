@@ -74,7 +74,16 @@ recent-session index in that client, and both the sidebar and Home read it,
 so a thread created, archived, unarchived or pinned anywhere, including in a
 Project that is not open, updates both lists without a reload. A directory
 list contributes only threads that run in that directory, because events
-reach only their own directory's list. `context/drafts.tsx` holds unsent drafts per window and keeps prompt
+reach only their own directory's list. The global event stream reconnects with
+exponential backoff and jitter (up to 20 s, reset by any received event). On
+every `server.connected` after the first, and on `global.disposed`,
+`serverSync` reloads every loaded directory list and reconciles busy statuses
+against a fresh `session.active` call, so threads deleted, archived, renamed or
+finished while disconnected do not linger. Projects page mutations invalidate
+the sidebar's project-threads query (`invalidateProjectThreads`). The renderer
+handles the server's `session.next.moved` and `session.next.revert.*` names
+(`context/global-sync/event-names.ts`, checked against the schema's event
+manifest in a unit test). `context/drafts.tsx` holds unsent drafts per window and keeps prompt
 state alive across route changes; it replaced the tab store.
 
 | Data                       | Owner and persistence                                                                                                 |

@@ -10,7 +10,14 @@ import type {
 import { QueryClient } from "@tanstack/solid-query"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessions } from "./global-sync/session-load"
-import { loadActiveSessionsQuery, loadMcpQuery, loadMcpResourcesQuery, seedActiveSessionStatuses } from "./server-sync"
+import {
+  createResyncTracker,
+  loadActiveSessionsQuery,
+  loadMcpQuery,
+  loadMcpResourcesQuery,
+  reconcileActiveSessionStatuses,
+  seedActiveSessionStatuses,
+} from "./server-sync"
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
@@ -98,6 +105,40 @@ describe("active session query", () => {
       attempt: 2,
       message: "retrying",
       next: 10,
+    })
+  })
+})
+
+describe("reconnect resync", () => {
+  test("resyncs on every reconnect after the first connection and on global disposal", () => {
+    const resyncNeeded = createResyncTracker()
+
+    expect(resyncNeeded("server.connected")).toBe(false)
+    expect(resyncNeeded("session.created")).toBe(false)
+    expect(resyncNeeded("server.connected")).toBe(true)
+    expect(resyncNeeded("server.connected")).toBe(true)
+    expect(createResyncTracker()("global.disposed")).toBe(true)
+  })
+
+  test("marks sessions missing from the active list idle", () => {
+    const session = createServerSession({} as OpencodeClient)
+    session.set("session_status", "ses_finished", { type: "busy" })
+    session.set("session_status", "ses_retry", { type: "retry", attempt: 1, message: "retrying", next: 10 })
+    session.set("session_status", "ses_running", { type: "retry", attempt: 1, message: "retrying", next: 10 })
+    session.set("session_status", "ses_started", { type: "idle" })
+
+    reconcileActiveSessionStatuses(session, {
+      ses_running: { type: "running" },
+      ses_started: { type: "running" },
+      ses_new: { type: "running" },
+    })
+
+    expect(session.data.session_status).toEqual({
+      ses_finished: { type: "idle" },
+      ses_retry: { type: "idle" },
+      ses_running: { type: "retry", attempt: 1, message: "retrying", next: 10 },
+      ses_started: { type: "busy" },
+      ses_new: { type: "busy" },
     })
   })
 })

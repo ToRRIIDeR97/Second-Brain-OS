@@ -160,11 +160,20 @@ export const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabl
       setStatus(reconcile(results))
     }
 
+    // A hidden window has no one looking at health badges; catch up as soon as it is shown again.
+    const hidden = () => typeof document !== "undefined" && document.hidden
+    const onVisibility = () => {
+      if (!hidden()) void refresh()
+    }
     void refresh()
-    const id = setInterval(() => void refresh(), pollMs)
+    const id = setInterval(() => {
+      if (!hidden()) void refresh()
+    }, pollMs)
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility)
     onCleanup(() => {
       dead = true
       clearInterval(id)
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility)
     })
   })
 

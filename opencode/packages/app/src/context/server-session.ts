@@ -20,6 +20,12 @@ import { rootSession } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
 import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
+import {
+  isSessionMovedEvent,
+  isSessionRevertEvent,
+  sessionMovedPath,
+  type SessionMovedData,
+} from "./global-sync/event-names"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
 
@@ -997,15 +1003,17 @@ export function createServerSession(
     const info = data.info[sessionID]
     if (event.type === "session.renamed" && info)
       remember({ ...info, title: event.data.title, time: { ...info.time, updated: event.created } })
-    if (event.type === "session.moved" && info)
+    if (isSessionMovedEvent(eventType) && info) {
+      const moved = event.data as SessionMovedData
       remember({
         ...info,
-        projectID: event.data.projectID ?? info.projectID,
-        workspaceID: event.data.location.workspaceID,
-        directory: event.data.location.directory,
-        path: event.data.subpath,
-        time: { ...info.time, updated: event.created },
+        projectID: moved.projectID ?? info.projectID,
+        workspaceID: moved.location.workspaceID,
+        directory: moved.location.directory,
+        path: sessionMovedPath(moved),
+        time: { ...info.time, updated: "created" in event ? event.created : info.time.updated },
       })
+    }
     if (event.type === "session.usage.updated" && info)
       remember({ ...info, cost: event.data.cost, tokens: event.data.tokens })
     // if (event.type === "session.archived") {
@@ -1027,12 +1035,7 @@ export function createServerSession(
         next: event.data.at,
       })
     if (event.type === "session.forked") void resolve(sessionID, { force: true }).catch(() => {})
-    if (
-      event.type === "session.revert.staged" ||
-      event.type === "session.revert.cleared" ||
-      event.type === "session.revert.committed"
-    )
-      void resolve(sessionID, { force: true }).catch(() => {})
+    if (isSessionRevertEvent(eventType)) void resolve(sessionID, { force: true }).catch(() => {})
   }
 
   const apply = (event: { type: string; properties?: unknown }) => {

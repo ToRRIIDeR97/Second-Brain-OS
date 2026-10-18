@@ -215,6 +215,16 @@ function currentDeltaFragment(event: CurrentDelta) {
     : event.data.delta
 }
 
+const RECONNECT_BASE_MS = 250
+const RECONNECT_MAX_MS = 20_000
+
+// Exponential backoff with jitter: the window doubles per consecutive failure up to the cap, and the
+// delay falls in its upper half so many clients do not reconnect in lockstep.
+export function reconnectDelay(failures: number, random = Math.random) {
+  const ceiling = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** failures)
+  return Math.round(ceiling / 2 + (random() * ceiling) / 2)
+}
+
 export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
   if (!event.persisted) return
   start()
@@ -277,7 +287,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
-  const RECONNECT_DELAY_MS = 250
 
   let queue: Queued[] = []
   let buffer: Queued[] = []
@@ -324,6 +333,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     const previous = run
     const current = (async () => {
       if (previous) await previous
+      let failures = 0
       // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
       while (!abort.signal.aborted && started && generation === active) {
         attempt = new AbortController()
@@ -336,6 +346,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
           let yielded = Date.now()
           for await (const event of events) {
             streamErrorLogged = false
+            failures = 0
             if (event.payload.type === "sync") continue
             const directory = event.directory ?? "global"
             const payload = adaptLegacyServerEvent(event.payload, directory)
@@ -360,7 +371,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         }
 
         if (abort.signal.aborted || !started || generation !== active) return
-        await wait(RECONNECT_DELAY_MS)
+        await wait(reconnectDelay(failures++))
       }
     })().finally(() => {
       if (run !== current) return
