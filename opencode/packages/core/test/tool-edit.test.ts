@@ -228,7 +228,7 @@ describe("EditTool", () => {
             ),
           ).toEqual({
             type: "error",
-            value: `Unable to edit ${external}`,
+            value: expect.stringContaining("prevents you from using this specific tool call"),
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(reads).toBe(0)
@@ -242,7 +242,7 @@ describe("EditTool", () => {
             ),
           ).toEqual({
             type: "error",
-            value: `Unable to edit ${external}`,
+            value: expect.stringContaining("prevents you from using this specific tool call"),
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
           expect(reads).toBe(0)
@@ -276,7 +276,7 @@ describe("EditTool", () => {
                   call({ path: "secret.txt", oldString: "not present", newString: "replacement" }),
                 )
 
-                expect(matching).toEqual({ type: "error", value: "Unable to edit secret.txt" })
+                expect(matching).toEqual({ type: "error", value: expect.stringContaining("prevents you from using this specific tool call") })
                 expect(missing).toEqual(matching)
                 expect(assertions.map((input) => input.action)).toEqual(["edit", "edit"])
                 expect(reads).toBe(0)

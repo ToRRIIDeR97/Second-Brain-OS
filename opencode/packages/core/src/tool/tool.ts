@@ -1,8 +1,9 @@
 export * as Tool from "./tool"
 
 import { ToolDefinition, ToolFailure, ToolOutput, type ToolCall } from "@opencode-ai/llm"
-import { Effect, JsonSchema, Schema } from "effect"
+import { Effect, JsonSchema, Predicate, Schema } from "effect"
 import type { AgentV2 } from "../agent"
+import type { PermissionV2 } from "../permission"
 import type { SessionMessage } from "../session/message"
 import type { SessionSchema } from "../session/schema"
 
@@ -53,7 +54,7 @@ type Config<
   readonly execute: (
     input: Schema.Schema.Type<Input>,
     context: Context,
-  ) => Effect.Effect<Schema.Schema.Type<Output>, ToolFailure>
+  ) => Effect.Effect<Schema.Schema.Type<Output>, ToolFailure | PermissionV2.Error>
   readonly toModelOutput?: (input: {
     readonly input: Schema.Schema.Type<Input>
     readonly output: Output["Encoded"]
@@ -93,6 +94,7 @@ export function make<
         Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
         Effect.flatMap((input) =>
           config.execute(input, context).pipe(
+            Effect.mapError(permissionFailure),
             Effect.flatMap((output) =>
               Schema.encodeEffect(config.output)(output).pipe(
                 Effect.flatMap((output) => {
@@ -129,6 +131,30 @@ export function make<
       ),
   })
   return tool
+}
+
+const isPermissionError = (error: unknown): error is PermissionV2.Error =>
+  Predicate.isTagged(error, "PermissionV2.CorrectedError") || Predicate.isTagged(error, "PermissionV2.BlockedError")
+
+/**
+ * Maps a tool's own errors to a model-facing failure while passing permission outcomes through, so
+ * `settle` can tell the model about the user's feedback or the deny rule instead of a generic failure.
+ */
+export const mapError =
+  <E>(failure: (error: E) => ToolFailure) =>
+  <A, R>(self: Effect.Effect<A, E, R>) =>
+    Effect.mapError(self, (error) => (isPermissionError(error) ? error : failure(error)))
+
+function permissionFailure(error: ToolFailure | PermissionV2.Error) {
+  if (Predicate.isTagged(error, "PermissionV2.CorrectedError"))
+    return new ToolFailure({
+      message: `The user rejected permission to use this specific tool call with the following feedback: ${error.feedback}`,
+    })
+  if (Predicate.isTagged(error, "PermissionV2.BlockedError"))
+    return new ToolFailure({
+      message: `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(error.rules)}`,
+    })
+  return error
 }
 
 export const validateName = (name: string) =>

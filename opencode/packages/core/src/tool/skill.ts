@@ -94,7 +94,7 @@ const layer = Layer.effectDiscard(
                   directory,
                   output: toModelOutput(skill, files),
                 }
-              }).pipe(Effect.mapError((error) => unableToLoad(input.name, error)))
+              }).pipe(Tool.mapError((error) => unableToLoad(input.name, error)))
             }),
         }),
       })

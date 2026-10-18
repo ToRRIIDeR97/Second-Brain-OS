@@ -92,7 +92,7 @@ const layer = Layer.effectDiscard(
                 return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
               return content
             }).pipe(
-              Effect.mapError((error) => {
+              Tool.mapError((error) => {
                 const message =
                   error instanceof ReadToolFileSystem.BinaryFileError ||
                   error instanceof ReadToolFileSystem.MediaIngestLimitError ||
