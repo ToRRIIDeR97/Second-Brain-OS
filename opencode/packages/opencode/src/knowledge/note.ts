@@ -68,20 +68,28 @@ export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
     include: "file",
     dot: false,
   })
-  const notes = yield* Effect.forEach(paths.slice(0, limit), (path) => readCard(path.replaceAll("\\", "/")), {
-    concurrency: 8,
-  })
   const query = search.trim().toLowerCase()
-  return notes
-    .filter(
-      (note) =>
-        !query ||
-        [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
-          value.toLowerCase().includes(query),
+  // Read every candidate so search sees all notes; keep only matching summaries in memory.
+  const notes = yield* Effect.forEach(
+    paths,
+    (path) =>
+      readCard(path.replaceAll("\\", "/")).pipe(
+        Effect.map((note) =>
+          !query ||
+          [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
+            value.toLowerCase().includes(query),
+          )
+            ? note.info
+            : undefined,
         ),
-    )
-    .map((note) => note.info)
+      ),
+    { concurrency: 8 },
+  )
+  // Cap the result after filtering and sorting so the most recent matches are returned.
+  return notes
+    .filter((note): note is Info => note !== undefined)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.title.localeCompare(right.title))
+    .slice(0, limit)
 })
 
 export const read = Effect.fn("KnowledgeNote.read")(function* (path: string) {
