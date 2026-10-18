@@ -47,6 +47,7 @@ revision, and migration gaps are recorded in [the archive](docs/archive/tauri/RE
 | `bun run typecheck`     | Check renderer, desktop, core, and server types       |
 | `bun run lint`          | Run OpenCode's linter                                 |
 | `bun run test`          | Run desktop, renderer, and Second Brain domain tests  |
+| `bun run check`         | Run typecheck, lint, test, and build; stop on failure |
 | `bun run test:engine`   | Run the full core and server suites                   |
 | `bun run test:routes`   | Check Brain home and workspace navigation in Chromium |
 
