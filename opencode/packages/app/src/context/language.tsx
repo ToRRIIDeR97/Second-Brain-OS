@@ -37,7 +37,6 @@ type PluralKey =
   | "secondBrain.sessionTab.messages"
   | "secondBrain.turnSteps.failed"
   | `secondBrain.turnSteps.${StepKind}`
-  | "secondBrain.session.status.subagents"
 type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {

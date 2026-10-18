@@ -270,6 +270,5 @@ describe("current session timeline rows", () => {
     const header = rows.find((row) => row._tag === "TurnSteps")
     expect(header?._tag === "TurnSteps" ? header.tools.map((ref) => ref.partID) : []).toEqual(["t1", "t2"])
     expect(header?._tag === "TurnSteps" && header.failed).toBe(true)
-    expect(header?._tag === "TurnSteps" && header.running).toBe(false)
   })
 })

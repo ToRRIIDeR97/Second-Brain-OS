@@ -1,8 +1,5 @@
-import { createMemo, Show, type JSX } from "solid-js"
-import type { ToolPart } from "@opencode-ai/sdk/v2"
-import { stepOf, stepVerbKey } from "@opencode-ai/session-ui/step-kind"
+import { Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useSync } from "@/context/sync"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
 import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
@@ -15,27 +12,7 @@ export function SessionComposerRegion(props: {
   promptInput: JSX.Element
 }) {
   const language = useLanguage()
-  const sync = useSync()
   const controller = props.controller
-  // The first running step of the latest turn and how many subagents are still working; hidden when idle.
-  const activity = createMemo(() => {
-    const id = controller.sessionID()
-    if (!id || (sync().data.session_status[id]?.type ?? "idle") === "idle") return
-    const messages = sync().data.message[id] ?? []
-    const turn = messages.slice(messages.findLastIndex((message) => message.role === "user") + 1)
-    const mcpServers = Object.keys(sync().data.mcp ?? {})
-    const steps = turn
-      .flatMap((message) => sync().data.part[message.id] ?? [])
-      .filter(
-        (part): part is ToolPart =>
-          part.type === "tool" && (part.state.status === "pending" || part.state.status === "running"),
-      )
-      .map((part) => stepOf(part, { mcpServers }))
-    const subagents = steps.filter((step) => step.kind === "subagent").length
-    const step = steps.find((step) => step.kind !== "subagent")
-    if (!step && subagents === 0) return
-    return { step, subagents }
-  })
   const rolled = () => {
     const revert = controller.revert()
     return revert?.items.length ? revert : undefined
@@ -148,35 +125,6 @@ export function SessionComposerRegion(props: {
                 "margin-top": `${-controller.lift()}px`,
               }}
             >
-              <Show when={activity()}>
-                {(activity) => (
-                  // Overlaid above the composer so steps starting and finishing never change its height.
-                  <div
-                    data-component="session-status-line"
-                    role="status"
-                    class="pointer-events-none absolute inset-x-0 bottom-full mb-2 flex min-w-0 items-center gap-2 rounded-[16px] bg-v2-background-bg-layer-01 px-4 py-2 text-[13px] text-v2-text-text-muted"
-                  >
-                    <span class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent animate-pulse motion-reduce:animate-none" />
-                    <Show when={activity().step}>
-                      {(step) => (
-                        <span class="flex min-w-0 items-center gap-1.5">
-                          <span class="shrink-0 text-v2-text-text-base [font-weight:500]">
-                            {language.t(stepVerbKey(step().kind, true))}
-                          </span>
-                          <Show when={step().target}>
-                            <span class="min-w-0 truncate font-mono text-[12px]">{step().target}</span>
-                          </Show>
-                        </span>
-                      )}
-                    </Show>
-                    <Show when={activity().subagents > 0}>
-                      <span class="ml-auto shrink-0">
-                        {language.plural("secondBrain.session.status.subagents", activity().subagents)}
-                      </span>
-                    </Show>
-                  </div>
-                )}
-              </Show>
               <Show when={controller.followup()?.items.length}>
                 <SessionFollowupDock
                   items={controller.followup()!.items}

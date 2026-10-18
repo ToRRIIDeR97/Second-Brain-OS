@@ -327,10 +327,9 @@ export function MessageTimeline(props: {
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
-  // A user toggle wins; otherwise steps stay open while the turn works, a step runs, or a step failed.
-  const turnStepsOpen = (row: TimelineRow.TurnSteps, active: boolean) =>
-    toolOpen[`turn:${row.userMessageID}:${row.segment}`] ??
-    ((active && sessionStatus().type !== "idle") || row.running || row.failed)
+  // A user toggle wins; otherwise steps open only when one failed. A working turn shows its live ticker instead.
+  const turnStepsOpen = (row: TimelineRow.TurnSteps) =>
+    toolOpen[`turn:${row.userMessageID}:${row.segment}`] ?? row.failed
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
@@ -339,7 +338,7 @@ export function MessageTimeline(props: {
     status: sessionStatus,
     showReasoningSummaries: settings.general.showReasoningSummaries,
     inlineComments: () => true,
-    folded: (row, active) => !turnStepsOpen(row, active),
+    folded: (row) => !turnStepsOpen(row),
   })
   const activeMessageID = projection.activeMessageID
   const assistantMessagesByParent = projection.assistantMessagesByParent
@@ -848,6 +847,11 @@ export function MessageTimeline(props: {
 
   const workingTurn = (userMessageID: string) => sessionStatus().type !== "idle" && activeMessageID() === userMessageID
 
+  const userMessageCreated = (userMessageID: string) => {
+    const message = messageByID().get(userMessageID)
+    return message?.role === "user" ? message.time.created : undefined
+  }
+
   const turnDurationMs = (userMessageID: string) => {
     const message = messageByID().get(userMessageID)
     if (!message || message.role !== "user") return
@@ -1095,15 +1099,15 @@ export function MessageTimeline(props: {
             return part ? [part] : []
           }),
         )
-        const active = () => activeMessageID() === turnStepsRow().userMessageID
         return (
           <TimelineRowFrame row={turnStepsRow}>
             <div data-slot="session-turn-message-container" class="w-full px-4 pb-2 md:px-5">
               <TurnStepsSummary
                 parts={parts()}
                 working={workingTurn(turnStepsRow().userMessageID)}
+                startedAt={userMessageCreated(turnStepsRow().userMessageID)}
                 durationMs={turnDurationMs(turnStepsRow().userMessageID)}
-                open={turnStepsOpen(turnStepsRow(), active())}
+                open={turnStepsOpen(turnStepsRow())}
                 onToggle={(open) => {
                   setToolOpen(`turn:${turnStepsRow().userMessageID}:${turnStepsRow().segment}`, open)
                   onSizeChange?.()
@@ -1237,11 +1241,8 @@ export function MessageTimeline(props: {
   return (
     <div class="relative w-full h-full min-w-0">
       <div
-        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-300 ease-emphasized motion-reduce:transition-none"
+        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-300 ease-emphasized bottom-8 motion-reduce:transition-none"
         classList={{
-          // Clear the composer status line, which overlays the timeline bottom while the session is busy.
-          "bottom-8": sessionStatus().type === "idle",
-          "bottom-[4.5rem]": sessionStatus().type !== "idle",
           "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
           "opacity-0 translate-y-2 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
           "scale-[0.8]": !props.scroll.overflow || !props.scroll.jump,

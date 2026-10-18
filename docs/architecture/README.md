@@ -493,16 +493,19 @@ splits the turn). It is inserted before the turn's first tool or reasoning
 group, and those group rows carry `step: true`. Text and other parts stay
 visible in their original order. `foldTimelineRows`
 (`timeline/row-reconciliation.ts`) removes a folded turn's step rows from the
-virtual list after row reuse, so group keys stay stable. A turn is open while
-the session is busy on it, while one of its tools is pending or running, or
-when one of them failed. Otherwise it is folded. `rows.ts` computes the
-`failed` and `running` flags on the header, so the fold check doesn't read
-parts. A user toggle wins and is cached per session in `toolOpen` under
-`turn:<userMessageID>:<segment>`. The header
+virtual list after row reuse, so group keys stay stable. A turn is folded
+unless one of its tools failed. `rows.ts` computes the `failed` flag on the
+header, so the fold check doesn't read parts. A user toggle wins and is cached
+per session in `toolOpen` under `turn:<userMessageID>:<segment>`. The header
 (`app/src/components/session/turn-steps-summary.tsx`) builds its "Worked
 {duration}" line and per-kind count phrases from `summarizeTurn`
 (`session-ui/src/components/step-kind.ts`). Each phrase is a complete i18n
-plural.
+plural. While the turn works and is folded, the header shows a live ticker
+instead of the step rows: a running "Working {duration}" timer, the latest
+in-progress step (spinner, present-tense verb from `stepVerbKey`, target and
+its own timer) and the two steps before it (`tickerSteps`), plus "Show all N",
+which opens the turn. The ticker has a fixed height, so steps starting and
+finishing don't move the rows below; one 1-second clock drives both timers.
 
 The side panel's Session tab (`components/session/session-context-tab.tsx`,
 which replaced the Context tab) sums usage over every assistant message of the
@@ -514,12 +517,6 @@ above 0. ACP turns get a per-turn cost from `usage_update`
 context window still comes from `getSessionContext` (last message, provider
 limit). Subagents are built-in `task` parts. Tool counts come from
 `summarizeTurn` over the harness's parts.
-
-While the session is busy, a status line above the composer
-(`app/src/pages/session/composer/session-composer-region.tsx`) shows the
-latest turn's first pending or running step as a verb and target from
-`stepOf`, plus the number of subagents still working. It is hidden when the
-session is idle.
 
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the
