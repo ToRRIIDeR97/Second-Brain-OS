@@ -332,6 +332,18 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
   )
 }
 
+// Caps strings built by repeat/padStart/padEnd so one call cannot allocate host memory without bound.
+const MAX_BUILT_STRING_LENGTH = 16 * 1024 * 1024
+
+const assertBuiltStringLength = (length: number, name: string, node: AstNode) => {
+  // NaN lengths fall through to the native method, which treats them as 0.
+  if (!(length > MAX_BUILT_STRING_LENGTH)) return
+  throw new InterpreterRuntimeError(
+    `String.${name} result would exceed the ${MAX_BUILT_STRING_LENGTH}-character limit.`,
+    node,
+  ).as("RangeError")
+}
+
 const invokeStringMethod = (value: string, name: string, args: Array<unknown>, node: AstNode): unknown => {
   const str = (index: number): string => {
     const arg = args[index]
@@ -466,13 +478,16 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       const count = num(0)
       if (!Number.isFinite(count) || count < 0)
         throw new InterpreterRuntimeError("String.repeat expects a finite non-negative count.", node)
+      assertBuiltStringLength(value.length * Math.floor(count), name, node)
       result = value.repeat(count)
       break
     }
     case "padStart":
+      assertBuiltStringLength(num(0), name, node)
       result = value.padStart(num(0), optStr(1))
       break
     case "padEnd":
+      assertBuiltStringLength(num(0), name, node)
       result = value.padEnd(num(0), optStr(1))
       break
     case "charAt":
