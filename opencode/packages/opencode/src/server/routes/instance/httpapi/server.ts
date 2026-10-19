@@ -286,11 +286,12 @@ export function createRoutes(
   ).pipe(
     Layer.provide([
       errorLayer,
-      bodyLimitLayer,
       compressionLayer,
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
+      // After cors: the first global middleware registered is outermost, so a 413 still gets CORS headers.
+      bodyLimitLayer,
       AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMapV2]]),
       HttpServer.layerServices,
     ]),

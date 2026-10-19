@@ -128,6 +128,37 @@ describe("pty", () => {
     }),
   )
 
+  ptyTest("does not pass the server credentials to the terminal environment", () =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const original = {
+            password: process.env.OPENCODE_SERVER_PASSWORD,
+            keep: process.env.CHILD_ENV_TEST_KEEP,
+          }
+          process.env.OPENCODE_SERVER_PASSWORD = "secret"
+          process.env.CHILD_ENV_TEST_KEEP = "kept"
+          return original
+        }),
+        (original) =>
+          Effect.sync(() => {
+            if (original.password === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
+            else process.env.OPENCODE_SERVER_PASSWORD = original.password
+            if (original.keep === undefined) delete process.env.CHILD_ENV_TEST_KEEP
+            else process.env.CHILD_ENV_TEST_KEEP = original.keep
+          }),
+      )
+      const info = yield* createPty("/usr/bin/env", [
+        "sh",
+        "-c",
+        'echo "pw=${OPENCODE_SERVER_PASSWORD:-none} keep=${CHILD_ENV_TEST_KEEP:-none}"; cat',
+      ])
+      const attached = yield* attachCollecting(info.id)
+      const output = yield* waitForOutput(attached.output, "keep=kept")
+      expect(output).toContain("pw=none")
+    }),
+  )
+
   ptyTest("replays buffered output and streams live output to attachments", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service

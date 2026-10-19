@@ -335,6 +335,5 @@ fix lands.
 - Server authorization also accepts an `auth_token` query parameter, so the
   credential can appear in URLs. Desktop main-process logs record only the
   scheme and host of blocked and rejected URLs, never the query string. The
-  parameter is still accepted on every route because the web UI page load
-  (`app/src/entry.tsx`) reads it, not only the terminal WebSocket.
+  parameter is not yet restricted to SSE and WebSocket routes.
 - `drafts.sqlite` stores unsent draft content unencrypted in the profile.

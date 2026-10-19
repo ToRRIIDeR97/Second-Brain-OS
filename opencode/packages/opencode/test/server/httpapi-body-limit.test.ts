@@ -15,10 +15,10 @@ afterAll(async () => {
   await resetDatabase()
 })
 
-const post = (body: BodyInit) =>
+const post = (body: BodyInit, headers: Record<string, string> = {}) =>
   fetch(new URL(ControlPaths.log, listener.url), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body,
     // @ts-expect-error Bun and Node need duplex for streamed request bodies.
     duplex: "half",
@@ -35,9 +35,11 @@ describe("HttpApi request body limit", () => {
   })
 
   test("rejects a body whose declared length exceeds the limit", async () => {
-    const response = await post(logBody("x".repeat(MAX_BODY_BYTES)))
+    // A cross-origin client must see the 413, not a CORS failure.
+    const response = await post(logBody("x".repeat(MAX_BODY_BYTES)), { origin: "http://localhost:3000" })
     await response.body?.cancel()
     expect(response.status).toBe(413)
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
   })
 
   test("stops buffering a streamed body without content-length past the limit", async () => {
