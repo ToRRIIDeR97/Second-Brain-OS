@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
@@ -184,6 +185,11 @@ const layer = Layer.effect(
                 .set({ project_id: newID })
                 .where(eq(WorkspaceTable.project_id, oldID))
                 .run()
+              // Saved "always allow" rules would cascade away with the old row. A rule the new
+              // project already has stays put, violates the unique index, and is dropped with it.
+              yield* d.run(
+                sql`UPDATE OR IGNORE ${PermissionTable} SET project_id = ${newID} WHERE project_id = ${oldID}`,
+              )
 
               if (oldProject) yield* d.delete(ProjectTable).where(eq(ProjectTable.id, oldID)).run()
             }),

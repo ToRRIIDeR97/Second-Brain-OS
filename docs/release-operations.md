@@ -153,8 +153,9 @@ normally:
 - If the copy fails, startup stops with "Could not copy Tenon Workbench data from
   X to Y. The original folder is unchanged."
 
-Before the first launch, quit every older Tenon Workbench build. Copying a SQLite
-database that another process is writing can capture an inconsistent state.
+Before the first launch, quit every older Tenon Workbench build and upstream
+OpenCode. Copying a SQLite database that another process is writing can capture
+an inconsistent state.
 
 Verify after the first launch:
 
@@ -172,6 +173,35 @@ Re-run the migration: quit the app, then delete `.legacy-storage-migrated` in a
 `tenon-workbench` folder to fill in missing files from the legacy folder (existing
 files are kept), or rename the whole `tenon-workbench` folder for a clean copy.
 Start the app.
+
+## Database migrations and backups
+
+`opencode.db` cannot be rebuilt. When a build has schema migrations that an
+existing database has not applied yet, the server first writes a consistent
+snapshot (`VACUUM INTO`) next to it, named
+`opencode.db.pre-<first pending migration id>.bak` (mode `0600`). It keeps the
+newest three backups and deletes older ones. In-memory and new databases are
+not backed up.
+
+Each migration runs in its own `immediate` transaction with foreign keys off.
+A migration that fails, including one that adds a foreign key violation, rolls
+back alone: earlier migrations from the same start stay committed, and startup
+stops. If the database holds migration ids newer than the running build (a
+downgrade), the server logs "database was migrated by a newer build" and
+continues.
+
+If the backup cannot be written (for example, the disk is full), no migration
+runs and startup stops. Free space next to `opencode.db` (old `*.bak` files
+can go) and start again. Leftover `*.tmp` files from an interrupted backup are
+removed on a later backup once they are an hour old.
+
+Restore a backup: quit the app, move `opencode.db`, `opencode.db-wal` and
+`opencode.db-shm` aside, copy the backup to `opencode.db`, and start the build
+that matches it. Data written after the backup is lost.
+
+Migration authors: foreign keys are off while migrations run, so
+`ON DELETE CASCADE` does not fire. Delete child rows explicitly, or the foreign
+key check fails the migration.
 
 ## Release limits
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
+import fs from "fs/promises"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
@@ -640,5 +641,154 @@ describe("DatabaseMigration", () => {
         expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id`)).toEqual([{ id: "existing" }])
       }),
     )
+  })
+})
+
+// The statements drizzle-kit generates when it rebuilds a table.
+const rebuildParent = {
+  id: "20990101000000_rebuild_parent",
+  up: (tx) =>
+    Effect.gen(function* () {
+      yield* tx.run(`PRAGMA foreign_keys=OFF;`)
+      yield* tx.run(`CREATE TABLE __new_parent (id text PRIMARY KEY, name text NOT NULL DEFAULT '')`)
+      yield* tx.run(`INSERT INTO __new_parent (id) SELECT id FROM parent`)
+      yield* tx.run(`DROP TABLE parent`)
+      yield* tx.run(`ALTER TABLE __new_parent RENAME TO parent`)
+      yield* tx.run(`PRAGMA foreign_keys=ON;`)
+    }),
+} satisfies DatabaseMigration.Migration
+
+const createParentAndChild = (db: Effect.Success<typeof makeDb>) =>
+  Effect.gen(function* () {
+    yield* db.run(sql`PRAGMA foreign_keys = ON`)
+    yield* db.run(sql`CREATE TABLE parent (id text PRIMARY KEY)`)
+    yield* db.run(
+      sql`CREATE TABLE child (id text PRIMARY KEY, parent_id text NOT NULL REFERENCES parent(id) ON DELETE CASCADE)`,
+    )
+    yield* db.run(sql`INSERT INTO parent (id) VALUES ('p1')`)
+    yield* db.run(sql`INSERT INTO child (id, parent_id) VALUES ('c1', 'p1'), ('c2', 'p1')`)
+  })
+
+describe("DatabaseMigration safety", () => {
+  if (process.platform !== "win32") {
+    test("restricts the database file to its owner", async () => {
+      await using tmp = await tmpdir()
+      const filename = path.join(tmp.path, "private.db")
+      await Bun.write(filename, "")
+      await fs.chmod(filename, 0o644)
+
+      await Effect.runPromise(Effect.scoped(Layer.build(Database.layerFromPath(filename))))
+
+      expect((await fs.stat(filename)).mode & 0o777).toBe(0o600)
+    })
+  }
+
+  test("rebuilds a parent table without cascading into its children", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* createParentAndChild(db)
+
+        yield* DatabaseMigration.applyOnly(db, [rebuildParent])
+
+        expect(yield* db.all(sql`SELECT id, parent_id FROM child ORDER BY id`)).toEqual([
+          { id: "c1", parent_id: "p1" },
+          { id: "c2", parent_id: "p1" },
+        ])
+        expect(yield* db.all(sql`SELECT name FROM parent`)).toEqual([{ name: "" }])
+        expect(yield* db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 })
+      }),
+    )
+  })
+
+  test("rolls back a migration that leaves new foreign key violations", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* createParentAndChild(db)
+        // An orphan left by an older build must not block later migrations.
+        yield* db.run(sql`PRAGMA foreign_keys = OFF`)
+        yield* db.run(sql`INSERT INTO child (id, parent_id) VALUES ('orphan', 'missing')`)
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+
+        const exit = yield* DatabaseMigration.applyOnly(db, [
+          rebuildParent,
+          {
+            id: "20990101000001_drop_parent_rows",
+            up: (tx) => tx.run(`DELETE FROM parent`).pipe(Effect.asVoid),
+          },
+        ]).pipe(Effect.exit)
+
+        // Earlier migrations in the batch stay committed; only the failing one rolls back.
+        expect(exit._tag).toBe("Failure")
+        expect(yield* db.all(sql`SELECT id, name FROM parent`)).toEqual([{ id: "p1", name: "" }])
+        expect(yield* db.all(sql`SELECT id FROM migration`)).toEqual([{ id: rebuildParent.id }])
+        expect(yield* db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 })
+      }),
+    )
+  })
+
+  test("skips a migration that another process applied after the journal was read", async () => {
+    const applied: string[] = []
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.applyOnly(db, [
+          {
+            id: "20990101000000_first",
+            up: (tx) =>
+              Effect.gen(function* () {
+                applied.push("first")
+                // Simulates a concurrent process that committed the next migration.
+                yield* tx.run(sql`INSERT INTO migration (id, time_completed) VALUES ('20990101000001_second', 1)`)
+              }),
+          },
+          {
+            id: "20990101000001_second",
+            up: () => Effect.sync(() => void applied.push("second")),
+          },
+        ])
+
+        expect(applied).toEqual(["first"])
+      }),
+    )
+  })
+
+  test("backs up a file database before pending migrations and keeps the newest backups", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "opencode.db")
+    const stale = ["20000101000000_a", "20000101000001_b", "20000101000002_c"]
+    await Promise.all(stale.map((id) => Bun.write(`${filename}.pre-${id}.bak`, "old")))
+    // Temp files from a backup that was killed long ago, and from one another process is writing now.
+    const killed = `${filename}.pre-20000101000000_a.bak.killed.tmp`
+    const writing = `${filename}.pre-20000101000000_a.bak.writing.tmp`
+    await Promise.all([Bun.write(killed, "partial"), Bun.write(writing, "partial")])
+    await fs.utimes(killed, new Date(0), new Date(0))
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO session (id) VALUES ('ses_1')`)
+        yield* DatabaseMigration.applyOnly(db, [
+          { id: "20990101000000_add_note", up: (tx) => tx.run(`CREATE TABLE note (id text)`).pipe(Effect.asVoid) },
+        ])
+      }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped),
+    )
+
+    const backup = `${filename}.pre-20990101000000_add_note.bak`
+    const restored = await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        return yield* db.all(sql`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
+      }).pipe(Effect.provide(SqliteClient.layer({ filename: backup, readonly: true })), Effect.scoped),
+    )
+    expect(restored).toEqual([{ name: "migration" }, { name: "session" }])
+    expect((await fs.readdir(tmp.path)).filter((name) => name.endsWith(".bak")).toSorted()).toEqual([
+      "opencode.db.pre-20000101000001_b.bak",
+      "opencode.db.pre-20000101000002_c.bak",
+      "opencode.db.pre-20990101000000_add_note.bak",
+    ])
+    expect((await fs.readdir(tmp.path)).filter((name) => name.endsWith(".tmp"))).toEqual([path.basename(writing)])
+    if (process.platform !== "win32") expect((await fs.stat(backup)).mode & 0o777).toBe(0o600)
   })
 })

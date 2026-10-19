@@ -59,6 +59,8 @@ await Promise.all([
   fs.mkdir(Path.bin, { recursive: true }),
   fs.mkdir(Path.repos, { recursive: true }),
 ])
+// The data folder holds opencode.db and its backups, which store provider credentials.
+if (process.platform !== "win32") await fs.chmod(Path.data, 0o700).catch(() => undefined)
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Global") {}
 
