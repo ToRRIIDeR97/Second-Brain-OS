@@ -333,20 +333,38 @@ fix lands.
 
 - `open-path` (`ipc.ts`) opens any renderer-supplied absolute path.
   `reveal-path` reveals any existing absolute path. Neither uses a workspace ID
-  or validated relative path. As of the 2026-10 batch-1 hardening, all IPC
-  handlers reject senders outside the trusted main frame, `open-path` no longer
+  or validated relative path. As of the 2026-10 batch-1 hardening, `open-path` no longer
   executes renderer-supplied application paths (main resolves an application
   name through the registered-application lookup), and both handlers require
   absolute paths. Arbitrary-path opening from a compromised main-frame renderer
   remains open until the workspace-ID contract lands.
-- `store-*` handlers now reject renderer-chosen store names outside a strict
-  single-file-name pattern (`store-name.ts`), so renderer input can no longer
-  create or escape files under `userData`. Main-process callers such as the
-  Tauri migration are not renderer-controlled and remain unrestricted.
-- IPC handlers now check `event.senderFrame` against the trusted main frame
-  through the shared `trustedHandle`/`trustedOn` wrappers in `ipc.ts`.
+- `store-*` handlers accept only the renderer's own store files, `default.dat`
+  and `opencode.<scope>.dat` (`store-name.ts`). Renderer input can't create or
+  escape files under `userData`, and can't read or write main-owned stores
+  such as `opencode.settings`, `opencode.updater`, `second-brain.google` or
+  Chromium `Preferences`.
+- Every IPC handler, including the WSL handlers in `wsl/ipc.ts`, checks
+  `event.senderFrame` against the trusted main frame through the shared
+  `trustedHandle`/`trustedOn` wrappers in `ipc.ts`. Before the 2026-10
+  desktop IPC hardening, the WSL handlers used raw `ipcMain.handle`.
+- WSL distro names from the renderer must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`
+  (`wsl/policy.ts`); probe lists skip names that don't. The "open terminal" action still goes through
+  `cmd.exe /c start` to get its own console window, so the allowlist is what
+  keeps cmd metacharacters out of that command line.
+- Draft IPC accepts only string keys and values and caps one attachment blob
+  at 64 MiB (`draft-store.ts`).
 - Server authorization also accepts an `auth_token` query parameter, so the
   credential can appear in URLs. Desktop main-process logs record only the
   scheme and host of blocked and rejected URLs, never the query string. The
-  parameter is not yet restricted to SSE and WebSocket routes.
+  parameter is not yet restricted to SSE and WebSocket routes. The
+  desktop no longer records a Chromium NetLog, which captured full URLs, and
+  the debug-log export skips any `.netlog` file. Packaged builds don't copy
+  renderer console output into the log files, and no terminal console
+  messages are written to `pty.log`.
+- Renderer sourcemaps are built as hidden maps and excluded from the packaged
+  app. The macOS entitlements no longer request microphone access. They still
+  include `allow-jit`, `allow-unsigned-executable-memory`,
+  `disable-executable-page-protection`, `allow-dyld-environment-variables` and
+  `disable-library-validation`; check which ones the runtime and native modules
+  need before removing any.
 - `drafts.sqlite` stores unsent draft content unencrypted in the profile.

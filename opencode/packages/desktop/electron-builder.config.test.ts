@@ -32,5 +32,6 @@ for (const channel of channels) {
     expect(config.rpm?.packageName).toBe(channel.name)
     expect(config.protocols).toEqual(expect.objectContaining({ schemes: ["tenon"] }))
     expect(JSON.stringify(config)).not.toContain("ai.opencode.desktop")
+    expect(config.files).toContain("!out/**/*.map")
   })
 }

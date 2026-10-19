@@ -1,6 +1,6 @@
 import { MainLogger } from "electron-log"
 import log from "electron-log/main.js"
-import { app, crashReporter, netLog, shell } from "electron"
+import { app, crashReporter, shell } from "electron"
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { ZipWriter, BlobWriter, BlobReader } from "@zip.js/zip.js"
 import { dirname, join } from "node:path"
@@ -10,11 +10,9 @@ const MAX_LOG_AGE_DAYS = 7
 const TAIL_LINES = 1000
 const EXPORT_WINDOW = 24 * 60 * 60 * 1000
 const MAX_EXPORT_FILE_SIZE = 50 * 1024 * 1024
-const NET_LOG_SIZE = 20 * 1024 * 1024
 
 let root = ""
 let run = ""
-let netLogPath: string | undefined
 
 let logger: MainLogger
 export const getLogger = () => logger
@@ -27,7 +25,9 @@ export function initLogging() {
       run,
       `${safeLogName(message?.scope ?? (message?.variables?.processType === "renderer" ? "renderer" : "main"))}.log`,
     )
-  log.initialize({ preload: false, spyRendererConsole: true })
+  // Renderer console output can carry note or terminal text, so packaged
+  // builds don't copy it into the log files.
+  log.initialize({ preload: false, spyRendererConsole: !app.isPackaged })
   initConsoleTransport()
   cleanup()
   return (logger = log)
@@ -41,35 +41,20 @@ export function initCrashReporter() {
   write("crash", "crash reporter started", { path: dir })
 }
 
-export async function startNetLog() {
-  if (netLog.currentlyLogging) return
-  netLogPath = join(run, "network.netlog")
-  await netLog.startLogging(netLogPath, { captureMode: "default", maxFileSize: NET_LOG_SIZE })
-  write("network", "net log started", { path: netLogPath })
-}
-
+// NetLog is not recorded: it captures full request URLs, including the server
+// `auth_token` query parameter. Developers can still launch with Electron's
+// `--log-net-log=<path>` switch. Leftover .netlog files are never exported.
 export async function exportDebugLogs() {
-  const restartNetLog = netLog.currentlyLogging
-  if (restartNetLog) {
-    await netLog.stopLogging().catch((error) => write("network", "failed to stop net log", { error }))
-  }
-
   const output = join(app.getPath("downloads"), `opencode-debug-${stamp()}.zip`)
-  try {
-    write("main", "exporting debug logs", { output })
-    await writeZip(output, [
-      { name: "manifest.json", data: Buffer.from(JSON.stringify(manifest(), null, 2)) },
-      ...collect(root, "desktop"),
-      ...serverLogRoots().flatMap((dir, i) => collect(dir, `server-${i + 1}`)),
-      ...collect(app.getPath("crashDumps"), "crashpad"),
-    ])
-    shell.showItemInFolder(output)
-    return output
-  } finally {
-    if (restartNetLog) {
-      await startNetLog().catch((error) => write("network", "failed to restart net log", { error }))
-    }
-  }
+  write("main", "exporting debug logs", { output })
+  await writeZip(output, [
+    { name: "manifest.json", data: Buffer.from(JSON.stringify(manifest(), null, 2)) },
+    ...collect(root, "desktop"),
+    ...serverLogRoots().flatMap((dir, i) => collect(dir, `server-${i + 1}`)),
+    ...collect(app.getPath("crashDumps"), "crashpad"),
+  ])
+  shell.showItemInFolder(output)
+  return output
 }
 
 export function write(
@@ -145,7 +130,6 @@ function manifest() {
     currentRun: run,
     crashDumps: app.getPath("crashDumps"),
     serverLogs: serverLogRoots(),
-    netLog: netLogPath,
   }
 }
 
@@ -170,7 +154,7 @@ function collect(dir: string, prefix: string): Entry[] {
       }
       if (info.mtimeMs < cutoff) continue
       if (info.size > MAX_EXPORT_FILE_SIZE) continue
-      if (file.endsWith(".heapsnapshot")) continue
+      if (file.endsWith(".heapsnapshot") || file.endsWith(".netlog")) continue
       result.push({ name: join(prefix, file.slice(dir.length + 1)).replace(/\\/g, "/"), path: file })
     }
   }

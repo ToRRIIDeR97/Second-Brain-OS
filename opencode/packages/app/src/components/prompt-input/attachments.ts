@@ -43,6 +43,14 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
     return { prompt, cursor: prompt.cursor() ?? getCursorPosition(editor) }
   }
 
+  // The desktop draft store refuses blobs over its size cap. Keep such an
+  // attachment in memory for this session instead of dropping it; it just
+  // isn't restored with the draft.
+  const storeBlob = (file: File) => {
+    if (!input.draftStore) return createBlobReference(file)
+    return input.draftStore.putBlob(file).catch(() => createBlobReference(file))
+  }
+
   const add = async (file: File, toast = true, target = capture()) => {
     if (!target) return false
     const mime = await attachmentMime(file)
@@ -57,7 +65,7 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
       filename: file.name,
       sourcePath: input.getPathForFile?.(file) || undefined,
       mime,
-      blob: input.draftStore ? await input.draftStore.putBlob(file) : await createBlobReference(file),
+      blob: await storeBlob(file),
     }
     target.prompt.set([...target.prompt.current(), attachment], target.cursor)
     return true
