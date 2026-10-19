@@ -398,4 +398,30 @@ describe("provider HttpApi", () => {
     }),
     { ...projectOptions, init: writeProviderModelsMutationPlugin },
   )
+
+  it.instance(
+    "serves provider lists with an ETag and answers matching revalidation with 304",
+    Effect.gen(function* () {
+      const directory = (yield* TestInstance).directory
+      const headers = { "x-opencode-directory": directory }
+      const first = yield* request("/provider", { headers })
+      expect(first.status).toBe(200)
+      const etag = first.headers["etag"]
+      expect(etag).toStartWith('W/"')
+      const body = yield* first.json
+      expect(providerList(body, "all").length).toBeGreaterThan(0)
+
+      const second = yield* request("/provider", { headers })
+      expect(second.headers["etag"]).toBe(etag)
+      expect(yield* second.json).toEqual(body)
+
+      const revalidated = yield* request("/provider", { headers: { ...headers, "if-none-match": etag } })
+      expect(revalidated.status).toBe(304)
+      expect(yield* revalidated.text).toBe("")
+
+      const stale = yield* request("/provider", { headers: { ...headers, "if-none-match": 'W/"stale"' } })
+      expect(stale.status).toBe(200)
+    }),
+    projectOptions,
+  )
 })
