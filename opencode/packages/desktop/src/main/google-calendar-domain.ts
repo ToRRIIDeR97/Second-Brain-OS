@@ -130,3 +130,86 @@ function previousDate(value: string) {
   date.setUTCDate(date.getUTCDate() - 1)
   return date.toISOString().slice(0, 10)
 }
+
+export type GoogleTokenResponse = {
+  access_token?: string
+  refresh_token?: string
+  expires_in?: number
+  error?: string
+}
+
+type Fetch = (input: string, init: RequestInit) => Promise<Response>
+type OutboxState = "pending" | "offline" | "failed" | "conflict" | "succeeded"
+
+export const GOOGLE_OUTBOX_LIMIT = 100
+export const GOOGLE_OUTBOX_MAX_ATTEMPTS = 5
+
+export async function requestGoogleToken(fetch: Fetch, endpoint: string, input: Record<string, string>) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(input),
+    signal: AbortSignal.timeout(30_000),
+  })
+  const value = (await response.json().catch(() => ({}))) as GoogleTokenResponse
+  // A revoked or expired refresh token needs new consent; retrying the exchange cannot succeed.
+  if (value.error === "invalid_grant" && input.grant_type === "refresh_token") {
+    throw new Error("google_reconnect_required")
+  }
+  if (!response.ok || value.error) throw new Error("google_token_exchange_failed")
+  return value
+}
+
+/** Caches the access token until shortly before `expires_in`, so queued writes share one exchange. */
+export function createGoogleAccessTokens(input: {
+  fetch: Fetch
+  endpoint: string
+  onRotate: (refreshToken: string) => void
+  now?: () => number
+}) {
+  const now = input.now ?? Date.now
+  let cached: { clientId: string; token: string; expiresAt: number } | undefined
+  return {
+    async get(config: { clientId: string; clientSecret: string; refreshToken: string }) {
+      if (cached?.clientId === config.clientId && cached.expiresAt > now()) return cached.token
+      cached = undefined
+      const tokens = await requestGoogleToken(input.fetch, input.endpoint, {
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        refresh_token: config.refreshToken,
+        grant_type: "refresh_token",
+      })
+      if (!tokens.access_token) throw new Error("google_reconnect_required")
+      if (tokens.refresh_token) input.onRotate(tokens.refresh_token)
+      // Renew a minute early so a token never expires during a request.
+      const lifetime = (tokens.expires_in ?? 0) * 1_000 - 60_000
+      if (lifetime > 0) cached = { clientId: config.clientId, token: tokens.access_token, expiresAt: now() + lifetime }
+      return tokens.access_token
+    },
+    clear() {
+      cached = undefined
+    },
+  }
+}
+
+/** Drops succeeded entries first, then old failures. Queued (pending or offline) writes are never dropped. */
+export function pruneOutbox<T extends { state: OutboxState }>(entries: T[], limit = GOOGLE_OUTBOX_LIMIT) {
+  const excess = entries.length - limit
+  if (excess <= 0) return entries
+  const drop = new Set(
+    [
+      ...entries.filter((entry) => entry.state === "succeeded"),
+      ...entries.filter((entry) => entry.state === "failed" || entry.state === "conflict"),
+    ].slice(0, excess),
+  )
+  return entries.filter((entry) => !drop.has(entry))
+}
+
+/** `attempts` counts the attempt that just failed. */
+export function outboxFailureState(message: string, attempts: number): "conflict" | "failed" | "offline" {
+  if (message === "google_conflict") return "conflict"
+  if (message.startsWith("google_http_")) return "failed"
+  // The write waits for the user to reconnect; sync stops at the token exchange until then.
+  if (message === "google_reconnect_required") return "offline"
+  return attempts >= GOOGLE_OUTBOX_MAX_ATTEMPTS ? "failed" : "offline"
+}

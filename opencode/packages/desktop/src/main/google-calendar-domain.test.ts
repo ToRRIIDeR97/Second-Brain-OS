@@ -1,13 +1,30 @@
 import { describe, expect, test } from "bun:test"
 import {
+  createGoogleAccessTokens,
+  GOOGLE_OUTBOX_MAX_ATTEMPTS,
   googleEventId,
   googleEventPayload,
   googleScopes,
   googleTaskPayload,
   normalizeGoogleEvent,
   normalizeGoogleTask,
+  outboxFailureState,
   pkceChallenge,
+  pruneOutbox,
+  requestGoogleToken,
 } from "./google-calendar-domain"
+
+function tokenFetch(...responses: { status?: number; body: Record<string, unknown> }[]) {
+  const requests: URLSearchParams[] = []
+  const fetch = async (_input: string, init: RequestInit) => {
+    requests.push(new URLSearchParams(init.body as URLSearchParams))
+    const next = responses[Math.min(requests.length, responses.length) - 1]
+    return new Response(JSON.stringify(next.body), { status: next.status ?? 200 })
+  }
+  return { fetch, requests }
+}
+
+const config = { clientId: "id.apps.googleusercontent.com", clientSecret: "secret", refreshToken: "refresh-1" }
 
 describe("Google Calendar domain", () => {
   test("uses PKCE, narrow scopes, stable IDs, and normalized event fields", () => {
@@ -76,5 +93,60 @@ describe("Google Calendar domain", () => {
 
     expect(event.endDate).toBe("2026-08-26")
     expect(googleEventPayload(event)).toMatchObject({ end: { dateTime: "2026-08-26T01:00:00" } })
+  })
+})
+
+describe("Google access tokens", () => {
+  test("reuses one access token until it nearly expires", async () => {
+    const clock = { now: 0 }
+    const http = tokenFetch({ body: { access_token: "a1", expires_in: 3600 } }, { body: { access_token: "a2", expires_in: 3600 } })
+    const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: () => {}, now: () => clock.now })
+
+    for (const _ of [1, 2, 3]) expect(await tokens.get(config)).toBe("a1")
+    expect(http.requests).toHaveLength(1)
+
+    clock.now += 3600_000 - 60_000
+    expect(await tokens.get(config)).toBe("a2")
+    expect(http.requests).toHaveLength(2)
+  })
+
+  test("hands a rotated refresh token to the store", async () => {
+    const rotated: string[] = []
+    const http = tokenFetch({ body: { access_token: "a1", refresh_token: "refresh-2", expires_in: 3600 } })
+    const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: (token) => rotated.push(token) })
+
+    await tokens.get(config)
+    expect(rotated).toEqual(["refresh-2"])
+    expect(http.requests[0].get("refresh_token")).toBe("refresh-1")
+  })
+
+  test("maps invalid_grant on refresh to reconnect-required", async () => {
+    const http = tokenFetch({ status: 400, body: { error: "invalid_grant" } })
+    const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: () => {} })
+
+    await expect(tokens.get(config)).rejects.toThrow("google_reconnect_required")
+    await expect(
+      requestGoogleToken(http.fetch, "token", { grant_type: "authorization_code", code: "x" }),
+    ).rejects.toThrow("google_token_exchange_failed")
+  })
+})
+
+describe("Google outbox", () => {
+  const entry = (id: string, state: "pending" | "offline" | "failed" | "conflict" | "succeeded") => ({ id, state })
+
+  test("prunes succeeded entries first and never drops queued writes", () => {
+    const entries = [entry("p1", "pending"), entry("f1", "failed"), entry("s1", "succeeded"), entry("o1", "offline")]
+    expect(pruneOutbox(entries, 3).map((item) => item.id)).toEqual(["p1", "f1", "o1"])
+    expect(pruneOutbox(entries, 2).map((item) => item.id)).toEqual(["p1", "o1"])
+    expect(pruneOutbox(entries, 1).map((item) => item.id)).toEqual(["p1", "o1"])
+    expect(pruneOutbox(entries, 4)).toBe(entries)
+  })
+
+  test("keeps transient failures queued until the attempt cap", () => {
+    expect(outboxFailureState("google_conflict", 1)).toBe("conflict")
+    expect(outboxFailureState("google_http_400", 1)).toBe("failed")
+    expect(outboxFailureState("google_token_exchange_failed", 1)).toBe("offline")
+    expect(outboxFailureState("google_token_exchange_failed", GOOGLE_OUTBOX_MAX_ATTEMPTS)).toBe("failed")
+    expect(outboxFailureState("google_reconnect_required", GOOGLE_OUTBOX_MAX_ATTEMPTS + 1)).toBe("offline")
   })
 })
