@@ -41,7 +41,10 @@ function eventResponse() {
       (queue) => {
         const handler = (event: GlobalBusEvent) => {
           if (Queue.offerUnsafe(queue, event)) return
-          Queue.failCauseUnsafe(queue, Cause.fail(new EventV2.SubscriberOverflowError({ capacity: subscriberCapacity })))
+          Queue.failCauseUnsafe(
+            queue,
+            Cause.fail(new EventV2.SubscriberOverflowError({ capacity: subscriberCapacity })),
+          )
         }
         return Effect.acquireRelease(
           Effect.sync(() => GlobalBus.on("event", handler)),
