@@ -162,13 +162,30 @@ export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES, ...AUDIO_MIMES] as c
 export const MAX_MEDIA_ENCODED_BYTES = 28 * 1024 * 1024
 export const MAX_MEDIA_DECODED_BYTES = 20 * 1024 * 1024
 
-const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+// A plain character-class scan stays linear on multi-megabyte input, where a grouped,
+// quantified pattern makes the regex engine give up and report a mismatch.
+const nonBase64Character = /[^A-Za-z0-9+/]/
+// In canonical base64 the character before the padding carries no leftover bits,
+// so "QQ==" is accepted and "QR==" is not.
+const canonicalBeforePadding = ["", "AEIMQUYcgkosw048", "AQgw"]
+
+const base64Padding = (base64: string) => (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0)
+
+/** Decoded byte length of valid, padded base64, computed without decoding it. */
+export const base64DecodedLength = (base64: string) => (base64.length / 4) * 3 - base64Padding(base64)
+
+const isCanonicalBase64 = (base64: string) => {
+  if (!base64 || base64.length % 4 !== 0) return false
+  const padding = base64Padding(base64)
+  const body = base64.slice(0, base64.length - padding)
+  if (nonBase64Character.test(body)) return false
+  return padding === 0 || canonicalBeforePadding[padding]!.includes(body.at(-1)!)
+}
 
 export interface ValidatedMedia {
   readonly mime: string
   readonly base64: string
   readonly dataUrl: string
-  readonly bytes: Uint8Array
 }
 
 export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
@@ -196,13 +213,10 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
 
   if (Buffer.byteLength(base64, "utf8") > MAX_MEDIA_ENCODED_BYTES)
     return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_ENCODED_BYTES} byte encoded limit`)
-  if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
-    return yield* invalidRequest(`${route} media must contain valid base64`)
-  const bytes = Buffer.from(base64, "base64")
-  if (bytes.byteLength > MAX_MEDIA_DECODED_BYTES)
+  if (!isCanonicalBase64(base64)) return yield* invalidRequest(`${route} media must contain valid base64`)
+  if (base64DecodedLength(base64) > MAX_MEDIA_DECODED_BYTES)
     return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
-  if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
-  return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
+  return { mime, base64, dataUrl: `data:${mime};base64,${base64}` } satisfies ValidatedMedia
 })
 
 export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>
