@@ -2378,6 +2378,27 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("does not retry a provider failure after an empty step already finished", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 0 }),
+      })
+      const emptyStep = [LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" })]
+      response = emptyStep
+      responseStream = Stream.fromIterable(emptyStep).pipe(Stream.concat(Stream.fail(failure)))
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(1)
+    }),
+  )
+
   it.effect("does not retry a provider failure after assistant output started", () =>
     Effect.gen(function* () {
       yield* setup

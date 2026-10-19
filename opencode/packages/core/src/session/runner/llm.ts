@@ -371,8 +371,13 @@ const layer = Layer.effect(
         providerStream.pipe(
           Effect.catch((error) =>
             Effect.gen(function* () {
+              // An empty step that already finished cannot be replayed: the publisher records one step finish.
               const delay =
-                usesHostModel && !publisher.hasAssistantStarted() && !publisher.hasProviderError() && !overflowFailure
+                usesHostModel &&
+                !publisher.hasAssistantStarted() &&
+                !publisher.stepSettlement() &&
+                !publisher.hasProviderError() &&
+                !overflowFailure
                   ? providerRetryDelay(error, attempt)
                   : undefined
               if (delay === undefined || !(error instanceof LLMError)) return yield* Effect.fail(error)
@@ -555,8 +560,9 @@ const localToolCallsSinceLastUser = (context: ReadonlyArray<SessionMessage.Messa
 const PROVIDER_RETRY_LIMIT = 5
 const PROVIDER_RETRY_BASE_MS = 2_000
 const PROVIDER_RETRY_MAX_BACKOFF_MS = 30_000
-// A provider asking for a longer pause fails the turn instead of holding the Session busy.
-const PROVIDER_RETRY_MAX_WAIT_MS = 5 * 60_000
+// A provider asking for a longer pause fails the turn instead of holding the Session busy; retry notices
+// are not surfaced in the UI yet, so keep each wait (and the five-attempt total) short.
+const PROVIDER_RETRY_MAX_WAIT_MS = 60_000
 
 /** Milliseconds to wait before retrying a failed provider call, or undefined when it must not be retried. */
 const providerRetryDelay = (error: unknown, attempt: number) => {
