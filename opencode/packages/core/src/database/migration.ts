@@ -17,6 +17,7 @@ const lock = Semaphore.makeUnsafe(1)
 export const BACKUPS_KEPT = 3
 // Another process may hold the write lock while it migrates; wait for it instead of failing.
 const MIGRATION_BUSY_TIMEOUT = 60_000
+const STALE_BACKUP_TEMP = 60 * 60_000
 
 export type Migration = {
   id: string
@@ -50,7 +51,7 @@ export function apply(db: Database) {
           }),
         { behavior: "immediate" },
       )
-      if (!created) yield* applyOnly(db, migrations)
+      return created ? undefined : yield* applyOnly(db, migrations)
     }),
   )
 }
@@ -95,28 +96,33 @@ export function applyOnly(db: Database, input: Migration[]) {
     yield* backup(db, pending[0].id)
     const timeout = (yield* db.get<{ timeout: number }>(sql`PRAGMA busy_timeout`))?.timeout ?? 0
     yield* db.run(sql.raw(`PRAGMA busy_timeout = ${Math.max(timeout, MIGRATION_BUSY_TIMEOUT)}`))
-    yield* Effect.forEach(pending, (migration) => run(db, migration), { discard: true }).pipe(
-      Effect.ensuring(db.run(sql.raw(`PRAGMA busy_timeout = ${timeout}`)).pipe(Effect.orDie)),
-    )
+    yield* Effect.gen(function* () {
+      // A foreign key scan reads every child table, so scan once up front and then once per migration,
+      // carrying each result forward as the next baseline.
+      let baseline = yield* violations(db)
+      for (const migration of pending) baseline = yield* run(db, migration, baseline)
+    }).pipe(Effect.ensuring(db.run(sql.raw(`PRAGMA busy_timeout = ${timeout}`)).pipe(Effect.orDie)))
   })
 }
 
 // SQLite ignores `PRAGMA foreign_keys` inside a transaction, so the `PRAGMA foreign_keys=OFF` in
 // generated table rebuilds would not stop DROP TABLE from cascading into child tables. Turn
 // enforcement off around the transaction and check the constraints before commit instead.
-function run(db: Database, migration: Migration) {
+// Returns the foreign key violation count after the migration, the baseline for the next one.
+function run(db: Database, migration: Migration, before: number) {
   return Effect.gen(function* () {
     const foreignKeys = (yield* db.get<{ foreign_keys: number }>(sql`PRAGMA foreign_keys`))?.foreign_keys === 1
     yield* db.run(sql`PRAGMA foreign_keys = OFF`)
-    yield* db
+    return yield* db
       .transaction(
         (tx) =>
           Effect.gen(function* () {
-            // Another process may have applied it since the journal was read.
-            if (yield* tx.get(sql`SELECT id FROM ${sql.identifier("migration")} WHERE id = ${migration.id}`)) return
-            // Older databases may already hold orphaned rows; only fail on violations this migration adds.
-            const before = yield* violations(tx)
+            // Another process may have applied it since the journal was read, which also makes the
+            // carried baseline stale.
+            if (yield* tx.get(sql`SELECT id FROM ${sql.identifier("migration")} WHERE id = ${migration.id}`))
+              return yield* violations(tx)
             yield* migration.up(tx)
+            // Older databases may already hold orphaned rows; only fail on violations this migration adds.
             const after = yield* violations(tx)
             if (after > before)
               return yield* Effect.fail(
@@ -125,6 +131,7 @@ function run(db: Database, migration: Migration) {
             yield* tx.run(
               sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
             )
+            return after
           }),
         { behavior: "immediate" },
       )
@@ -132,8 +139,8 @@ function run(db: Database, migration: Migration) {
   })
 }
 
-function violations(tx: Transaction) {
-  return tx
+function violations(db: Database | Transaction) {
+  return db
     .get<{ count: number }>(sql`SELECT count(*) AS count FROM pragma_foreign_key_check`)
     .pipe(Effect.map((row) => row?.count ?? 0))
 }
@@ -146,6 +153,7 @@ function backup(db: Database, id: string) {
     )?.file
     // In-memory and temporary databases have no file.
     if (!file) return
+    yield* Effect.promise(() => prune(file))
     const target = `${file}.pre-${id}.bak`
     // A backup from an earlier, failed attempt already holds the pre-migration state.
     if (yield* Effect.promise(() => exists(target))) return
@@ -168,13 +176,25 @@ async function keep(temp: string, target: string) {
   await fs.rename(temp, target)
 }
 
+// Removes backups beyond the newest few, and temp files left by a process killed mid-backup.
 async function prune(file: string) {
+  const dir = path.dirname(file)
   const prefix = `${path.basename(file)}.pre-`
-  const backups = (await fs.readdir(path.dirname(file)))
-    .filter((name) => name.startsWith(prefix) && name.endsWith(".bak"))
-    .toSorted()
+  const names = (await fs.readdir(dir)).filter((name) => name.startsWith(prefix))
+  const backups = names.filter((name) => name.endsWith(".bak")).toSorted()
+  // Another process may still be writing a recent temp file.
+  const stale = (
+    await Promise.all(
+      names
+        .filter((name) => name.endsWith(".tmp"))
+        .map(async (name) => {
+          const stat = await fs.stat(path.join(dir, name)).catch(() => undefined)
+          return stat && Date.now() - stat.mtimeMs > STALE_BACKUP_TEMP ? [name] : []
+        }),
+    )
+  ).flat()
   await Promise.all(
-    backups.slice(0, -BACKUPS_KEPT).map((name) => fs.rm(path.join(path.dirname(file), name), { force: true })),
+    [...backups.slice(0, -BACKUPS_KEPT), ...stale].map((name) => fs.rm(path.join(dir, name), { force: true })),
   )
 }
 

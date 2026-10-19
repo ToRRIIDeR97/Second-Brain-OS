@@ -712,19 +712,18 @@ describe("DatabaseMigration safety", () => {
         yield* db.run(sql`PRAGMA foreign_keys = ON`)
 
         const exit = yield* DatabaseMigration.applyOnly(db, [
+          rebuildParent,
           {
-            id: "20990101000000_drop_parent_rows",
+            id: "20990101000001_drop_parent_rows",
             up: (tx) => tx.run(`DELETE FROM parent`).pipe(Effect.asVoid),
           },
         ]).pipe(Effect.exit)
 
+        // Earlier migrations in the batch stay committed; only the failing one rolls back.
         expect(exit._tag).toBe("Failure")
-        expect(yield* db.all(sql`SELECT id FROM parent`)).toEqual([{ id: "p1" }])
-        expect(yield* db.all(sql`SELECT id FROM migration`)).toEqual([])
-        expect(yield* db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 })
-
-        yield* DatabaseMigration.applyOnly(db, [rebuildParent])
+        expect(yield* db.all(sql`SELECT id, name FROM parent`)).toEqual([{ id: "p1", name: "" }])
         expect(yield* db.all(sql`SELECT id FROM migration`)).toEqual([{ id: rebuildParent.id }])
+        expect(yield* db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 })
       }),
     )
   })
@@ -760,6 +759,11 @@ describe("DatabaseMigration safety", () => {
     const filename = path.join(tmp.path, "opencode.db")
     const stale = ["20000101000000_a", "20000101000001_b", "20000101000002_c"]
     await Promise.all(stale.map((id) => Bun.write(`${filename}.pre-${id}.bak`, "old")))
+    // Temp files from a backup that was killed long ago, and from one another process is writing now.
+    const killed = `${filename}.pre-20000101000000_a.bak.killed.tmp`
+    const writing = `${filename}.pre-20000101000000_a.bak.writing.tmp`
+    await Promise.all([Bun.write(killed, "partial"), Bun.write(writing, "partial")])
+    await fs.utimes(killed, new Date(0), new Date(0))
     await Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* makeDb
@@ -784,6 +788,7 @@ describe("DatabaseMigration safety", () => {
       "opencode.db.pre-20000101000002_c.bak",
       "opencode.db.pre-20990101000000_add_note.bak",
     ])
+    expect((await fs.readdir(tmp.path)).filter((name) => name.endsWith(".tmp"))).toEqual([path.basename(writing)])
     if (process.platform !== "win32") expect((await fs.stat(backup)).mode & 0o777).toBe(0o600)
   })
 })
