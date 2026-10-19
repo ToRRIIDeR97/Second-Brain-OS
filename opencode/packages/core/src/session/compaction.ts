@@ -1,6 +1,15 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMError, LLMEvent, Message, type ContentPart, type LLMRequest, type Model } from "@opencode-ai/llm"
+import {
+  LLM,
+  LLMError,
+  LLMEvent,
+  Message,
+  type ContentPart,
+  type LLMRequest,
+  type Model,
+  type ToolContent,
+} from "@opencode-ai/llm"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
@@ -100,7 +109,7 @@ const estimatePart = (part: ContentPart) => {
   return (
     Token.estimate(part.name) +
     sum(
-      part.result.value.map((item) =>
+      part.result.value.map((item: ToolContent) =>
         item.type === "text" ? Token.estimate(item.text) : mediaTokens(item.mime, item.uri.length),
       ),
     )
