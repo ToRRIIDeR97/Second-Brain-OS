@@ -596,6 +596,51 @@ describe("Session.findMessage", () => {
   )
 })
 
+describe("MessageV2.filterCompactedEffect", () => {
+  it.instance("matches filterCompacted over a multi-page history without compaction", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 120)
+
+        const lazy = yield* MessageV2.filterCompactedEffect(sessionID)
+        expect(lazy).toEqual(MessageV2.filterCompacted(yield* MessageV2.stream(sessionID)))
+        expect(lazy.map((item) => item.info.id)).toEqual(ids)
+      }),
+    ),
+  )
+
+  it.instance("matches filterCompacted when the boundary is pages away from the start", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        yield* fill(sessionID, 70, () => Date.now())
+        const u1 = yield* addUser(sessionID, "before compaction")
+        const a1 = yield* addAssistant(sessionID, u1, { finish: "end_turn" })
+        const c1 = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, c1, u1)
+        const s1 = yield* addAssistant(sessionID, c1, { summary: true, finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: s1,
+          type: "text",
+          text: "summary",
+        })
+        const after = yield* fill(sessionID, 60, () => Date.now())
+
+        const lazy = yield* MessageV2.filterCompactedEffect(sessionID)
+        expect(lazy).toEqual(MessageV2.filterCompacted(yield* MessageV2.stream(sessionID)))
+        expect(lazy.map((item) => item.info.id)).toEqual([c1, s1, u1, a1, ...after])
+      }),
+    ),
+  )
+
+  it.instance("returns empty for a missing session", () =>
+    Effect.gen(function* () {
+      expect(yield* MessageV2.filterCompactedEffect("ses_missing" as SessionID)).toEqual([])
+    }),
+  )
+})
+
 describe("MessageV2.filterCompacted", () => {
   it.instance("returns all messages when no compaction", () =>
     withSession(({ sessionID }) =>
