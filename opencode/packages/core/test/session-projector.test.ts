@@ -19,7 +19,7 @@ import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
-import { MessageTable, SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Location } from "@opencode-ai/core/location"
@@ -86,9 +86,9 @@ describe("SessionProjector", () => {
       const events = yield* EventV2.Service
       yield* seedSession
       yield* db
-        .insert(MessageTable)
-        .values({ id: SessionV1.MessageID.make("msg_usage"), session_id: sessionID, time_created: 1, data: {} as never })
-        .run()
+        .run(
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('msg_usage', ${sessionID}, 1, 1, '{}')`,
+        )
         .pipe(Effect.orDie)
 
       yield* events.publish(SessionV1.Event.PartUpdated, {

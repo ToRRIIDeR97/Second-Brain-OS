@@ -5,7 +5,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Effect, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
-import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
 
 import { NotFoundError } from "@/storage/storage"
 import { testEffect } from "../lib/effect"
@@ -636,7 +636,7 @@ describe("MessageV2.filterCompactedEffect", () => {
 
   it.instance("returns empty for a missing session", () =>
     Effect.gen(function* () {
-      expect(yield* MessageV2.filterCompactedEffect("ses_missing" as SessionID)).toEqual([])
+      expect(yield* MessageV2.filterCompactedEffect(SessionID.make("ses_missing"))).toEqual([])
     }),
   )
 })

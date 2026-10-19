@@ -532,7 +532,7 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
   let before: string | undefined
   while (true) {
     const next = yield* page({ sessionID, limit: 50, before }).pipe(
-      Effect.catchIf(NotFoundError.isInstance, () =>
+      Effect.catchTag("NotFoundError", () =>
         Effect.succeed({ items: [] as WithParts[], more: false, cursor: undefined }),
       ),
     )

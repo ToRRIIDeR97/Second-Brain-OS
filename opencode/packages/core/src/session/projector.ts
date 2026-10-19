@@ -185,7 +185,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .limit(1)
             .get()
             .pipe(Effect.orDie)
-          if (!row) return
+          if (!row) return undefined
           const message = decodeRow(row)
           return message.type === "shell" ? message : undefined
         })

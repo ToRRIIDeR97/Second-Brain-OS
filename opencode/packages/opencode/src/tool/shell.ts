@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Semaphore, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -476,18 +476,22 @@ export const ShellTool = Tool.define(
 
       let dirty = false
       let flushed = 0
-      // Uninterruptible so closing the scope cannot drop a flush that already cleared `dirty`.
+      // The ticker and the reader both flush: one permit keeps writes in order so an older output
+      // never lands last, and uninterruptible keeps scope close from dropping a flush that cleared `dirty`.
+      const flushLock = Semaphore.makeUnsafe(1)
       const flush = Effect.uninterruptible(
-        Effect.suspend(() => {
-          if (!dirty) return Effect.void
-          dirty = false
-          flushed = Date.now()
-          return ctx.metadata({
-            metadata: {
-              output: last,
-            },
-          })
-        }),
+        flushLock.withPermits(1)(
+          Effect.suspend(() => {
+            if (!dirty) return Effect.void
+            dirty = false
+            flushed = Date.now()
+            return ctx.metadata({
+              metadata: {
+                output: last,
+              },
+            })
+          }),
+        ),
       )
       const flushIfDue = Effect.suspend(() => (Date.now() - flushed >= METADATA_INTERVAL_MS ? flush : Effect.void))
 

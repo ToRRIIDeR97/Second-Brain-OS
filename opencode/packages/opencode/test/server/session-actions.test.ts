@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock } from "bun:test"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -138,9 +138,8 @@ describe("session action routes", () => {
           test.directory,
         )
         expect(next.status).toBe(200)
-        const ids = [...((yield* first.json) as SessionNs.Info[]), ...((yield* next.json) as SessionNs.Info[])].map(
-          (item) => item.id,
-        )
+        const decode = Schema.decodeUnknownSync(Schema.Array(SessionNs.GlobalInfo))
+        const ids = [...decode(yield* first.json), ...decode(yield* next.json)].map((item) => item.id)
         expect(ids.toSorted()).toEqual(created.map((item) => item.id).toSorted())
 
         const legacy = yield* requestInDirectory(`/experimental/session?cursor=${time + 1}`, test.directory)
