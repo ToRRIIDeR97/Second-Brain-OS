@@ -239,7 +239,8 @@ export function openExternalURL(value: string) {
     writeLog("window", "blocked external target", { url: redactURL(value) }, "warn")
     return
   }
-  void shell.openExternal(url)
+  // The error text can repeat the full URL, so only the redacted target is logged.
+  shell.openExternal(url).catch(() => writeLog("window", "failed to open external target", { url: redactURL(url) }, "warn"))
 }
 
 export function openLocalFileURL(value: string) {
@@ -335,11 +336,13 @@ function loadWindow(win: BrowserWindow, html: string) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (devUrl) {
     const url = new URL(html, devUrl)
-    void win.loadURL(url.toString())
+    win.loadURL(url.toString()).catch((error) => writeLog("window", "failed to load renderer", { error }, "error"))
     return
   }
 
-  void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
+  win
+    .loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
+    .catch((error) => writeLog("window", "failed to load renderer", { error }, "error"))
 }
 
 function wireWindowRecovery(win: BrowserWindow, name: string) {

@@ -8,7 +8,7 @@ import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
 
-import { Deferred, Effect, Fiber } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
 
 import type { ServerReadyData } from "../preload/types"
@@ -32,6 +32,7 @@ import {
   spawnLocalServer,
   type SidecarListener,
 } from "./server"
+import { superviseSidecar } from "./sidecar-supervisor"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
 import { safeWebContentsURL } from "./window-state"
 import {
@@ -67,6 +68,8 @@ const LEGACY_DEV_APP_ID = "ai.opencode.desktop.dev"
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const SIDECAR_VERSION = process.env.OPENCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
+// Covers the sidecar's own graceful stop (6 s) before it is killed.
+const QUIT_STOP_TIMEOUT = 8_000
 
 let logger: ReturnType<typeof initLogging>
 let server: SidecarListener | null = null
@@ -144,6 +147,16 @@ const main = Effect.gen(function* () {
     return root
   })()
   const userData = onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId)
+  app.setName(APP_NAMES[channel])
+  app.setAppUserModelId(appId)
+  app.setPath("userData", userData)
+  if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
+  // The lock is keyed by userData. A second instance only hands its argv (deep links) to the first
+  // instance, so it quits before migrating data, opening logs or starting the crash reporter.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit()
+    return
+  }
   // Beta and prod never shipped under the old IDs, so their old folders are upstream's and stay unread.
   const userDataMigration = (() => {
     if (onboardingTestRoot) return
@@ -157,10 +170,6 @@ const main = Effect.gen(function* () {
       return error instanceof Error ? error : new Error(String(error))
     }
   })()
-  app.setName(APP_NAMES[channel])
-  app.setAppUserModelId(appId)
-  app.setPath("userData", userData)
-  if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
   initializeOldLayoutEligibility(app.getPath("userData"))
   logger = initLogging()
   if (userDataMigration instanceof Error)
@@ -214,11 +223,7 @@ const main = Effect.gen(function* () {
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
 
-  if (!app.requestSingleInstanceLock()) {
-    app.quit()
-    return
-  }
-
+  // Probes the login shell in the background; the sidecar env waits for it below.
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
@@ -240,9 +245,19 @@ const main = Effect.gen(function* () {
     emitDeepLinks([url])
   })
 
-  app.on("before-quit", () => {
+  // The first quit waits (bounded) for the sidecar to stop, then quits again.
+  let quitStop: Promise<void> | undefined
+  let quitStopped = false
+  app.on("before-quit", (event) => {
     setAppQuitting()
-    void stopSidecars()
+    if (quitStopped || (!quitStop && !server)) return
+    event.preventDefault()
+    quitStop ??= Promise.race([stopSidecars(), new Promise<void>((resolve) => setTimeout(resolve, QUIT_STOP_TIMEOUT))])
+      .catch((error) => logger.error("failed to stop sidecars before quit", error))
+      .finally(() => {
+        quitStopped = true
+        app.quit()
+      })
   })
 
   app.on("will-quit", () => {
@@ -347,12 +362,13 @@ const main = Effect.gen(function* () {
   const loadingTask = yield* Effect.gen(function* () {
     logger.log("sidecar connection started", { version: SIDECAR_VERSION })
 
+    const env = yield* Effect.promise(() => shellEnv)
     ensureLoopbackNoProxy()
     useEnvProxy()
 
     if (SIDECAR_VERSION === "v2") {
       logger.log("spawning v2 sidecar")
-      const sidecar = yield* Effect.promise(() => startBackgroundCli(logger, shellEnv?.XDG_STATE_HOME))
+      const sidecar = yield* Effect.promise(() => startBackgroundCli(logger, env?.XDG_STATE_HOME))
       yield* Deferred.succeed(serverReady, {
         url: sidecar.url,
         username: sidecar.username,
@@ -395,15 +411,30 @@ const main = Effect.gen(function* () {
     const password = randomUUID()
 
     logger.log("spawning sidecar", { url })
-    const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(hostname, port, password, {
-        userDataPath: app.getPath("userData"),
-        onStdout: (message) => writeLog("server", "stdout", { message }),
-        onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
-        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-      }),
+    // Restarts after a crash reuse the port and password, so renderers reconnect to the same URL.
+    const sidecar = superviseSidecar({
+      spawn: () =>
+        spawnLocalServer(hostname, port, password, {
+          userDataPath: app.getPath("userData"),
+          onStdout: (message) => writeLog("server", "stdout", { message }),
+          onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+          onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
+        }),
+      log: (message, meta) => writeLog("utility", message, meta, "warn"),
+    })
+    // Set before the start is awaited, so quitting during startup stops the child.
+    server = sidecar
+    yield* Effect.promise(() => sidecar.initial.ready)
+
+    // Windows are already open; renderers keep their splash until the server answers (or this times out).
+    yield* Effect.tryPromise({ try: (signal) => sidecar.initial.waitHealthy(signal), catch: (error) => error }).pipe(
+      Effect.timeout("30 seconds"),
+      Effect.catch((e) =>
+        Effect.sync(() => {
+          logger.error("sidecar health check failed", String(e))
+        }),
+      ),
     )
-    server = listener
     yield* Deferred.succeed(serverReady, {
       url,
       username: "opencode",
@@ -414,20 +445,10 @@ const main = Effect.gen(function* () {
       void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
     }
 
-    yield* Effect.promise(() => health.wait).pipe(
-      Effect.timeout("30 seconds"),
-      Effect.catch((e) =>
-        Effect.sync(() => {
-          logger.error("sidecar health check failed", e.toString())
-        }),
-      ),
-    )
-
     logger.log("loading task finished")
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
 
-  yield* Fiber.await(loadingTask)
-
+  // Windows open while the server starts; the renderer shows its splash until awaitInitialization resolves.
   app.on("window-all-closed", () => {
     if (process.platform === "darwin") return
     app.quit()
@@ -439,6 +460,9 @@ const main = Effect.gen(function* () {
 
   const windows = restoreMainWindows()
   if (windows.length) createMenu(menuDeps)
+
+  const loaded = yield* Fiber.await(loadingTask)
+  if (Exit.isFailure(loaded)) logger.error("loading task failed", Cause.pretty(loaded.cause))
 })
 
 Effect.runFork(main)

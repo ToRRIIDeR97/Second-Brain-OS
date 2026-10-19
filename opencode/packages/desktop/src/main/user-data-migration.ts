@@ -24,7 +24,8 @@ const skip = new Set([
 
 /**
  * One-time copy of Electron userData from the app ID Tenon Workbench used to share with upstream OpenCode
- * Desktop. Synchronous because it must finish before `app.setPath("userData")` and the stores open.
+ * Desktop. Synchronous because it must finish before the stores open. It runs after the single-instance
+ * lock, which may already have created Electron's Singleton* files in the new folder (they are never copied).
  * The old folder is never modified. A fresh install is marked too, so a folder that appears later is
  * never imported.
  */

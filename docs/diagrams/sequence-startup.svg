@@ -77,59 +77,63 @@
 <text x="760.0" y="98" text-anchor="middle" class="s">preload + app</text>
 <line class="life" x1="760" y1="108" x2="760" y2="780"/>
 <path class="e " d="M110,124 L150,124 L150,140 L112,140" marker-end="url(#a)"/>
-<path class="e " d="M110,160 L150,160 L150,176 L112,176" marker-end="url(#a)"/>
-<path class="e " d="M110,210 L320,210" marker-end="url(#a)"/>
-<path class="e " d="M320,245 L530,245" marker-end="url(#a)"/>
-<path class="e " d="M530,270 L570,270 L570,286 L532,286" marker-end="url(#a)"/>
-<path class="e d " d="M530,316 L320,316" marker-end="url(#o)"/>
-<path class="e d " d="M320,346 L110,346" marker-end="url(#o)"/>
-<rect class="frag" x="40" y="366" width="820" height="92"/>
-<path class="fragt" d="M40,366 h38.5 v12 l-8,8 h-30.5 z"/>
-<text x="46" y="380" text-anchor="start" class="t">alt</text>
-<text x="86.5" y="381" text-anchor="start" class="s">[error · exit before ready · 60 s stall]</text>
-<path class="e " d="M320,405 L530,405" marker-end="url(#a)"/>
-<path class="e d " d="M320,440 L110,440" marker-end="url(#o)"/>
-<path class="e " d="M320,488 L530,488" marker-end="url(#a)"/>
-<path class="e " d="M110,528 L760,528" marker-end="url(#a)"/>
-<path class="e " d="M760,566 L110,566" marker-end="url(#a)"/>
-<path class="e d " d="M110,600 L760,600" marker-end="url(#o)"/>
-<path class="e " d="M760,640 L530,640" marker-end="url(#a)"/>
-<path class="e " d="M760,674 L530,674" marker-end="url(#a)"/>
-<rect class="frag" x="40" y="694" width="820" height="76"/>
-<path class="fragt" d="M40,694 h38.5 v12 l-8,8 h-30.5 z"/>
-<text x="46" y="708" text-anchor="start" class="t">opt</text>
-<text x="86.5" y="709" text-anchor="start" class="s">[before-quit · will-quit · SIGTERM]</text>
+<path class="e " d="M110,156 L150,156 L150,172 L112,172" marker-end="url(#a)"/>
+<path class="e " d="M110,200 L760,200" marker-end="url(#a)"/>
+<path class="e " d="M760,228 L110,228" marker-end="url(#a)"/>
+<path class="e " d="M110,258 L320,258" marker-end="url(#a)"/>
+<path class="e " d="M320,286 L530,286" marker-end="url(#a)"/>
+<path class="e " d="M530,306 L570,306 L570,322 L532,322" marker-end="url(#a)"/>
+<path class="e d " d="M530,344 L320,344" marker-end="url(#o)"/>
+<rect class="frag" x="40" y="360" width="820" height="92"/>
+<path class="fragt" d="M40,360 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="46" y="374" text-anchor="start" class="t">alt</text>
+<text x="86.5" y="375" text-anchor="start" class="s">[error · exit before ready · 60 s stall]</text>
+<path class="e " d="M320,399 L530,399" marker-end="url(#a)"/>
+<path class="e d " d="M320,434 L760,434" marker-end="url(#o)"/>
+<path class="e " d="M320,478 L530,478" marker-end="url(#a)"/>
+<path class="e d " d="M110,512 L760,512" marker-end="url(#o)"/>
+<path class="e " d="M760,546 L530,546" marker-end="url(#a)"/>
+<path class="e " d="M760,576 L530,576" marker-end="url(#a)"/>
+<rect class="frag" x="40" y="596" width="820" height="70"/>
+<path class="fragt" d="M40,596 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="46" y="610" text-anchor="start" class="t">opt</text>
+<text x="86.5" y="611" text-anchor="start" class="s">[exit after ready]</text>
+<path class="e " d="M320,640 L530,640" marker-end="url(#a)"/>
+<rect class="frag" x="40" y="684" width="820" height="86"/>
+<path class="fragt" d="M40,684 h38.5 v12 l-8,8 h-30.5 z"/>
+<text x="46" y="698" text-anchor="start" class="t">opt</text>
+<text x="86.5" y="699" text-anchor="start" class="s">[before-quit · will-quit · SIGTERM]</text>
 <path class="e " d="M110,735 L530,735" marker-end="url(#a)"/>
-<rect class="lblbg" x="153.0" y="125.0" width="212.5" height="13" rx="2"/>
-<text class="lbl" x="156" y="135" text-anchor="start">single-instance lock · preferAppEnv</text>
-<rect class="lblbg" x="153.0" y="161.0" width="236.1" height="13" rx="2"/>
-<text class="lbl" x="156" y="171" text-anchor="start">whenReady: migrate, IPC, Google service</text>
-<rect class="lblbg" x="96.9" y="195.0" width="236.1" height="13" rx="2"/>
-<text class="lbl" x="215.0" y="205" text-anchor="middle">spawnLocalServer(127.0.0.1, port, uuid)</text>
-<rect class="lblbg" x="318.8" y="230.0" width="212.5" height="13" rx="2"/>
-<text class="lbl" x="425.0" y="240" text-anchor="middle">utilityProcess.fork · {type: start}</text>
-<rect class="lblbg" x="573.0" y="271.0" width="194.8" height="13" rx="2"/>
-<text class="lbl" x="576" y="281" text-anchor="start">Server.listen (Basic auth, CORS)</text>
-<rect class="lblbg" x="407.2" y="301.0" width="35.5" height="13" rx="2"/>
-<text class="lbl" x="425.0" y="311" text-anchor="middle">ready</text>
-<rect class="lblbg" x="96.9" y="331.0" width="236.1" height="13" rx="2"/>
-<text class="lbl" x="215.0" y="341" text-anchor="middle">serverReady ← {url, username, password}</text>
-<rect class="lblbg" x="392.5" y="390.0" width="65.0" height="13" rx="2"/>
-<text class="lbl" x="425.0" y="400" text-anchor="middle">kill child</text>
-<rect class="lblbg" x="129.4" y="425.0" width="171.2" height="13" rx="2"/>
-<text class="lbl" x="215.0" y="435" text-anchor="middle">serverReady fails (no retry)</text>
-<rect class="lblbg" x="236.1" y="473.0" width="377.7" height="13" rx="2"/>
-<text class="lbl" x="425.0" y="483" text-anchor="middle">poll GET /api/health every 100 ms, ≤ 30 s (failure only logged)</text>
-<rect class="lblbg" x="331.7" y="513.0" width="206.6" height="13" rx="2"/>
-<text class="lbl" x="435.0" y="523" text-anchor="middle">restoreMainWindows → oc://renderer</text>
-<rect class="lblbg" x="352.4" y="551.0" width="165.3" height="13" rx="2"/>
-<text class="lbl" x="435.0" y="561" text-anchor="middle">invoke await-initialization</text>
-<rect class="lblbg" x="284.5" y="585.0" width="301.0" height="13" rx="2"/>
-<text class="lbl" x="435.0" y="595" text-anchor="middle">{url, username, password} | rejection → error page</text>
-<rect class="lblbg" x="506.3" y="625.0" width="277.4" height="13" rx="2"/>
-<text class="lbl" x="645.0" y="635" text-anchor="middle">GET /api/health, /global/health (capabilities)</text>
-<rect class="lblbg" x="532.9" y="659.0" width="224.3" height="13" rx="2"/>
-<text class="lbl" x="645.0" y="669" text-anchor="middle">SSE /global/event · bootstrap queries</text>
-<rect class="lblbg" x="169.5" y="720.0" width="301.0" height="13" rx="2"/>
-<text class="lbl" x="320.0" y="730" text-anchor="middle">{type: stop} · kill after 6 s · drafts flush/close</text>
+<rect class="lblbg" x="153.0" y="125.0" width="336.4" height="13" rx="2"/>
+<text class="lbl" x="156" y="135" text-anchor="start">single-instance lock · migrate · shell env probe (async)</text>
+<rect class="lblbg" x="153.0" y="157.0" width="183.0" height="13" rx="2"/>
+<text class="lbl" x="156" y="167" text-anchor="start">whenReady: IPC, Google service</text>
+<rect class="lblbg" x="305.1" y="185.0" width="259.7" height="13" rx="2"/>
+<text class="lbl" x="435.0" y="195" text-anchor="middle">restoreMainWindows → oc://renderer (splash)</text>
+<rect class="lblbg" x="328.8" y="213.0" width="212.5" height="13" rx="2"/>
+<text class="lbl" x="435.0" y="223" text-anchor="middle">invoke await-initialization (waits)</text>
+<rect class="lblbg" x="111.7" y="243.0" width="206.6" height="13" rx="2"/>
+<text class="lbl" x="215.0" y="253" text-anchor="middle">spawnLocalServer · after shell env</text>
+<rect class="lblbg" x="318.8" y="271.0" width="212.5" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="281" text-anchor="middle">utilityProcess.fork · {type: start}</text>
+<rect class="lblbg" x="573.0" y="307.0" width="194.8" height="13" rx="2"/>
+<text class="lbl" x="576" y="317" text-anchor="start">Server.listen (Basic auth, CORS)</text>
+<rect class="lblbg" x="407.2" y="329.0" width="35.5" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="339" text-anchor="middle">ready</text>
+<rect class="lblbg" x="392.5" y="384.0" width="65.0" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="394" text-anchor="middle">kill child</text>
+<rect class="lblbg" x="383.6" y="419.0" width="312.8" height="13" rx="2"/>
+<text class="lbl" x="540.0" y="429" text-anchor="middle">await-initialization rejects → error page (no retry)</text>
+<rect class="lblbg" x="268.6" y="463.0" width="312.8" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="473" text-anchor="middle">poll health every 100 ms, ≤ 30 s, aborted on timeout</text>
+<rect class="lblbg" x="358.2" y="497.0" width="153.5" height="13" rx="2"/>
+<text class="lbl" x="435.0" y="507" text-anchor="middle">{url, username, password}</text>
+<rect class="lblbg" x="506.3" y="531.0" width="277.4" height="13" rx="2"/>
+<text class="lbl" x="645.0" y="541" text-anchor="middle">GET /api/health, /global/health (capabilities)</text>
+<rect class="lblbg" x="532.9" y="561.0" width="224.3" height="13" rx="2"/>
+<text class="lbl" x="645.0" y="571" text-anchor="middle">SSE /global/event · bootstrap queries</text>
+<rect class="lblbg" x="236.1" y="625.0" width="377.7" height="13" rx="2"/>
+<text class="lbl" x="425.0" y="635" text-anchor="middle">restart: same port and password, 1–30 s backoff, ≤ 5 per 10 min</text>
+<rect class="lblbg" x="116.4" y="720.0" width="407.2" height="13" rx="2"/>
+<text class="lbl" x="320.0" y="730" text-anchor="middle">quit waits ≤ 8 s: {type: stop} · kill after 6 s · drafts flush/close</text>
 </svg>

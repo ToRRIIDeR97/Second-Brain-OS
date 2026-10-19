@@ -162,7 +162,7 @@ Later turns in the same runtime send only the user message. See
 | Sidebar navigation (rail, Projects panel, Brain, Other threads) and drafts | Subsystem | Component; text in [README](README.md#product-entry-points-and-persistence) and the [navigation map](../product/NAVIGATION-MAP-V1.md) | `app/src/components/second-brain-sidebar.tsx`, `app/src/components/sidebar/sidebar-controller.ts`, `app/src/features/second-brain/sidebar-threads.ts`, `app/src/context/global-sync/home-session-index.ts` (recent-session index shared with Home), `app/src/context/drafts.tsx`, `app/src/components/sidebar/dialog-archived-threads.tsx` |
 | Page frame and visual system (Material 3 shape and motion tokens) | Subsystem | Text in [README](README.md#product-entry-points-and-persistence) | `app/src/components/page.tsx`, `ui/src/v2/styles/theme.css`, `ui/src/theme/v2/mapping.ts`, `ui/src/v2/components/*-v2.css` |
 | Preload and IPC | Subsystem | Component, Sequence: startup | `desktop/src/preload/index.ts`, `desktop/src/main/ipc.ts` |
-| Server launch and lifecycle | Subsystem | Deployment, State: sidecar, Sequence: startup | `desktop/src/main/server.ts`, `desktop/src/main/sidecar.ts` |
+| Server launch and lifecycle | Subsystem | Deployment, State: sidecar, Sequence: startup | `desktop/src/main/server.ts`, `desktop/src/main/sidecar.ts`, `desktop/src/main/sidecar-supervisor.ts` |
 | Second Brain notes, projects, calendar | Subsystem | Component, Class, Activity: write, State: project status | `opencode/src/knowledge/`, `opencode/src/project/brain.ts`, `opencode/src/planner/calendar.ts` |
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
@@ -211,7 +211,9 @@ The following were inferred from source and haven't been confirmed at runtime.
   packaged beta or production builds it would also be missing, because only
   the development channel bundles it.
 - **Server health checks.** A health-check failure after the server reports
-  ready is only logged. The renderer isn't told.
+  ready is only logged. The renderer isn't told. A server that exits after
+  ready is restarted on the same port and password with backoff
+  (`desktop/src/main/sidecar-supervisor.ts`); no IPC event announces it.
 
 ## Not drawn
 

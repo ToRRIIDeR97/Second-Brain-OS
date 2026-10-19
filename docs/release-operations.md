@@ -77,8 +77,9 @@ Upgrade consequences:
 - Automatic updates stay disabled (`UPDATER_ENABLED=false`, `publish: null`),
   so there is no update-feed continuity to keep.
 
-`userData` copy (`desktop/src/main/user-data-migration.ts`), run once before
-`app.setPath("userData")`:
+`userData` copy (`desktop/src/main/user-data-migration.ts`), run once after
+`app.setPath("userData")` and the single-instance lock, before logging and the
+stores open:
 
 - Only the dev channel (packaged dev builds and unpackaged dev runs) copies
   from `%APPDATA%/ai.opencode.desktop.dev`. The release workflow only built
@@ -171,6 +172,28 @@ Re-run the migration: quit the app, then delete `.legacy-storage-migrated` in a
 `tenon-workbench` folder to fill in missing files from the legacy folder (existing
 files are kept), or rename the whole `tenon-workbench` folder for a clean copy.
 Start the app.
+
+## Desktop startup and quit
+
+`desktop/src/main/index.ts`, `server.ts` and `sidecar-supervisor.ts`:
+
+- A second launch takes the single-instance lock right after setting
+  `userData`, hands its `tenon://` links to the running app, and quits before
+  the `userData` copy, logging and the crash reporter.
+- Windows open as soon as Electron is ready and show a splash until the local
+  server passes its health check, or the 30 s health wait ends. The server
+  start itself can take up to the 60 s stall timeout, for example during the
+  first-start storage copy.
+- The login-shell environment probe (`-il`, then `-l`, 5 s each) runs in the
+  background. The server is spawned after it finishes.
+- If the server exits after it was ready, it is restarted on the same port and
+  password after 1, 2, 4, 8 and 16 s, at most 5 times in 10 minutes. Restarts
+  are logged in the `utility` log; no IPC event tells the renderer, which
+  reconnects through its own health checks. After the limit, restart the app.
+- On quit, the app waits up to 8 s for the server to stop (it is killed after
+  6 s), then exits.
+- Uncaught exceptions and unhandled rejections in the main process are written
+  to the main log.
 
 ## Release limits
 
