@@ -8,6 +8,7 @@ import type {
   SessionListInput,
 } from "@opencode-ai/client/promise"
 import { QueryClient } from "@tanstack/solid-query"
+import { reconcile } from "solid-js/store"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessions } from "./global-sync/session-load"
 import {
@@ -17,12 +18,15 @@ import {
   loadMcpResourcesQuery,
   reconcileActiveSessionStatuses,
   seedActiveSessionStatuses,
+  snapshotSessionStatuses,
 } from "./server-sync"
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
 
 type McpApi = ServerApi["mcp"]
+
+const newSession = () => createServerSession({} as OpencodeClient)
 
 describe("MCP queries", () => {
   test("loads current servers for the requested location", async () => {
@@ -91,7 +95,7 @@ describe("active session query", () => {
   })
 
   test("does not overwrite statuses already written by events", () => {
-    const session = createServerSession({} as OpencodeClient)
+    const session = newSession()
     session.set("session_status", "ses_retry", { type: "retry", attempt: 2, message: "retrying", next: 10 })
 
     seedActiveSessionStatuses(session, {
@@ -121,17 +125,17 @@ describe("reconnect resync", () => {
   })
 
   test("marks sessions missing from the active list idle", () => {
-    const session = createServerSession({} as OpencodeClient)
+    const session = newSession()
     session.set("session_status", "ses_finished", { type: "busy" })
     session.set("session_status", "ses_retry", { type: "retry", attempt: 1, message: "retrying", next: 10 })
     session.set("session_status", "ses_running", { type: "retry", attempt: 1, message: "retrying", next: 10 })
     session.set("session_status", "ses_started", { type: "idle" })
 
-    reconcileActiveSessionStatuses(session, {
-      ses_running: { type: "running" },
-      ses_started: { type: "running" },
-      ses_new: { type: "running" },
-    })
+    reconcileActiveSessionStatuses(
+      session,
+      { ses_running: { type: "running" }, ses_started: { type: "running" }, ses_new: { type: "running" } },
+      snapshotSessionStatuses(session),
+    )
 
     expect(session.data.session_status).toEqual({
       ses_finished: { type: "idle" },
@@ -139,6 +143,22 @@ describe("reconnect resync", () => {
       ses_running: { type: "retry", attempt: 1, message: "retrying", next: 10 },
       ses_started: { type: "busy" },
       ses_new: { type: "busy" },
+    })
+  })
+
+  test("leaves statuses that changed while the request was in flight", () => {
+    const session = newSession()
+    session.set("session_status", "ses_finished", { type: "busy" })
+    const before = snapshotSessionStatuses(session)
+    // Events that arrive after the request: one run starts, another finishes.
+    session.set("session_status", "ses_started", { type: "busy" })
+    session.set("session_status", "ses_finished", reconcile({ type: "idle" }))
+
+    reconcileActiveSessionStatuses(session, { ses_finished: { type: "running" } }, before)
+
+    expect(session.data.session_status).toEqual({
+      ses_finished: { type: "idle" },
+      ses_started: { type: "busy" },
     })
   })
 })

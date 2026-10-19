@@ -75,9 +75,11 @@ so a thread created, archived, unarchived or pinned anywhere, including in a
 Project that is not open, updates both lists without a reload. A directory
 list contributes only threads that run in that directory, because events
 reach only their own directory's list. The global event stream reconnects with
-exponential backoff and jitter (up to 20 s, reset by any received event). On
+exponential backoff and jitter (up to 20 s, reset by any event after
+`server.connected`, cut short when the stream is stopped). On
 every `server.connected` after the first, and on `global.disposed`,
-`serverSync` reloads every loaded directory list and reconciles busy statuses
+`serverSync` reloads every loaded directory list and reconciles busy statuses (one
+resync at a time; statuses changed by newer events are kept)
 against a fresh `session.active` call, so threads deleted, archived, renamed or
 finished while disconnected do not linger. Projects page mutations invalidate
 the sidebar's project-threads query (`invalidateProjectThreads`). The renderer

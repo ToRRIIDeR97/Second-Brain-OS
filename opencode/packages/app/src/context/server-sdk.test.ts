@@ -3,6 +3,7 @@ import {
   adaptLegacyServerEvent,
   adaptServerEvent,
   coalesceServerEvents,
+  createInterruptibleWait,
   enqueueServerEvent,
   reconnectDelay,
   resumeStreamAfterPageShow,
@@ -30,6 +31,20 @@ describe("reconnectDelay", () => {
     expect(reconnectDelay(3, () => 1)).toBe(2_000)
     expect(reconnectDelay(20, () => 0)).toBe(10_000)
     expect(reconnectDelay(20, () => 1)).toBe(20_000)
+  })
+})
+
+describe("createInterruptibleWait", () => {
+  test("interrupt ends a pending wait early", async () => {
+    const backoff = createInterruptibleWait()
+    const startedAt = Date.now()
+    const pending = backoff.wait(20_000)
+    backoff.interrupt()
+    await pending
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+    // Interrupting with nothing pending is a no-op, and later waits still time out normally.
+    backoff.interrupt()
+    await backoff.wait(1)
   })
 })
 

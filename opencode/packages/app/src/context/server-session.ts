@@ -20,12 +20,7 @@ import { rootSession } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
 import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
-import {
-  isSessionMovedEvent,
-  isSessionRevertEvent,
-  sessionMovedPath,
-  type SessionMovedData,
-} from "./global-sync/event-names"
+import { isSessionMovedEvent, isSessionRevertEvent, sessionMovedData } from "./global-sync/event-names"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
 
@@ -1003,14 +998,14 @@ export function createServerSession(
     const info = data.info[sessionID]
     if (event.type === "session.renamed" && info)
       remember({ ...info, title: event.data.title, time: { ...info.time, updated: event.created } })
-    if (isSessionMovedEvent(eventType) && info) {
-      const moved = event.data as SessionMovedData
+    const moved = isSessionMovedEvent(eventType) ? sessionMovedData(event.data) : undefined
+    if (moved && info) {
       remember({
         ...info,
         projectID: moved.projectID ?? info.projectID,
-        workspaceID: moved.location.workspaceID,
-        directory: moved.location.directory,
-        path: sessionMovedPath(moved),
+        workspaceID: moved.workspaceID,
+        directory: moved.directory,
+        path: moved.path,
         time: { ...info.time, updated: "created" in event ? event.created : info.time.updated },
       })
     }

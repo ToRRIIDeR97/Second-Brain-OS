@@ -225,6 +225,27 @@ export function reconnectDelay(failures: number, random = Math.random) {
   return Math.round(ceiling / 2 + (random() * ceiling) / 2)
 }
 
+// A timer that `interrupt()` ends early, so stopping the stream never waits out a long backoff.
+export function createInterruptibleWait() {
+  let wake: (() => void) | undefined
+  return {
+    wait(ms: number) {
+      return new Promise<void>((resolve) => {
+        const done = () => {
+          clearTimeout(timer)
+          if (wake === done) wake = undefined
+          resolve()
+        }
+        const timer = setTimeout(done, ms)
+        wake = done
+      })
+    },
+    interrupt() {
+      wake?.()
+    },
+  }
+}
+
 export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
   if (!event.persisted) return
   start()
@@ -321,6 +342,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 
   let streamErrorLogged = false
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  const backoff = createInterruptibleWait()
   let attempt: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
@@ -346,8 +368,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
           let yielded = Date.now()
           for await (const event of events) {
             streamErrorLogged = false
-            failures = 0
             if (event.payload.type === "sync") continue
+            // `server.connected` only proves the server accepted the stream; a server that accepts and
+            // then drops must keep backing off. Any later event (heartbeats included) resets it.
+            if (event.payload.type !== "server.connected") failures = 0
             const directory = event.directory ?? "global"
             const payload = adaptLegacyServerEvent(event.payload, directory)
             if (enqueueServerEvent(queue, { directory, payload })) schedule()
@@ -371,7 +395,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         }
 
         if (abort.signal.aborted || !started || generation !== active) return
-        await wait(reconnectDelay(failures++))
+        await backoff.wait(reconnectDelay(failures++))
       }
     })().finally(() => {
       if (run !== current) return
@@ -386,6 +410,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     started = false
     generation++
     attempt?.abort()
+    backoff.interrupt()
   }
 
   onMount(() => {

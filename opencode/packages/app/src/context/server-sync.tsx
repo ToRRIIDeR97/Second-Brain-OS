@@ -59,7 +59,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
-import { isSessionMovedEvent, SERVER_EVENT_NAMES, type SessionMovedData } from "./global-sync/event-names"
+import { isSessionMovedEvent, SERVER_EVENT_NAMES, sessionMovedData } from "./global-sync/event-names"
 
 type GlobalStore = {
   ready: boolean
@@ -177,20 +177,31 @@ export function seedActiveSessionStatuses(
   }
 }
 
+export function snapshotSessionStatuses(session: Pick<ServerSession, "data">) {
+  return Object.fromEntries(
+    Object.entries(session.data.session_status).map(([sessionID, status]) => [sessionID, JSON.stringify(status)]),
+  )
+}
+
 // A reconnected stream may have missed status events, so a "working" Session can be idle by now.
 // Sessions absent from the fresh active list become idle; active ones that look idle become busy.
+// `before` is the snapshot taken when the request started: a status that changed since then came
+// from a newer event than the response, so it is left alone.
 export function reconcileActiveSessionStatuses(
   session: Pick<ServerSession, "data" | "set">,
   active: SessionActiveOutput | Record<string, SessionStatus>,
+  before: Record<string, string>,
 ) {
+  const unchanged = (sessionID: string) => before[sessionID] === JSON.stringify(session.data.session_status[sessionID])
   batch(() => {
     for (const [sessionID, status] of Object.entries(session.data.session_status)) {
-      if (status?.type === "idle" || sessionID in active) continue
+      if (status?.type === "idle" || sessionID in active || !unchanged(sessionID)) continue
       session.set("session_status", sessionID, reconcile({ type: "idle" }))
     }
     for (const sessionID of Object.keys(active)) {
       const current = session.data.session_status[sessionID]
       if (current !== undefined && current.type !== "idle") continue
+      if (!unchanged(sessionID)) continue
       const status = active[sessionID]
       session.set("session_status", sessionID, status?.type === "running" ? { type: "busy" } : status)
     }
@@ -568,12 +579,27 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 
   const resyncNeeded = createResyncTracker()
+  // One resync at a time; a reconnect during a run queues exactly one more.
+  let resyncRun: Promise<unknown> | undefined
+  let resyncAgain = false
   const resync = () => {
-    void activeSessionsQuery.refetch().then((result) => {
-      if (result.isSuccess) reconcileActiveSessionStatuses(session, result.data)
+    if (resyncRun) {
+      resyncAgain = true
+      return
+    }
+    const before = snapshotSessionStatuses(session)
+    resyncRun = Promise.allSettled([
+      activeSessionsQuery.refetch().then((result) => {
+        if (result.isSuccess) reconcileActiveSessionStatuses(session, result.data, before)
+      }),
+      // Deletes, archives and renames missed while disconnected only show up in a fresh list.
+      ...[...sessionMeta.keys()].map((key) => loadSessions(key, { force: true })),
+    ]).finally(() => {
+      resyncRun = undefined
+      if (!resyncAgain) return
+      resyncAgain = false
+      resync()
     })
-    // Deletes, archives and renames missed while disconnected only show up in a fresh list.
-    for (const key of sessionMeta.keys()) void loadSessions(key, { force: true })
   }
 
   const unsub = serverSDK.event.listen((e) => {
@@ -627,9 +653,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       return
     }
 
-    const moved = isSessionMovedEvent(event.current?.type)
-    if (moved && event.current) {
-      const info = session.get((event.current.data as SessionMovedData).sessionID)
+    const moved = isSessionMovedEvent(event.current?.type) ? sessionMovedData(event.current?.data) : undefined
+    if (moved) {
+      const info = session.get(moved.sessionID)
       if (info) indexSession(info)
     }
     if (event.current?.type === "session.forked")
@@ -642,7 +668,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     if (!existing) return
     children.mark(key)
     if (
-      moved ||
+      moved !== undefined ||
       // event.current?.type === "session.archived" ||
       event.current?.type === "session.forked" ||
       eventType === "command.updated" ||

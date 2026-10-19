@@ -253,7 +253,7 @@ describe("server session", () => {
   })
 
   test("applies the server's session.next.moved event to session info", () => {
-    const store = createServerSession({} as OpencodeClient)
+    const store = setup({}).store
     store.remember(session("child"))
 
     store.applyV2({
