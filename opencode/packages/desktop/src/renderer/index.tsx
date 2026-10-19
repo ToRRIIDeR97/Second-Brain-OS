@@ -345,7 +345,8 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
     return next satisfies Locale
   }
 
-  // Fetch sidecar credentials (available immediately, before health check)
+  // Sidecar credentials resolve once the server passes its startup health check (or that wait times out);
+  // the window opens earlier and shows the splash until then.
   const [sidecar] = createResource(() => window.api.awaitInitialization())
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())

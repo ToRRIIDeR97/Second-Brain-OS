@@ -30,6 +30,8 @@ export function initLogging() {
   log.initialize({ preload: false, spyRendererConsole: !app.isPackaged })
   initConsoleTransport()
   cleanup()
+  // Logs uncaught exceptions and unhandled rejections in the main process without a blocking dialog.
+  log.errorHandler.startCatching({ showDialog: false })
   return (logger = log)
 }
 

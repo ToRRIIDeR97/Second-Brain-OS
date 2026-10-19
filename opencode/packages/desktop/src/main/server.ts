@@ -7,8 +7,6 @@ import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
 
-export type HealthCheck = { wait: Promise<void> }
-
 type SidecarMessage =
   | { type: "ready" }
   | { type: "stopped" }
@@ -41,9 +39,10 @@ export function setDefaultServerUrl(url: string | null) {
   getStore().delete(DEFAULT_SERVER_URL_KEY)
 }
 
-export function preferAppEnv(userDataPath: string) {
+// Async so the login-shell probe runs alongside app startup; it must finish before the sidecar env is built.
+export async function preferAppEnv(userDataPath: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? loadShellEnv(shell, getLogger()) : null
+  const shellEnv = shell ? await loadShellEnv(shell, getLogger()) : null
   Object.assign(process.env, {
     ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
@@ -54,12 +53,8 @@ export function preferAppEnv(userDataPath: string) {
   return shellEnv
 }
 
-export async function spawnLocalServer(
-  hostname: string,
-  port: number,
-  password: string,
-  options: SpawnLocalServerOptions,
-) {
+// Returns at once so the caller can stop the child while it is still starting.
+export function spawnLocalServer(hostname: string, port: number, password: string, options: SpawnLocalServerOptions) {
   const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
   const child = utilityProcess.fork(sidecar, [], {
     cwd: process.cwd(),
@@ -87,7 +82,7 @@ export async function spawnLocalServer(
   child.stdout?.on("data", (chunk: Buffer) => options.onStdout?.(chunk.toString("utf8").trimEnd()))
   child.stderr?.on("data", (chunk: Buffer) => options.onStderr?.(chunk.toString("utf8").trimEnd()))
 
-  await new Promise<void>((resolve, reject) => {
+  const ready = new Promise<void>((resolve, reject) => {
     let done = false
     let timeout: NodeJS.Timeout
 
@@ -141,52 +136,48 @@ export async function spawnLocalServer(
     throw error
   })
 
-  const wait = (async () => {
+  // Polls until healthy; stops when the signal aborts (for example on a timeout) or the child exits.
+  const waitHealthy = async (signal: AbortSignal) => {
+    await ready
+    const gone = new AbortController()
+    void exit.promise.then(() => gone.abort())
+    const stop = AbortSignal.any([signal, gone.signal])
     const url = `http://${hostname}:${port}`
-    let healthy = false
-    const gone = exit.promise.then((code) => {
-      if (healthy) return
-      throw new Error(`Sidecar exited before health check passed with code ${code}`)
-    })
-
-    const ready = async () => {
-      while (true) {
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        if (await checkHealth(url, password)) {
-          healthy = true
-          return
-        }
-      }
+    while (!stop.aborted) {
+      await delay(100)
+      if (await checkHealth(url, password, stop)) return
     }
-
-    await Promise.race([ready(), gone])
-  })()
+    if (exited) throw new Error(`Sidecar exited before health check passed with code ${await exit.promise}`)
+    throw new Error("Sidecar health check aborted")
+  }
 
   let stopping: Promise<void> | undefined
 
   return {
-    listener: {
-      stop: () => {
-        if (stopping) return stopping
-        if (exited) return Promise.resolve()
-        child.postMessage({ type: "stop" })
-        stopping = Promise.race([
-          exit.promise.then(() => undefined),
-          delay(SIDECAR_STOP_TIMEOUT).then(() => {
-            if (!exited) child.kill()
-          }),
-        ])
-        return stopping
-      },
+    ready,
+    exited: exit.promise,
+    waitHealthy,
+    stop: () => {
+      if (stopping) return stopping
+      if (exited) return Promise.resolve()
+      child.postMessage({ type: "stop" })
+      stopping = Promise.race([
+        exit.promise.then(() => undefined),
+        delay(SIDECAR_STOP_TIMEOUT).then(() => {
+          if (!exited) child.kill()
+        }),
+      ])
+      return stopping
     },
-    health: { wait },
   }
 }
 
-export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
-  let healthUrls: URL[]
+// The path that last answered is tried first, so later polls make one request instead of two.
+let healthPaths = ["/api/health", "/global/health"]
+
+export async function checkHealth(url: string, password?: string | null, signal?: AbortSignal): Promise<boolean> {
   try {
-    healthUrls = [new URL("/api/health", url), new URL("/global/health", url)]
+    new URL(url)
   } catch {
     return false
   }
@@ -197,14 +188,17 @@ export async function checkHealth(url: string, password?: string | null): Promis
     headers.set("authorization", `Basic ${auth}`)
   }
 
-  for (const healthUrl of healthUrls) {
+  for (const path of healthPaths) {
+    if (signal?.aborted) return false
     try {
-      const res = await fetch(healthUrl, {
+      const res = await fetch(new URL(path, url), {
         method: "GET",
         headers,
-        signal: AbortSignal.timeout(3000),
+        signal: signal ? AbortSignal.any([AbortSignal.timeout(3000), signal]) : AbortSignal.timeout(3000),
       })
-      if (res.ok) return true
+      if (!res.ok) continue
+      healthPaths = [path, ...healthPaths.filter((item) => item !== path)]
+      return true
     } catch {}
   }
   return false

@@ -11,13 +11,17 @@ import type {
 import { net, safeStorage, shell } from "electron"
 import { getStore } from "./store"
 import {
+  createGoogleAccessTokens,
   googleEventId,
   googleEventPayload,
   googleScopes,
   googleTaskPayload,
   normalizeGoogleEvent,
   normalizeGoogleTask,
+  outboxFailureState,
   pkceChallenge,
+  pruneOutbox,
+  requestGoogleToken,
   type GoogleEventResponse,
   type GoogleTaskResponse,
 } from "./google-calendar-domain"
@@ -63,11 +67,13 @@ type StoredTaskOutbox = {
 
 type TaskListResponse = { id?: string; title?: string }
 
-type TokenResponse = {
-  access_token?: string
-  refresh_token?: string
-  error?: string
-}
+const netFetch = (input: string, init: RequestInit) => net.fetch(input, init)
+// A rotated refresh token is stored on its own, so no stale copy of the config can overwrite it.
+const accessTokens = createGoogleAccessTokens({
+  fetch: netFetch,
+  endpoint: tokenEndpoint,
+  onRotate: (refreshToken) => getStore(storeName).set("refreshToken", encrypt(refreshToken)),
+})
 
 export function createGoogleCalendarService(): GoogleCalendarPlatform {
   let busy = false
@@ -114,6 +120,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
       const tokens = await authorize({ ...input, windowId: windowId! })
       if (!tokens.access_token || !tokens.refresh_token) throw new Error("google_refresh_token_missing")
       const account = await providerJson<{ summary?: string; id?: string }>(calendarEndpoint, tokens.access_token)
+      accessTokens.clear()
       writeConfig({
         clientId: input.clientId.trim(),
         clientSecret: input.clientSecret.trim(),
@@ -132,30 +139,17 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
     const config = requireConfig()
     busy = true
     try {
+      // Exchanged first, so a revoked grant stops the sync before any queued write is retried.
+      await accessTokens.get(config)
       await retryOutbox(config)
       await retryTaskOutbox(config)
-      const accessToken = await refreshAccessToken(config)
-      const events: GoogleCalendarProviderEvent[] = []
-      let pageToken: string | undefined
-      do {
-        const url = new URL(eventsEndpoint)
-        url.searchParams.set("singleEvents", "true")
-        url.searchParams.set("showDeleted", "false")
-        url.searchParams.set("maxResults", "2500")
-        url.searchParams.set("timeMin", rangeDate(-365))
-        url.searchParams.set("timeMax", rangeDate(730))
-        if (pageToken) url.searchParams.set("pageToken", pageToken)
-        const page = await providerJson<{ items?: GoogleEventResponse[]; nextPageToken?: string }>(url, accessToken)
-        for (const item of page.items ?? []) {
-          const event = normalizeGoogleEvent(item)
-          if (event) events.push(event)
-        }
-        pageToken = page.nextPageToken
-      } while (pageToken)
-      const tasks = await fetchGoogleTasks(accessToken)
-      const next = { ...config, lastSyncedAt: new Date().toISOString() }
-      writeConfig(next)
-      return { events, tasks, connection: await status() }
+      const result = await accessTokens.with(config, async (accessToken) => ({
+        events: await fetchGoogleEvents(accessToken),
+        tasks: await fetchGoogleTasks(accessToken),
+      }))
+      // Only the timestamp: `config` may hold a refresh token that was rotated during this sync.
+      getStore(storeName).set("lastSyncedAt", new Date().toISOString())
+      return { events: result.events, tasks: result.tasks, connection: await status() }
     } finally {
       busy = false
     }
@@ -239,6 +233,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
           .catch(() => undefined)
       }
       getStore(storeName).clear()
+      accessTokens.clear()
       return status()
     } finally {
       busy = false
@@ -246,6 +241,27 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
   }
 
   return { status, connect, sync, write, writeTask, disconnect }
+}
+
+async function fetchGoogleEvents(accessToken: string) {
+  const events: GoogleCalendarProviderEvent[] = []
+  let pageToken: string | undefined
+  do {
+    const url = new URL(eventsEndpoint)
+    url.searchParams.set("singleEvents", "true")
+    url.searchParams.set("showDeleted", "false")
+    url.searchParams.set("maxResults", "2500")
+    url.searchParams.set("timeMin", rangeDate(-365))
+    url.searchParams.set("timeMax", rangeDate(730))
+    if (pageToken) url.searchParams.set("pageToken", pageToken)
+    const page = await providerJson<{ items?: GoogleEventResponse[]; nextPageToken?: string }>(url, accessToken)
+    for (const item of page.items ?? []) {
+      const event = normalizeGoogleEvent(item)
+      if (event) events.push(event)
+    }
+    pageToken = page.nextPageToken
+  } while (pageToken)
+  return events
 }
 
 async function fetchGoogleTasks(accessToken: string) {
@@ -339,7 +355,7 @@ async function authorize(input: {
       callback.promise,
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("google_oauth_timeout")), oauthTimeoutMs)),
     ])
-    return tokenRequest({
+    return requestGoogleToken(netFetch, tokenEndpoint, {
       client_id: input.clientId.trim(),
       client_secret: input.clientSecret.trim(),
       code,
@@ -352,30 +368,6 @@ async function authorize(input: {
   }
 }
 
-async function tokenRequest(input: Record<string, string>) {
-  const response = await net.fetch(tokenEndpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(input),
-    signal: AbortSignal.timeout(30_000),
-  })
-  const value = (await response.json().catch(() => ({}))) as TokenResponse
-  if (!response.ok || value.error) throw new Error("google_token_exchange_failed")
-  return value
-}
-
-async function refreshAccessToken(config: Config) {
-  const tokens = await tokenRequest({
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-    refresh_token: config.refreshToken,
-    grant_type: "refresh_token",
-  })
-  if (!tokens.access_token) throw new Error("google_reconnect_required")
-  if (tokens.refresh_token) writeConfig({ ...config, refreshToken: tokens.refresh_token })
-  return tokens.access_token
-}
-
 async function providerJson<T>(input: string | URL, accessToken: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   headers.set("Authorization", `Bearer ${accessToken}`)
@@ -385,7 +377,10 @@ async function providerJson<T>(input: string | URL, accessToken: string, init?: 
     headers,
     signal: AbortSignal.timeout(30_000),
   })
-  if (response.status === 401) throw new Error("google_reconnect_required")
+  if (response.status === 401) {
+    accessTokens.clear()
+    throw new Error("google_reconnect_required")
+  }
   if (response.status === 412) throw new Error("google_conflict")
   if (!response.ok) throw new Error(`google_http_${response.status}`)
   return (await response.json()) as T
@@ -394,20 +389,20 @@ async function providerJson<T>(input: string | URL, accessToken: string, init?: 
 async function dispatch(config: Config, operation: StoredOutbox) {
   updateOperation(operation.id, { state: "pending", attempts: operation.attempts + 1, lastError: undefined })
   try {
-    const accessToken = await refreshAccessToken(config)
     const input = operation.input
-    let result: GoogleCalendarProviderEvent | null
-    if (input.kind === "delete") {
-      const headers = input.event.etag ? { "If-Match": input.event.etag } : undefined
-      const response = await net.fetch(`${eventsEndpoint}/${encodeURIComponent(input.event.providerId)}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}`, ...headers },
-        signal: AbortSignal.timeout(30_000),
-      })
-      if (response.status === 412) throw new Error("google_conflict")
-      if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
-      result = null
-    } else {
+    const result = await accessTokens.with(config, async (accessToken): Promise<GoogleCalendarProviderEvent | null> => {
+      if (input.kind === "delete") {
+        const headers = input.event.etag ? { "If-Match": input.event.etag } : undefined
+        const response = await net.fetch(`${eventsEndpoint}/${encodeURIComponent(input.event.providerId)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}`, ...headers },
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (response.status === 401) throw new Error("google_reconnect_required")
+        if (response.status === 412) throw new Error("google_conflict")
+        if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
+        return null
+      }
       const id = input.kind === "create" ? googleEventId(input.idempotencyKey) : input.event.providerId
       const payload = {
         ...googleEventPayload(input.event),
@@ -415,27 +410,21 @@ async function dispatch(config: Config, operation: StoredOutbox) {
       }
       const endpoint = input.kind === "create" ? eventsEndpoint : `${eventsEndpoint}/${encodeURIComponent(id)}`
       const headers = input.kind === "update" && input.event.etag ? { "If-Match": input.event.etag } : undefined
-      try {
-        const saved = await providerJson<GoogleEventResponse>(endpoint, accessToken, {
-          method: input.kind === "create" ? "POST" : "PATCH",
-          headers,
-          body: JSON.stringify(payload),
-        })
-        result = normalizeGoogleEvent(saved) ?? null
-      } catch (error) {
+      const saved = await providerJson<GoogleEventResponse>(endpoint, accessToken, {
+        method: input.kind === "create" ? "POST" : "PATCH",
+        headers,
+        body: JSON.stringify(payload),
+      }).catch((error) => {
         if (input.kind !== "create" || !(error instanceof Error) || error.message !== "google_http_409") throw error
-        result =
-          normalizeGoogleEvent(
-            await providerJson<GoogleEventResponse>(`${eventsEndpoint}/${encodeURIComponent(id)}`, accessToken),
-          ) ?? null
-      }
-    }
+        return providerJson<GoogleEventResponse>(`${eventsEndpoint}/${encodeURIComponent(id)}`, accessToken)
+      })
+      return normalizeGoogleEvent(saved) ?? null
+    })
     updateOperation(operation.id, { state: "succeeded", result, lastError: undefined })
     return { state: "synced" as const, event: result }
   } catch (error) {
     const message = error instanceof Error ? error.message : "google_write_failed"
-    const state: "conflict" | "failed" | "offline" =
-      message === "google_conflict" ? "conflict" : message.startsWith("google_http_") ? "failed" : "offline"
+    const state = outboxFailureState(message, operation.attempts + 1)
     updateOperation(operation.id, { state, lastError: message })
     return { state, event: pendingEvent(operation.input) }
   }
@@ -451,23 +440,23 @@ async function retryOutbox(config: Config) {
 async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
   updateTaskOperation(operation.id, { state: "pending", attempts: operation.attempts + 1, lastError: undefined })
   try {
-    const accessToken = await refreshAccessToken(config)
     const input = operation.input
     const collection = `${tasksEndpoint}/${encodeURIComponent(input.task.taskListId)}/tasks`
-    let result: GoogleTaskProviderTask | null
-    if (input.kind === "delete") {
-      const response = await net.fetch(`${collection}/${encodeURIComponent(input.task.providerId)}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          ...(input.task.etag ? { "If-Match": input.task.etag } : {}),
-        },
-        signal: AbortSignal.timeout(30_000),
-      })
-      if (response.status === 412) throw new Error("google_conflict")
-      if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
-      result = null
-    } else {
+    const result = await accessTokens.with(config, async (accessToken): Promise<GoogleTaskProviderTask | null> => {
+      if (input.kind === "delete") {
+        const response = await net.fetch(`${collection}/${encodeURIComponent(input.task.providerId)}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(input.task.etag ? { "If-Match": input.task.etag } : {}),
+          },
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (response.status === 401) throw new Error("google_reconnect_required")
+        if (response.status === 412) throw new Error("google_conflict")
+        if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
+        return null
+      }
       const endpoint =
         input.kind === "create" ? collection : `${collection}/${encodeURIComponent(input.task.providerId)}`
       const saved = await providerJson<GoogleTaskResponse>(endpoint, accessToken, {
@@ -475,15 +464,15 @@ async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
         headers: input.kind === "update" && input.task.etag ? { "If-Match": input.task.etag } : undefined,
         body: JSON.stringify(googleTaskPayload(input.task)),
       })
-      result = normalizeGoogleTask(saved, { id: input.task.taskListId, title: input.task.taskListTitle }) ?? null
-      if (!result) throw new Error("google_task_invalid_response")
-    }
+      const task = normalizeGoogleTask(saved, { id: input.task.taskListId, title: input.task.taskListTitle })
+      if (!task) throw new Error("google_task_invalid_response")
+      return task
+    })
     updateTaskOperation(operation.id, { state: "succeeded", result, lastError: undefined })
     return { state: "synced" as const, task: result }
   } catch (error) {
     const message = error instanceof Error ? error.message : "google_task_write_failed"
-    const state: "conflict" | "failed" | "offline" =
-      message === "google_conflict" ? "conflict" : message.startsWith("google_http_") ? "failed" : "offline"
+    const state = outboxFailureState(message, operation.attempts + 1)
     updateTaskOperation(operation.id, { state, lastError: message })
     return { state, task: operation.input.kind === "delete" ? operation.input.task : operation.input.task }
   }
@@ -594,7 +583,7 @@ function readOutbox() {
 }
 
 function persistOutbox(value: StoredOutbox[]) {
-  getStore(storeName).set("outbox", value.slice(-100))
+  getStore(storeName).set("outbox", pruneOutbox(value))
 }
 
 function updateOperation(id: string, patch: Partial<StoredOutbox>) {
@@ -608,7 +597,7 @@ function readTaskOutbox() {
 }
 
 function persistTaskOutbox(value: StoredTaskOutbox[]) {
-  getStore(storeName).set("taskOutbox", value.slice(-100))
+  getStore(storeName).set("taskOutbox", pruneOutbox(value))
 }
 
 function updateTaskOperation(id: string, patch: Partial<StoredTaskOutbox>) {

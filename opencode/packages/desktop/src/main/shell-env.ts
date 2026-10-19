@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process"
+import { spawn } from "node:child_process"
 import { userInfo } from "node:os"
 import { basename } from "node:path"
 
@@ -33,32 +33,48 @@ export function parseShellEnv(out: Buffer) {
   return env
 }
 
-function probe(shell: string, mode: "-il" | "-l"): Probe {
-  const out = spawnSync(shell, [mode, "-c", "env -0"], {
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: TIMEOUT,
-    windowsHide: true,
+// Async so the probe never blocks the main process. The child is killed on timeout.
+function probe(shell: string, mode: "-il" | "-l", timeout: number) {
+  return new Promise<Probe>((resolve) => {
+    const chunks: Buffer[] = []
+    let settled = false
+    const settle = (result: Probe) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(result)
+    }
+    const child = spawn(shell, [mode, "-c", "env -0"], {
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    })
+    // Interactive shells ignore SIGTERM, so a stuck probe is killed outright.
+    const timer = setTimeout(() => {
+      settle({ type: "Timeout" })
+      child.kill("SIGKILL")
+    }, timeout)
+
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk))
+    child.once("error", (err) => {
+      if (!settled) console.log(`[server] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
+      settle({ type: "Unavailable" })
+    })
+    child.once("close", (code) => {
+      if (settled) return
+      if (code !== 0) {
+        console.log(`[server] Shell env probe exited with non-zero status for ${shell} ${mode}`)
+        settle({ type: "Unavailable" })
+        return
+      }
+      const env = parseShellEnv(Buffer.concat(chunks))
+      if (Object.keys(env).length === 0) {
+        console.log(`[server] Shell env probe returned empty env for ${shell} ${mode}`)
+        settle({ type: "Unavailable" })
+        return
+      }
+      settle({ type: "Loaded", value: env })
+    })
   })
-
-  const err = out.error as NodeJS.ErrnoException | undefined
-  if (err) {
-    if (err.code === "ETIMEDOUT") return { type: "Timeout" }
-    console.log(`[server] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
-    return { type: "Unavailable" }
-  }
-
-  if (out.status !== 0) {
-    console.log(`[server] Shell env probe exited with non-zero status for ${shell} ${mode}`)
-    return { type: "Unavailable" }
-  }
-
-  const env = parseShellEnv(out.stdout)
-  if (Object.keys(env).length === 0) {
-    console.log(`[server] Shell env probe returned empty env for ${shell} ${mode}`)
-    return { type: "Unavailable" }
-  }
-
-  return { type: "Loaded", value: env }
 }
 
 export function isNushell(shell: string) {
@@ -67,13 +83,13 @@ export function isNushell(shell: string) {
   return name === "nu" || name === "nu.exe" || raw.endsWith("\\nu.exe")
 }
 
-export function loadShellEnv(shell: string, logger: ShellEnvLogger) {
+export async function loadShellEnv(shell: string, logger: ShellEnvLogger, timeout = TIMEOUT) {
   if (isNushell(shell)) {
     logger.log(`[server] Skipping shell env probe for nushell: ${shell}`)
     return null
   }
 
-  const interactive = probe(shell, "-il")
+  const interactive = await probe(shell, "-il", timeout)
   if (interactive.type === "Loaded") {
     logger.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
     return interactive.value
@@ -83,7 +99,7 @@ export function loadShellEnv(shell: string, logger: ShellEnvLogger) {
     return null
   }
 
-  const login = probe(shell, "-l")
+  const login = await probe(shell, "-l", timeout)
   if (login.type === "Loaded") {
     logger.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
     return login.value
