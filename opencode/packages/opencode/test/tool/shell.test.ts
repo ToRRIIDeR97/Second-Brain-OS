@@ -1133,6 +1133,35 @@ describe("tool.shell abort", () => {
       }),
     ),
   )
+
+  it.live(
+    "coalesces metadata updates for chatty output and flushes the final output",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const updates: string[] = []
+          const script = "for (let i = 0; i < 200; i++) { console.log(`line${i}`); await Bun.sleep(3) }"
+          const result = yield* run(
+            {
+              command: `${bin} -e ${evalarg(script)}`,
+            },
+            {
+              ...ctx,
+              metadata: (input) =>
+                Effect.sync(() => {
+                  updates.push((input.metadata as { output?: string })?.output ?? "")
+                }),
+            },
+          )
+          expect(result.output).toContain("line199")
+          expect(updates.length).toBeGreaterThan(1)
+          expect(updates.length).toBeLessThan(30)
+          expect(updates.at(-1)).toContain("line199")
+        }),
+      ),
+    15_000,
+  )
 })
 
 describe("tool.shell truncation", () => {
