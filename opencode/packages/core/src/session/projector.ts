@@ -171,16 +171,23 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       },
       getCurrentShell(callID) {
         return Effect.gen(function* () {
-          const rows = yield* db
+          const row = yield* db
             .select()
             .from(SessionMessageTable)
-            .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "shell")))
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "shell"),
+                sql`json_extract(${SessionMessageTable.data}, '$.callID') = ${callID}`,
+              ),
+            )
             .orderBy(desc(SessionMessageTable.seq))
-            .all()
+            .limit(1)
+            .get()
             .pipe(Effect.orDie)
-          return rows
-            .map(decodeRow)
-            .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "shell" ? message : undefined
         })
       },
       updateAssistant: updateMessage,
@@ -233,14 +240,20 @@ const layer = Layer.effectDiscard(
         }
       }),
     )
-    yield* events.project(SessionV1.Event.Updated, (event) =>
-      db
-        .update(SessionTable)
-        .set(sessionRow(event.data.info))
-        .where(eq(SessionTable.id, event.data.sessionID))
-        .run()
-        .pipe(Effect.orDie),
-    )
+    yield* events.project(SessionV1.Event.Updated, (event) => {
+      // applyUsage owns the usage totals after creation; an Updated snapshot read before a
+      // concurrent step-finish must not overwrite them.
+      const {
+        cost: _cost,
+        tokens_input: _input,
+        tokens_output: _output,
+        tokens_reasoning: _reasoning,
+        tokens_cache_read: _cacheRead,
+        tokens_cache_write: _cacheWrite,
+        ...row
+      } = sessionRow(event.data.info)
+      return db.update(SessionTable).set(row).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
+    })
     yield* events.project(SessionEvent.Moved, (event) =>
       Effect.gen(function* () {
         yield* db
@@ -315,7 +328,18 @@ const layer = Layer.effectDiscard(
         const messageID = event.data.part.messageID
         const sessionID = event.data.part.sessionID
         const data = partData(event.data.part)
-        const row = yield* db.select().from(PartTable).where(eq(PartTable.id, id)).get().pipe(Effect.orDie)
+        // Only a previous step-finish carries usage; avoid decoding large tool-output blobs on every update.
+        const row = yield* db
+          .select({
+            session_id: PartTable.session_id,
+            data: sql`CASE WHEN json_extract(${PartTable.data}, '$.type') = 'step-finish' THEN ${PartTable.data} END`.mapWith(
+              PartTable.data,
+            ),
+          })
+          .from(PartTable)
+          .where(eq(PartTable.id, id))
+          .get()
+          .pipe(Effect.orDie)
         yield* db
           .insert(PartTable)
           .values({ id, message_id: messageID, session_id: sessionID, time_created: event.data.time, data })
