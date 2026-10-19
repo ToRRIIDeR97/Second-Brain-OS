@@ -169,28 +169,44 @@ export function createGoogleAccessTokens(input: {
 }) {
   const now = input.now ?? Date.now
   let cached: { clientId: string; token: string; expiresAt: number } | undefined
+  const fresh = (config: Credentials) => cached?.clientId === config.clientId && cached.expiresAt > now()
+  const get = async (config: Credentials) => {
+    if (cached && fresh(config)) return cached.token
+    cached = undefined
+    const tokens = await requestGoogleToken(input.fetch, input.endpoint, {
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: config.refreshToken,
+      grant_type: "refresh_token",
+    })
+    if (!tokens.access_token) throw new Error("google_reconnect_required")
+    if (tokens.refresh_token) input.onRotate(tokens.refresh_token)
+    // Renew a minute early so a token never expires during a request.
+    const lifetime = (tokens.expires_in ?? 0) * 1_000 - 60_000
+    if (lifetime > 0) cached = { clientId: config.clientId, token: tokens.access_token, expiresAt: now() + lifetime }
+    return tokens.access_token
+  }
   return {
-    async get(config: { clientId: string; clientSecret: string; refreshToken: string }) {
-      if (cached?.clientId === config.clientId && cached.expiresAt > now()) return cached.token
-      cached = undefined
-      const tokens = await requestGoogleToken(input.fetch, input.endpoint, {
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        refresh_token: config.refreshToken,
-        grant_type: "refresh_token",
+    get,
+    /**
+     * Runs `request` with an access token. When a cached token is rejected (reconnect-required),
+     * the token is exchanged again and the request retried once before the error is reported.
+     */
+    async with<T>(config: Credentials, request: (accessToken: string) => Promise<T>) {
+      const reused = fresh(config)
+      return request(await get(config)).catch(async (error) => {
+        if (!reused || !(error instanceof Error) || error.message !== "google_reconnect_required") throw error
+        cached = undefined
+        return request(await get(config))
       })
-      if (!tokens.access_token) throw new Error("google_reconnect_required")
-      if (tokens.refresh_token) input.onRotate(tokens.refresh_token)
-      // Renew a minute early so a token never expires during a request.
-      const lifetime = (tokens.expires_in ?? 0) * 1_000 - 60_000
-      if (lifetime > 0) cached = { clientId: config.clientId, token: tokens.access_token, expiresAt: now() + lifetime }
-      return tokens.access_token
     },
     clear() {
       cached = undefined
     },
   }
 }
+
+type Credentials = { clientId: string; clientSecret: string; refreshToken: string }
 
 /** Drops succeeded entries first, then old failures. Queued (pending or offline) writes are never dropped. */
 export function pruneOutbox<T extends { state: OutboxState }>(entries: T[], limit = GOOGLE_OUTBOX_LIMIT) {

@@ -89,8 +89,10 @@ stores open:
   `DawnWebGPUCache`, `Crashpad`, `logs`, `cli`, `DevToolsActivePort`,
   `Singleton*`, `lockfile`.
 - The copy goes to a temporary sibling folder and is renamed into place. If
-  the target already exists, files are merged and existing ones are kept.
-  The old folder is never modified.
+  the target already exists (the single-instance lock usually creates it
+  first), files are merged and existing ones are kept. If an entry can't be
+  moved, the copy stays in `<appId>.migrating-*`, no marker is written, and
+  the log names the entries. The old folder is never modified.
 - A `.user-data-migrated` marker is written last. Fresh installs are marked
   too.
 - On failure the app logs "user data migration failed; retrying on next
@@ -184,8 +186,9 @@ Start the app.
   server passes its health check, or the 30 s health wait ends. The server
   start itself can take up to the 60 s stall timeout, for example during the
   first-start storage copy.
-- The login-shell environment probe (`-il`, then `-l`, 5 s each) runs in the
-  background. The server is spawned after it finishes.
+- The login-shell environment probe runs in the background with a 5 s timeout.
+  It tries `-il` and falls back to `-l` only when `-il` fails; after a timeout
+  the app environment is used. The server is spawned after the probe finishes.
 - If the server exits after it was ready, it is restarted on the same port and
   password after 1, 2, 4, 8 and 16 s, at most 5 times in 10 minutes. Restarts
   are logged in the `utility` log; no IPC event tells the renderer, which

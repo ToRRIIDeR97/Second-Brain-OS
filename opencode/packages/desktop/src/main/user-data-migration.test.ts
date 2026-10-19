@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+  type PathLike,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, relative, sep } from "node:path"
 import { marker, migrateUserData } from "./user-data-migration"
@@ -71,6 +81,25 @@ describe("migrateUserData", () => {
     writeFileSync(join(dirs.from, "late.dat"), "{}")
     expect(migrateUserData(dirs.from, dirs.to)).toBe("done")
     expect(existsSync(join(dirs.to, "late.dat"))).toBe(false)
+  })
+
+  test("keeps the copy and retries on the next start when an entry cannot be moved", () => {
+    const dirs = setup({ "opencode.settings": "old", "storage/default.dat": "old" })
+    // The single-instance lock creates the new folder before the copy runs.
+    mkdirSync(dirs.to)
+    writeFileSync(join(dirs.to, "SingletonLock"), "x")
+    const failing = (from: PathLike, to: PathLike) => {
+      if (String(from).endsWith("storage")) throw new Error("EBUSY")
+      renameSync(from, to)
+    }
+
+    expect(() => migrateUserData(dirs.from, dirs.to, failing)).toThrow("could not move storage into")
+    expect(existsSync(join(dirs.to, marker))).toBe(false)
+    expect(readdirSync(dirs.root).filter((name) => name.includes(".migrating-"))).toHaveLength(1)
+
+    expect(migrateUserData(dirs.from, dirs.to)).toBe("copied")
+    expect(readFileSync(join(dirs.to, "storage/default.dat"), "utf8")).toBe("old")
+    expect(existsSync(join(dirs.to, marker))).toBe(true)
   })
 
   test("beta and prod pass no old folder and start fresh", () => {

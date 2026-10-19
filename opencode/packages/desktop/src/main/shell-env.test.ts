@@ -66,12 +66,15 @@ describe("shell env", () => {
     expect(isNushell("/bin/zsh")).toBe(false)
   })
 
-  test.skipIf(process.platform === "win32")("loadShellEnv reads the interactive login shell without blocking", async () => {
-    const log = logger()
-    const pending = loadShellEnv(fakeShell("interactive", "printf 'MODE=%s\\0PATH=/x\\0' \"$1\""), log)
-    expect(pending).toBeInstanceOf(Promise)
-    expect(await pending).toEqual({ MODE: "-il", PATH: "/x" })
-  })
+  test.skipIf(process.platform === "win32")(
+    "loadShellEnv reads the interactive login shell without blocking",
+    async () => {
+      const log = logger()
+      const pending = loadShellEnv(fakeShell("interactive", "printf 'MODE=%s\\0PATH=/x\\0' \"$1\""), log)
+      expect(pending).toBeInstanceOf(Promise)
+      expect(await pending).toEqual({ MODE: "-il", PATH: "/x" })
+    },
+  )
 
   test.skipIf(process.platform === "win32")("loadShellEnv falls back to a login shell", async () => {
     const shell = fakeShell("login", `if [ "$1" = "-il" ]; then exit 1; fi\nprintf 'MODE=%s\\0' "$1"`)

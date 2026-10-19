@@ -240,7 +240,9 @@ export function openExternalURL(value: string) {
     return
   }
   // The error text can repeat the full URL, so only the redacted target is logged.
-  shell.openExternal(url).catch(() => writeLog("window", "failed to open external target", { url: redactURL(url) }, "warn"))
+  shell
+    .openExternal(url)
+    .catch(() => writeLog("window", "failed to open external target", { url: redactURL(url) }, "warn"))
 }
 
 export function openLocalFileURL(value: string) {

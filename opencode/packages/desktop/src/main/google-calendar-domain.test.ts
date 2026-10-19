@@ -99,8 +99,16 @@ describe("Google Calendar domain", () => {
 describe("Google access tokens", () => {
   test("reuses one access token until it nearly expires", async () => {
     const clock = { now: 0 }
-    const http = tokenFetch({ body: { access_token: "a1", expires_in: 3600 } }, { body: { access_token: "a2", expires_in: 3600 } })
-    const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: () => {}, now: () => clock.now })
+    const http = tokenFetch(
+      { body: { access_token: "a1", expires_in: 3600 } },
+      { body: { access_token: "a2", expires_in: 3600 } },
+    )
+    const tokens = createGoogleAccessTokens({
+      fetch: http.fetch,
+      endpoint: "token",
+      onRotate: () => {},
+      now: () => clock.now,
+    })
 
     for (const _ of [1, 2, 3]) expect(await tokens.get(config)).toBe("a1")
     expect(http.requests).toHaveLength(1)
@@ -110,10 +118,57 @@ describe("Google access tokens", () => {
     expect(http.requests).toHaveLength(2)
   })
 
+  test("renews a rejected cached token once before requiring a reconnect", async () => {
+    const http = tokenFetch(
+      { body: { access_token: "a1", expires_in: 3600 } },
+      { body: { access_token: "a2", expires_in: 3600 } },
+    )
+    const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: () => {} })
+    await tokens.get(config)
+
+    const used: string[] = []
+    const result = await tokens.with(config, async (token) => {
+      used.push(token)
+      if (token === "a1") throw new Error("google_reconnect_required")
+      return "ok"
+    })
+    expect(result).toBe("ok")
+    expect(used).toEqual(["a1", "a2"])
+    expect(http.requests).toHaveLength(2)
+
+    const rejected = tokens.with(config, async () => {
+      throw new Error("google_reconnect_required")
+    })
+    expect(await rejected.catch(String)).toContain("google_reconnect_required")
+    expect(http.requests).toHaveLength(3)
+  })
+
+  test("does not retry a freshly exchanged token or other errors", async () => {
+    const http = tokenFetch({ body: { access_token: "a1", expires_in: 3600 } })
+    const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: () => {} })
+    let calls = 0
+    const reconnect = tokens.with(config, async () => {
+      calls++
+      throw new Error("google_reconnect_required")
+    })
+    expect(await reconnect.catch(String)).toContain("google_reconnect_required")
+    const conflict = tokens.with(config, async () => {
+      calls++
+      throw new Error("google_conflict")
+    })
+    expect(await conflict.catch(String)).toContain("google_conflict")
+    expect(calls).toBe(2)
+    expect(http.requests).toHaveLength(1)
+  })
+
   test("hands a rotated refresh token to the store", async () => {
     const rotated: string[] = []
     const http = tokenFetch({ body: { access_token: "a1", refresh_token: "refresh-2", expires_in: 3600 } })
-    const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: (token) => rotated.push(token) })
+    const tokens = createGoogleAccessTokens({
+      fetch: http.fetch,
+      endpoint: "token",
+      onRotate: (token) => rotated.push(token),
+    })
 
     await tokens.get(config)
     expect(rotated).toEqual(["refresh-2"])
@@ -124,10 +179,9 @@ describe("Google access tokens", () => {
     const http = tokenFetch({ status: 400, body: { error: "invalid_grant" } })
     const tokens = createGoogleAccessTokens({ fetch: http.fetch, endpoint: "token", onRotate: () => {} })
 
-    await expect(tokens.get(config)).rejects.toThrow("google_reconnect_required")
-    await expect(
-      requestGoogleToken(http.fetch, "token", { grant_type: "authorization_code", code: "x" }),
-    ).rejects.toThrow("google_token_exchange_failed")
+    expect(await tokens.get(config).catch(String)).toContain("google_reconnect_required")
+    const exchange = requestGoogleToken(http.fetch, "token", { grant_type: "authorization_code", code: "x" })
+    expect(await exchange.catch(String)).toContain("google_token_exchange_failed")
   })
 })
 

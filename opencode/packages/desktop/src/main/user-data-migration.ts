@@ -29,7 +29,7 @@ const skip = new Set([
  * The old folder is never modified. A fresh install is marked too, so a folder that appears later is
  * never imported.
  */
-export function migrateUserData(from: string | undefined, to: string) {
+export function migrateUserData(from: string | undefined, to: string, move = renameSync) {
   if (existsSync(join(to, marker))) return "done"
   if (!from || !existsSync(from)) return finish(from, to, "absent")
   const source = realpathSync(from)
@@ -41,11 +41,17 @@ export function migrateUserData(from: string | undefined, to: string) {
       verbatimSymlinks: true,
       filter: (path) => !skip.has(relative(source, path).split(sep)[0]),
     })
-    if (!rename(temp, to)) moveMissing(temp, to)
-    return finish(from, to, "copied")
-  } finally {
+  } catch (error) {
     rmSync(temp, { recursive: true, force: true })
+    throw error
   }
+  if (!rename(temp, to, move)) {
+    const failed = moveMissing(temp, to, move)
+    // The copy stays in the temporary folder and no marker is written, so the next start retries.
+    if (failed.length > 0) throw new Error(`could not move ${failed.join(", ")} into the new user data folder`)
+  }
+  rmSync(temp, { recursive: true, force: true })
+  return finish(from, to, "copied")
 }
 
 function finish(from: string | undefined, to: string, result: "copied" | "absent") {
@@ -54,20 +60,22 @@ function finish(from: string | undefined, to: string, result: "copied" | "absent
   return result
 }
 
-// Moves entries the target lacks; files already in the target win.
-function moveMissing(source: string, target: string) {
+// Moves entries the target lacks; files already in the target win. Returns the entries that could not be moved.
+function moveMissing(source: string, target: string, move: typeof renameSync, prefix = ""): string[] {
   mkdirSync(target, { recursive: true })
-  readdirSync(source, { withFileTypes: true }).forEach((entry) => {
+  return readdirSync(source, { withFileTypes: true }).flatMap((entry) => {
     const from = join(source, entry.name)
     const to = join(target, entry.name)
-    if (!existsSync(to)) return void rename(from, to)
-    if (entry.isDirectory() && statSync(to).isDirectory()) moveMissing(from, to)
+    const name = `${prefix}${entry.name}`
+    if (!existsSync(to)) return rename(from, to, move) ? [] : [name]
+    if (entry.isDirectory() && statSync(to).isDirectory()) return moveMissing(from, to, move, `${name}/`)
+    return []
   })
 }
 
-function rename(from: string, to: string) {
+function rename(from: string, to: string, move: typeof renameSync) {
   try {
-    renameSync(from, to)
+    move(from, to)
     return true
   } catch {
     return false
