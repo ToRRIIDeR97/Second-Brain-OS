@@ -35,6 +35,20 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   return tr(translate, "error.chain.unknown", "Unknown error")
 }
 
+const ERROR_TOAST_WINDOW_MS = 10_000
+const errorToasts = new Map<string, number>()
+
+// When a server goes away every open Project fails the same way. Callers pass a key naming the
+// server and error kind, and only the first claim within the window shows a toast.
+export function claimErrorToast(kind: string, now = Date.now()) {
+  for (const [key, at] of errorToasts) {
+    if (now - at >= ERROR_TOAST_WINDOW_MS) errorToasts.delete(key)
+  }
+  if (errorToasts.has(kind)) return false
+  errorToasts.set(kind, now)
+  return true
+}
+
 function unwrapNamedError(error: unknown): unknown {
   if (error instanceof Error && error.cause && typeof error.cause === "object" && "body" in error.cause) {
     return (error.cause as Record<string, unknown>).body

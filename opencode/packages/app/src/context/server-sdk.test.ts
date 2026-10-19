@@ -3,7 +3,9 @@ import {
   adaptLegacyServerEvent,
   adaptServerEvent,
   coalesceServerEvents,
+  createInterruptibleWait,
   enqueueServerEvent,
+  reconnectDelay,
   resumeStreamAfterPageShow,
 } from "./server-sdk"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
@@ -18,6 +20,31 @@ describe("resumeStreamAfterPageShow", () => {
     resumeStreamAfterPageShow({ persisted: true } as PageTransitionEvent, start)
 
     expect(starts).toBe(1)
+  })
+})
+
+describe("reconnectDelay", () => {
+  test("backs off exponentially with jitter up to a cap", () => {
+    expect(reconnectDelay(0, () => 0)).toBe(125)
+    expect(reconnectDelay(0, () => 1)).toBe(250)
+    expect(reconnectDelay(3, () => 0)).toBe(1_000)
+    expect(reconnectDelay(3, () => 1)).toBe(2_000)
+    expect(reconnectDelay(20, () => 0)).toBe(10_000)
+    expect(reconnectDelay(20, () => 1)).toBe(20_000)
+  })
+})
+
+describe("createInterruptibleWait", () => {
+  test("interrupt ends a pending wait early", async () => {
+    const backoff = createInterruptibleWait()
+    const startedAt = Date.now()
+    const pending = backoff.wait(20_000)
+    backoff.interrupt()
+    await pending
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+    // Interrupting with nothing pending is a no-op, and later waits still time out normally.
+    backoff.interrupt()
+    await backoff.wait(1)
   })
 })
 

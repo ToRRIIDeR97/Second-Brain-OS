@@ -31,7 +31,7 @@ import { estimateRootSessionTotal, loadRootSessions, loadRootSessionsV1 } from "
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { formatServerError } from "@/utils/server-errors"
+import { claimErrorToast, formatServerError } from "@/utils/server-errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import type { SolidQueryOptions } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
@@ -59,6 +59,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
+import { isSessionMovedEvent, SERVER_EVENT_NAMES, sessionMovedData } from "./global-sync/event-names"
 
 type GlobalStore = {
   ready: boolean
@@ -173,6 +174,50 @@ export function seedActiveSessionStatuses(
     if (session.data.session_status[sessionID] !== undefined) continue
     const status = active[sessionID]
     session.set("session_status", sessionID, status?.type === "running" ? { type: "busy" } : status)
+  }
+}
+
+export function snapshotSessionStatuses(session: Pick<ServerSession, "data">) {
+  return Object.fromEntries(
+    Object.entries(session.data.session_status).map(([sessionID, status]) => [sessionID, JSON.stringify(status)]),
+  )
+}
+
+// A reconnected stream may have missed status events, so a "working" Session can be idle by now.
+// Sessions absent from the fresh active list become idle; active ones that look idle become busy.
+// `before` is the snapshot taken when the request started: a status that changed since then came
+// from a newer event than the response, so it is left alone.
+export function reconcileActiveSessionStatuses(
+  session: Pick<ServerSession, "data" | "set">,
+  active: SessionActiveOutput | Record<string, SessionStatus>,
+  before: Record<string, string>,
+) {
+  const unchanged = (sessionID: string) => before[sessionID] === JSON.stringify(session.data.session_status[sessionID])
+  batch(() => {
+    for (const [sessionID, status] of Object.entries(session.data.session_status)) {
+      if (status?.type === "idle" || sessionID in active || !unchanged(sessionID)) continue
+      session.set("session_status", sessionID, reconcile({ type: "idle" }))
+    }
+    for (const sessionID of Object.keys(active)) {
+      const current = session.data.session_status[sessionID]
+      if (current !== undefined && current.type !== "idle") continue
+      if (!unchanged(sessionID)) continue
+      const status = active[sessionID]
+      session.set("session_status", sessionID, status?.type === "running" ? { type: "busy" } : status)
+    }
+  })
+}
+
+// The first `server.connected` belongs to the initial bootstrap; every later one is a reconnect
+// after a gap in the event stream. `global.disposed` also invalidates everything loaded so far.
+export function createResyncTracker() {
+  let connected = false
+  return (eventType: string) => {
+    if (eventType === SERVER_EVENT_NAMES.disposed) return true
+    if (eventType !== SERVER_EVENT_NAMES.connected) return false
+    if (connected) return true
+    connected = true
+    return false
   }
 }
 
@@ -366,10 +411,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       void loadCommands(directory, serverSDK.api.command, sdkFor(directory), serverSDK.protocol)
         .then((commands) => setStore("command", commands))
         .catch((err) => {
+          const description = formatServerError(err, language.t)
+          if (!claimErrorToast(`${serverSDK.scope}:toast.project.reloadFailed:${description}`)) return
           showToast({
             variant: "error",
             title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
-            description: formatServerError(err, language.t),
+            description,
           })
         })
     },
@@ -387,7 +434,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     },
   })
 
-  async function loadSessions(directory: string, options?: { limit?: number }) {
+  // `force` reloads an already loaded list at its retained size, e.g. after a reconnect.
+  async function loadSessions(directory: string, options?: { limit?: number; force?: boolean }) {
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
     if (pending) {
@@ -399,7 +447,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(key)
     const retainedLimit = Math.max(store.limit, options?.limit ?? 0, meta?.limit ?? 0)
-    if (meta && meta.limit >= retainedLimit) {
+    if (meta && meta.limit >= retainedLimit && !options?.force) {
       const next = trimSessions(store.session, {
         limit: retainedLimit,
         permission: session.data.permission,
@@ -411,7 +459,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       return
     }
 
-    const limit = Math.max(retainedLimit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
+    const limit =
+      options?.force && meta ? retainedLimit : Math.max(retainedLimit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
     const promise = queryClient
       .fetchQuery({
         ...queryOptionsApi.sessions(key),
@@ -449,11 +498,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
-              const project = getFilename(directory)
+              const description = formatServerError(err, language.t)
+              if (!claimErrorToast(`${serverSDK.scope}:toast.session.listFailed:${description}`)) return
               showToast({
                 variant: "error",
-                title: language.t("toast.session.listFailed.title", { project }),
-                description: formatServerError(err, language.t),
+                title: language.t("toast.session.listFailed.title", { project: getFilename(directory) }),
+                description,
               })
             })
             .then(() => null),
@@ -528,6 +578,30 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     })
   }
 
+  const resyncNeeded = createResyncTracker()
+  // One resync at a time; a reconnect during a run queues exactly one more.
+  let resyncRun: Promise<unknown> | undefined
+  let resyncAgain = false
+  const resync = () => {
+    if (resyncRun) {
+      resyncAgain = true
+      return
+    }
+    const before = snapshotSessionStatuses(session)
+    resyncRun = Promise.allSettled([
+      activeSessionsQuery.refetch().then((result) => {
+        if (result.isSuccess) reconcileActiveSessionStatuses(session, result.data, before)
+      }),
+      // Deletes, archives and renames missed while disconnected only show up in a fresh list.
+      ...[...sessionMeta.keys()].map((key) => loadSessions(key, { force: true })),
+    ]).finally(() => {
+      resyncRun = undefined
+      if (!resyncAgain) return
+      resyncAgain = false
+      resync()
+    })
+  }
+
   const unsub = serverSDK.event.listen((e) => {
     const directory = e.name
     const key = directoryKey(directory)
@@ -544,7 +618,14 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     if (eventType === "integration.connection.updated") void refreshProviders()
 
     if (directory === "global") {
-      if (eventType === "server.connected" && activeSessionsQuery.data === undefined && !activeSessionsQuery.isFetching)
+      const resyncing = resyncNeeded(eventType)
+      if (resyncing) resync()
+      if (
+        !resyncing &&
+        eventType === "server.connected" &&
+        activeSessionsQuery.data === undefined &&
+        !activeSessionsQuery.isFetching
+      )
         void activeSessionsQuery.refetch()
       applyGlobalEvent({
         event,
@@ -572,8 +653,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       return
     }
 
-    if (event.current?.type === "session.moved") {
-      const info = session.get(event.current.data.sessionID)
+    const moved = isSessionMovedEvent(event.current?.type) ? sessionMovedData(event.current?.data) : undefined
+    if (moved) {
+      const info = session.get(moved.sessionID)
       if (info) indexSession(info)
     }
     if (event.current?.type === "session.forked")
@@ -586,7 +668,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     if (!existing) return
     children.mark(key)
     if (
-      event.current?.type === "session.moved" ||
+      moved !== undefined ||
       // event.current?.type === "session.archived" ||
       event.current?.type === "session.forked" ||
       eventType === "command.updated" ||

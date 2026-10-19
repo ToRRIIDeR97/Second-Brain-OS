@@ -215,6 +215,37 @@ function currentDeltaFragment(event: CurrentDelta) {
     : event.data.delta
 }
 
+const RECONNECT_BASE_MS = 250
+const RECONNECT_MAX_MS = 20_000
+
+// Exponential backoff with jitter: the window doubles per consecutive failure up to the cap, and the
+// delay falls in its upper half so many clients do not reconnect in lockstep.
+export function reconnectDelay(failures: number, random = Math.random) {
+  const ceiling = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** failures)
+  return Math.round(ceiling / 2 + (random() * ceiling) / 2)
+}
+
+// A timer that `interrupt()` ends early, so stopping the stream never waits out a long backoff.
+export function createInterruptibleWait() {
+  let wake: (() => void) | undefined
+  return {
+    wait(ms: number) {
+      return new Promise<void>((resolve) => {
+        const done = () => {
+          clearTimeout(timer)
+          if (wake === done) wake = undefined
+          resolve()
+        }
+        const timer = setTimeout(done, ms)
+        wake = done
+      })
+    },
+    interrupt() {
+      wake?.()
+    },
+  }
+}
+
 export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
   if (!event.persisted) return
   start()
@@ -277,7 +308,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
-  const RECONNECT_DELAY_MS = 250
 
   let queue: Queued[] = []
   let buffer: Queued[] = []
@@ -312,6 +342,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 
   let streamErrorLogged = false
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  const backoff = createInterruptibleWait()
   let attempt: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
@@ -324,6 +355,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     const previous = run
     const current = (async () => {
       if (previous) await previous
+      let failures = 0
       // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
       while (!abort.signal.aborted && started && generation === active) {
         attempt = new AbortController()
@@ -337,6 +369,9 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
           for await (const event of events) {
             streamErrorLogged = false
             if (event.payload.type === "sync") continue
+            // `server.connected` only proves the server accepted the stream; a server that accepts and
+            // then drops must keep backing off. Any later event (heartbeats included) resets it.
+            if (event.payload.type !== "server.connected") failures = 0
             const directory = event.directory ?? "global"
             const payload = adaptLegacyServerEvent(event.payload, directory)
             if (enqueueServerEvent(queue, { directory, payload })) schedule()
@@ -360,7 +395,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         }
 
         if (abort.signal.aborted || !started || generation !== active) return
-        await wait(RECONNECT_DELAY_MS)
+        await backoff.wait(reconnectDelay(failures++))
       }
     })().finally(() => {
       if (run !== current) return
@@ -375,6 +410,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     started = false
     generation++
     attempt?.abort()
+    backoff.interrupt()
   }
 
   onMount(() => {

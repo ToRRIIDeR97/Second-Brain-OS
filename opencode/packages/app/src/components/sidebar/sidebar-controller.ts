@@ -1,6 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { useQuery, useQueryClient } from "@tanstack/solid-query"
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createComputed, createEffect, createMemo, createResource, onCleanup, onMount } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -62,6 +62,10 @@ const ARCHIVED_THREAD_LIMIT = 500
 export const projectThreadsQueryKey = (server: string, brain: string | undefined) =>
   ["second-brain", "project-threads", server, brain ?? ""] as const
 
+// Call after every Project mutation so the sidebar's Project list and threads catch up.
+export const invalidateProjectThreads = (queryClient: QueryClient, server: string) =>
+  queryClient.invalidateQueries({ queryKey: ["second-brain", "project-threads", server] })
+
 export function createSidebarController() {
   const layout = useLayout()
   const server = useServer()
@@ -107,8 +111,7 @@ export function createSidebarController() {
       }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
-  const refreshProjects = () =>
-    queryClient.invalidateQueries({ queryKey: ["second-brain", "project-threads", server.key] })
+  const refreshProjects = () => invalidateProjectThreads(queryClient, server.key)
 
   // Per-directory thread lists, kept live by session.created/updated/deleted events.
   const directories = createMemo(() => {
@@ -338,6 +341,11 @@ export function createSidebarController() {
             item.title = value
           }),
         )
+      // Recent threads outside any loaded list read the Home index, so rename (and roll back) there too.
+      homeSessions().apply({
+        type: "session.updated",
+        properties: { sessionID: session.id, info: { ...session, title: value } },
+      })
     }
     update(title)
     await serverSDK()
@@ -471,14 +479,17 @@ export function createSidebarController() {
     server.projects.touch(directory)
     const sdk = serverSDK()
     const location = { directory }
-    const project = await sdk.api.file
-      .list({ path: ".", location })
-      .then(async (files) => {
-        if (files.data.length > 0 || !options.initEmpty) return sdk.api.project.current({ location })
-        const result = await sdk.client.project.initGit({ directory })
-        return result.data ?? sdk.api.project.current({ location })
-      })
-      .catch(() => undefined)
+    const current = () => sdk.api.project.current({ location })
+    // Only an `initEmpty` open needs to know whether the folder is empty.
+    const project = await (
+      options.initEmpty
+        ? sdk.api.file.list({ path: ".", location }).then(async (files) => {
+            if (files.data.length > 0) return current()
+            const result = await sdk.client.project.initGit({ directory })
+            return result.data ?? current()
+          })
+        : current()
+    ).catch(() => undefined)
     if (!project) return
     serverSync().child(directory, { bootstrap: false })[1]("project", project.id)
     const brain = brainDirectory()

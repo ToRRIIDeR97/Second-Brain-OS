@@ -71,15 +71,20 @@ export function groupSidebarThreads<P extends SidebarProject, S extends SidebarS
   const brain: S[] = []
   const other: S[] = []
   const brainKey = input.brainDirectory ? pathKey(input.brainDirectory) : undefined
+  // Reversed so the first Project for a directory wins, as in `projectForDirectory`.
+  const projectByKey = new Map(
+    [...input.projects].reverse().map((project) => [pathKey(project.threadDirectory), project] as const),
+  )
   for (const session of live) {
-    const project = projectForDirectory(input.projects, session.directory)
+    const sessionKey = pathKey(session.directory)
+    const project = projectByKey.get(sessionKey)
     if (project) {
       const list = byProject.get(project.id) ?? []
       list.push(session)
       byProject.set(project.id, list)
       continue
     }
-    if (brainKey && pathKey(session.directory) === brainKey) brain.push(session)
+    if (brainKey && sessionKey === brainKey) brain.push(session)
     else other.push(session)
   }
   return {

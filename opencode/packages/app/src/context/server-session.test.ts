@@ -252,6 +252,20 @@ describe("server session", () => {
     expect(store.data.session_status.child).toEqual({ type: "idle" })
   })
 
+  test("applies the server's session.next.moved event to session info", () => {
+    const store = setup({}).store
+    store.remember(session("child"))
+
+    store.applyV2({
+      id: "evt_moved",
+      created: 5,
+      type: "session.next.moved",
+      data: { sessionID: "child", location: { directory: "/other" }, subdirectory: "pkg" },
+    } as unknown as OpenCodeEvent)
+
+    expect(store.get("child")).toMatchObject({ directory: "/other", path: "pkg", projectID: "project" })
+  })
+
   test("keeps an ISO-timestamped current prompt before its hydrated assistant", async () => {
     const created = Date.parse("2026-09-01T00:43:00.000Z")
     const assistant = {

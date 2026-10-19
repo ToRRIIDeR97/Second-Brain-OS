@@ -20,6 +20,8 @@ import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useDrafts } from "@/context/drafts"
+import { useQueryClient } from "@tanstack/solid-query"
+import { invalidateProjectThreads } from "@/components/sidebar/sidebar-controller"
 import {
   createProject,
   listNotes,
@@ -66,6 +68,7 @@ export default function ProjectsPage() {
   const server = useServer()
   const serverSDK = useServerSDK()
   const drafts = useDrafts()
+  const queryClient = useQueryClient()
   const [search] = useSearchParams<{ project?: string }>()
   const [state, setState] = createStore<PageState>({
     brainDirectory: "",
@@ -182,12 +185,15 @@ export default function ProjectsPage() {
         : language.t("secondBrain.error.request"),
     )
   }
-  const replace = (project: ProjectRecord) =>
+  // Every Project mutation lands here, so this also refreshes the sidebar's Project threads.
+  const replace = (project: ProjectRecord) => {
+    void invalidateProjectThreads(queryClient, server.key)
     projectActions.mutate(
       [...(projects() ?? []).filter((item) => item.id !== project.id), project].sort((left, right) =>
         right.updatedAt.localeCompare(left.updatedAt),
       ),
     )
+  }
 
   const submitCreate = async () => {
     const name = state.draft.name.trim()

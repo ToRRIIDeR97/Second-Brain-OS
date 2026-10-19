@@ -208,6 +208,31 @@ describe("applyDirectoryEvent", () => {
     expect(store.sessionTotal).toBe(2)
   })
 
+  test("applies the server's session.next.moved event", () => {
+    const [store, setStore] = createStore(
+      baseState({ session: [rootSession({ id: "a" }), rootSession({ id: "b" })], sessionTotal: 2 }),
+    )
+    const move = (sessionID: string, directory: string) =>
+      applyDirectoryEvent({
+        event: {
+          type: "session.next.moved",
+          properties: { sessionID, location: { directory }, subdirectory: "pkg" },
+        },
+        store,
+        setStore,
+        push() {},
+        directory: "/tmp",
+        loadLsp() {},
+      })
+
+    move("a", "/tmp")
+    expect(store.session[0]).toMatchObject({ id: "a", directory: "/tmp", path: "pkg" })
+
+    move("b", "/elsewhere")
+    expect(store.session.map((x) => x.id)).toEqual(["a"])
+    expect(store.sessionTotal).toBe(1)
+  })
+
   test("cleans session caches when archived", () => {
     const message = userMessage("msg_1", "ses_1")
     const [store, setStore] = createStore(

@@ -16,6 +16,7 @@ import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { messageKey } from "@/utils/session-message"
+import { SERVER_EVENT_NAMES, sessionMovedData } from "./event-names"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([
@@ -225,22 +226,19 @@ export function applyDirectoryEvent(input: {
     //   if (!info?.parentID) input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
     //   break
     // }
-    case "session.moved": {
-      const properties = event.properties as {
-        sessionID: string
-        location: { directory: string; workspaceID?: string }
-        projectID?: string
-        subpath?: string
-      }
-      const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)
+    case "session.moved":
+    case SERVER_EVENT_NAMES.moved: {
+      const moved = sessionMovedData(event.properties)
+      if (!moved) break
+      const result = Binary.search(input.store.session, moved.sessionID, (session) => session.id)
       if (!result.found) break
-      if (properties.location.directory === input.directory) {
+      if (moved.directory === input.directory) {
         input.setStore("session", result.index, (session) => ({
           ...session,
-          projectID: properties.projectID ?? session.projectID,
-          workspaceID: properties.location.workspaceID,
-          directory: properties.location.directory,
-          path: properties.subpath,
+          projectID: moved.projectID ?? session.projectID,
+          workspaceID: moved.workspaceID,
+          directory: moved.directory,
+          path: moved.path,
           time: { ...session.time, updated: Date.now() },
         }))
         break
