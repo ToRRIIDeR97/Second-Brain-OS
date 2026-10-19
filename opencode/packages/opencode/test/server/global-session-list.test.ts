@@ -1,4 +1,6 @@
 import { describe, expect } from "bun:test"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Layer } from "effect"
@@ -102,6 +104,57 @@ describe("session.listGlobal", () => {
 
         expect(ids).toContain(first.id)
         expect(ids).not.toContain(second.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "pages through sessions that tie on time_updated",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const created = [
+          yield* withSession({ title: "tie-a" }),
+          yield* withSession({ title: "tie-b" }),
+          yield* withSession({ title: "tie-c" }),
+        ]
+        const time = Date.now() + 60_000
+        yield* Effect.forEach(created, (item) =>
+          SessionNs.Service.use((session) =>
+            session.setAgentModel({
+              sessionID: item.id,
+              agent: "build",
+              model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+              time,
+            }),
+          ),
+        )
+
+        const first = yield* SessionNs.Service.use((session) =>
+          session.listGlobal({ directory: test.directory, limit: 2 }),
+        )
+        expect(first.map((item) => item.time.updated)).toEqual([time, time])
+        const last = first[first.length - 1]
+        const rest = yield* SessionNs.Service.use((session) =>
+          session.listGlobal({
+            directory: test.directory,
+            limit: 10,
+            cursor: SessionNs.globalCursor.decode(SessionNs.globalCursor.encode({ time, id: last.id })),
+          }),
+        )
+        const tied = rest.filter((item) => item.time.updated === time)
+        expect([...first, ...tied].map((item) => item.id).toSorted()).toEqual(created.map((item) => item.id).toSorted())
+
+        // The legacy numeric cursor still pages by time_updated alone.
+        const legacy = yield* SessionNs.Service.use((session) =>
+          session.listGlobal({
+            directory: test.directory,
+            limit: 10,
+            cursor: SessionNs.globalCursor.decode(String(time)),
+          }),
+        )
+        expect(legacy.some((item) => item.time.updated === time)).toBe(false)
+        expect(() => SessionNs.globalCursor.decode("not-a-cursor")).toThrow()
       }),
     { git: true },
   )

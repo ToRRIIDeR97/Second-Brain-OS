@@ -137,12 +137,20 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
 
     const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
       const limit = ctx.query.limit ?? 100
+      const query = ctx.query.cursor
+      const cursor =
+        query === undefined
+          ? undefined
+          : yield* Effect.try({
+              try: () => Session.globalCursor.decode(query),
+              catch: () => new HttpApiError.BadRequest({}),
+            })
       const directory = ctx.query.directory ? yield* InstanceState.directory : undefined
       const all = yield* sessions.listGlobal({
         directory,
         roots: ctx.query.roots,
         start: ctx.query.start,
-        cursor: ctx.query.cursor,
+        cursor,
         search: ctx.query.search,
         limit: limit + 1,
         archived: ctx.query.archived,
@@ -151,7 +159,12 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       return HttpServerResponse.jsonUnsafe(list, {
         headers:
           all.length > limit && list.length > 0
-            ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
+            ? {
+                "x-next-cursor": Session.globalCursor.encode({
+                  time: list[list.length - 1].time.updated,
+                  id: list[list.length - 1].id,
+                }),
+              }
             : undefined,
       })
     })

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, mock } from "bun:test"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
@@ -104,6 +106,47 @@ describe("session action routes", () => {
 
         expect(res.status).toBe(200)
         expect(yield* res.json).toBe(false)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "experimental session list returns a cursor that keeps tied sessions",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const created = yield* Effect.forEach([1, 2, 3], () =>
+          Effect.acquireRelease(SessionNs.use.create({}), (item) => SessionNs.use.remove(item.id).pipe(Effect.ignore)),
+        )
+        const time = Date.now() + 60_000
+        yield* Effect.forEach(created, (item) =>
+          SessionNs.use.setAgentModel({
+            sessionID: item.id,
+            agent: "build",
+            model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+            time,
+          }),
+        )
+
+        const directory = encodeURIComponent(test.directory)
+        const first = yield* requestInDirectory(`/experimental/session?directory=${directory}&limit=2`, test.directory)
+        expect(first.status).toBe(200)
+        const cursor = first.headers["x-next-cursor"]
+        expect(cursor).toBeTruthy()
+        const next = yield* requestInDirectory(
+          `/experimental/session?directory=${directory}&limit=10&cursor=${cursor}`,
+          test.directory,
+        )
+        expect(next.status).toBe(200)
+        const ids = [...((yield* first.json) as SessionNs.Info[]), ...((yield* next.json) as SessionNs.Info[])].map(
+          (item) => item.id,
+        )
+        expect(ids.toSorted()).toEqual(created.map((item) => item.id).toSorted())
+
+        const legacy = yield* requestInDirectory(`/experimental/session?cursor=${time + 1}`, test.directory)
+        expect(legacy.status).toBe(200)
+        const invalid = yield* requestInDirectory("/experimental/session?cursor=not-a-cursor", test.directory)
+        expect(invalid.status).toBe(400)
       }),
     { git: true },
   )
