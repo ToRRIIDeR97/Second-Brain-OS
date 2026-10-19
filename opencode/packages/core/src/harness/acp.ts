@@ -226,7 +226,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   const params = { cwd: input.directory, mcpServers: [] }
   const loaded =
     input.continuation && capabilities.loadSession === true
-      ? yield* client.request("session/load", { ...params, sessionId: input.continuation }).pipe(
+      ? yield* client.request("session/load", { ...params, sessionId: input.continuation }, SESSION_SETUP_TIMEOUT).pipe(
           Effect.map((response) => ({ sessionId: input.continuation!, response })),
           Effect.catch(() => Effect.succeed(undefined)),
         )
@@ -301,8 +301,11 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   } satisfies Session
 })
 
+// session/load replays history before it answers, so allow more than the initialize handshake.
+const SESSION_SETUP_TIMEOUT = "60 seconds"
+
 function createSession(client: Client, params: { readonly cwd: string; readonly mcpServers: ReadonlyArray<never> }) {
-  return client.request("session/new", params).pipe(
+  return client.request("session/new", params, SESSION_SETUP_TIMEOUT).pipe(
     Effect.flatMap((response) => {
       const sessionId = isRecord(response) ? string(response.sessionId) : undefined
       return sessionId

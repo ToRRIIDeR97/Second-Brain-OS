@@ -53,6 +53,7 @@ let relaunchHandler = () => {
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const windowIDs = new WeakMap<BrowserWindow, string>()
+const wiredSessions = new WeakSet<Electron.Session>()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
@@ -204,21 +205,9 @@ export function createMainWindow(id: string = randomUUID()) {
     },
   })
 
-  allowRendererPermissions(win)
+  wireSession(win.webContents.session)
   wireWindowRecovery(win, id)
   wireNavigationPolicy(win)
-
-  win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-    const { requestHeaders } = details
-    upsertKeyValue(requestHeaders, "Access-Control-Allow-Origin", ["*"])
-    callback({ requestHeaders })
-  })
-
-  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    const { responseHeaders = {} } = details
-    addRendererHeaders(details.url, responseHeaders)
-    callback({ responseHeaders })
-  })
 
   state.manage(win)
   registerWindow(win, id)
@@ -466,11 +455,6 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     writeLog("window", "renderer responsive", { window: name, currentURL: safeWindowURL(win) }, "error")
     sampler.stopAndFlush()
   })
-  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
-      writeLog("pty", "console", { window: name, level, message, line, sourceId })
-    }
-  })
   win.webContents.on("preload-error", (_event, preloadPath, error) => {
     writeLog("preload", "preload error", { window: name, preloadPath, error }, "error")
   })
@@ -483,21 +467,42 @@ function addDocumentPolicy(response: Response, file: string) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-function allowRendererPermissions(win: BrowserWindow) {
-  const webContentsId = win.webContents.id
+// All app windows share the default session, and each setter replaces the
+// previous handler, so wire a session once and admit every app window rather
+// than only the newest one.
+function wireSession(session: Electron.Session) {
+  if (wiredSessions.has(session)) return
+  wiredSessions.add(session)
 
-  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+  session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
       rendererPermissions.has(permission) &&
         isTrustedRendererUrl(details.requestingUrl) &&
-        webContents.id === webContentsId,
+        isAppWindowContents(webContents),
     )
   })
-  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+  session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     if (!rendererPermissions.has(permission)) return false
-    if (webContents && webContents.id !== webContentsId) return false
+    if (webContents && !isAppWindowContents(webContents)) return false
     return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)
   })
+
+  session.webRequest.onBeforeSendHeaders((details, callback) => {
+    const { requestHeaders } = details
+    upsertKeyValue(requestHeaders, "Access-Control-Allow-Origin", ["*"])
+    callback({ requestHeaders })
+  })
+
+  session.webRequest.onHeadersReceived((details, callback) => {
+    const { responseHeaders = {} } = details
+    addRendererHeaders(details.url, responseHeaders)
+    callback({ responseHeaders })
+  })
+}
+
+function isAppWindowContents(webContents: Electron.WebContents) {
+  const win = BrowserWindow.fromWebContents(webContents)
+  return !!win && !win.isDestroyed() && win.webContents === webContents && windowIDs.has(win)
 }
 
 function isTrustedRendererUrl(value?: string) {

@@ -32,6 +32,14 @@ function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R
   )
 }
 
+const listEtagBoot = crypto.randomUUID()
+const encodeListResult = Schema.encodeSync(Provider.ListResult)
+
+function matchesEtag(header: string | undefined, etag: string) {
+  if (!header) return false
+  return header.split(",").some((value) => value.trim() === "*" || value.trim() === etag)
+}
+
 export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider", (handlers) =>
   Effect.gen(function* () {
     const cfg = yield* Config.Service
@@ -39,26 +47,64 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const svc = yield* ProviderAuth.Service
     const authStore = yield* Auth.Service
 
-    const list = Effect.fn("ProviderHttpApi.list")(function* () {
+    // The projection is rebuilt only when one of its inputs changes. models.dev data, config and
+    // provider state are replaced (not mutated) on refresh, so object identity tracks their versions.
+    let cached:
+      | {
+          readonly all: unknown
+          readonly config: unknown
+          readonly connected: unknown
+          readonly credentials: string
+          readonly etag: string
+          readonly body: string
+        }
+      | undefined
+    let version = 0
+
+    const listRaw = Effect.fn("ProviderHttpApi.list")(function* (ctx: {
+      request: HttpServerRequest.HttpServerRequest
+    }) {
       const config = yield* cfg.get()
       const all = yield* ModelsDev.Service.use((s) => s.get())
-      const disabled = new Set(config.disabled_providers ?? [])
-      const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-      const filtered: Record<string, (typeof all)[string]> = {}
-      for (const [key, value] of Object.entries(all)) {
-        if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
-      }
       const connected = yield* provider.list()
       const credentials = yield* authStore.all().pipe(Effect.orDie)
-      const providers = Object.assign(
-        mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
-        connected,
-      )
-      return {
-        all: Object.values(providers).map(Provider.toPublicInfo),
-        default: Provider.defaultModelIDs(providers),
-        connected: Object.keys(providers).filter((id) => id in connected || credentials[id]),
+      const credentialIDs = Object.keys(credentials).sort().join(",")
+      if (
+        cached?.all !== all ||
+        cached.config !== config ||
+        cached.connected !== connected ||
+        cached.credentials !== credentialIDs
+      ) {
+        const disabled = new Set(config.disabled_providers ?? [])
+        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+        const filtered: Record<string, (typeof all)[string]> = {}
+        for (const [key, value] of Object.entries(all)) {
+          if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
+        }
+        const providers = Object.assign(
+          mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
+          connected,
+        )
+        const result = {
+          all: Object.values(providers).map(Provider.toPublicInfo),
+          default: Provider.defaultModelIDs(providers),
+          connected: Object.keys(providers).filter((id) => id in connected || credentials[id]),
+        }
+        version += 1
+        cached = {
+          all,
+          config,
+          connected,
+          credentials: credentialIDs,
+          // The boot token keeps ETags from a previous server process from matching.
+          etag: `W/"${listEtagBoot}-${version}"`,
+          body: JSON.stringify(encodeListResult(result)),
+        }
       }
+      const headers = { etag: cached.etag }
+      if (matchesEtag(ctx.request.headers["if-none-match"], cached.etag))
+        return HttpServerResponse.empty({ status: 304, headers })
+      return HttpServerResponse.text(cached.body, { contentType: "application/json", headers })
     })
 
     const auth = Effect.fn("ProviderHttpApi.auth")(function* () {
@@ -108,7 +154,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     })
 
     return handlers
-      .handle("list", list)
+      .handleRaw("list", listRaw)
       .handle("auth", auth)
       .handleRaw("authorize", authorizeRaw)
       .handle("callback", callback)

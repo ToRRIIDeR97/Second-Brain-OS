@@ -245,7 +245,7 @@ const layer = Layer.effectDiscard(
                 provider,
                 text: text ?? NO_RESULTS,
               }
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to search the web for ${input.query}` })))
+            }).pipe(Tool.mapError(() => new ToolFailure({ message: `Unable to search the web for ${input.query}` })))
           },
         }),
       })

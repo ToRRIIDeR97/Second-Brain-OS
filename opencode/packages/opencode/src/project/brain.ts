@@ -15,6 +15,8 @@ import type { PlannerCalendar } from "../planner/calendar"
 
 const directory = "projects"
 const limit = 1_000
+const idPattern = /^project_[0-9A-Z]+$/i
+const utf8 = new TextDecoder()
 
 export const Status = Schema.Literals(["active", "paused", "archived"])
 export type Status = typeof Status.Type
@@ -109,37 +111,71 @@ export class ConflictError extends Schema.TaggedErrorClass<ConflictError>()("Bra
   reason: Schema.String,
 }) {}
 
-type Card = { info: Info; data: Record<string, unknown>; body: string; source: string }
+type Card = { info: Info; data: Record<string, unknown>; body: string }
 
 export const list = Effect.fn("BrainProject.list")(function* () {
+  return (yield* all()).slice(0, limit)
+})
+
+/**
+ * Every readable Project card, sorted. One card per id: the managed
+ * `projects/<id>/project.md` wins over a legacy flat `projects/<id>.md`, and a
+ * card whose id does not match its path is ignored. Unreadable cards are
+ * skipped with a warning so one bad file cannot hide the rest.
+ */
+const all = Effect.fn("BrainProject.all")(function* () {
   const location = yield* Location.Service
   const fs = yield* FSUtil.Service
-  const paths = yield* fs.glob(`{${directory}/*.md,${directory}/*/project.md}`, {
+  const paths = yield* fs.glob(`{${directory}/project_*.md,${directory}/project_*/project.md}`, {
     cwd: location.directory,
     absolute: false,
     include: "file",
     dot: false,
   })
-  const projects = yield* Effect.forEach(paths.slice(0, limit), (path) => readCard(path.replaceAll("\\", "/")), {
-    concurrency: 8,
-  })
-  return projects
-    .map((card) => card.info)
-    .sort(
-      (left, right) =>
-        statusRank(left.status) - statusRank(right.status) ||
-        right.updatedAt.localeCompare(left.updatedAt) ||
-        left.name.localeCompare(right.name),
-    )
+  const cards = yield* Effect.forEach(
+    paths.map((path) => path.replaceAll("\\", "/")),
+    (path) =>
+      readCard(path).pipe(
+        Effect.flatMap((card) =>
+          card.info.id === pathId(path)
+            ? Effect.succeed({ path, info: card.info })
+            : Effect.logWarning("Skipping Project card whose id does not match its path", { path }).pipe(
+                Effect.as(undefined),
+              ),
+        ),
+        Effect.catch((error) =>
+          Effect.logWarning("Skipping unreadable Project card", { path, error: error._tag }).pipe(Effect.as(undefined)),
+        ),
+      ),
+    { concurrency: 8 },
+  )
+  const byId = new Map<string, Info>()
+  cards
+    .filter((card) => card !== undefined)
+    // Managed cards sort last so they replace a legacy flat card with the same id.
+    .sort((left, right) => Number(left.path.endsWith("/project.md")) - Number(right.path.endsWith("/project.md")))
+    .forEach((card) => byId.set(card.info.id, card.info))
+  return [...byId.values()].sort(
+    (left, right) =>
+      statusRank(left.status) - statusRank(right.status) ||
+      right.updatedAt.localeCompare(left.updatedAt) ||
+      left.name.localeCompare(right.name),
+  )
 })
+
+/** The id a card path names: `projects/<id>.md` or `projects/<id>/project.md`. */
+function pathId(path: string) {
+  const parts = path.split("/")
+  return parts.length === 3 ? parts[1] : parts[1]?.replace(/\.md$/, "")
+}
 
 export const get = Effect.fn("BrainProject.get")(function* (id: string) {
-  const path = yield* existingProjectPath(id)
-  return (yield* readCard(path)).info
+  return (yield* readProjectCard(id)).info
 })
 
-export const create = Effect.fn("BrainProject.create")(function* (input: CreateInput) {
-  const projects = yield* list()
+/** `projects` is the caller's already-loaded full list, used for the duplicate-name check. */
+export const create = Effect.fn("BrainProject.create")(function* (input: CreateInput, projects?: ReadonlyArray<Info>) {
+  const existing = projects ?? (yield* all())
   const now = new Date().toISOString()
   const id = `project_${ulid()}`
   const info = yield* Effect.try({
@@ -162,7 +198,7 @@ export const create = Effect.fn("BrainProject.create")(function* (input: CreateI
       }),
     catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_card" })),
   })
-  if (projects.some((project) => project.name.toLowerCase() === info.name.toLowerCase())) {
+  if (existing.some((project) => project.name.toLowerCase() === info.name.toLowerCase())) {
     return yield* new ConflictError({ reason: "duplicate_name" })
   }
   const mutation = yield* LocationMutation.Service
@@ -197,12 +233,10 @@ export const create = Effect.fn("BrainProject.create")(function* (input: CreateI
 })
 
 export const update = Effect.fn("BrainProject.update")(function* (id: string, input: UpdateInput) {
-  const path = yield* existingProjectPath(id)
-  const card = yield* readCard(path)
+  const card = yield* readProjectCard(id)
   if (input.expectedUpdatedAt !== undefined && input.expectedUpdatedAt !== card.info.updatedAt) {
     return yield* new ConflictError({ reason: "stale" })
   }
-  const projects = yield* list()
   const info = yield* Effect.try({
     try: () =>
       validate({
@@ -221,8 +255,10 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
       }),
     catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_card" })),
   })
+  // Only a rename can introduce a duplicate name, so only then list the other cards.
   if (
-    projects.some(
+    input.name !== undefined &&
+    (yield* all()).some(
       (project) => project.id !== id && project.name.trim().toLowerCase() === info.name.trim().toLowerCase(),
     )
   ) {
@@ -230,12 +266,12 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
   }
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
-  const target = yield* mutation.resolve({ path, kind: "file" })
+  const target = yield* mutation.resolve({ path: card.path, kind: "file" })
   yield* files
     .writeIfUnchanged({
       target,
       content: encode(info, card.data, card.body),
-      expected: new TextEncoder().encode(card.source),
+      expected: card.bytes,
     })
     .pipe(Effect.catchTag("FileMutation.StaleContentError", () => Effect.fail(new ConflictError({ reason: "stale" }))))
   return info
@@ -246,16 +282,22 @@ export const update = Effect.fn("BrainProject.update")(function* (id: string, in
  * Idempotent: a second call returns the same Project. Only writes Markdown cards
  * and the Project folder; never moves files.
  */
-export const ensureForWorkspace = Effect.fn("BrainProject.ensureForWorkspace")(function* (workspace: Workspace) {
-  const projects = yield* list()
+export const ensureForWorkspace = Effect.fn("BrainProject.ensureForWorkspace")(function* (
+  workspace: Workspace,
+  loaded?: ReadonlyArray<Info>,
+) {
+  const projects = loaded ?? (yield* all())
   const existing = projects.find((project) => project.location?.workspaceId === workspace.id)
   if (existing) return { project: existing, created: false }
   const base = workspaceName(workspace)
-  const project = yield* create({
-    name: uniqueName(base, new Set(projects.map((project) => project.name.trim().toLowerCase()))),
-    outcome: `Threads and work in ${base}.`,
-    location: { workspaceId: workspace.id, displayPath: workspace.worktree },
-  })
+  const project = yield* create(
+    {
+      name: uniqueName(base, new Set(projects.map((project) => project.name.trim().toLowerCase()))),
+      outcome: `Threads and work in ${base}.`,
+      location: { workspaceId: workspace.id, displayPath: workspace.worktree },
+    },
+    projects,
+  )
   return { project, created: true }
 })
 
@@ -329,9 +371,7 @@ export function migrationCandidates(input: {
   const brain = path.resolve(input.brainDirectory)
   return input.workspaces.filter(
     (workspace) =>
-      workspace.id !== "global" &&
-      input.withThreads.has(workspace.id) &&
-      path.resolve(workspace.worktree) !== brain,
+      workspace.id !== "global" && input.withThreads.has(workspace.id) && path.resolve(workspace.worktree) !== brain,
   )
 }
 
@@ -340,7 +380,14 @@ export const migrateWorkspaces = Effect.fn("BrainProject.migrateWorkspaces")(fun
   workspaces: ReadonlyArray<Workspace>,
 ) {
   // Sequential so generated names stay unique across this pass; one failure does not stop the rest.
-  const results = yield* Effect.forEach(workspaces, (workspace) => ensureForWorkspace(workspace).pipe(Effect.option))
+  // The card list is read once and extended with each created Project.
+  const projects = [...(yield* all())]
+  const results = yield* Effect.forEach(workspaces, (workspace) =>
+    ensureForWorkspace(workspace, projects).pipe(
+      Effect.tap((result) => Effect.sync(() => result.created && projects.push(result.project))),
+      Effect.option,
+    ),
+  )
   const done = results.filter(Option.isSome).map((result) => result.value)
   return {
     created: done.filter((result) => result.created).length,
@@ -363,13 +410,21 @@ function uniqueName(base: string, taken: ReadonlySet<string>) {
 }
 
 const existingProjectPath = Effect.fn("BrainProject.existingProjectPath")(function* (id: string) {
-  if (!/^project_[0-9A-Z]+$/i.test(id)) return yield* new InvalidError({ reason: "invalid_id" })
+  if (!idPattern.test(id)) return yield* new InvalidError({ reason: "invalid_id" })
   const location = yield* Location.Service
   const fs = yield* FSUtil.Service
   const managed = managedProjectPath(id)
   const managedTarget = yield* fs.resolve(`${location.directory}/${managed}`)
   if (yield* fs.existsSafe(managedTarget)) return managed
   return `${directory}/${id}.md`
+})
+
+const readProjectCard = Effect.fn("BrainProject.readProjectCard")(function* (id: string) {
+  const path = yield* existingProjectPath(id)
+  const card = yield* readCard(path)
+  // A card whose id does not match its path is not this Project; the list ignores it too.
+  if (card.info.id !== pathId(path)) return yield* new NotFoundError({ id })
+  return { ...card, path }
 })
 
 export function managedFolder(id: string) {
@@ -388,10 +443,16 @@ export function projectTimeline(snapshot: PlannerCalendar.Snapshot, id: string):
   }
 }
 
+/**
+ * Mirror each Project's slice of the calendar into `projects/<id>/timeline/calendar.json`.
+ * Only files whose events or tasks changed are rewritten; the calendar revision
+ * alone changes on every save, so it does not count as a change.
+ */
 export const syncTimelines = Effect.fn("BrainProject.syncTimelines")(function* (snapshot: PlannerCalendar.Snapshot) {
-  const projects = yield* list()
+  const projects = yield* all()
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
+  const fs = yield* FSUtil.Service
   yield* Effect.forEach(
     projects,
     (project) =>
@@ -400,7 +461,10 @@ export const syncTimelines = Effect.fn("BrainProject.syncTimelines")(function* (
           path: `${managedFolder(project.id)}/timeline/calendar.json`,
           kind: "file",
         })
-        yield* files.write({ target, content: timelineSource(projectTimeline(snapshot, project.id)) })
+        const next = projectTimeline(snapshot, project.id)
+        const current = yield* fs.readFileString(target.canonical).pipe(Effect.option)
+        if (Option.isSome(current) && sameTimeline(current.value, next)) return
+        yield* files.write({ target, content: timelineSource(next) })
       }),
     { concurrency: 8, discard: true },
   )
@@ -410,16 +474,22 @@ const readCard = Effect.fn("BrainProject.readCard")(function* (path: string) {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path, kind: "file" })
-  const source = yield* fs.readFileStringSafe(target.canonical)
-  if (source === undefined) return yield* new NotFoundError({ id: path.split("/").pop()?.replace(/\.md$/, "") ?? path })
-  return yield* Effect.try({
-    try: () => decode(source),
+  // Only a missing file is "not found"; permission and IO failures must surface.
+  const bytes = yield* fs
+    .readFile(target.canonical)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+  if (bytes === undefined) return yield* new NotFoundError({ id: pathId(path) ?? path })
+  const card = yield* Effect.try({
+    try: () => decode(utf8.decode(bytes)),
     catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_card" })),
   })
+  // The exact bytes read are the compare-and-swap baseline for a later save.
+  return { ...card, bytes }
 })
 
 export function decode(source: string): Card {
-  const parsed = matter(source)
+  // Passing options disables gray-matter's unbounded module-level parse cache.
+  const parsed = matter(source, {})
   const data = { ...(parsed.data as Record<string, unknown>) }
   const version = typeof data.version === "number" ? data.version : 1
   if (version > 2) throw new InvalidError({ reason: "unsupported_version" })
@@ -446,7 +516,7 @@ export function decode(source: string): Card {
   const decoded = Schema.decodeUnknownOption(Info)(raw)
   if (Option.isNone(decoded)) throw new InvalidError({ reason: "invalid_card" })
   const info = validate(decoded.value)
-  return { info, data, body: parsed.content, source }
+  return { info, data, body: parsed.content }
 }
 
 export function encode(info: Info, previous: Record<string, unknown>, body: string) {
@@ -472,11 +542,11 @@ export function encode(info: Info, previous: Record<string, unknown>, body: stri
   setOptional(data, "next_milestone", info.nextMilestone)
   setOptional(data, "blocker", info.blocker)
   setOptional(data, "location", info.location)
-  return matter.stringify(body, data)
+  return matter.stringify(body, data, {})
 }
 
 function validate(info: Info) {
-  if (!/^project_[0-9A-Z]+$/i.test(info.id) || info.folder !== managedFolder(info.id)) {
+  if (!idPattern.test(info.id) || info.folder !== managedFolder(info.id)) {
     throw new InvalidError({ reason: "invalid_id" })
   }
   if (info.name.length === 0 || [...info.name].length > 200) throw new InvalidError({ reason: "invalid_name" })
@@ -497,6 +567,11 @@ function validate(info: Info) {
 
 function timelineSource(snapshot: PlannerCalendar.Snapshot) {
   return JSON.stringify(snapshot, null, 2) + "\n"
+}
+
+function sameTimeline(source: string, next: PlannerCalendar.Snapshot) {
+  const current = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ revision: Schema.String })))(source)
+  return Option.isSome(current) && source === timelineSource({ ...next, revision: current.value.revision })
 }
 
 function normalizeTags(tags: ReadonlyArray<string>) {

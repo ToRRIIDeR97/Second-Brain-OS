@@ -2662,6 +2662,13 @@ export type SessionBusyError = {
   message: string
 }
 
+export type SecondBrainInvalidError = {
+  name: "SecondBrainInvalidError"
+  data: {
+    message: string
+  }
+}
+
 export type SecondBrainConflictError = {
   name: "SecondBrainConflictError"
   data: {
@@ -8250,7 +8257,7 @@ export type ExperimentalSessionListData = {
     workspace?: string
     roots?: boolean | "true" | "false"
     start?: number
-    cursor?: number
+    cursor?: string | number
     search?: string
     limit?: number
     archived?: boolean | "true" | "false"
@@ -8260,9 +8267,9 @@ export type ExperimentalSessionListData = {
 
 export type ExperimentalSessionListErrors = {
   /**
-   * Bad request
+   * BadRequest | InvalidRequestError
    */
-  400: BadRequestError
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
 }
 
 export type ExperimentalSessionListError = ExperimentalSessionListErrors[keyof ExperimentalSessionListErrors]
@@ -10940,9 +10947,21 @@ export type SecondBrainListNotesData = {
 
 export type SecondBrainListNotesErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainListNotesError = SecondBrainListNotesErrors[keyof SecondBrainListNotesErrors]
@@ -10976,13 +10995,21 @@ export type SecondBrainReadNoteData = {
 
 export type SecondBrainReadNoteErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
   /**
    * Not found
    */
   404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainReadNoteError = SecondBrainReadNoteErrors[keyof SecondBrainReadNoteErrors]
@@ -11027,9 +11054,9 @@ export type SecondBrainWriteNoteData = {
 
 export type SecondBrainWriteNoteErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
   /**
    * Not found
    */
@@ -11038,6 +11065,10 @@ export type SecondBrainWriteNoteErrors = {
    * SecondBrainConflictError
    */
   409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainWriteNoteError = SecondBrainWriteNoteErrors[keyof SecondBrainWriteNoteErrors]
@@ -11074,9 +11105,21 @@ export type SecondBrainReadCalendarData = {
 
 export type SecondBrainReadCalendarErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainReadCalendarError = SecondBrainReadCalendarErrors[keyof SecondBrainReadCalendarErrors]
@@ -11191,13 +11234,21 @@ export type SecondBrainWriteCalendarData = {
 
 export type SecondBrainWriteCalendarErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
   /**
    * SecondBrainConflictError
    */
   409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainWriteCalendarError = SecondBrainWriteCalendarErrors[keyof SecondBrainWriteCalendarErrors]
@@ -11269,9 +11320,21 @@ export type SecondBrainListProjectsData = {
 
 export type SecondBrainListProjectsErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainListProjectsError = SecondBrainListProjectsErrors[keyof SecondBrainListProjectsErrors]
@@ -11325,13 +11388,21 @@ export type SecondBrainCreateProjectData = {
 
 export type SecondBrainCreateProjectErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
   /**
    * SecondBrainConflictError
    */
   409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainCreateProjectError = SecondBrainCreateProjectErrors[keyof SecondBrainCreateProjectErrors]
@@ -11376,9 +11447,21 @@ export type SecondBrainListProjectThreadsData = {
 
 export type SecondBrainListProjectThreadsErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainListProjectThreadsError =
@@ -11437,9 +11520,9 @@ export type SecondBrainEnsureWorkspaceProjectData = {
 
 export type SecondBrainEnsureWorkspaceProjectErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
   /**
    * Not found
    */
@@ -11448,6 +11531,10 @@ export type SecondBrainEnsureWorkspaceProjectErrors = {
    * SecondBrainConflictError
    */
   409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainEnsureWorkspaceProjectError =
@@ -11494,13 +11581,21 @@ export type SecondBrainReadProjectData = {
 
 export type SecondBrainReadProjectErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
   /**
    * Not found
    */
   404: NotFoundError
+  /**
+   * SecondBrainConflictError
+   */
+  409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainReadProjectError = SecondBrainReadProjectErrors[keyof SecondBrainReadProjectErrors]
@@ -11560,9 +11655,9 @@ export type SecondBrainUpdateProjectData = {
 
 export type SecondBrainUpdateProjectErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * SecondBrainInvalidError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: SecondBrainInvalidError | InvalidRequestError
   /**
    * Not found
    */
@@ -11571,6 +11666,10 @@ export type SecondBrainUpdateProjectErrors = {
    * SecondBrainConflictError
    */
   409: SecondBrainConflictError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
 }
 
 export type SecondBrainUpdateProjectError = SecondBrainUpdateProjectErrors[keyof SecondBrainUpdateProjectErrors]

@@ -5,7 +5,7 @@ import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
-import type { Event } from "electron"
+import type { Event, WebContents } from "electron"
 import { app, BrowserWindow } from "electron"
 
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
@@ -14,10 +14,11 @@ import contextMenu from "electron-context-menu"
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL, DEEP_LINK_SCHEME } from "./constants"
+import { createDeepLinkQueue } from "./deep-links"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { createGoogleCalendarService } from "./google-calendar"
-import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
+import { exportDebugLogs, initCrashReporter, initLogging, write as writeLog } from "./logging"
 import { createMenu } from "./menu"
 import {
   finishFirstLaunchOnboarding,
@@ -74,7 +75,8 @@ const QUIT_STOP_TIMEOUT = 8_000
 let logger: ReturnType<typeof initLogging>
 let server: SidecarListener | null = null
 
-const pendingDeepLinks: string[] = []
+const deepLinks = createDeepLinkQueue()
+const deepLinkSenders = new WeakSet<WebContents>()
 
 function useEnvProxy() {
   try {
@@ -86,10 +88,23 @@ function useEnvProxy() {
 }
 
 function emitDeepLinks(urls: string[]) {
-  if (urls.length === 0) return
-  pendingDeepLinks.push(...urls)
   const win = getLastFocusedWindow()
-  if (win) sendDeepLinks(win, urls)
+  deepLinks.emit(urls, win ? { id: win.webContents.id, send: (next) => sendDeepLinks(win, next) } : undefined)
+}
+
+function consumeInitialDeepLinks(sender: WebContents) {
+  const id = sender.id
+  if (!deepLinkSenders.has(sender)) {
+    deepLinkSenders.add(sender)
+    // Only a full main-frame load drops the renderer's deep-link listener;
+    // in-app pushState and hash navigations keep it.
+    sender.on("did-start-navigation", (details) => {
+      if (details.isMainFrame && !details.isSameDocument) deepLinks.forget(id)
+    })
+    sender.on("render-process-gone", () => deepLinks.forget(id))
+    sender.once("destroyed", () => deepLinks.forget(id))
+  }
+  return deepLinks.consume(id)
 }
 
 async function killSidecar() {
@@ -326,7 +341,7 @@ const main = Effect.gen(function* () {
       },
       (e) => Effect.runPromise(e),
     ),
-    consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
+    consumeInitialDeepLinks,
     getDefaultServerUrl: () => getDefaultServerUrl(),
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
     isFirstLaunchOnboardingPending,
@@ -351,13 +366,6 @@ const main = Effect.gen(function* () {
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()
   app.once("will-quit", () => clearInterval(updateTimer))
-  yield* Effect.promise(() => startNetLog()).pipe(
-    Effect.catch((error) =>
-      Effect.sync(() => {
-        logger.warn("failed to start net log", error)
-      }),
-    ),
-  )
 
   const loadingTask = yield* Effect.gen(function* () {
     logger.log("sidecar connection started", { version: SIDECAR_VERSION })

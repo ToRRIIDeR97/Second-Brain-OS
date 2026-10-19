@@ -81,7 +81,8 @@ export const SessionListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
-  cursor: Schema.optional(Schema.NumberFromString),
+  // The opaque x-next-cursor value; a numeric time_updated cursor from older clients is still accepted.
+  cursor: Schema.optional(Schema.String),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
   archived: Schema.optional(QueryBoolean),
@@ -224,6 +225,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         HttpApiEndpoint.get("session", ExperimentalPaths.session, {
           query: SessionListQuery,
           success: described(Schema.Array(Session.GlobalInfo), "List of sessions"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.session.list",

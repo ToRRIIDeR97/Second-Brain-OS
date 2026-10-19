@@ -111,7 +111,8 @@ workspace routing):
   server process runs the Workspace migration: every OpenCode project with
   root threads, other than `global` and the Brain itself, gets a Project
   through `BrainProject.ensureForWorkspace`. It only creates Markdown cards,
-  never moves files, and logs counts only. The server has no other way to
+  never moves files, and logs counts only. A pass with any failure runs again
+  on the next listing. The server has no other way to
   know which Workspace is the Brain, so the migration does not run at
   bootstrap.
 - `POST /second-brain/projects/workspace` with `{ workspaceId }` returns the
@@ -386,6 +387,14 @@ renderer selects those supported routes through capability detection rather
 than assuming that every operation uses one API generation. PTY sockets use
 short-lived tickets from the legacy connection endpoint on managed servers
 and the native `/api/pty` endpoints on servers using only the current API.
+
+The event streams (`/global/event`, legacy `/event`, and native `/api/event`)
+buffer a bounded number of events per subscriber (4096 for the first two, 256
+for `/api/event`) and disconnect a subscriber that falls further behind. The
+renderer reconnects and resyncs on the `server.connected` event. `/api/event`
+skips bus events outside its served schema, such as TUI events. `GET /provider`
+caches its projection until models.dev data, config, provider state, or stored
+credentials change, and answers a matching `If-None-Match` with 304.
 
 Archive, unarchive, and pin go through the legacy
 `PATCH /session/:sessionID` route. `time.archived: <ms>` archives and

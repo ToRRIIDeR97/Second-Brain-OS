@@ -47,4 +47,20 @@ describe("Codex app-server client", () => {
       ),
     )
   })
+
+  test("fails a setup request that is not answered within its timeout", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const incoming = yield* Queue.unbounded<Uint8Array>()
+          const client = yield* make({
+            connection: { stdout: Stream.fromQueue(incoming), stdin: Sink.drain },
+          })
+
+          const error = yield* client.request("thread/start", {}, "20 millis").pipe(Effect.flip)
+          expect(error.message).toContain("did not answer thread/start")
+        }),
+      ),
+    )
+  })
 })

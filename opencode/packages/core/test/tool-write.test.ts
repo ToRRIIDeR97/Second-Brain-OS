@@ -56,6 +56,8 @@ const filesystem = Layer.effect(
       ...fs,
       writeWithDirs: (target, content, mode) =>
         Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
+      // FileMutation commits a replacement by renaming a temp file over the target.
+      rename: (from, to) => Effect.sync(() => writes.push(to)).pipe(Effect.andThen(fs.rename(from, to))),
     })
   }),
 ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
@@ -256,7 +258,7 @@ describe("WriteTool", () => {
             ),
           ).toEqual({
             type: "error",
-            value: `Unable to write ${external}`,
+            value: expect.stringContaining("prevents you from using this specific tool call"),
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(writes).toEqual([])
@@ -269,7 +271,7 @@ describe("WriteTool", () => {
             ),
           ).toEqual({
             type: "error",
-            value: "Unable to write denied.txt",
+            value: expect.stringContaining("prevents you from using this specific tool call"),
           })
           expect(assertions.map((input) => input.action)).toEqual(["edit"])
           expect(writes).toEqual([])

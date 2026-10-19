@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
 import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ProviderID, Usage } from "../src/schema"
@@ -82,5 +82,41 @@ describe("LLM.Usage", () => {
     expect(new Usage({ outputTokens: 10 }).visibleOutputTokens).toBe(10)
     expect(new Usage({ outputTokens: 4, reasoningTokens: 10 }).visibleOutputTokens).toBe(0)
     expect(new Usage({}).visibleOutputTokens).toBe(0)
+  })
+})
+
+describe("ProviderShared media validation", () => {
+  const validate = (data: string) =>
+    Effect.runPromise(
+      ProviderShared.validateMedia(
+        "Test",
+        { type: "media", mediaType: "image/png", data },
+        new Set(["image/png"]),
+      ).pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: (media) => media })),
+    )
+
+  test("computes decoded length from base64 length and padding", () => {
+    for (const bytes of [1, 2, 3, 4, 5, 6, 255, 256, 257]) {
+      const base64 = Buffer.alloc(bytes, 7).toString("base64")
+      expect(ProviderShared.base64DecodedLength(base64)).toBe(bytes)
+    }
+  })
+
+  test("accepts canonical base64 and rejects malformed or non-canonical input", async () => {
+    for (const data of ["QQ==", "QUI=", "QUJD", "data:image/png;base64,QUJD"])
+      expect(await validate(data)).toMatchObject({ mime: "image/png", base64: data.replace(/^data:[^,]*,/, "") })
+    // "QR==" and "QUJ=" carry non-zero bits after the last byte.
+    for (const data of ["QR==", "QUJ=", "QUJ", "QU=I", "QU*D", ""]) expect(await validate(data)).toMatch(/valid base64/)
+  })
+
+  test("accepts large media below the decoded limit", async () => {
+    // 12 MB decoded: large enough that a grouped base64 regex gives up on it.
+    const base64 = "A".repeat(16_000_000)
+    expect(await validate(base64)).toMatchObject({ mime: "image/png" })
+  })
+
+  test("rejects media whose decoded size exceeds the limit without decoding it", async () => {
+    const base64 = "A".repeat(Math.ceil((ProviderShared.MAX_MEDIA_DECODED_BYTES + 1) / 3) * 4)
+    expect(await validate(base64)).toMatch(/byte decoded limit/)
   })
 })

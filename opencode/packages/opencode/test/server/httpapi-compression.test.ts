@@ -65,6 +65,23 @@ describe("HttpApi compression", () => {
       expect(response.headers.get("content-encoding")).toBe("gzip")
     })
 
+    test("honours q-values", async () => {
+      await using tmp = await tmpdir({ config: fatConfig() })
+      const cases = [
+        ["gzip;q=0, deflate", "deflate"],
+        ["gzip;q=0.5, deflate;q=0.8", "deflate"],
+        ["*;q=0.1", "gzip"],
+        ["gzip;q=0, deflate;q=0", null],
+        ["*, gzip;q=0, deflate;q=0", null],
+      ] as const
+      for (const [acceptEncoding, expected] of cases) {
+        const response = await app().request("/config", {
+          headers: { "x-opencode-directory": tmp.path, "accept-encoding": acceptEncoding },
+        })
+        expect([acceptEncoding, response.headers.get("content-encoding")]).toEqual([acceptEncoding, expected])
+      }
+    })
+
     test("does not include the original Content-Length when compressed", async () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
@@ -104,6 +121,21 @@ describe("HttpApi compression", () => {
       const body = new Uint8Array(await response.arrayBuffer())
       expect(body.byteLength).toBeLessThan(1024)
       expect(response.headers.get("content-encoding")).toBeNull()
+    })
+
+    test("for loopback hosts", async () => {
+      await using tmp = await tmpdir({ config: fatConfig() })
+      for (const host of ["127.0.0.1:4096", "localhost", "[::1]:4096"]) {
+        const response = await app().request("/config", {
+          headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip", host },
+        })
+        expect(response.status).toBe(200)
+        expect([host, response.headers.get("content-encoding")]).toEqual([host, null])
+      }
+      const remote = await app().request("/config", {
+        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip", host: "workbench.example:4096" },
+      })
+      expect(remote.headers.get("content-encoding")).toBe("gzip")
     })
 
     test("HEAD requests", async () => {

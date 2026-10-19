@@ -34,6 +34,8 @@ export function workspaceProxyURL(target: string | URL, requestURL: URL) {
   proxyURL.search = requestURL.search
   proxyURL.hash = requestURL.hash
   proxyURL.searchParams.delete("workspace")
+  // `auth_token` carries the local server credential; never forward it to a remote target.
+  proxyURL.searchParams.delete("auth_token")
   // The `directory` param is the *host's* working directory (e.g. a Windows
   // path like `F:\proj`). It is meaningless — and dangerous — on the remote:
   // the sandbox would `path.resolve` it against its own cwd, producing a bogus

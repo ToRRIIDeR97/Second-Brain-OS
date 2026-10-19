@@ -310,6 +310,64 @@ describe("CatalogV2", () => {
     }),
   )
 
+  it.effect("gets one available model with the same rules as the available list", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
+        [Location.node, locationLayer],
+      ]),
+    )
+    const open = ProviderV2.ID.make("open")
+    const disabled = ProviderV2.ID.make("disabled")
+    const gated = ProviderV2.ID.make("gated")
+    const model = ModelV2.ID.make("model")
+    const off = ModelV2.ID.make("off")
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) => {
+        editor.provider.update(open, (provider) => {
+          provider.request.body.baseURL = "https://open.example/v1"
+        })
+        editor.model.update(open, model, () => {})
+        editor.model.update(open, off, (item) => {
+          item.enabled = false
+        })
+        editor.provider.update(disabled, (provider) => {
+          provider.disabled = true
+        })
+        editor.model.update(disabled, model, () => {})
+        editor.provider.update(gated, (provider) => {
+          provider.integrationID = integrationID
+        })
+        editor.model.update(gated, model, () => {})
+      })
+
+      const listed = (providerID: ProviderV2.ID, modelID: ModelV2.ID) =>
+        catalog.model
+          .available()
+          .pipe(Effect.map((models) => models.find((item) => item.providerID === providerID && item.id === modelID)))
+      const cases = [
+        [open, model],
+        [open, off],
+        [open, ModelV2.ID.make("missing")],
+        [disabled, model],
+        [gated, model],
+      ] as const
+      for (const [providerID, modelID] of cases)
+        expect(yield* catalog.model.getAvailable(providerID, modelID)).toEqual(yield* listed(providerID, modelID))
+      expect(yield* catalog.model.getAvailable(open, model)).toMatchObject({ api: { url: "https://open.example/v1" } })
+      expect(yield* catalog.model.getAvailable(gated, model)).toBeUndefined()
+
+      yield* (yield* Credential.Service).create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "secret" }),
+      })
+      expect(yield* catalog.model.getAvailable(gated, model)).toMatchObject({ providerID: gated, id: model })
+    }).pipe(Effect.provide(localCatalogLayer))
+  })
+
   it.effect("small model prefers small keyword candidates before cost scoring", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

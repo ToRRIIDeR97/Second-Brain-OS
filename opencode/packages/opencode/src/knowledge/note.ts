@@ -13,6 +13,8 @@ const directory = "notes"
 const limit = 500
 const maxBytes = 5 * 1024 * 1024
 const projectPattern = /^project_[0-9A-Z]+$/i
+// Keep a leading BOM in the text so decode() can detect it and the save path keeps it.
+const utf8 = new TextDecoder("utf-8", { ignoreBOM: true })
 
 export const Info = Schema.Struct({
   path: Schema.String,
@@ -62,7 +64,7 @@ type Card = Document & {
 export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
-  const paths = yield* fs.glob(`{${directory}/**/*.md,projects/*/notes/**/*.md}`, {
+  const paths = yield* fs.glob(`{${directory}/**/*.md,projects/project_*/notes/**/*.md}`, {
     cwd: location.directory,
     absolute: false,
     include: "file",
@@ -70,10 +72,11 @@ export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
   })
   const query = search.trim().toLowerCase()
   // Read every candidate so search sees all notes; keep only matching summaries in memory.
+  // One unreadable or malformed note is skipped so it cannot hide the rest.
   const notes = yield* Effect.forEach(
-    paths,
+    paths.map((path) => path.replaceAll("\\", "/")).filter(isNotePath),
     (path) =>
-      readCard(path.replaceAll("\\", "/")).pipe(
+      readCard(path).pipe(
         Effect.map((note) =>
           !query ||
           [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
@@ -81,6 +84,9 @@ export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
           )
             ? note.info
             : undefined,
+        ),
+        Effect.catch((error) =>
+          Effect.logWarning("Skipping unreadable note", { path, error: error._tag }).pipe(Effect.as(undefined)),
         ),
       ),
     { concurrency: 8 },
@@ -124,6 +130,7 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
       .pipe(
         Effect.catchTag("FileMutation.TargetExistsError", () => Effect.fail(new ConflictError({ reason: "exists" }))),
       )
+    // Re-decode so the response matches what a later read returns (stringify normalizes the body).
     return decode(normalizedPath, source)
   }
 
@@ -151,7 +158,7 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
     .writeIfUnchanged({
       target,
       content: source,
-      expected: new TextEncoder().encode(card.source),
+      expected: card.bytes,
     })
     .pipe(Effect.catchTag("FileMutation.StaleContentError", () => Effect.fail(new ConflictError({ reason: "stale" }))))
   return decode(normalizedPath, source)
@@ -161,28 +168,36 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path, kind: "file" })
-  const source = yield* fs.readFileStringSafe(target.canonical)
-  if (source === undefined) return yield* new NotFoundError({ path })
-  return yield* Effect.try({
-    try: () => decode(path, source),
+  // Only a missing file is "not found"; permission and IO failures must surface, not read as empty.
+  const bytes = yield* fs
+    .readFile(target.canonical)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+  if (bytes === undefined) return yield* new NotFoundError({ path })
+  const card = yield* Effect.try({
+    try: () => decode(path, utf8.decode(bytes)),
     catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_card" })),
   })
+  // The exact bytes read are the compare-and-swap baseline for a later save.
+  return { ...card, bytes }
 })
 
 const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {
   const path = input.replaceAll("\\", "/").replace(/^\.\//, "")
-  const global = path.startsWith(`${directory}/`)
-  const managed = /^projects\/project_[0-9A-Z]+\/notes\/.+\.md$/i.test(path)
-  if ((!global && !managed) || !path.toLowerCase().endsWith(".md") || path.split("/").includes("..")) {
-    return yield* new InvalidError({ reason: "invalid_path" })
-  }
+  if (!isNotePath(path)) return yield* new InvalidError({ reason: "invalid_path" })
   return path
 })
+
+function isNotePath(path: string) {
+  const global = path.startsWith(`${directory}/`)
+  const managed = /^projects\/project_[0-9A-Z]+\/notes\/.+\.md$/i.test(path)
+  return (global || managed) && path.toLowerCase().endsWith(".md") && !path.split("/").includes("..")
+}
 
 export function decode(path: string, raw: string): Card {
   const bom = raw.startsWith("\uFEFF")
   const source = bom ? raw.slice(1) : raw
-  const parsed = matter(source)
+  // Passing options disables gray-matter's unbounded module-level parse cache.
+  const parsed = matter(source, {})
   const data = { ...(parsed.data as Record<string, unknown>) }
   const projectIds = Array.isArray(data.project_ids)
     ? data.project_ids.filter((value): value is string => typeof value === "string" && projectPattern.test(value))
@@ -215,7 +230,7 @@ export function encode(info: Info, previous: Record<string, unknown>, body: stri
     tags: [...info.tags],
     updated_at: info.updatedAt,
   }
-  const source = matter.stringify(body, data)
+  const source = matter.stringify(body, data, {})
   return bom ? `\uFEFF${source}` : source
 }
 

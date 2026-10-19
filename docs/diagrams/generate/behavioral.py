@@ -173,7 +173,7 @@ def activity_write():
         E([(cx, y + 72), (cx, y + 90)])
     s.decision(cx, 466)
     E([(cx, 480), (cx, 500)], "[update]", at=(cx + 34, 494))
-    s.node(cx - 150, 500, 300, 44, "read current file", "compare expectedRevision")
+    s.node(cx - 150, 500, 300, 44, "read current file", "compare revision · move bad calendar aside")
     s.decision(cx, 572)
     E([(cx, 544), (cx, 558)])
     E([(cx + 14, 572), (680, 572)], "[revision differs]", at=(580, 566))
@@ -181,7 +181,7 @@ def activity_write():
     E([(cx, 586), (cx, 604)])
     s.node(cx - 150, 604, 300, 44, "validate + encode", "frontmatter / ULID revision")
     E([(cx, 648), (cx, 664)])
-    s.node(cx - 150, 664, 300, 44, "FileMutation.writeIfUnchanged", "per-path mutex, compare bytes")
+    s.node(cx - 150, 664, 300, 44, "FileMutation.writeIfUnchanged", "per-path mutex, compare bytes, temp + rename")
     s.decision(cx, 736)
     E([(cx, 708), (cx, 722)])
     E([(cx + 14, 736), (680, 736)], "[bytes changed]", at=(580, 730))
@@ -198,12 +198,12 @@ def activity_write():
     s.decision(cx, 790)
     E([(cx, 750), (cx, 776)], "[written]", at=(cx + 36, 768))
     E([(cx, 804), (cx, 822)])
-    s.node(cx - 150, 822, 300, 44, "[calendar] BrainProject.syncTimelines", "best effort; errors swallowed")
+    s.node(cx - 150, 822, 300, 44, "[calendar] BrainProject.syncTimelines", "changed timelines only; errors logged")
     E([(cx, 866), (cx, 880)])
     s.final(cx, 892)
     s.text(cx + 20, 897, "200 Document / Snapshot", "s")
-    s.box(680, 800, 270, 96, "Unverified at runtime", ["note/project validate() throws inside", "Effect.fn; handlers catch typed errors",
-          "only, so these may surface as 500.", "CAS lock is process-local; no rename."], cls="gapz")
+    s.box(680, 800, 270, 96, "Unverified at runtime", ["Domain errors → 400 {reason}; IO → 500.", "Calendar saves and Project changes",
+          "share a per-Brain lock. The CAS lock is", "process-local; other processes can race."], cls="gapz")
     s.save(f"{OUT}/activity-second-brain-write.svg")
 
 

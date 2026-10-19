@@ -99,6 +99,21 @@ test("rolls back explicit transaction rollback", async () => {
   )
 })
 
+test("redacts bound values from failed query errors", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      yield* db.insert(users).values({ id: 1, name: "Ada" })
+
+      const error = yield* db.insert(users).values({ id: 1, name: "sk-secret-token" }).pipe(Effect.flip)
+
+      expect(error.params).toEqual(["[redacted]", "[redacted]"])
+      expect(error.message).not.toContain("sk-secret-token")
+      expect(error.message).toContain("insert into")
+    }),
+  )
+})
+
 test("preserves failed transaction begin errors", async () => {
   const dir = await mkdtemp(join(tmpdir(), "effect-drizzle-sqlite-"))
   const filename = join(dir, "locked.db")

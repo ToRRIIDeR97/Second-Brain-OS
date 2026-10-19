@@ -385,6 +385,48 @@ describe("RequestExecutor", () => {
     }),
   )
 
+  it.effect("fails fast with retryAfterMs when Retry-After exceeds the inner retry cap", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      return yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const error = expectLLMError(yield* executor.execute(request).pipe(Effect.flip))
+
+        expect(error.retryable).toBe(true)
+        expect(error.retryAfterMs).toBe(60_000)
+        expect(yield* Ref.get(attempts)).toBe(1)
+      }).pipe(
+        Effect.provide(
+          countedResponsesLayer(attempts, [
+            new Response("busy", { status: 429, headers: { "retry-after": "60" } }),
+            new Response("ok", { status: 200 }),
+          ]),
+        ),
+      )
+    }),
+  )
+
+  it.effect("skips inner retries when the caller sets MaxRetries to 0", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      return yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const error = expectLLMError(yield* executor.execute(request).pipe(Effect.flip))
+
+        expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 503 })
+        expect(yield* Ref.get(attempts)).toBe(1)
+      }).pipe(
+        Effect.provideService(RequestExecutor.MaxRetries, 0),
+        Effect.provide(
+          countedResponsesLayer(attempts, [
+            new Response("busy", { status: 503, headers: { "retry-after-ms": "0" } }),
+            new Response("ok", { status: 200 }),
+          ]),
+        ),
+      )
+    }),
+  )
+
   it.effect("uses exponential jittered delay when retry-after is absent", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)

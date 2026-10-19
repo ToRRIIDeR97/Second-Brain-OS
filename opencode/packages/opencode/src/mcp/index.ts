@@ -31,6 +31,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { ChildEnv } from "@opencode-ai/core/child-env"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
@@ -350,7 +351,7 @@ const layer = Layer.effect(
         args,
         cwd,
         env: {
-          ...process.env,
+          ...ChildEnv.from(),
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },

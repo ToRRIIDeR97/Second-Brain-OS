@@ -1,9 +1,10 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Option } from "effect"
+import { Context, Effect, Layer, Option, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Auth } from "../../src/auth"
+import { GlobalBus } from "../../src/bus/global"
 import { Config } from "../../src/config/config"
 import { Installation } from "../../src/installation"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
@@ -61,6 +62,21 @@ describe("global HttpApi", () => {
 
       expect(response.status).toBe(400)
       expect(yield* response.json).toEqual({ success: false, error: "Invalid request body" })
+    }),
+  )
+
+  it.live("disconnects an event subscriber that falls too far behind", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.get(GlobalPaths.event)
+      expect(response.status).toBe(200)
+      // Bursts are emitted synchronously, so the server cannot drain between them.
+      // The stream starts listening after server.connected, so keep bursting until it ends.
+      yield* Effect.sync(() => {
+        for (let index = 0; index < 5000; index++)
+          GlobalBus.emit("event", { directory: "/overflow", payload: { type: "test.overflow", properties: {} } })
+      }).pipe(Effect.andThen(Effect.sleep("10 millis")), Effect.forever, Effect.forkScoped)
+      const ended = yield* response.stream.pipe(Stream.runDrain, Effect.exit, Effect.timeoutOption("10 seconds"))
+      expect(Option.isSome(ended)).toBe(true)
     }),
   )
 })

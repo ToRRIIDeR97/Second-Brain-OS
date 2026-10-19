@@ -25,7 +25,8 @@ import {
 } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
-import { createDesktopDraftStore } from "./draft-store"
+import { createDesktopDraftStore, requireDraftBlob, requireDraftKey, requireDraftValue } from "./draft-store"
+import { write as writeLog } from "./logging"
 import { saveSessionExport } from "./session-export"
 import { nativeT } from "./native-translations"
 
@@ -39,7 +40,7 @@ const assertTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent) => {
   }
 }
 
-const trustedHandle = <A extends unknown[]>(
+export const trustedHandle = <A extends unknown[]>(
   channel: string,
   listener: (event: IpcMainInvokeEvent, ...args: A) => unknown,
 ) => {
@@ -59,6 +60,17 @@ const trustedOn = <A extends unknown[]>(
   })
 }
 
+// Parent native dialogs to the requesting window so they stay modal to it.
+const showOpenDialog = (event: IpcMainInvokeEvent, options: Electron.OpenDialogOptions) => {
+  const owner = BrowserWindow.fromWebContents(event.sender)
+  return owner ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options)
+}
+
+const showSaveDialog = (event: IpcMainInvokeEvent, options: Electron.SaveDialogOptions) => {
+  const owner = BrowserWindow.fromWebContents(event.sender)
+  return owner ? dialog.showSaveDialog(owner, options) : dialog.showSaveDialog(options)
+}
+
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
   return [{ name: nativeT("desktop.dialog.files"), extensions: ext }]
@@ -70,7 +82,7 @@ type Deps = {
   killSidecar: () => Promise<void> | void
   relaunch: () => void
   awaitInitialization: () => Promise<ServerReadyData>
-  consumeInitialDeepLinks: () => Promise<string[]> | string[]
+  consumeInitialDeepLinks: (sender: Electron.WebContents) => Promise<string[]> | string[]
   getDefaultServerUrl: () => Promise<string | null> | string | null
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
   isFirstLaunchOnboardingPending: () => Promise<boolean> | boolean
@@ -90,7 +102,14 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
-  const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
+  const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"), (error) =>
+    writeLog(
+      "drafts",
+      "draft flush failed",
+      { error: error instanceof Error ? error.message : String(error) },
+      "error",
+    ),
+  )
   const updaterSubscriptions = createUpdaterSubscriptions()
   const updaterSenders = new WeakSet<Electron.WebContents>()
   app.once("will-quit", updaterSubscriptions.clear)
@@ -100,7 +119,7 @@ export function registerIpcHandlers(deps: Deps) {
 
   trustedHandle("kill-sidecar", () => deps.killSidecar())
   trustedHandle("await-initialization", () => deps.awaitInitialization())
-  trustedHandle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
+  trustedHandle("consume-initial-deep-links", (event) => deps.consumeInitialDeepLinks(event.sender))
   trustedHandle("get-default-server-url", () => deps.getDefaultServerUrl())
   trustedHandle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
     deps.setDefaultServerUrl(url),
@@ -195,19 +214,21 @@ export function registerIpcHandlers(deps: Deps) {
     const store = getStore(name)
     return Object.keys(store.store).length
   })
-  trustedHandle("draft-get", (_event, key: string) => drafts.get(key))
-  trustedHandle("draft-set", (_event, key: string, value: string) => drafts.set(key, value))
-  trustedHandle("draft-delete", (_event, key: string) => drafts.set(key, null))
-  trustedHandle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
-  trustedHandle("draft-blob-get", (_event, id: string) => {
-    const data = drafts.getBlob(id)
+  trustedHandle("draft-get", (_event, key: unknown) => drafts.get(requireDraftKey(key)))
+  trustedHandle("draft-set", (_event, key: unknown, value: unknown) =>
+    drafts.set(requireDraftKey(key), requireDraftValue(value)),
+  )
+  trustedHandle("draft-delete", (_event, key: unknown) => drafts.set(requireDraftKey(key), null))
+  trustedHandle("draft-blob-put", (_event, data: unknown) => drafts.putBlob(requireDraftBlob(data)))
+  trustedHandle("draft-blob-get", (_event, id: unknown) => {
+    const data = drafts.getBlob(requireDraftKey(id))
     return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
   })
 
   trustedHandle(
     "open-directory-picker",
-    async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
-      const result = await dialog.showOpenDialog({
+    async (event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
+      const result = await showOpenDialog(event, {
         properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
         title: opts?.title ?? nativeT("desktop.dialog.chooseFolder"),
         defaultPath: opts?.defaultPath,
@@ -223,7 +244,7 @@ export function registerIpcHandlers(deps: Deps) {
       event: IpcMainInvokeEvent,
       opts?: { multiple?: boolean; title?: string; defaultPath?: string; extensions?: string[] },
     ) => {
-      const result = await dialog.showOpenDialog({
+      const result = await showOpenDialog(event, {
         properties: ["openFile", ...(opts?.multiple ? ["multiSelections" as const] : [])],
         title: opts?.title ?? nativeT("desktop.dialog.chooseFile"),
         defaultPath: opts?.defaultPath,
@@ -253,8 +274,8 @@ export function registerIpcHandlers(deps: Deps) {
 
   trustedHandle(
     "save-file-picker",
-    async (_event: IpcMainInvokeEvent, opts?: { title?: string; defaultPath?: string }) => {
-      const result = await dialog.showSaveDialog({
+    async (event: IpcMainInvokeEvent, opts?: { title?: string; defaultPath?: string }) => {
+      const result = await showSaveDialog(event, {
         title: opts?.title ?? nativeT("desktop.dialog.saveFile"),
         defaultPath: opts?.defaultPath,
       })
@@ -270,8 +291,7 @@ export function registerIpcHandlers(deps: Deps) {
         defaultPath: filename,
         filters: [{ name: "JSON", extensions: ["json"] }],
       }
-      const owner = BrowserWindow.fromWebContents(event.sender)
-      const result = await (owner ? dialog.showSaveDialog(owner, options) : dialog.showSaveDialog(options))
+      const result = await showSaveDialog(event, options)
       return result.canceled ? null : (result.filePath ?? null)
     }),
   )
@@ -355,8 +375,10 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   trustedHandle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
-  trustedHandle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => {
-    event.sender.setZoomFactor(factor)
+  trustedHandle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: unknown) => {
+    if (typeof factor !== "number" || !Number.isFinite(factor)) throw new Error("Invalid zoom factor")
+    // Same bounds as the View menu zoom actions.
+    event.sender.setZoomFactor(Math.min(Math.max(factor, 0.2), 10))
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     updateTitlebar(win)

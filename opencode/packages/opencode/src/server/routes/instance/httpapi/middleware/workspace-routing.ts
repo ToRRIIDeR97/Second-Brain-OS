@@ -2,11 +2,12 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
-import { Session } from "@/session/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { eq } from "drizzle-orm"
 import { HttpApiProxy } from "./proxy"
 import * as Fence from "@/server/shared/fence"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/shared/workspace-routing"
-import { NotFoundError } from "@/storage/storage"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -54,7 +55,6 @@ export class WorkspaceRoutingMiddleware extends HttpApiMiddleware.Service<
   WorkspaceRoutingMiddleware,
   {
     provides: WorkspaceRouteContext
-    requires: Session.Service
   }
 >()("@opencode/ExperimentalHttpApiWorkspaceRouting") {}
 
@@ -157,16 +157,21 @@ function planWorkspaceRequest(
   })
 }
 
+type SessionPlacement = {
+  readonly directory: string
+  readonly workspaceID: WorkspaceV2.ID | null
+}
+
 function planRequest(
   request: HttpServerRequest.HttpServerRequest,
-  session?: Session.Info,
+  session?: SessionPlacement,
 ): Effect.Effect<RequestPlan, never, Workspace.Service> {
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
     const workspaceID = url.pathname.startsWith("/api/")
-      ? selectedV2WorkspaceID(url, session?.workspaceID)
-      : selectedWorkspaceID(url, session?.workspaceID)
+      ? selectedV2WorkspaceID(url, session?.workspaceID ?? undefined)
+      : selectedWorkspaceID(url, session?.workspaceID ?? undefined)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
@@ -210,24 +215,32 @@ function routeWorkspace<E>(
 }
 
 function routeHttpApiWorkspace<E>(
+  db: Database.Interface["db"],
   client: HttpClient.HttpClient,
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   E,
-  Session.Service | Workspace.Service | HttpServerRequest.HttpServerRequest | Socket.WebSocketConstructor
+  Workspace.Service | HttpServerRequest.HttpServerRequest | Socket.WebSocketConstructor
 > {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const sessionID = getWorkspaceRouteSessionID(requestURL(request))
+    // Routing needs only the Session's placement, so read those columns instead of the whole Session.
     const session = sessionID
-      ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(
-          Effect.catchIf(
-            (error): error is NotFoundError => NotFoundError.isInstance(error),
-            () => Effect.succeed(undefined),
-          ),
-          Effect.catchDefect(() => Effect.succeed(undefined)),
-        )
+      ? yield* db
+          .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.catchDefect((defect) =>
+              Effect.logWarning("workspace routing could not read session placement", { sessionID, defect }).pipe(
+                Effect.as(undefined),
+              ),
+            ),
+          )
       : undefined
     const plan = yield* planRequest(request, session)
     return yield* routeWorkspace(client, effect, plan)
@@ -240,8 +253,9 @@ export const workspaceRoutingLayer = Layer.effect(
     const makeWebSocket = yield* Socket.WebSocketConstructor
     const workspace = yield* Workspace.Service
     const client = yield* HttpClient.HttpClient
+    const { db } = yield* Database.Service
     return WorkspaceRoutingMiddleware.of((effect) =>
-      routeHttpApiWorkspace(client, effect).pipe(
+      routeHttpApiWorkspace(db, client, effect).pipe(
         Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
         Effect.provideService(Workspace.Service, workspace),
       ),
