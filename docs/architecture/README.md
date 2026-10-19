@@ -111,7 +111,8 @@ workspace routing):
   server process runs the Workspace migration: every OpenCode project with
   root threads, other than `global` and the Brain itself, gets a Project
   through `BrainProject.ensureForWorkspace`. It only creates Markdown cards,
-  never moves files, and logs counts only. The server has no other way to
+  never moves files, and logs counts only. A pass with any failure runs again
+  on the next listing. The server has no other way to
   know which Workspace is the Brain, so the migration does not run at
   bootstrap.
 - `POST /second-brain/projects/workspace` with `{ workspaceId }` returns the

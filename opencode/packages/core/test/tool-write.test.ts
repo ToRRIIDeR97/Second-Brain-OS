@@ -56,6 +56,8 @@ const filesystem = Layer.effect(
       ...fs,
       writeWithDirs: (target, content, mode) =>
         Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
+      // FileMutation commits a replacement by renaming a temp file over the target.
+      rename: (from, to) => Effect.sync(() => writes.push(to)).pipe(Effect.andThen(fs.rename(from, to))),
     })
   }),
 ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
