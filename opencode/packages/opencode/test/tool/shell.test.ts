@@ -83,6 +83,8 @@ const ctx = {
 }
 
 Shell.acceptable.reset()
+const outputOf = (metadata: Record<string, unknown> | undefined) =>
+  typeof metadata?.output === "string" ? metadata.output : ""
 const quote = (text: string) => `"${text}"`
 const squote = (text: string) => `'${text}'`
 const projectRoot = path.join(__dirname, "../..")
@@ -1028,7 +1030,7 @@ describe("tool.shell abort", () => {
               abort: controller.signal,
               metadata: (input) =>
                 Effect.sync(() => {
-                  const output = (input.metadata as { output?: string })?.output
+                  const output = outputOf(input.metadata)
                   if (output && output.includes("before") && !controller.signal.aborted) {
                     collected.push(output)
                     controller.abort()
@@ -1122,7 +1124,7 @@ describe("tool.shell abort", () => {
             ...ctx,
             metadata: (input) =>
               Effect.sync(() => {
-                const output = (input.metadata as { output?: string })?.output
+                const output = outputOf(input.metadata)
                 if (output) updates.push(output)
               }),
           },
@@ -1132,6 +1134,79 @@ describe("tool.shell abort", () => {
         expect(updates.length).toBeGreaterThan(1)
       }),
     ),
+  )
+
+  it.live(
+    "coalesces metadata updates for chatty output and flushes the final output",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const updates: string[] = []
+          const script = "for (let i = 0; i < 200; i++) { console.log(`line${i}`); await Bun.sleep(3) }"
+          const result = yield* run(
+            {
+              command: `${bin} -e ${evalarg(script)}`,
+            },
+            {
+              ...ctx,
+              metadata: (input) =>
+                Effect.sync(() => {
+                  updates.push(outputOf(input.metadata))
+                }),
+            },
+          )
+          expect(result.output).toContain("line199")
+          expect(updates.length).toBeGreaterThan(1)
+          expect(updates.length).toBeLessThan(30)
+          expect(updates.at(-1)).toContain("line199")
+        }),
+      ),
+    15_000,
+  )
+
+  it.live(
+    "persists the last output when a chatty command times out or is aborted",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const script = "for (let i = 0; ; i++) { console.log(`tick${i}`); await Bun.sleep(2) }"
+          const timedOut: string[] = []
+          const timeout = yield* run(
+            { command: `${bin} -e ${evalarg(script)}`, timeout: 600 },
+            {
+              ...ctx,
+              metadata: (input) =>
+                Effect.sync(() => {
+                  timedOut.push(outputOf(input.metadata))
+                }),
+            },
+          )
+          expect(timeout.output).toContain("exceeding timeout")
+          expect(timedOut.at(-1)).toContain("tick")
+          expect(timedOut.at(-1)).toBe(timeout.metadata.output)
+
+          const controller = new AbortController()
+          setTimeout(() => controller.abort(), 600)
+          const aborted: string[] = []
+          const abort = yield* run(
+            { command: `${bin} -e ${evalarg(script)}` },
+            {
+              ...ctx,
+              abort: controller.signal,
+              metadata: (input) =>
+                Effect.sync(() => {
+                  aborted.push(outputOf(input.metadata))
+                }),
+            },
+          )
+          expect(abort.output).toContain("User aborted the command")
+          expect(aborted.at(-1)).toContain("tick")
+          expect(aborted.at(-1)).toBe(abort.metadata.output)
+        }),
+      ),
+    20_000,
   )
 })
 

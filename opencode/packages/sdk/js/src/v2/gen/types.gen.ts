@@ -8250,7 +8250,7 @@ export type ExperimentalSessionListData = {
     workspace?: string
     roots?: boolean | "true" | "false"
     start?: number
-    cursor?: number
+    cursor?: string | number
     search?: string
     limit?: number
     archived?: boolean | "true" | "false"
@@ -8260,9 +8260,9 @@ export type ExperimentalSessionListData = {
 
 export type ExperimentalSessionListErrors = {
   /**
-   * Bad request
+   * BadRequest | InvalidRequestError
    */
-  400: BadRequestError
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
 }
 
 export type ExperimentalSessionListError = ExperimentalSessionListErrors[keyof ExperimentalSessionListErrors]

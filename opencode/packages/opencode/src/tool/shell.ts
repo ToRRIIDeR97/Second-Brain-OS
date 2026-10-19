@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Semaphore, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -25,6 +25,8 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+// Each metadata update is a durable part write, so streamed output is coalesced per call.
+const METADATA_INTERVAL_MS = 250
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -472,6 +474,27 @@ export const ShellTool = Tool.define(
         ).pipe(Effect.catch(() => Effect.void))
       })
 
+      let dirty = false
+      let flushed = 0
+      // The ticker and the reader both flush: one permit keeps writes in order so an older output
+      // never lands last, and uninterruptible keeps scope close from dropping a flush that cleared `dirty`.
+      const flushLock = Semaphore.makeUnsafe(1)
+      const flush = Effect.uninterruptible(
+        flushLock.withPermits(1)(
+          Effect.suspend(() => {
+            if (!dirty) return Effect.void
+            dirty = false
+            flushed = Date.now()
+            return ctx.metadata({
+              metadata: {
+                output: last,
+              },
+            })
+          }),
+        ),
+      )
+      const flushIfDue = Effect.suspend(() => (Date.now() - flushed >= METADATA_INTERVAL_MS ? flush : Effect.void))
+
       yield* ctx.metadata({
         metadata: {
           output: "",
@@ -483,6 +506,10 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
+          // Trailing flush for output that arrives inside the interval and is followed by silence.
+          yield* Effect.forkScoped(
+            Effect.forever(Effect.sleep(`${METADATA_INTERVAL_MS} millis`).pipe(Effect.andThen(flush))),
+          )
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
@@ -496,6 +523,7 @@ export const ShellTool = Tool.define(
               }
 
               last = preview(last + chunk)
+              dirty = true
 
               if (file) {
                 sink?.write(chunk)
@@ -511,22 +539,12 @@ export const ShellTool = Tool.define(
                         full = ""
                       }),
                     ),
-                    Effect.andThen(
-                      ctx.metadata({
-                        metadata: {
-                          output: last,
-                        },
-                      }),
-                    ),
+                    Effect.andThen(flushIfDue),
                   )
                 }
               }
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                },
-              })
+              return flushIfDue
             }),
           )
 
@@ -556,7 +574,7 @@ export const ShellTool = Tool.define(
 
           return exit.kind === "exit" ? exit.code : null
         }),
-      ).pipe(Effect.orDie)
+      ).pipe(Effect.ensuring(flush), Effect.orDie)
 
       const meta: string[] = []
       if (expired) {
