@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMEvent, Message, type ContentPart, type LLMRequest, type Model } from "@opencode-ai/llm"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
@@ -13,6 +13,9 @@ const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
+// Providers bill images by pixel dimensions, not by base64 length, and cap a typical image near
+// this many tokens. Other media (for example PDFs) still scale with their encoded size.
+const IMAGE_TOKENS = 1_600
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -80,7 +83,37 @@ type Input = {
   readonly request: LLMRequest
 }
 
-const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
+const estimate = (value: unknown) => Token.estimate(JSON.stringify(value) ?? "")
+
+const sum = (values: readonly number[]) => values.reduce((total, value) => total + value, 0)
+
+const estimatePart = (part: ContentPart) => {
+  if (part.type === "text") return Token.estimate(part.text)
+  if (part.type === "reasoning") return Token.estimate(part.text) + Token.estimate(part.encrypted ?? "")
+  if (part.type === "media")
+    return mediaTokens(
+      part.mediaType,
+      typeof part.data === "string" ? part.data.length : Math.ceil((part.data.byteLength * 4) / 3),
+    )
+  if (part.type === "tool-call") return Token.estimate(part.name) + estimate(part.input)
+  if (part.result.type !== "content") return Token.estimate(part.name) + estimate(part.result.value)
+  return (
+    Token.estimate(part.name) +
+    sum(
+      part.result.value.map((item) =>
+        item.type === "text" ? Token.estimate(item.text) : mediaTokens(item.mime, item.uri.length),
+      ),
+    )
+  )
+}
+
+const mediaTokens = (mediaType: string, encodedLength: number) =>
+  mediaType.startsWith("image/") ? IMAGE_TOKENS : Token.estimateLength(encodedLength)
+
+export const estimateRequest = (request: Pick<LLMRequest, "system" | "messages" | "tools">) =>
+  sum(request.system.map((part) => Token.estimate(part.text))) +
+  sum(request.messages.flatMap((message) => message.content.map(estimatePart))) +
+  estimate(request.tools)
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -234,11 +267,7 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
-    )
-      return false
+    if (estimateRequest(input.request) <= context - Math.max(output, config.buffer)) return false
     return yield* compactAfterOverflow(input)
   })
   return {
