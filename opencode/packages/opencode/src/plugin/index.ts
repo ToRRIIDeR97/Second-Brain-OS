@@ -37,7 +37,14 @@ import { logStartupTiming } from "@/util/startup-timing"
 
 type State = {
   hooks: Hooks[]
+  // Plugin name or spec per hooks object, for diagnostics only.
+  sources: WeakMap<Hooks, string>
 }
+
+const HOOK_TIMEOUT = "30 seconds"
+// A throw from these hooks is the documented way for a plugin to block the operation, so a
+// failure or timeout must still abort it instead of being logged and skipped.
+const BLOCKING_HOOKS = new Set<string>(["tool.execute.before", "command.execute.before"])
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
 type TriggerName = {
@@ -135,6 +142,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
+        const sources = new WeakMap<Hooks, string>()
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -177,7 +185,10 @@ const layer = Layer.effect(
             Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
             Effect.option,
           )
-          if (init._tag === "Some") hooks.push(init.value)
+          if (init._tag === "Some") {
+            hooks.push(init.value)
+            sources.set(init.value, plugin.name || "CodexAuthPlugin")
+          }
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
@@ -223,6 +234,7 @@ const layer = Layer.effect(
 
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
+          const start = hooks.length
           yield* Effect.tryPromise({
             try: () => applyPlugin(load, input, hooks),
             catch: (err) => {
@@ -242,6 +254,7 @@ const layer = Layer.effect(
               return Effect.void
             }),
           )
+          for (const hook of hooks.slice(start)) sources.set(hook, load.spec)
         }
 
         // Notify plugins of current config
@@ -259,7 +272,19 @@ const layer = Layer.effect(
           if (event.location?.directory !== ctx.directory) return Effect.void
           return Effect.sync(() => {
             for (const hook of hooks) {
-              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
+              if (!hook.event) continue
+              // A sync throw must not stop delivery to later plugins, and a rejection must not go unhandled.
+              Promise.resolve()
+                .then(() => hook.event?.({ event: { id: event.id, type: event.type, properties: event.data } as any }))
+                .catch((error) =>
+                  bridge.fork(
+                    Effect.logError("plugin event hook failed", {
+                      plugin: sources.get(hook),
+                      eventType: event.type,
+                      error: errorMessage(error),
+                    }),
+                  ),
+                )
             }
           })
         })
@@ -280,7 +305,7 @@ const layer = Layer.effect(
           ),
         )
 
-        return { hooks }
+        return { hooks, sources }
       }),
     )
 
@@ -294,7 +319,18 @@ const layer = Layer.effect(
       for (const hook of s.hooks) {
         const fn = hook[name] as any
         if (!fn) continue
-        yield* Effect.promise(async () => fn(input, output))
+        const plugin = s.sources.get(hook)
+        yield* Effect.tryPromise({ try: async () => fn(input, output), catch: (error) => error }).pipe(
+          Effect.timeoutOrElse({
+            duration: HOOK_TIMEOUT,
+            orElse: () => Effect.fail(new Error(`Plugin ${plugin ?? "hook"} ${name} timed out after ${HOOK_TIMEOUT}`)),
+          }),
+          Effect.catch((error) =>
+            BLOCKING_HOOKS.has(name)
+              ? Effect.die(error)
+              : Effect.logError("plugin hook failed", { plugin, hook: name, error: errorMessage(error) }),
+          ),
+        )
       }
       return output
     })

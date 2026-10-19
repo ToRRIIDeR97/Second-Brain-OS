@@ -186,7 +186,7 @@ const layer = Layer.effectDiscard(
                   { discard: true },
                 )
                 return { applied, files: patchFiles }
-              }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch"))))
+              }).pipe(Tool.mapError((error) => (error instanceof ToolFailure ? error : fail("patch"))))
             },
           }),
           "edit",

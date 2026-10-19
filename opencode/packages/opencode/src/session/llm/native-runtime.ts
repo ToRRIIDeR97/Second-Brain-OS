@@ -16,7 +16,7 @@ import {
   type JsonSchema,
   type LLMEvent,
 } from "@opencode-ai/llm"
-import type { LLMClientShape } from "@opencode-ai/llm/route"
+import { RequestExecutor, type LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
 
 export type RuntimeStatus =
@@ -112,6 +112,8 @@ export function stream(input: StreamInput): StreamResult {
             }),
           )
           .pipe(
+            // SessionRetry owns provider retries on this path; inner executor retries would multiply them.
+            Stream.provideService(RequestExecutor.MaxRetries, 0),
             Stream.flatMap((event) =>
               event.type !== "tool-call" || event.providerExecuted
                 ? Stream.make(event)
