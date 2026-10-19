@@ -8,24 +8,31 @@ const COMPRESSIBLE_CONTENT_TYPE_REGEX =
 
 const NO_TRANSFORM_REGEX = /(?:^|,)\s*?no-transform\s*?(?:,|$)/i
 
-const STREAMING_PATHS = new Set(["/event", "/global/event"])
-const STREAMING_POST_REGEX = /^\/session\/[^/]+\/(?:message|prompt_async)$/
-
 const THRESHOLD_BYTES = 1024
 
 type Encoding = "gzip" | "deflate"
 
+// Loopback clients gain nothing from compression and would pay its CPU cost on every response.
+const LOOPBACK_HOST_REGEX = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i
+
 function pickEncoding(acceptEncoding: string | undefined): Encoding | undefined {
   if (!acceptEncoding) return undefined
-  const lower = acceptEncoding.toLowerCase()
-  if (lower.includes("gzip")) return "gzip"
-  if (lower.includes("deflate")) return "deflate"
-  return undefined
-}
-
-function pathOf(url: string): string {
-  const queryIndex = url.indexOf("?")
-  return queryIndex === -1 ? url : url.slice(0, queryIndex)
+  const weights = new Map(
+    acceptEncoding
+      .toLowerCase()
+      .split(",")
+      .map((item) => {
+        const [name = "", ...params] = item.split(";").map((part) => part.trim())
+        const q = params.find((param) => param.startsWith("q="))
+        const weight = q === undefined ? 1 : Number(q.slice(2))
+        return [name, Number.isFinite(weight) ? weight : 0] as const
+      }),
+  )
+  const weight = (encoding: Encoding) => weights.get(encoding) ?? weights.get("*") ?? 0
+  const gzip = weight("gzip")
+  const deflate = weight("deflate")
+  if (gzip <= 0 && deflate <= 0) return undefined
+  return gzip >= deflate ? "gzip" : "deflate"
 }
 
 export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((effect) =>
@@ -44,9 +51,8 @@ export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((e
     const cacheControl = response.headers["cache-control"]
     if (cacheControl && NO_TRANSFORM_REGEX.test(cacheControl)) return response
 
-    const path = pathOf(request.url)
-    if (STREAMING_PATHS.has(path)) return response
-    if (request.method === "POST" && STREAMING_POST_REGEX.test(path)) return response
+    const host = request.headers["host"]
+    if (host && LOOPBACK_HOST_REGEX.test(host)) return response
 
     const contentType = body.contentType
     if (!COMPRESSIBLE_CONTENT_TYPE_REGEX.test(contentType)) return response

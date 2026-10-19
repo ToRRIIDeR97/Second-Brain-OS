@@ -54,6 +54,8 @@ export interface Interface extends State.Transformable<Draft> {
     readonly get: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<ModelV2.Info | undefined>
     readonly all: () => Effect.Effect<ModelV2.Info[]>
     readonly available: () => Effect.Effect<ModelV2.Info[]>
+    /** Returns one model when it is enabled and its provider is available, without listing the catalog. */
+    readonly getAvailable: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<ModelV2.Info | undefined>
     readonly default: () => Effect.Effect<ModelV2.Info | undefined>
     readonly small: (providerID: ProviderV2.ID) => Effect.Effect<ModelV2.Info | undefined>
   }
@@ -212,14 +214,20 @@ const layer = Layer.effect(
           return (yield* result.model.all()).filter((model) => providers.has(model.providerID) && model.enabled)
         }),
 
+        getAvailable: Effect.fn("CatalogV2.model.getAvailable")(function* (providerID, modelID) {
+          const record = state.get().providers.get(providerID)
+          const model = record?.models.get(modelID)
+          if (!record || !model?.enabled) return
+          const integration = yield* integrations.get(record.provider.integrationID ?? Integration.ID.make(providerID))
+          if (!available(record.provider, integration)) return
+          return projectModel(model, record.provider)
+        }),
+
         default: Effect.fn("CatalogV2.model.default")(function* () {
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
-            const provider = yield* result.provider.get(defaultModel.providerID)
-            if (provider && (yield* result.provider.available()).some((item) => item.id === provider.id)) {
-              const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID)
-              if (model?.enabled) return model
-            }
+            const model = yield* result.model.getAvailable(defaultModel.providerID, defaultModel.modelID)
+            if (model) return model
           }
 
           return Option.getOrUndefined(

@@ -5,13 +5,15 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Effect, Queue, Schema } from "effect"
+import { Cause, Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
 import { GlobalUpgradeInput } from "../groups/global"
+
+const subscriberCapacity = 4096
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -33,13 +35,24 @@ function parseBody(body: string) {
 function eventResponse() {
   return Effect.gen(function* () {
     yield* Effect.logInfo("global event connected")
-    const events = Stream.callback<GlobalBusEvent>((queue) => {
-      const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
-      return Effect.acquireRelease(
-        Effect.sync(() => GlobalBus.on("event", handler)),
-        () => Effect.sync(() => GlobalBus.off("event", handler)),
-      )
-    })
+    // A subscriber that falls `subscriberCapacity` events behind is disconnected;
+    // clients resync on the `server.connected` event of their next connection.
+    const events = Stream.callback<GlobalBusEvent, EventV2.SubscriberOverflowError>(
+      (queue) => {
+        const handler = (event: GlobalBusEvent) => {
+          if (Queue.offerUnsafe(queue, event)) return
+          Queue.failCauseUnsafe(
+            queue,
+            Cause.fail(new EventV2.SubscriberOverflowError({ capacity: subscriberCapacity })),
+          )
+        }
+        return Effect.acquireRelease(
+          Effect.sync(() => GlobalBus.on("event", handler)),
+          () => Effect.sync(() => GlobalBus.off("event", handler)),
+        )
+      },
+      { bufferSize: subscriberCapacity, strategy: "dropping" },
+    )
     const heartbeat = Stream.tick("10 seconds").pipe(
       Stream.drop(1),
       Stream.map(() => ({ payload: { id: EventV2.ID.create(), type: "server.heartbeat", properties: {} } })),
