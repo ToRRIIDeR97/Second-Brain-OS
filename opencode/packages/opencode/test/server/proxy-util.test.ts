@@ -81,6 +81,17 @@ describe("ProxyUtil", () => {
       expect(result.get("x-custom")).toBe("keep")
     })
 
+    test("strips local credentials but keeps target-configured ones", () => {
+      const req = new Request("http://localhost", {
+        headers: { authorization: "Basic bG9jYWw=", cookie: "session=local", "x-custom": "keep" },
+      })
+      const forwarded = ProxyUtil.headers(req)
+      expect(forwarded.get("authorization")).toBeNull()
+      expect(forwarded.get("cookie")).toBeNull()
+      expect(forwarded.get("x-custom")).toBe("keep")
+      expect(ProxyUtil.headers(req, { authorization: "Bearer remote" }).get("authorization")).toBe("Bearer remote")
+    })
+
     test("merges extra headers", () => {
       const req = new Request("http://localhost", {
         headers: { "content-type": "application/json" },

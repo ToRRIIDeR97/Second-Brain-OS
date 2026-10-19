@@ -26,6 +26,23 @@ export class SecondBrainConflictError extends Schema.ErrorClass<SecondBrainConfl
   { httpApiStatus: 409 },
 ) {}
 
+/** A rejected request: `data.message` is the domain reason, such as `invalid_path` or `invalid_json`. */
+export class SecondBrainInvalidError extends Schema.ErrorClass<SecondBrainInvalidError>("SecondBrainInvalidError")(
+  {
+    name: Schema.Literal("SecondBrainInvalidError"),
+    data: Schema.Struct({ message: Schema.String }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
+// Every endpoint shares one error mapper, so they declare the same error set.
+const errors = [
+  SecondBrainInvalidError,
+  HttpApiError.NotFound,
+  SecondBrainConflictError,
+  HttpApiError.InternalServerError,
+]
+
 export const SecondBrainPaths = {
   notes: "/second-brain/notes",
   note: "/second-brain/note",
@@ -42,62 +59,62 @@ export const SecondBrainApi = HttpApi.make("secondBrain").add(
       HttpApiEndpoint.get("listNotes", SecondBrainPaths.notes, {
         query: Schema.Struct({ ...WorkspaceRoutingQueryFields, search: Schema.optional(Schema.String) }),
         success: described(Schema.Array(KnowledgeNote.Info), "Notes"),
-        error: HttpApiError.BadRequest,
+        error: errors,
       }),
       HttpApiEndpoint.get("readNote", SecondBrainPaths.note, {
         query: NoteQuery,
         success: described(KnowledgeNote.Document, "Note"),
-        error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        error: errors,
       }),
       HttpApiEndpoint.put("writeNote", SecondBrainPaths.note, {
         query: NoteQuery,
         payload: KnowledgeNote.WriteInput,
         success: described(KnowledgeNote.Document, "Note saved"),
-        error: [HttpApiError.BadRequest, HttpApiError.NotFound, SecondBrainConflictError],
+        error: errors,
       }),
       HttpApiEndpoint.get("readCalendar", SecondBrainPaths.calendar, {
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         success: described(PlannerCalendar.Snapshot, "Calendar"),
-        error: HttpApiError.BadRequest,
+        error: errors,
       }),
       HttpApiEndpoint.put("writeCalendar", SecondBrainPaths.calendar, {
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         payload: PlannerCalendar.WriteInput,
         success: described(PlannerCalendar.Snapshot, "Calendar saved"),
-        error: [HttpApiError.BadRequest, SecondBrainConflictError],
+        error: errors,
       }),
       HttpApiEndpoint.get("listProjects", SecondBrainPaths.projects, {
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         success: described(Schema.Array(BrainProject.Info), "Projects"),
-        error: HttpApiError.BadRequest,
+        error: errors,
       }),
       HttpApiEndpoint.post("createProject", SecondBrainPaths.projects, {
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         payload: BrainProject.CreateInput,
         success: described(BrainProject.Info, "Project created"),
-        error: [HttpApiError.BadRequest, SecondBrainConflictError],
+        error: errors,
       }),
       HttpApiEndpoint.get("listProjectThreads", SecondBrainPaths.projectThreads, {
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         success: described(Schema.Array(BrainProject.ThreadSummary), "Projects with thread directories"),
-        error: HttpApiError.BadRequest,
+        error: errors,
       }),
       HttpApiEndpoint.post("ensureWorkspaceProject", SecondBrainPaths.projectWorkspace, {
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         payload: BrainProject.EnsureWorkspaceInput,
         success: described(BrainProject.Info, "Project linked to the Workspace"),
-        error: [HttpApiError.BadRequest, HttpApiError.NotFound, SecondBrainConflictError],
+        error: errors,
       }),
       HttpApiEndpoint.get("readProject", SecondBrainPaths.project, {
         query: ProjectQuery,
         success: described(BrainProject.Info, "Project"),
-        error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        error: errors,
       }),
       HttpApiEndpoint.patch("updateProject", SecondBrainPaths.project, {
         query: ProjectQuery,
         payload: BrainProject.UpdateInput,
         success: described(BrainProject.Info, "Project updated"),
-        error: [HttpApiError.BadRequest, HttpApiError.NotFound, SecondBrainConflictError],
+        error: errors,
       }),
     )
     .annotateMerge(

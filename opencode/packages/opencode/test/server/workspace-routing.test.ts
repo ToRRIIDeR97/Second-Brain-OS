@@ -73,6 +73,13 @@ describe("workspaceProxyURL", () => {
     expect(result.pathname).toBe("/base/session/abc")
   })
 
+  test("removes the local auth_token", () => {
+    const url = new URL("http://localhost/event?auth_token=bG9jYWw6c2VjcmV0&keep=yes")
+    const result = workspaceProxyURL("http://remote:8080/base", url)
+    expect(result.searchParams.get("auth_token")).toBeNull()
+    expect(result.searchParams.get("keep")).toBe("yes")
+  })
+
   test("preserves query params from request but removes workspace", () => {
     const url = new URL("http://localhost/config?workspace=ws_123&keep=yes")
     const result = workspaceProxyURL("http://remote:8080/base", url)

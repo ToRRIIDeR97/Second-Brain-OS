@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Option, Queue, Ref, Schema, type Sink, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Option, Queue, Ref, Schema, type Sink, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 
 export interface Notification {
@@ -26,7 +26,15 @@ export class ProtocolError extends Error {
 }
 
 export interface Client {
-  readonly request: (method: string, params?: unknown) => Effect.Effect<unknown, ProtocolError>
+  /**
+   * Sends one request. Pass `timeout` for setup calls that must answer promptly; turn-length calls such as
+   * ACP `session/prompt` legitimately stay open for the whole turn and take none.
+   */
+  readonly request: (
+    method: string,
+    params?: unknown,
+    timeout?: Duration.Input,
+  ) => Effect.Effect<unknown, ProtocolError>
   readonly notify: (method: string, params?: unknown) => Effect.Effect<void, ProtocolError>
   readonly notifications: Stream.Stream<Notification, ProtocolError>
 }
@@ -174,7 +182,7 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
     Queue.end(outgoing).pipe(Effect.andThen(fail(new ProtocolError(`${label} client closed.`))), Effect.ignore),
   )
 
-  const request = (method: string, params?: unknown) =>
+  const request = (method: string, params?: unknown, timeout?: Duration.Input) =>
     Effect.gen(function* () {
       const id = yield* Ref.modify(nextID, (current) => [current, current + 1] as const)
       const deferred = yield* Deferred.make<unknown, ProtocolError>()
@@ -182,7 +190,19 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
       yield* send({ id, method, ...(params === undefined ? {} : { params }) }).pipe(
         Effect.tapError(() => removePending(String(id))),
       )
-      return yield* Deferred.await(deferred).pipe(Effect.onInterrupt(() => removePending(String(id))))
+      const response = Deferred.await(deferred).pipe(Effect.onInterrupt(() => removePending(String(id))))
+      if (timeout === undefined) return yield* response
+      return yield* response.pipe(
+        Effect.timeoutOrElse({
+          duration: timeout,
+          orElse: () =>
+            Effect.fail(
+              new ProtocolError(
+                `${label} did not answer ${method} within ${Duration.format(Duration.fromInputUnsafe(timeout))}.`,
+              ),
+            ),
+        }),
+      )
     })
 
   return {

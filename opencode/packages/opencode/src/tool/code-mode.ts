@@ -13,6 +13,14 @@ export const CODE_MODE_TOOL = "execute"
 
 const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
 
+// Backstops for model-written programs. The timeout is wall-clock and includes time spent waiting on
+// child-call permission prompts, so it is generous; the user can still cancel sooner.
+export const CODE_MODE_LIMITS = {
+  timeoutMs: 600_000,
+  maxToolCalls: 100,
+  maxOutputBytes: 64_000,
+} satisfies CodeMode.ExecutionLimits
+
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
     description: "Script body executed by the confined interpreter.",
@@ -238,6 +246,7 @@ export const CodeModeTool = Tool.define(
 
         const runtime = CodeMode.make({
           tools: toolTree(catalog, callTool),
+          limits: CODE_MODE_LIMITS,
           onToolCallStart: ({ index, name, input }) =>
             Effect.suspend(() => {
               const shown = (() => {

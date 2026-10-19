@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -131,4 +131,46 @@ test("list caps the filtered, sorted result instead of the raw glob slice", asyn
   expect(all[0]?.title).toBe(name(count - 1))
   expect(all.at(-1)?.title).toBe(name(count - 500))
   expect(all.map((note) => note.title)).not.toContain("Needle")
+})
+
+const provideNoteServices =
+  (directory: AbsolutePath) =>
+  <A, E>(
+    effect: Effect.Effect<A, E, Location.Service | LocationMutation.Service | FSUtil.Service | FileMutation.Service>,
+  ) =>
+    effect.pipe(
+      Effect.provide(LocationMutation.locationLayer),
+      Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
+      Effect.provide(LayerNode.compile(FSUtil.node)),
+      Effect.provide(LayerNode.compile(FileMutation.node)),
+    )
+
+test("a note with a UTF-8 BOM saves against its read revision and keeps the BOM", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const file = path.join(tmp.path, "notes", "bom.md")
+  await writeFile(file, "﻿---\ntitle: Bom\n---\nBefore\n")
+  const directory = AbsolutePath.make(tmp.path)
+  const read = await Effect.runPromise(KnowledgeNote.read("notes/bom.md").pipe(provideNoteServices(directory)))
+  const saved = await Effect.runPromise(
+    KnowledgeNote.write("notes/bom.md", { body: "After\n", expectedRevision: read.revision }).pipe(
+      provideNoteServices(directory),
+    ),
+  )
+  expect(saved.body).toBe("After\n")
+  const bytes = await readFile(file)
+  expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf])
+  expect(bytes.subarray(3).toString("utf8")).not.toContain("﻿")
+  expect(bytes.toString("utf8")).toContain("After")
+})
+
+test("list skips malformed notes and folders outside managed Projects", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  await mkdir(path.join(tmp.path, "projects", "scratch", "notes"), { recursive: true })
+  await writeFile(path.join(tmp.path, "notes", "good.md"), "# Good\n\nReadable")
+  await writeFile(path.join(tmp.path, "notes", "broken.md"), "---\ntitle: [unclosed\n---\nBroken")
+  await writeFile(path.join(tmp.path, "projects", "scratch", "notes", "stray.md"), "# Stray\n")
+  const found = await Effect.runPromise(KnowledgeNote.list().pipe(provideNoteServices(AbsolutePath.make(tmp.path))))
+  expect(found.map((note) => note.path)).toEqual(["notes/good.md"])
 })

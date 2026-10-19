@@ -38,6 +38,14 @@ const BASE_DELAY_MS = 500
 const MAX_DELAY_MS = 10_000
 const REDACTED = "<redacted>"
 
+/**
+ * Inner retries for retryable status responses. A caller that owns its own retry policy (the session
+ * runners) sets this to 0 so the two layers do not multiply attempts.
+ */
+export const MaxRetries = Context.Reference<number>("@opencode/LLM/RequestExecutor/MaxRetries", {
+  defaultValue: () => MAX_RETRIES,
+})
+
 // One source of truth for what counts as a sensitive name across headers,
 // URL query keys, and field names embedded inside request/response bodies.
 //
@@ -343,7 +351,7 @@ const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: u
 }
 
 const retryDelay = (error: LLMError, attempt: number) => {
-  if (error.retryAfterMs !== undefined) return Effect.succeed(Math.min(error.retryAfterMs, MAX_DELAY_MS))
+  if (error.retryAfterMs !== undefined) return Effect.succeed(error.retryAfterMs)
   return Random.nextBetween(
     Math.min(BASE_DELAY_MS * 2 ** attempt * 0.8, MAX_DELAY_MS),
     Math.min(BASE_DELAY_MS * 2 ** attempt * 1.2, MAX_DELAY_MS),
@@ -352,11 +360,12 @@ const retryDelay = (error: LLMError, attempt: number) => {
 
 const retryStatusFailures = <A, R>(
   effect: Effect.Effect<A, LLMError, R>,
-  retries = MAX_RETRIES,
+  retries: number,
   attempt = 0,
 ): Effect.Effect<A, LLMError, R> =>
   Effect.catchTag(effect, "LLM.Error", (error): Effect.Effect<A, LLMError, R> => {
-    if (!error.retryable || retries <= 0) return Effect.fail(error)
+    // Never retry sooner than the provider asked; a longer Retry-After fails fast and carries retryAfterMs.
+    if (!error.retryable || retries <= 0 || (error.retryAfterMs ?? 0) > MAX_DELAY_MS) return Effect.fail(error)
     return retryDelay(error, attempt).pipe(
       Effect.flatMap((delay) => Effect.sleep(delay)),
       Effect.flatMap(() => retryStatusFailures(effect, retries - 1, attempt + 1)),
@@ -375,7 +384,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
           .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
       })
     return Service.of({
-      execute: (request) => retryStatusFailures(executeOnce(request)),
+      execute: (request) =>
+        Effect.gen(function* () {
+          return yield* retryStatusFailures(executeOnce(request), yield* MaxRetries)
+        }),
     })
   }),
 )

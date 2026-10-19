@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Npm } from "@opencode-ai/core/npm"
 import path from "path"
@@ -102,6 +102,44 @@ describe("plugin.trigger", () => {
       ].join("\n"),
       Effect.gen(function* () {
         expect(yield* triggerSystemTransform()).toEqual(["async"])
+      }),
+    ),
+  )
+
+  it.instance("logs and skips a rejecting hook without failing the trigger", () =>
+    withProject(
+      [
+        "export default async () => ({",
+        `  ${JSON.stringify(systemHook)}: async (_input, output) => {`,
+        '    output.system.unshift("before")',
+        '    throw new Error("plugin exploded")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["before"])
+      }),
+    ),
+  )
+
+  it.instance("still lets tool.execute.before block a call by throwing", () =>
+    withProject(
+      [
+        "export default async () => ({",
+        '  "tool.execute.before": async () => {',
+        '    throw new Error("Do not read .env files")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        const exit = yield* plugin
+          .trigger("tool.execute.before", { tool: "read", sessionID: "ses_test", callID: "call_1" }, { args: {} })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("Do not read .env files")
       }),
     ),
   )

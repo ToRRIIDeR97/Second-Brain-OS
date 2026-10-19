@@ -2,12 +2,14 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
-import { Effect, Queue } from "effect"
+import { Cause, Effect, Queue } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { EventApi } from "../groups/event"
+
+const subscriberCapacity = 4096
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -28,15 +30,19 @@ function eventResponse(events: EventV2.Interface) {
     const workspaceID = yield* InstanceState.workspaceID
     // Listener registration is eager, so events published after this point cannot
     // be lost while the HTTP body fiber is starting or emitting server.connected.
-    const queue = yield* Queue.unbounded<EventV2.Payload>()
-    const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
-    yield* Effect.addFinalizer(() => unsubscribe)
+    // A subscriber that falls `subscriberCapacity` events behind is disconnected;
+    // clients resync on the `server.connected` event of their next connection.
+    const queue = yield* Queue.dropping<EventV2.Payload, EventV2.SubscriberOverflowError>(subscriberCapacity)
+    const unsubscribe = yield* events.listen((event) => {
+      if (event.location?.directory !== instance.directory) return Effect.void
+      if (event.location.workspaceID !== undefined && event.location.workspaceID !== workspaceID) return Effect.void
+      return Effect.sync(() => {
+        if (Queue.offerUnsafe(queue, event)) return
+        Queue.failCauseUnsafe(queue, Cause.fail(new EventV2.SubscriberOverflowError({ capacity: subscriberCapacity })))
+      })
+    })
+    yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue))))
     const stream = Stream.fromQueue(queue).pipe(
-      Stream.filter(
-        (event) =>
-          event.location?.directory === instance.directory &&
-          (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID),
-      ),
       Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
     )
     const disposed = Stream.callback<{ id: string; type: string; properties: unknown }>((queue) => {

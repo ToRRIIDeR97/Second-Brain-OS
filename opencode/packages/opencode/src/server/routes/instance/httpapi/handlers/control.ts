@@ -6,6 +6,10 @@ import { RootHttpApi } from "../api"
 import { LogInput } from "../groups/control"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
+// Clients can post arbitrary text to /log; bound what reaches the server log.
+const MAX_LOG_MESSAGE_LENGTH = 8_192
+const MAX_LOG_EXTRA_LENGTH = 8_192
+
 export const controlHandlers = HttpApiBuilder.group(RootHttpApi, "control", (handlers) =>
   Effect.gen(function* () {
     const auth = yield* Auth.Service
@@ -34,7 +38,12 @@ export const controlHandlers = HttpApiBuilder.group(RootHttpApi, "control", (han
             : ctx.payload.level === "warn"
               ? Effect.logWarning
               : Effect.logError
-      yield* write(ctx.payload.message).pipe(Effect.annotateLogs(ctx.payload.extra ?? {}))
+      const extra = ctx.payload.extra ?? {}
+      yield* write(ctx.payload.message.slice(0, MAX_LOG_MESSAGE_LENGTH)).pipe(
+        Effect.annotateLogs(
+          JSON.stringify(extra).length > MAX_LOG_EXTRA_LENGTH ? { extraOmitted: "metadata too large" } : extra,
+        ),
+      )
       return true
     })
 

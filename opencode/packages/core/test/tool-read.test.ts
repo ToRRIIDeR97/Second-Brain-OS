@@ -44,7 +44,11 @@ let configEntries: Config.Entry[] = []
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
   ReadToolFileSystem.Service.of({
-    inspect: () => (resolveFailure === undefined ? Effect.succeed(resolvedType) : Effect.die(resolveFailure)),
+    inspect: (input) => {
+      if (input === missingAbsolutePath)
+        return Effect.fail(new ReadToolFileSystem.PathKindError({ resource: input, expected: "a file or directory" }))
+      return resolveFailure === undefined ? Effect.succeed(resolvedType) : Effect.die(resolveFailure)
+    },
     read: (input, _resource, page = {}) => {
       readCalls.push({ input, page })
       if (readFailure !== undefined) return Effect.fail(readFailure)
@@ -103,8 +107,6 @@ const mutation = Layer.succeed(
   LocationMutation.Service,
   LocationMutation.Service.of({
     resolve: (input) => {
-      if (input.path === missingPath)
-        return Effect.fail(new LocationMutation.PathError({ path: input.path, reason: "non_directory_ancestor" }))
       const canonical = path.resolve(process.cwd(), input.path)
       const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), canonical)
       const resource = external ? canonical.replaceAll("\\", "/") : path.relative(process.cwd(), canonical) || "."
@@ -539,7 +541,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
-      ).toEqual({ type: "error", value: "Unable to read README.md" })
+      ).toEqual({ type: "error", value: expect.stringContaining("prevents you from using this specific tool call") })
       expect(readCalls).toEqual([])
     }),
   )
@@ -555,7 +557,27 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-missing-path", name: "read", input: { path: missingPath } },
         }),
       ).toEqual({ type: "error", value: `Unable to read ${missingPath}` })
-      expect(assertions).toEqual([])
+      expect(assertions).toMatchObject([{ action: "read", resources: [missingPath] }])
+      expect(readCalls).toEqual([])
+    }),
+  )
+
+  it.effect("returns the same denial for denied existing and missing paths", () =>
+    Effect.gen(function* () {
+      allow = false
+      const registry = yield* ToolRegistry.Service
+      const read = (id: string, path: string) =>
+        executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id, name: "read", input: { path } },
+        })
+
+      const existing = yield* read("call-denied-existing", "README.md")
+      const missing = yield* read("call-denied-missing", missingPath)
+
+      expect(existing).toEqual({ type: "error", value: expect.stringContaining("prevents you from using") })
+      expect(missing).toEqual(existing)
       expect(readCalls).toEqual([])
     }),
   )
@@ -594,7 +616,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
         }),
-      ).toEqual({ type: "error", value: "Unable to read src" })
+      ).toEqual({ type: "error", value: expect.stringContaining("prevents you from using this specific tool call") })
       expect(listCalls).toEqual([])
     }),
   )

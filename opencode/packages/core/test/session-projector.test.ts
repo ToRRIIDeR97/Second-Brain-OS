@@ -25,6 +25,7 @@ import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Location } from "@opencode-ai/core/location"
 import { SessionRevert } from "@opencode-ai/core/session/revert"
 import { RelativePath } from "@opencode-ai/core/schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
 const sessionsLayer = AppNodeBuilder.build(SessionV2.node, [[SessionExecution.node, SessionExecution.noopLayer]])
@@ -46,7 +47,144 @@ const assistantRow = (
   return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
 }
 
+const seedSession = Effect.gen(function* () {
+  const { db } = yield* Database.Service
+  yield* db
+    .insert(ProjectTable)
+    .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+    .run()
+    .pipe(Effect.orDie)
+  yield* db
+    .insert(SessionTable)
+    .values({
+      id: sessionID,
+      project_id: Project.ID.global,
+      slug: "test",
+      directory: "/project",
+      title: "test",
+      version: "test",
+    })
+    .run()
+    .pipe(Effect.orDie)
+})
+
+const stepFinish = (id: string, messageID: string, cost: number) =>
+  SessionV1.StepFinishPart.make({
+    id: SessionV1.PartID.make(id),
+    sessionID,
+    messageID: SessionV1.MessageID.make(messageID),
+    type: "step-finish",
+    reason: "stop",
+    cost,
+    tokens: { input: cost * 10, output: cost, reasoning: 0, cache: { read: 0, write: 0 } },
+  })
+
 describe("SessionProjector", () => {
+  it.effect("keeps projected usage when a stale session snapshot is updated", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      yield* seedSession
+      yield* db
+        .run(
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('msg_usage', ${sessionID}, 1, 1, '{}')`,
+        )
+        .pipe(Effect.orDie)
+
+      yield* events.publish(SessionV1.Event.PartUpdated, {
+        sessionID,
+        part: stepFinish("prt_usage", "msg_usage", 2),
+        time: 1,
+      })
+      // A concurrent setTitle built its snapshot before the step-finish was projected.
+      yield* events.publish(SessionV1.Event.Updated, {
+        sessionID,
+        info: SessionV1.SessionInfo.make({
+          id: sessionID,
+          slug: "test",
+          version: "test",
+          projectID: Project.ID.global,
+          directory: "/project",
+          title: "renamed",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 2 },
+        }),
+      })
+      const usage = () =>
+        db
+          .select({ title: SessionTable.title, cost: SessionTable.cost, input: SessionTable.tokens_input })
+          .from(SessionTable)
+          .get()
+          .pipe(Effect.orDie)
+      expect(yield* usage()).toEqual({ title: "renamed", cost: 2, input: 20 })
+
+      // Replacing the step-finish swaps its usage, and a non-usage part type replacing it removes the usage.
+      yield* events.publish(SessionV1.Event.PartUpdated, {
+        sessionID,
+        part: stepFinish("prt_usage", "msg_usage", 3),
+        time: 3,
+      })
+      expect(yield* usage()).toEqual({ title: "renamed", cost: 3, input: 30 })
+      yield* events.publish(SessionV1.Event.PartUpdated, {
+        sessionID,
+        part: SessionV1.TextPart.make({
+          id: SessionV1.PartID.make("prt_usage"),
+          sessionID,
+          messageID: SessionV1.MessageID.make("msg_usage"),
+          type: "text",
+          text: "replaced",
+        }),
+        time: 4,
+      })
+      expect(yield* usage()).toEqual({ title: "renamed", cost: 0, input: 0 })
+    }),
+  )
+
+  it.effect("ends the shell projection with the matching call ID", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      yield* seedSession
+      for (const callID of ["shell-a", "shell-b"])
+        yield* events.publish(SessionEvent.Shell.Started, {
+          sessionID,
+          messageID: SessionMessage.ID.create(),
+          timestamp: created,
+          callID,
+          command: callID,
+        })
+      yield* events.publish(SessionEvent.Shell.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        callID: "shell-a",
+        output: "a done",
+      })
+      yield* events.publish(SessionEvent.Shell.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        callID: "shell-missing",
+        output: "ignored",
+      })
+
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.type, "shell"))
+        .orderBy(asc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      expect(
+        rows
+          .map((row) => Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }))
+          .map((message) => (message.type === "shell" ? [message.callID, message.output] : [])),
+      ).toEqual([
+        ["shell-a", "a done"],
+        ["shell-b", ""],
+      ])
+    }),
+  )
+
   it.effect("projects moved sessions without the transitional context epoch table", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

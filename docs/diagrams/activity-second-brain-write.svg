@@ -102,7 +102,7 @@
 <path class="e " d="M440,480 L440,500" marker-end="url(#a)"/>
 <rect class="act" x="290" y="500" width="300" height="44" rx="14"/>
 <text x="440.0" y="520.0" text-anchor="middle" class="t">read current file</text>
-<text x="440.0" y="535.0" text-anchor="middle" class="s">compare expectedRevision</text>
+<text x="440.0" y="535.0" text-anchor="middle" class="s">compare revision · move bad calendar aside</text>
 <path class="dia" d="M440,558 L454,572 L440,586 L426,572 z"/>
 <path class="e " d="M440,544 L440,558" marker-end="url(#a)"/>
 <path class="e " d="M454,572 L680,572" marker-end="url(#a)"/>
@@ -115,7 +115,7 @@
 <path class="e " d="M440,648 L440,664" marker-end="url(#a)"/>
 <rect class="act" x="290" y="664" width="300" height="44" rx="14"/>
 <text x="440.0" y="684.0" text-anchor="middle" class="t">FileMutation.writeIfUnchanged</text>
-<text x="440.0" y="699.0" text-anchor="middle" class="s">per-path mutex, compare bytes</text>
+<text x="440.0" y="699.0" text-anchor="middle" class="s">per-path mutex, compare bytes, temp + rename</text>
 <path class="dia" d="M440,722 L454,736 L440,750 L426,736 z"/>
 <path class="e " d="M440,708 L440,722" marker-end="url(#a)"/>
 <path class="e " d="M454,736 L680,736" marker-end="url(#a)"/>
@@ -136,16 +136,16 @@
 <path class="e " d="M440,804 L440,822" marker-end="url(#a)"/>
 <rect class="act" x="290" y="822" width="300" height="44" rx="14"/>
 <text x="440.0" y="842.0" text-anchor="middle" class="t">[calendar] BrainProject.syncTimelines</text>
-<text x="440.0" y="857.0" text-anchor="middle" class="s">best effort; errors swallowed</text>
+<text x="440.0" y="857.0" text-anchor="middle" class="s">changed timelines only; errors logged</text>
 <path class="e " d="M440,866 L440,880" marker-end="url(#a)"/>
 <circle class="ring" cx="440" cy="892" r="10"/><circle class="dot" cx="440" cy="892" r="6"/>
 <text x="460" y="897" text-anchor="start" class="s">200 Document / Snapshot</text>
 <rect class="gapz" x="680" y="800" width="270" height="96" rx="6"/>
 <text x="690" y="818" text-anchor="start" class="t">Unverified at runtime</text>
-<text x="690" y="834" text-anchor="start" class="s">note/project validate() throws inside</text>
-<text x="690" y="850" text-anchor="start" class="s">Effect.fn; handlers catch typed errors</text>
-<text x="690" y="866" text-anchor="start" class="s">only, so these may surface as 500.</text>
-<text x="690" y="882" text-anchor="start" class="s">CAS lock is process-local; no rename.</text>
+<text x="690" y="834" text-anchor="start" class="s">Domain errors → 400 {reason}; IO → 500.</text>
+<text x="690" y="850" text-anchor="start" class="s">Calendar saves and Project changes</text>
+<text x="690" y="866" text-anchor="start" class="s">share a per-Brain lock. The CAS lock is</text>
+<text x="690" y="882" text-anchor="start" class="s">process-local; other processes can race.</text>
 <rect class="lblbg" x="526.9" y="134.0" width="106.3" height="13" rx="2"/>
 <text class="lbl" x="580" y="144" text-anchor="middle">[bad credentials]</text>
 <rect class="lblbg" x="491.4" y="224.0" width="177.1" height="13" rx="2"/>

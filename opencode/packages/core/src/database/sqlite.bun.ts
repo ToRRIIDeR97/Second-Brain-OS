@@ -34,6 +34,8 @@ interface Config {
   readonly create?: boolean
   readonly readwrite?: boolean
   readonly disableWAL?: boolean
+  /** Busy timeout in milliseconds, set when the connection opens. */
+  readonly timeout?: number
   readonly spanAttributes?: Record<string, unknown>
   readonly transformResultNames?: (str: string) => string
   readonly transformQueryNames?: (str: string) => string
@@ -161,6 +163,8 @@ const nativeLayer = (config: Config) =>
         create: config.create ?? true,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
+      // Before WAL: switching the journal mode can itself wait on another connection's lock.
+      if (config.timeout !== undefined) native.run(`PRAGMA busy_timeout = ${Math.trunc(config.timeout)};`)
       if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
       return native
     }),

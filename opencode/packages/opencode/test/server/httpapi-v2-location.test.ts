@@ -123,4 +123,25 @@ describe("v2 location HttpApi", () => {
     })
     await reader.return(undefined)
   })
+
+  test("keeps streaming after an event outside the served schema", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const response = await request("/api/event", tmp.path)
+    const reader = eventStream(response.body!)
+    expect((await readEvent(reader)).type).toBe("server.connected")
+
+    // TUI events are published on the shared bus but are not part of the /api/event schema.
+    const toast = await request("/tui/show-toast", tmp.path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "hello", variant: "info" }),
+    })
+    expect(toast.status).toBe(200)
+
+    const created = await request("/session", tmp.path, { method: "POST" })
+    expect(created.status).toBe(200)
+    const event = await readEventType(reader, "session.created")
+    expect(event.type).toBe("session.created")
+    await reader.return(undefined)
+  })
 })

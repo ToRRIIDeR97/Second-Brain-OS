@@ -68,7 +68,7 @@ const layer = Layer.effectDiscard(
                 })
               const resource = target.resource
               const absolute = AbsolutePath.make(target.canonical)
-              const type = yield* reader.inspect(absolute)
+              // Check permission before touching the path, so a denied read cannot reveal whether the path exists.
               yield* permission.assert({
                 action: name,
                 resources: [resource],
@@ -77,6 +77,7 @@ const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source,
               })
+              const type = yield* reader.inspect(absolute)
               if (type === "directory")
                 return yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
               const content = yield* reader.read(absolute, resource, {
@@ -92,7 +93,7 @@ const layer = Layer.effectDiscard(
                 return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
               return content
             }).pipe(
-              Effect.mapError((error) => {
+              Tool.mapError((error) => {
                 const message =
                   error instanceof ReadToolFileSystem.BinaryFileError ||
                   error instanceof ReadToolFileSystem.MediaIngestLimitError ||

@@ -370,13 +370,20 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("keeps live-only listener defects fail-fast", () =>
+  it.effect("isolates observer defects for non-durable events", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
-      const defect = new Error("listener defect")
-      yield* events.listen(() => Effect.die(defect))
+      const received = new Array<string>()
+      yield* events.listen(() => Effect.die(new Error("listener defect")))
+      yield* events.listen((event) =>
+        Effect.sync(() => {
+          received.push(event.type)
+        }),
+      )
 
-      expect(yield* events.publish(Message, { text: "hello" }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
+      yield* events.publish(Message, { text: "hello" })
+
+      expect(received).toEqual([Message.type])
     }),
   )
 

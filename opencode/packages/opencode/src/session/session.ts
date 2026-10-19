@@ -314,10 +314,26 @@ export type GlobalListInput = {
   directory?: string
   roots?: boolean
   start?: number
-  cursor?: number
+  // A bare number is the legacy time_updated-only cursor, which skips sessions that tie on time_updated.
+  cursor?: number | GlobalCursor
   search?: string
   limit?: number
   archived?: boolean
+}
+
+const GlobalCursor = Schema.Struct({ time: Schema.Finite, id: SessionID })
+export type GlobalCursor = typeof GlobalCursor.Type
+const decodeGlobalCursor = Schema.decodeUnknownSync(Schema.fromJsonString(GlobalCursor))
+
+export const globalCursor = {
+  encode(input: GlobalCursor) {
+    return Buffer.from(JSON.stringify(input)).toString("base64url")
+  },
+  /** Accepts the opaque (time_updated, id) cursor and the legacy numeric time_updated cursor; throws when invalid. */
+  decode(input: string): number | GlobalCursor {
+    if (/^\d+$/.test(input)) return Number(input)
+    return decodeGlobalCursor(Buffer.from(input, "base64url").toString("utf8"))
+  },
 }
 
 export const Event = {
@@ -558,7 +574,15 @@ const layer: Layer.Layer<
       if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
-      if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
+      const cursor = input?.cursor
+      if (typeof cursor === "number" && cursor) conditions.push(lt(SessionTable.time_updated, cursor))
+      if (typeof cursor === "object")
+        conditions.push(
+          or(
+            lt(SessionTable.time_updated, cursor.time),
+            and(eq(SessionTable.time_updated, cursor.time), lt(SessionTable.id, cursor.id)),
+          )!,
+        )
       if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
       if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
 

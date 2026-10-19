@@ -713,3 +713,23 @@ describe("sandbox values at intra-sandbox checkpoints", () => {
     expect(observed).toStrictEqual([{ when: "1970-01-01T00:00:00.000Z", tags: {} }])
   })
 })
+
+describe("String size limits", () => {
+  test("repeat and pad reject results beyond the built-string limit", async () => {
+    for (const code of [
+      `return "x".repeat(1e9)`,
+      `return "ab".repeat(9_000_000)`,
+      `return "".padStart(1e9, "x")`,
+      `return "x".padEnd(2 ** 25)`,
+    ]) {
+      const failure = await error(code)
+      expect(failure.message).toContain("character limit")
+    }
+  })
+
+  test("repeat and pad still work below the limit", async () => {
+    expect(await value(`return "ab".repeat(3)`)).toBe("ababab")
+    expect(await value(`return "5".padStart(3, "0")`)).toBe("005")
+    expect(await value(`return "x".padEnd(NaN)`)).toBe("x")
+  })
+})

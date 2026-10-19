@@ -1,20 +1,28 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Option, Result, Schema, Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Api } from "../api"
 
 const subscriberCapacity = 256
+const encodeEvent = Schema.encodeUnknownOption(OpenCodeEvent)
 
-function eventData(data: unknown): Sse.Event {
-  return {
-    _tag: "Event",
-    event: "message",
-    id: undefined,
-    data: JSON.stringify(Schema.encodeUnknownSync(OpenCodeEvent)(data)),
-  }
+// The bus also carries events outside the served schema (for example TUI events).
+// Encoding them would fail and end the stream for every subscriber, so drop them.
+function eventData(event: { readonly type: string }) {
+  return Option.match(encodeEvent(event), {
+    onNone: () =>
+      Effect.logDebug("skipping event outside the server event schema").pipe(
+        Effect.annotateLogs({ type: event.type }),
+        Effect.as(Result.failVoid),
+      ),
+    onSome: (encoded) =>
+      Effect.succeed(
+        Result.succeed<Sse.Event>({ _tag: "Event", event: "message", id: undefined, data: JSON.stringify(encoded) }),
+      ),
+  })
 }
 
 export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
@@ -33,7 +41,7 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
             const live = yield* EventV2.allBounded(events, subscriberCapacity)
             return Stream.make(connected).pipe(Stream.concat(live))
           }),
-        ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))
+        ).pipe(Stream.filterMapEffect(eventData), Stream.pipeThroughChannel(Sse.encode()))
         const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))
         return HttpServerResponse.stream(
           output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }), Stream.encodeText),

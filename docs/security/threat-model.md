@@ -47,19 +47,55 @@ credentials (`auth.json`, `mcp-auth.json`) and the session database
 (`opencode.db`) live in the XDG data directory (by default
 `~/.local/share/tenon-workbench/`), outside Electron `userData`. `userData` holds
 drafts, electron-store files, logs, and server state. Treat both locations as
-sensitive and exclude them from source control and release artifacts.
+sensitive and exclude them from source control and release artifacts. Outside
+Windows, the server sets the data directory to `0700` and `opencode.db`, its
+`-wal`/`-shm` files and its pre-migration backups to `0600`. Failed-query errors
+keep the SQL text but replace bound values with `[redacted]`, so logged defects
+do not carry credentials or note text.
 
 Configured plugins execute code in the local runtime. Dependency installation
 and plugin initialization can therefore affect both access and startup time.
 Review plugin origins and package changes, retain the Bun lockfile and local
 patches, and do not treat a plugin as sandboxed workspace content. Build and
 packaging scripts also download upstream binaries, as described in
-[release operations](../release-operations.md).
+[release operations](../release-operations.md). A plugin hook that throws or
+runs longer than 30 seconds is logged and skipped, except `tool.execute.before`
+and `command.execute.before`, which fail closed so a plugin can still block a
+call by throwing. A timed-out hook is not cancelled and may keep running, and
+can still change the hook output after the caller has moved on.
 
 Workspace validation and agent tool permissions are different controls.
 Keep the existing permission checks on tool execution; a user opening a note
-does not authorize instructions embedded inside it. Destructive recovery must
-preserve both canonical workspace files and session/draft profile state.
+does not authorize instructions embedded inside it. The V2 runner checks the
+`doom_loop` permission before a third identical tool call in a row. Built-in
+agents add a `doom_loop: ask` rule, but the agent's ruleset decides: an agent
+that denies all actions resolves to deny, as in V1. The runner returns the
+user's rejection feedback or the deny rule to the model. Destructive recovery
+must preserve both canonical workspace files and session/draft profile state.
+
+## Managed server controls
+
+- **Child processes.** Terminals, agent shell commands, MCP stdio servers and
+  LSP servers don't inherit `OPENCODE_SERVER_PASSWORD` or
+  `OPENCODE_SERVER_USERNAME`. `ChildEnv.from` (`core/src/child-env.ts`) strips
+  them in the cross-spawn spawner and `Process.spawn`, which apply it to every
+  child environment. All other variables are still inherited.
+- **Credential checks.** `ServerAuth.authorized` compares the username and
+  password in constant time. `httpapi-route-auth-coverage.test.ts` sends an
+  unauthenticated request to every declared HttpApi operation and expects 401.
+- **Workspace proxy.** Requests forwarded to a remote workspace lose their
+  `authorization` and `cookie` headers and the `auth_token` query parameter.
+  Only the target's configured headers supply credentials.
+- **CORS.** The allowlist is `oc://renderer` (exact match), numeric-port
+  `localhost` and `127.0.0.1` origins for development, and origins passed to
+  `Server.listen`. Tauri and `*.opencode.ai` origins are no longer trusted.
+- **Body size.** The server rejects a declared request body over 32 MiB with
+  413. Effect's `MaxBodySize` stops a streamed body at the same cap. The cap
+  matches the session export limit and leaves room for base64 image
+  attachments. `POST /log` truncates messages and drops oversized metadata.
+- **CodeMode.** The `execute` tool runs with a 10 minute timeout, 100 child
+  tool calls and 64 KB of output. The interpreter rejects `repeat` and `pad*`
+  results longer than 16M characters.
 
 ## Outbound network endpoints
 
@@ -242,11 +278,12 @@ picker refreshes don't relaunch every agent.
 
 ## Checks
 
-From the repository root, `bun run typecheck` checks desktop, renderer, core,
-and server types. `bun run test` checks desktop, renderer, and Second Brain
+From the repository root, `bun run typecheck` checks every workspace package
+through turbo. `bun run test` runs every package suite except the engine
+(core, server) and the client and schema suites, then the Second Brain
 domains; `bun run test:engine` runs core and server suites. `bun run lint`
-checks `opencode/`. These commands are defined
-in the root `package.json`.
+checks `opencode/`, and `bun run check:generated` fails when the generated
+client is stale. These commands are defined in the root `package.json`.
 Relevant focused tests include
 `opencode/packages/desktop/src/main/google-calendar-domain.test.ts`,
 `opencode/packages/opencode/test/project/brain.test.ts`, and the note tests
@@ -319,6 +356,7 @@ fix lands.
 - Server authorization also accepts an `auth_token` query parameter, so the
   credential can appear in URLs. Desktop main-process logs record only the
   scheme and host of blocked and rejected URLs, never the query string. The
+  parameter is not yet restricted to SSE and WebSocket routes. The
   desktop no longer records a Chromium NetLog, which captured full URLs, and
   the debug-log export skips any `.netlog` file. Packaged builds don't copy
   renderer console output into the log files, and no terminal console

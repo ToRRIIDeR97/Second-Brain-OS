@@ -11,8 +11,13 @@ const hop = new Set([
   "host",
 ])
 
+// Local server credentials must not reach a remote workspace target; only the
+// target's own configured headers may supply credentials.
+const credentials = ["authorization", "cookie"]
+
 function sanitize(out: Headers) {
   for (const key of hop) out.delete(key)
+  for (const key of credentials) out.delete(key)
   out.delete("accept-encoding")
   out.delete("x-opencode-directory")
   out.delete("x-opencode-workspace")

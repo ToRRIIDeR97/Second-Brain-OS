@@ -6,6 +6,7 @@ import {
   Model,
   TransportReason,
   InvalidRequestReason,
+  RateLimitReason,
   type LLMClientShape,
   type LLMRequest,
 } from "@opencode-ai/llm"
@@ -56,6 +57,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -110,10 +112,11 @@ const recoveryModel = Model.make({
 })
 const authorizations: Tool.Context[] = []
 const executions: string[] = []
+let permissionAssert: PermissionV2.Interface["assert"] = () => Effect.die("unused")
 const permission = Layer.succeed(
   PermissionV2.Service,
   PermissionV2.Service.of({
-    assert: () => Effect.die("unused"),
+    assert: (input, options) => permissionAssert(input, options),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
     get: () => Effect.die("unused"),
@@ -329,6 +332,7 @@ const setup = Effect.gen(function* () {
   toolExecutionsReady = 5
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
+  permissionAssert = () => Effect.die("unused")
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -2280,6 +2284,146 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("retries a retryable provider failure before output starts, honoring Retry-After", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-retried", ["Recovered"]).completeEvents
+      responseStream = Stream.fail(
+        new LLMError({
+          module: "test",
+          method: "stream",
+          reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 5_000 }),
+        }),
+      )
+      const retried = yield* Deferred.make<EventV2.Payload>()
+      yield* events.listen((event) =>
+        event.type === SessionEvent.Retried.type ? Deferred.succeed(retried, event).pipe(Effect.asVoid) : Effect.void,
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      expect((yield* Deferred.await(retried)).data).toMatchObject({
+        sessionID,
+        attempt: 1,
+        error: { message: "Slow down", isRetryable: true },
+      })
+      yield* Effect.yieldNow
+      yield* TestClock.adjust(4_999)
+      yield* Effect.yieldNow
+      expect(requests).toHaveLength(1)
+
+      yield* TestClock.adjust(1)
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Hi" },
+        { type: "assistant", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("cancels a pending provider retry when interrupted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      streamFailure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 60_000 }),
+      })
+      const retried = yield* Deferred.make<void>()
+      yield* events.listen((event) =>
+        event.type === SessionEvent.Retried.type
+          ? Deferred.succeed(retried, undefined).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(retried)
+      yield* Fiber.interrupt(run)
+
+      expect(requests).toHaveLength(1)
+    }),
+  )
+
+  it.effect("fails the open assistant step when the provider stream defects", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      responseStream = Stream.fromIterable(fragmentFixture("text", "text-defect", ["Half"]).partialEvents).pipe(
+        Stream.concat(Stream.die(new Error("parser bug"))),
+      )
+
+      expect(Exit.isFailure(yield* session.resume(sessionID).pipe(Effect.exit))).toBe(true)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Hi" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "Internal error while processing the provider response" },
+          content: [{ type: "text", text: "Half" }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("does not retry a provider failure after an empty step already finished", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 0 }),
+      })
+      const emptyStep = [LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" })]
+      response = emptyStep
+      responseStream = Stream.fromIterable(emptyStep).pipe(Stream.concat(Stream.fail(failure)))
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(1)
+    }),
+  )
+
+  it.effect("does not retry a provider failure after assistant output started", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hi" }), resume: false })
+
+      requests.length = 0
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new RateLimitReason({ message: "Slow down", retryAfterMs: 0 }),
+      })
+      responseStream = Stream.fromIterable(fragmentFixture("text", "text-partial", ["Half"]).partialEvents).pipe(
+        Stream.concat(Stream.fail(failure)),
+      )
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Hi" },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Slow down" } },
+      ])
+    }),
+  )
+
   it.effect("durably fails local tools left running by a prior process before continuing", () =>
     Effect.gen(function* () {
       yield* setup
@@ -3170,6 +3314,60 @@ describe("SessionRunnerLLM", () => {
       expect(requests[1]?.tools).not.toEqual([])
       expect(requests[2]?.toolChoice).toMatchObject({ type: "none" })
       expect(executions).toEqual(["before", "after"])
+    }),
+  )
+
+  it.effect("asks doom_loop permission before a third identical tool call in a row", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Loop" }), resume: false })
+
+      const asked: PermissionV2.AssertInput[] = []
+      permissionAssert = (input) =>
+        Effect.sync(() => asked.push(input)).pipe(
+          Effect.andThen(Effect.fail(new PermissionV2.BlockedError({ rules: [] }))),
+        )
+      const repeat = (id: string) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id, name: "echo", input: { text: "same" } }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]
+      requests.length = 0
+      executions.length = 0
+      responses = [
+        repeat("call-repeat-1"),
+        repeat("call-repeat-2"),
+        repeat("call-repeat-3"),
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(executions).toEqual(["same", "same"])
+      expect(asked).toMatchObject([{ action: "doom_loop", resources: ["echo"], metadata: { tool: "echo" } }])
+      expect(requests).toHaveLength(4)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Loop" },
+        { type: "assistant", content: [{ type: "tool", id: "call-repeat-1", state: { status: "completed" } }] },
+        { type: "assistant", content: [{ type: "tool", id: "call-repeat-2", state: { status: "completed" } }] },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-repeat-3",
+              state: { status: "error", error: { message: expect.stringContaining("prevents you from using") } },
+            },
+          ],
+        },
+        { type: "assistant" },
+      ])
     }),
   )
 

@@ -21,8 +21,9 @@ import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionID } from "../../src/session/schema"
 import { Project } from "../../src/project/project"
-import { Session } from "../../src/session/session"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
   WorkspaceRoutingMiddleware,
@@ -228,6 +229,11 @@ const ProbeApi = HttpApi.make("workspace-routing-probe").add(
       HttpApiEndpoint.get("get", "/probe", { query: WorkspaceRoutingQuery, success: ProbeResult }),
       HttpApiEndpoint.patch("patch", "/probe", { query: WorkspaceRoutingQuery, success: Schema.Boolean }),
       HttpApiEndpoint.get("session", "/session", { query: WorkspaceRoutingQuery, success: ProbeResult }),
+      HttpApiEndpoint.get("sessionDetail", "/session/:sessionID", {
+        params: { sessionID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        success: ProbeResult,
+      }),
       HttpApiEndpoint.get("workspace", WorkspacePaths.list, {
         query: WorkspaceRoutingQuery,
         success: ProbeResult,
@@ -246,13 +252,13 @@ const probeHandlers = HttpApiBuilder.group(ProbeApi, "probe", (handlers) =>
     .handle("get", () => routeContextResponse)
     .handle("patch", () => Effect.succeed(false))
     .handle("session", () => routeContextResponse)
+    .handle("sessionDetail", () => routeContextResponse)
     .handle("workspace", () => routeContextResponse),
 )
 
 const serveProbe = HttpApiBuilder.layer(ProbeApi).pipe(
   Layer.provide(probeHandlers),
   Layer.provide(workspaceRoutingTestLayer),
-  Layer.provide(Layer.mock(Session.Service)({})),
   HttpRouter.serve,
   Layer.build,
 )
@@ -376,7 +382,6 @@ describe("HttpApi workspace routing middleware", () => {
         Layer.provide(probeHandlers),
         Layer.provide(workspaceRoutingTestLayer),
         Layer.provide(Layer.succeed(Workspace.Service, workspace)),
-        Layer.provide(Layer.mock(Session.Service)({})),
         HttpRouter.serve,
         Layer.build,
       )
@@ -521,6 +526,42 @@ describe("HttpApi workspace routing middleware", () => {
       expect(yield* queryResponse.json).toEqual({ directory: queryDir, workspaceID: null })
       expect(headerResponse.status).toBe(200)
       expect(yield* headerResponse.json).toEqual({ directory: headerDir, workspaceID: null })
+    }),
+  )
+
+  it.live("routes session requests to the stored session directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const sessionDir = path.join(dir, "session-target")
+      const sessionID = SessionID.descending()
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: project.project.id,
+          slug: "routing",
+          directory: sessionDir,
+          title: "routing",
+          version: "test",
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* serveProbe
+
+      const stored = yield* HttpClient.get(`/session/${sessionID}`)
+      expect(stored.status).toBe(200)
+      expect(yield* stored.json).toEqual({ directory: sessionDir, workspaceID: null })
+
+      // An unknown session falls back to the request directory hints.
+      const fallbackDir = path.join(dir, "fallback")
+      const missing = yield* HttpClient.get(
+        `/session/${SessionID.descending()}?directory=${encodeURIComponent(fallbackDir)}`,
+      )
+      expect(missing.status).toBe(200)
+      expect(yield* missing.json).toEqual({ directory: fallbackDir, workspaceID: null })
     }),
   )
 

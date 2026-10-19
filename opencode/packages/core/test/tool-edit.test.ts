@@ -68,10 +68,8 @@ const filesystem = Layer.effect(
           ),
       writeWithDirs: (target, content, mode) =>
         Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
-      writeFile: (target, content, options) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFile(target, content, options))),
-      writeFileString: (target, content, options) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFileString(target, content, options))),
+      // FileMutation commits a replacement by renaming a synced temp file over the target.
+      rename: (from, to) => Effect.sync(() => writes.push(to)).pipe(Effect.andThen(fs.rename(from, to))),
     })
   }),
 ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
@@ -228,7 +226,7 @@ describe("EditTool", () => {
             ),
           ).toEqual({
             type: "error",
-            value: `Unable to edit ${external}`,
+            value: expect.stringContaining("prevents you from using this specific tool call"),
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(reads).toBe(0)
@@ -242,7 +240,7 @@ describe("EditTool", () => {
             ),
           ).toEqual({
             type: "error",
-            value: `Unable to edit ${external}`,
+            value: expect.stringContaining("prevents you from using this specific tool call"),
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
           expect(reads).toBe(0)
@@ -276,7 +274,10 @@ describe("EditTool", () => {
                   call({ path: "secret.txt", oldString: "not present", newString: "replacement" }),
                 )
 
-                expect(matching).toEqual({ type: "error", value: "Unable to edit secret.txt" })
+                expect(matching).toEqual({
+                  type: "error",
+                  value: expect.stringContaining("prevents you from using this specific tool call"),
+                })
                 expect(missing).toEqual(matching)
                 expect(assertions.map((input) => input.action)).toEqual(["edit", "edit"])
                 expect(reads).toBe(0)

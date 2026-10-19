@@ -51,16 +51,20 @@ Run from the repository root, locally, before requesting a merge. `bun run check
 runs these in order and stops at the first failure:
 
 ```sh
-bun run typecheck
+bun run typecheck        # turbo typecheck of every opencode/ package
 bun run lint
-bun run test
+bun run check:generated  # generated client in packages/client is current
+bun run test             # turbo test of packages + Second Brain server tests
 bun run build
 ```
 
-Also run `bun run test:engine` when changing `opencode/packages/core` or
+`bun run test` skips the engine packages (`core`, `opencode`) and, until their
+contract fixtures are updated, `client` and `schema`. Also run
+`bun run test:engine` when changing `opencode/packages/core` or
 `opencode/packages/opencode`, and `bun run test:routes` when changing
 navigation or routing. `bun install` inside `opencode/` also installs a git
 pre-push hook (`opencode/.husky/pre-push`) that runs typecheck and lint.
+The CI workflow runs only on manual dispatch.
 
 ## Merging
 

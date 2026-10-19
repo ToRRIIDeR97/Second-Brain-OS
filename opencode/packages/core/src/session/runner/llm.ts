@@ -10,6 +10,7 @@ import {
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
+import { RequestExecutor } from "@opencode-ai/llm/route"
 import { Harness } from "@opencode-ai/schema/harness"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
@@ -26,19 +27,21 @@ import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
+import { Tool } from "../../tool/tool"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
-import { MAX_STEPS_PROMPT } from "./max-steps"
+import { DEFAULT_MAX_STEPS, DOOM_LOOP_THRESHOLD, MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -62,8 +65,8 @@ const harnessRequestModel = (session: SessionSchema.Info) =>
  *   - [ ] Replace local ownership with durable multi-node ownership when clustered.
  *   - [ ] Mark busy, retrying, idle, interrupted, or terminal-failure status durably.
  *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
- *   - [x] Honor optional agent step limits.
- *   - [ ] Bound provider retries and repeated identical tool calls.
+ *   - [x] Honor agent step limits, defaulting to DEFAULT_MAX_STEPS.
+ *   - [x] Bound provider retries and repeated identical tool calls.
  *
  * - Runtime context assembly
  *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
@@ -116,6 +119,7 @@ const layer = Layer.effect(
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
+    const permissions = yield* PermissionV2.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
@@ -227,8 +231,9 @@ const layer = Layer.effect(
         : harnessRequestModel(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
-      const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
+      const isLastStep = currentStep >= (agent.info?.steps ?? DEFAULT_MAX_STEPS)
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
+      const recentCalls = localToolCallsSinceLastUser(context)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
@@ -266,63 +271,133 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = harnesses
-        .stream({
+      // Suspended so each retry attempt opens a fresh provider stream.
+      const providerStream = Stream.suspend(() =>
+        harnesses.stream({
           instanceID: session.harnessInstanceID,
           sessionID: session.id,
           directory: session.location.directory,
           request,
           model: session.harnessModel,
           revision: session.harnessRevision ?? 0,
-        })
-        .pipe(
-          Stream.runForEach((event) =>
-            Effect.gen(function* () {
-              if (overflowFailure || publisher.hasProviderError()) return
-              if (LLMEvent.is.providerError(event)) {
-                if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
-                  overflowFailure = event
-                  return
-                }
-              }
-              yield* publish(event)
-              if (event.type !== "tool-call" || event.providerExecuted) return
-              if (!toolMaterialization) {
-                yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
+        }),
+      ).pipe(
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            if (overflowFailure || publisher.hasProviderError()) return
+            if (LLMEvent.is.providerError(event)) {
+              if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
+                overflowFailure = event
                 return
               }
-              needsContinuation = true
-              const assistantMessageID = yield* publisher.assistantMessageID(event.id)
-              yield* Effect.uninterruptibleMask((restore) =>
-                restore(
-                  toolMaterialization.settle({
+            }
+            yield* publish(event)
+            if (event.type !== "tool-call" || event.providerExecuted) return
+            if (!toolMaterialization) {
+              yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
+              return
+            }
+            needsContinuation = true
+            const assistantMessageID = yield* publisher.assistantMessageID(event.id)
+            const input = JSON.stringify(event.input)
+            const repeated =
+              recentCalls.length >= DOOM_LOOP_THRESHOLD - 1 &&
+              recentCalls
+                .slice(-(DOOM_LOOP_THRESHOLD - 1))
+                .every((call) => call.name === event.name && call.input === input)
+            recentCalls.push({ name: event.name, input })
+            // Like V1, ask before running the same call a third time in a row; a denial becomes the tool result.
+            const guard = repeated
+              ? permissions
+                  .assert({
                     sessionID: session.id,
                     agent: agent.id,
-                    assistantMessageID,
-                    call: event,
-                  }),
-                ).pipe(
-                  Effect.flatMap((settlement) =>
-                    publish(
-                      LLMEvent.toolResult({
-                        id: event.id,
-                        name: event.name,
-                        result: settlement.result,
-                        output: settlement.output,
+                    action: "doom_loop",
+                    resources: [event.name],
+                    save: [event.name],
+                    metadata: { tool: event.name, input: event.input },
+                    source: { type: "tool", messageID: assistantMessageID, callID: event.id },
+                  })
+                  .pipe(
+                    Effect.as(undefined),
+                    Effect.catch((error) =>
+                      Effect.succeed({
+                        result: {
+                          type: "error" as const,
+                          value:
+                            error._tag === "Session.NotFoundError"
+                              ? `Repeated ${event.name} call was not allowed`
+                              : Tool.permissionFailure(error).message,
+                        },
                       }),
-                      settlement.outputPaths ?? [],
                     ),
+                  )
+              : Effect.succeed(undefined)
+            yield* Effect.uninterruptibleMask((restore) =>
+              restore(
+                guard.pipe(
+                  Effect.flatMap((denied) =>
+                    denied
+                      ? Effect.succeed(denied)
+                      : toolMaterialization.settle({
+                          sessionID: session.id,
+                          agent: agent.id,
+                          assistantMessageID,
+                          call: event,
+                        }),
                   ),
                 ),
-              ).pipe(FiberSet.run(toolFibers))
+              ).pipe(
+                Effect.flatMap((settlement) =>
+                  publish(
+                    LLMEvent.toolResult({
+                      id: event.id,
+                      name: event.name,
+                      result: settlement.result,
+                      output: settlement.output,
+                    }),
+                    settlement.outputPaths ?? [],
+                  ),
+                ),
+              ),
+            ).pipe(FiberSet.run(toolFibers))
+          }),
+        ),
+        Effect.ensuring(withPublication(publisher.flush())),
+      )
+      // Retry a failed provider call only while nothing was published for it, so a retry never
+      // duplicates assistant output. Harness drivers own their own transport and are not retried here.
+      const runProvider = (attempt: number): typeof providerStream =>
+        providerStream.pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              // An empty step that already finished cannot be replayed: the publisher records one step finish.
+              const delay =
+                usesHostModel &&
+                !publisher.hasAssistantStarted() &&
+                !publisher.stepSettlement() &&
+                !publisher.hasProviderError() &&
+                !overflowFailure
+                  ? providerRetryDelay(error, attempt)
+                  : undefined
+              if (delay === undefined || !(error instanceof LLMError)) return yield* Effect.fail(error)
+              yield* events.publish(SessionEvent.Retried, {
+                sessionID: session.id,
+                timestamp: yield* DateTime.now,
+                attempt: attempt + 1,
+                error: { message: error.reason.message, statusCode: providerStatus(error), isRetryable: true },
+              })
+              yield* Effect.sleep(delay)
+              return yield* runProvider(attempt + 1)
             }),
           ),
-          Effect.ensuring(withPublication(publisher.flush())),
         )
 
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const stream = yield* restore(providerStream).pipe(Effect.exit)
+          const stream = yield* restore(runProvider(0).pipe(Effect.provideService(RequestExecutor.MaxRetries, 0))).pipe(
+            Effect.exit,
+          )
           const failure =
             stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
           if (
@@ -338,6 +413,16 @@ const layer = Layer.effect(
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
+          }
+          // Defects and non-provider failures must still close the step, or the Session shows a reply that never ends.
+          if (
+            stream._tag === "Failure" &&
+            !llmFailure &&
+            !Cause.hasInterrupts(stream.cause) &&
+            !publisher.hasProviderError()
+          ) {
+            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* withPublication(publisher.failAssistant("Internal error while processing the provider response"))
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
@@ -458,6 +543,41 @@ const layer = Layer.effect(
   }),
 )
 
+/** Local tool calls after the latest user message, oldest first, for the repeated-call guard. */
+const localToolCallsSinceLastUser = (context: ReadonlyArray<SessionMessage.Message>) =>
+  context
+    .slice(context.findLastIndex((message) => message.type === "user") + 1)
+    .flatMap((message) =>
+      message.type !== "assistant"
+        ? []
+        : message.content.flatMap((part) =>
+            part.type === "tool" && part.state.status !== "pending" && part.provider?.executed !== true
+              ? [{ name: part.name, input: JSON.stringify(part.state.input) }]
+              : [],
+          ),
+    )
+
+const PROVIDER_RETRY_LIMIT = 5
+const PROVIDER_RETRY_BASE_MS = 2_000
+const PROVIDER_RETRY_MAX_BACKOFF_MS = 30_000
+// A provider asking for a longer pause fails the turn instead of holding the Session busy; retry notices
+// are not surfaced in the UI yet, so keep each wait (and the five-attempt total) short.
+const PROVIDER_RETRY_MAX_WAIT_MS = 60_000
+
+/** Milliseconds to wait before retrying a failed provider call, or undefined when it must not be retried. */
+const providerRetryDelay = (error: unknown, attempt: number) => {
+  if (!(error instanceof LLMError) || !error.retryable || attempt >= PROVIDER_RETRY_LIMIT) return undefined
+  const backoff =
+    Math.min(PROVIDER_RETRY_BASE_MS * 2 ** attempt, PROVIDER_RETRY_MAX_BACKOFF_MS) * (0.8 + Math.random() * 0.4)
+  const delay = Math.max(error.retryAfterMs ?? 0, Math.round(backoff))
+  return delay > PROVIDER_RETRY_MAX_WAIT_MS ? undefined : delay
+}
+
+const providerStatus = (error: LLMError) => {
+  if ("status" in error.reason && error.reason.status !== undefined) return error.reason.status
+  return "http" in error.reason ? error.reason.http?.response?.status : undefined
+}
+
 export const node = makeLocationNode({
   service: Service,
   layer,
@@ -474,6 +594,7 @@ export const node = makeLocationNode({
     SkillGuidance.node,
     ReferenceGuidance.node,
     Config.node,
+    PermissionV2.node,
     Snapshot.node,
     Database.node,
   ],
