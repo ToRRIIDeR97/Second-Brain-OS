@@ -30,20 +30,20 @@ export function superviseSidecar<T extends SupervisedSidecar>(input: {
   let stopped = false
   let restarts: number[] = []
 
-  const watch = (sidecar: SupervisedSidecar, restarted: boolean): Promise<void> =>
-    sidecar.ready.then(
+  const watch = (sidecar: SupervisedSidecar, restarted: boolean) =>
+    void sidecar.ready.then(
       () => {
         if (restarted) input.log("sidecar restarted")
-        return sidecar.exited.then((code) => {
+        void sidecar.exited.then((code) => {
           if (stopped || sidecar !== current) return
           input.log("sidecar exited unexpectedly", { code })
-          return restart()
+          void restart()
         })
       },
       (error) => {
         if (!restarted || stopped || sidecar !== current) return
         input.log("sidecar restart failed", { error: error instanceof Error ? error.message : String(error) })
-        return restart()
+        void restart()
       },
     )
 
@@ -60,10 +60,10 @@ export function superviseSidecar<T extends SupervisedSidecar>(input: {
     if (stopped) return
     input.log("restarting sidecar", { attempt: restarts.length, delay })
     current = input.spawn()
-    return watch(current, true)
+    watch(current, true)
   }
 
-  void watch(initial, false)
+  watch(initial, false)
 
   return {
     initial,

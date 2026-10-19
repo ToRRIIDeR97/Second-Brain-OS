@@ -17,7 +17,7 @@ import {
 function tokenFetch(...responses: { status?: number; body: Record<string, unknown> }[]) {
   const requests: URLSearchParams[] = []
   const fetch = async (_input: string, init: RequestInit) => {
-    requests.push(new URLSearchParams(init.body as URLSearchParams))
+    requests.push(init.body instanceof URLSearchParams ? init.body : new URLSearchParams())
     const next = responses[Math.min(requests.length, responses.length) - 1]
     return new Response(JSON.stringify(next.body), { status: next.status ?? 200 })
   }
