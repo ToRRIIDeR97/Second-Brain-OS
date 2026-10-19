@@ -242,11 +242,12 @@ picker refreshes don't relaunch every agent.
 
 ## Checks
 
-From the repository root, `bun run typecheck` checks desktop, renderer, core,
-and server types. `bun run test` checks desktop, renderer, and Second Brain
+From the repository root, `bun run typecheck` checks every workspace package
+through turbo. `bun run test` runs every package suite except the engine
+(core, server) and the client and schema suites, then the Second Brain
 domains; `bun run test:engine` runs core and server suites. `bun run lint`
-checks `opencode/`. These commands are defined
-in the root `package.json`.
+checks `opencode/`, and `bun run check:generated` fails when the generated
+client is stale. These commands are defined in the root `package.json`.
 Relevant focused tests include
 `opencode/packages/desktop/src/main/google-calendar-domain.test.ts`,
 `opencode/packages/opencode/test/project/brain.test.ts`, and the note tests

@@ -2,9 +2,9 @@
 
 The active application lives in `opencode/`. Required checks run locally (see
 `AGENTS.md`); the GitHub Actions workflows in `.github/workflows/` are disabled
-in the repository settings to avoid Actions charges. Root Tauri/Cargo/pnpm
-commands are retired; the former procedure is kept in
-[the archive](archive/tauri/release-operations.md).
+in the repository settings to avoid Actions charges, and `ci.yml` runs only on
+manual dispatch. Root Tauri/Cargo/pnpm commands are retired; the former
+procedure is kept in [the archive](archive/tauri/release-operations.md).
 
 ![Deployment view: Electron main, renderer and utility-process server on the user machine, optional harness processes and CLI daemon, profile and workspace stores, external services and the build host](diagrams/deployment.svg)
 
@@ -16,6 +16,7 @@ inside `opencode/`, then run these commands from the repository root:
 ```sh
 bun run typecheck
 bun run lint
+bun run check:generated
 bun run test
 bun run test:engine
 bun run build
