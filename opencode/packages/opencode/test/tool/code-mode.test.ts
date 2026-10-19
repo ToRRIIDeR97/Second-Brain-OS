@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { CODE_MODE_TOOL, CodeModeTool, Parameters, describeCatalog } from "@/tool/code-mode"
+import { CODE_MODE_LIMITS, CODE_MODE_TOOL, CodeModeTool, Parameters, describeCatalog } from "@/tool/code-mode"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
@@ -334,6 +334,28 @@ describe("code mode execute", () => {
     expect(output.output).toBe("12")
     expect(output.metadata.toolCalls.map((c) => c.tool).sort()).toEqual(["echo.one", "echo.two"])
     expect(output.metadata.toolCalls.every((c) => c.status === "completed")).toBe(true)
+  })
+
+  test("enforces the default tool-call limit", async () => {
+    const tool = await build({ counter_tick: mcpTool("tick", () => ({ content: [{ type: "text", text: "ok" }] })) })
+    const error = await failure(
+      tool.execute(
+        {
+          code: `for (let i = 0; i <= ${CODE_MODE_LIMITS.maxToolCalls}; i++) await tools.counter.tick({}); return "done"`,
+        },
+        ctx,
+      ),
+    )
+    expect(error.message).toContain(`tool-call limit of ${CODE_MODE_LIMITS.maxToolCalls}`)
+  })
+
+  test("truncates output beyond the default output limit", async () => {
+    const tool = await build({})
+    const output = await Effect.runPromise(
+      tool.execute({ code: `return "x".repeat(${CODE_MODE_LIMITS.maxOutputBytes * 2})` }, ctx),
+    )
+    expect(output.output).toContain("output limit")
+    expect(output.output.length).toBeLessThan(CODE_MODE_LIMITS.maxOutputBytes * 2)
   })
 
   test("a program failure fails the tool with a readable error", async () => {

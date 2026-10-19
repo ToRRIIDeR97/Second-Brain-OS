@@ -77,6 +77,19 @@ describe("util.process", () => {
     expect(out.stdout.toString()).toBe("set")
   })
 
+  test("does not pass the server credentials to children", async () => {
+    const original = process.env.OPENCODE_SERVER_PASSWORD
+    process.env.OPENCODE_SERVER_PASSWORD = "secret"
+    const script = node('process.stdout.write(process.env.OPENCODE_SERVER_PASSWORD ?? "none")')
+    const inherited = await Process.run(script).finally(() => {
+      if (original === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
+      else process.env.OPENCODE_SERVER_PASSWORD = original
+    })
+    const explicit = await Process.run(script, { env: { ...process.env, OPENCODE_SERVER_PASSWORD: "secret" } })
+    expect(inherited.stdout.toString()).toBe("none")
+    expect(explicit.stdout.toString()).toBe("none")
+  })
+
   test("uses shell in run on Windows", async () => {
     if (process.platform !== "win32") return
 

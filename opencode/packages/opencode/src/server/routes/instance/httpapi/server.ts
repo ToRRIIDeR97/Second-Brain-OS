@@ -111,6 +111,7 @@ import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { bodyLimitLayer } from "./middleware/body-limit"
 import { compressionLayer } from "./middleware/compression"
 import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
@@ -289,6 +290,8 @@ export function createRoutes(
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
+      // After cors: the first global middleware registered is outermost, so a 413 still gets CORS headers.
+      bodyLimitLayer,
       AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMapV2]]),
       HttpServer.layerServices,
     ]),

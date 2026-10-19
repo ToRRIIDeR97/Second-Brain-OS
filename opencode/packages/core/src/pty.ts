@@ -4,6 +4,7 @@ import { makeLocationNode } from "./effect/app-node"
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode-ai/schema/pty"
+import { ChildEnv } from "./child-env"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -168,7 +169,7 @@ const layer = Layer.effect(
       const args = Shell.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
       const cwd = input.cwd || location.directory
       const env = {
-        ...process.env,
+        ...ChildEnv.from(),
         ...input.env,
         TERM: "xterm-256color",
         OPENCODE_TERMINAL: "1",

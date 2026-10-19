@@ -25,13 +25,8 @@ export function required(config: Info) {
   return Option.isSome(config.password) && config.password.value !== ""
 }
 
-export function authorized(credentials: DecodedCredentials, config: Info) {
-  return (
-    Option.isSome(config.password) &&
-    credentials.username === config.username &&
-    Redacted.value(credentials.password) === config.password.value
-  )
-}
+// Constant-time credential check shared with the server package.
+export { authorized } from "@opencode-ai/server/auth"
 
 export function header(credentials?: Credentials) {
   const password = credentials?.password ?? Flag.OPENCODE_SERVER_PASSWORD

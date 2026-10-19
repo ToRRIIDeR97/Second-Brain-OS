@@ -56,4 +56,19 @@ describe("ServerAuth", () => {
     expect(ServerAuth.authorized({ username: "alice", password: Redacted.make("secret") }, config)).toBe(true)
     expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make("secret") }, config)).toBe(false)
   })
+
+  test("rejects credentials of a different length without throwing", () => {
+    const config = { password: Option.some("secret"), username: "alice" }
+
+    expect(ServerAuth.authorized({ username: "alice", password: Redacted.make("secret-longer") }, config)).toBe(false)
+    expect(ServerAuth.authorized({ username: "alice", password: Redacted.make("") }, config)).toBe(false)
+    expect(ServerAuth.authorized({ username: "al", password: Redacted.make("secret") }, config)).toBe(false)
+    expect(ServerAuth.authorized({ username: "alice", password: Redacted.make("sécret") }, config)).toBe(false)
+    expect(
+      ServerAuth.authorized(
+        { username: "alice", password: Redacted.make("secret") },
+        { ...config, password: Option.none() },
+      ),
+    ).toBe(false)
+  })
 })
