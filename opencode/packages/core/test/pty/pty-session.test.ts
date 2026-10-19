@@ -185,6 +185,79 @@ describe("pty", () => {
     }),
   )
 
+  ptyTest(
+    "trims retained output past the limit without breaking cursor replay",
+    () =>
+      Effect.gen(function* () {
+        const pty = yield* Pty.Service
+        // 1.5M four-byte emoji with no newlines: 3M UTF-16 code units, beyond the 2M-character limit.
+        const info = yield* createPty("/usr/bin/env", [
+          "sh",
+          "-c",
+          "yes '\u{1F600}' | tr -d '\\n' | head -c 6000000; printf END; exec cat",
+        ])
+        const total = 3_000_000 + "END".length
+        const end = yield* Effect.gen(function* () {
+          while (true) {
+            const probe = yield* pty.attach(info.id, { cursor: -1, onData: () => {}, onEnd: () => {} })
+            probe.detach()
+            if (probe.cursor >= total) return probe.cursor
+            yield* Effect.sleep("50 millis")
+          }
+        }).pipe(Effect.timeout("20 seconds"))
+        expect(end).toBe(total)
+
+        const full = yield* pty.attach(info.id, { onData: () => {}, onEnd: () => {} })
+        full.detach()
+        expect(full.cursor).toBe(total)
+        expect(full.replay.endsWith("\u{1F600}END")).toBe(true)
+        expect(full.replay.length).toBeGreaterThanOrEqual(2 * 1024 * 1024)
+        expect(full.replay.length).toBeLessThanOrEqual(2.5 * 1024 * 1024)
+        // The retained buffer never starts with half of a surrogate pair.
+        const first = full.replay.charCodeAt(0)
+        expect(first >= 0xdc00 && first <= 0xdfff).toBe(false)
+
+        // A cursor inside the trimmed region replays from the oldest retained output.
+        const trimmed = yield* pty.attach(info.id, { cursor: 0, onData: () => {}, onEnd: () => {} })
+        trimmed.detach()
+        expect(trimmed.replay).toBe(full.replay)
+
+        // A cursor inside the retained region replays exactly the output after it.
+        const resumed = yield* pty.attach(info.id, { cursor: total - 5, onData: () => {}, onEnd: () => {} })
+        resumed.detach()
+        expect(resumed.replay).toBe("\u{1F600}END")
+        expect(resumed.cursor).toBe(total)
+      }),
+    30_000,
+  )
+
+  ptyTest("delivers output produced between attach and activate", () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+      const info = yield* createPty("cat")
+      const output = yield* Queue.unbounded<string>()
+      const attachment = yield* pty.attach(info.id, {
+        cursor: -1,
+        onData: (chunk) => Queue.offerUnsafe(output, chunk),
+        onEnd: () => {},
+      })
+      yield* pty.write(info.id, "AAA\n")
+      // Wait for the echo to land in the buffer before activating.
+      yield* Effect.gen(function* () {
+        while (true) {
+          const probe = yield* pty.attach(info.id, { cursor: attachment.cursor, onData: () => {}, onEnd: () => {} })
+          probe.detach()
+          if (probe.replay.includes("AAA")) return
+          yield* Effect.sleep("20 millis")
+        }
+      }).pipe(Effect.timeout("5 seconds"))
+      expect((yield* Queue.poll(output))._tag).toBe("None")
+
+      attachment.activate()
+      expect(yield* waitForOutput(output, "AAA")).toContain("AAA")
+    }),
+  )
+
   ptyTest("notifies attachments with the exit code and rejects attach after exit", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service

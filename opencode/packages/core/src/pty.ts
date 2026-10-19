@@ -12,7 +12,14 @@ import { Shell } from "./shell"
 import { lazy } from "./util/lazy"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
-// Exited sessions stay observable (status, exit code, retained output) until removed explicitly.
+// Trim only once the buffer passes the limit by a quarter, so a full buffer is copied once per
+// BUFFER_LIMIT / 4 characters of output instead of once per chunk.
+const BUFFER_TRIM_AT = BUFFER_LIMIT + BUFFER_LIMIT / 4
+// Exited sessions cannot be attached, so only a short tail of their output is retained.
+const EXITED_BUFFER_LIMIT = 64 * 1024
+// How far past the cut a trim looks for a line start, so replay does not begin inside an escape sequence.
+const TRIM_LINE_SEARCH = 4 * 1024
+// Exited sessions stay observable (status, exit code) until removed explicitly.
 // Cap retention so abandoned terminals do not accumulate unbounded buffers.
 const EXITED_LIMIT = 25
 const pty = lazy(() => import("#pty"))
@@ -22,7 +29,8 @@ type Subscriber = {
   readonly onEnd: (event: { exitCode?: number }) => void
   active: boolean
   detached: boolean
-  pending: string[]
+  // Output cursor at attach time. Output produced before activation is read back from the buffer.
+  start: number
   end?: { exitCode?: number }
 }
 
@@ -207,10 +215,7 @@ const layer = Layer.effect(
           proc.onData((chunk) => {
             session.cursor += chunk.length
             for (const [token, subscriber] of session.subscribers.entries()) {
-              if (!subscriber.active) {
-                subscriber.pending.push(chunk)
-                continue
-              }
+              if (!subscriber.active) continue
               try {
                 subscriber.onData(chunk)
               } catch {
@@ -218,16 +223,14 @@ const layer = Layer.effect(
               }
             }
             session.buffer += chunk
-            if (session.buffer.length <= BUFFER_LIMIT) return
-            const excess = session.buffer.length - BUFFER_LIMIT
-            session.buffer = session.buffer.slice(excess)
-            session.bufferCursor += excess
+            if (session.buffer.length > BUFFER_TRIM_AT) trimBuffer(session, BUFFER_LIMIT)
           }),
           proc.onExit(({ exitCode }) => {
             if (session.info.status === "exited") return
             session.info.status = "exited"
             session.info.exitCode = exitCode
             notifyEnd(session, { exitCode })
+            trimBuffer(session, EXITED_BUFFER_LIMIT)
             exitOrder.push(id)
             runFork(
               Effect.gen(function* () {
@@ -271,7 +274,7 @@ const layer = Layer.effect(
         onEnd: input.onEnd,
         active: false,
         detached: false,
-        pending: [],
+        start: session.cursor,
       }
       session.subscribers.set(token, subscriber)
       const start = session.bufferCursor
@@ -298,8 +301,8 @@ const layer = Layer.effect(
           if (subscriber.active || subscriber.detached) return
           subscriber.active = true
           try {
-            for (const chunk of subscriber.pending) subscriber.onData(chunk)
-            subscriber.pending.length = 0
+            const missed = session.buffer.slice(Math.max(0, subscriber.start - session.bufferCursor))
+            if (missed) subscriber.onData(missed)
             if (subscriber.end) subscriber.onEnd(subscriber.end)
           } catch {
             session.subscribers.delete(token)
@@ -307,7 +310,6 @@ const layer = Layer.effect(
         },
         detach: () => {
           subscriber.detached = true
-          subscriber.pending.length = 0
           subscriber.end = undefined
           session.subscribers.delete(token)
         },
@@ -317,6 +319,18 @@ const layer = Layer.effect(
     return Service.of({ list, get, create, update, remove, write, attach })
   }),
 )
+
+// Drops the oldest output so at most `limit` characters remain. The cut moves to the next line start
+// when one is close, and never splits a UTF-16 surrogate pair.
+function trimBuffer(session: Active, limit: number) {
+  const excess = session.buffer.length - limit
+  if (excess <= 0) return
+  const newline = session.buffer.slice(excess, excess + TRIM_LINE_SEARCH).indexOf("\n")
+  const code = session.buffer.charCodeAt(excess)
+  const cut = newline !== -1 ? excess + newline + 1 : code >= 0xdc00 && code <= 0xdfff ? excess + 1 : excess
+  session.buffer = session.buffer.slice(cut)
+  session.bufferCursor += cut
+}
 
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
 
