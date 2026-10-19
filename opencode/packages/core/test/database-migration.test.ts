@@ -92,9 +92,40 @@ describe("DatabaseMigration", () => {
           { name: "session_input_session_pending_delivery_seq_idx" },
           { name: "session_input_session_promoted_seq_idx" },
           { name: "session_message_session_seq_idx" },
-          { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
         ])
+      }),
+    )
+  })
+
+  test("session list and thread stats queries use their indexes", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        const plan = (query: ReturnType<typeof sql>) =>
+          db
+            .all<{ detail: string }>(sql`EXPLAIN QUERY PLAN ${query}`)
+            .pipe(Effect.map((rows) => rows.map((row) => row.detail).join("\n")))
+
+        expect(
+          yield* plan(
+            sql`SELECT directory, count(*), max(time_updated) FROM session WHERE directory IN ('/a', '/b') AND parent_id IS NULL AND time_archived IS NULL GROUP BY directory`,
+          ),
+        ).toContain("USING INDEX session_directory_parent_archived_idx")
+        expect(
+          yield* plan(sql`SELECT * FROM session WHERE project_id = 'global' ORDER BY time_updated DESC LIMIT 100`),
+        ).toContain("USING INDEX session_project_time_updated_idx")
+        const global = yield* plan(
+          sql`SELECT * FROM session WHERE time_archived IS NULL AND (time_updated < 5 OR (time_updated = 5 AND id < 'ses_b')) ORDER BY time_updated DESC, id DESC LIMIT 100`,
+        )
+        expect(global).toContain("session_time_updated_id_idx")
+        expect(global).not.toContain("USE TEMP B-TREE")
+        expect(
+          yield* db.all(
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('session_project_idx', 'part_session_idx', 'todo_session_idx', 'session_message_time_created_idx', 'session_message_session_time_created_id_idx')`,
+          ),
+        ).toEqual([])
       }),
     )
   })
