@@ -179,7 +179,7 @@ const isCanonicalBase64 = (base64: string) => {
   const padding = base64Padding(base64)
   const body = base64.slice(0, base64.length - padding)
   if (nonBase64Character.test(body)) return false
-  return padding === 0 || canonicalBeforePadding[padding]!.includes(body.at(-1)!)
+  return padding === 0 || canonicalBeforePadding[padding].includes(body.at(-1)!)
 }
 
 export interface ValidatedMedia {
