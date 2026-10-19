@@ -65,7 +65,10 @@ describe("ServerAuth", () => {
     expect(ServerAuth.authorized({ username: "al", password: Redacted.make("secret") }, config)).toBe(false)
     expect(ServerAuth.authorized({ username: "alice", password: Redacted.make("sécret") }, config)).toBe(false)
     expect(
-      ServerAuth.authorized({ username: "alice", password: Redacted.make("secret") }, { ...config, password: Option.none() }),
+      ServerAuth.authorized(
+        { username: "alice", password: Redacted.make("secret") },
+        { ...config, password: Option.none() },
+      ),
     ).toBe(false)
   })
 })

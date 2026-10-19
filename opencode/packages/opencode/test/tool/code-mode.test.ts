@@ -340,7 +340,9 @@ describe("code mode execute", () => {
     const tool = await build({ counter_tick: mcpTool("tick", () => ({ content: [{ type: "text", text: "ok" }] })) })
     const error = await failure(
       tool.execute(
-        { code: `for (let i = 0; i <= ${CODE_MODE_LIMITS.maxToolCalls}; i++) await tools.counter.tick({}); return "done"` },
+        {
+          code: `for (let i = 0; i <= ${CODE_MODE_LIMITS.maxToolCalls}; i++) await tools.counter.tick({}); return "done"`,
+        },
         ctx,
       ),
     )

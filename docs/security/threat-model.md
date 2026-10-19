@@ -61,6 +61,30 @@ Keep the existing permission checks on tool execution; a user opening a note
 does not authorize instructions embedded inside it. Destructive recovery must
 preserve both canonical workspace files and session/draft profile state.
 
+## Managed server controls
+
+- **Child processes.** Terminals, agent shell commands, MCP stdio servers and
+  LSP servers don't inherit `OPENCODE_SERVER_PASSWORD` or
+  `OPENCODE_SERVER_USERNAME`. `ChildEnv.from` (`core/src/child-env.ts`) strips
+  them in the cross-spawn spawner and `Process.spawn`, which apply it to every
+  child environment. All other variables are still inherited.
+- **Credential checks.** `ServerAuth.authorized` compares the username and
+  password in constant time. `httpapi-route-auth-coverage.test.ts` sends an
+  unauthenticated request to every declared HttpApi operation and expects 401.
+- **Workspace proxy.** Requests forwarded to a remote workspace lose their
+  `authorization` and `cookie` headers and the `auth_token` query parameter.
+  Only the target's configured headers supply credentials.
+- **CORS.** The allowlist is `oc://renderer` (exact match), numeric-port
+  `localhost` and `127.0.0.1` origins for development, and origins passed to
+  `Server.listen`. Tauri and `*.opencode.ai` origins are no longer trusted.
+- **Body size.** The server rejects a declared request body over 32 MiB with
+  413. Effect's `MaxBodySize` stops a streamed body at the same cap. The cap
+  matches the session export limit and leaves room for base64 image
+  attachments. `POST /log` truncates messages and drops oversized metadata.
+- **CodeMode.** The `execute` tool runs with a 10 minute timeout, 100 child
+  tool calls and 64 KB of output. The interpreter rejects `repeat` and `pad*`
+  results longer than 16M characters.
+
 ## Outbound network endpoints
 
 The shipped app, desktop, and server code no longer contacts `opencode.ai`
@@ -310,5 +334,7 @@ fix lands.
   through the shared `trustedHandle`/`trustedOn` wrappers in `ipc.ts`.
 - Server authorization also accepts an `auth_token` query parameter, so the
   credential can appear in URLs. Desktop main-process logs record only the
-  scheme and host of blocked and rejected URLs, never the query string.
+  scheme and host of blocked and rejected URLs, never the query string. The
+  parameter is still accepted on every route because the web UI page load
+  (`app/src/entry.tsx`) reads it, not only the terminal WebSocket.
 - `drafts.sqlite` stores unsent draft content unencrypted in the profile.

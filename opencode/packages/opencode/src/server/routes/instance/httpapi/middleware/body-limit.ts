@@ -11,8 +11,7 @@ export const bodyLimitLayer = HttpRouter.middleware(
   (effect) =>
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest
-      if (Number(request.headers["content-length"]) > MAX_BODY_BYTES)
-        return HttpServerResponse.empty({ status: 413 })
+      if (Number(request.headers["content-length"]) > MAX_BODY_BYTES) return HttpServerResponse.empty({ status: 413 })
       return yield* effect.pipe(Effect.provideService(HttpServerRequest.MaxBodySize, FileSystem.Size(MAX_BODY_BYTES)))
     }),
   { global: true },
