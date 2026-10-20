@@ -256,7 +256,7 @@ export default function NotesPage() {
       setState("error", language.t("secondBrain.notes.error.title"))
       return
     }
-    const path = state.filterProjectId ? `projects/${state.filterProjectId}/notes/${slug}.md` : `notes/${slug}.md`
+    const path = state.filterProjectId ? `.tenon/projects/${state.filterProjectId}/notes/${slug}.md` : `notes/${slug}.md`
     const directory = state.directory
     setState({ saving: true, error: "" })
     try {

@@ -64,12 +64,16 @@ type Card = Document & {
 export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
-  const paths = yield* fs.glob(`{${directory}/**/*.md,projects/project_*/notes/**/*.md}`, {
-    cwd: location.directory,
-    absolute: false,
-    include: "file",
-    dot: false,
-  })
+  // Project notes live in the card folder: `.tenon/projects/<id>/notes`, or `projects/<id>/notes` before.
+  const paths = yield* fs.glob(
+    `{${directory}/**/*.md,.tenon/projects/project_*/notes/**/*.md,projects/project_*/notes/**/*.md}`,
+    {
+      cwd: location.directory,
+      absolute: false,
+      include: "file",
+      dot: false,
+    },
+  )
   const query = search.trim().toLowerCase()
   // Read every candidate so search sees all notes; keep only matching summaries in memory.
   // One unreadable or malformed note is skipped so it cannot hide the rest.
@@ -189,7 +193,7 @@ const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {
 
 function isNotePath(path: string) {
   const global = path.startsWith(`${directory}/`)
-  const managed = /^projects\/project_[0-9A-Z]+\/notes\/.+\.md$/i.test(path)
+  const managed = /^(?:\.tenon\/)?projects\/project_[0-9A-Z]+\/notes\/.+\.md$/i.test(path)
   return (global || managed) && path.toLowerCase().endsWith(".md") && !path.split("/").includes("..")
 }
 

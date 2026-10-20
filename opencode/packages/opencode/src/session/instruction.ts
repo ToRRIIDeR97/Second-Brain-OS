@@ -11,6 +11,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
+import { WorkspaceInstructions } from "@opencode-ai/core/workspace-instructions"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
@@ -119,8 +120,16 @@ const layer: Layer.Layer<
         }
       }
 
+      // In a Tenon workspace the project's AGENTS.md replaces the workspace one.
+      const workspace = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+        ? undefined
+        : yield* WorkspaceInstructions.resolve(ctx.directory, global.data).pipe(
+            Effect.provideService(FSUtil.Service, fs),
+          )
+      workspace?.forEach((item) => paths.add(path.resolve(item)))
+
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG && !workspace) {
         for (const file of instructionFiles) {
           const matches = yield* fs
             .findUp(file, ctx.directory, ctx.worktree)
