@@ -81,6 +81,18 @@ export function isSessionNotFoundError(error: unknown, sessionID: string) {
   })
 }
 
+// A server 404 for a missing resource, e.g. a session already deleted along with its parent.
+export function isServerNotFoundError(error: unknown) {
+  const candidates = [unwrapNamedError(error), error instanceof Error ? error.cause : undefined]
+  return candidates.some(
+    (candidate) =>
+      typeof candidate === "object" &&
+      candidate !== null &&
+      ((candidate as Record<string, unknown>).name === "NotFoundError" ||
+        (candidate as Record<string, unknown>).status === 404),
+  )
+}
+
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
   if (typeof error !== "object" || error === null) return false
   const o = error as Record<string, unknown>

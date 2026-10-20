@@ -4,6 +4,7 @@ import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-er
 import {
   claimErrorToast,
   formatServerError,
+  isServerNotFoundError,
   isSessionNotFoundError,
   parseReadableConfigInvalidError,
 } from "./server-errors"
@@ -196,5 +197,17 @@ describe("claimErrorToast", () => {
     expect(claimErrorToast("local:list:offline", 2_000)).toBe(false)
     expect(claimErrorToast("remote:list:offline", 2_000)).toBe(true)
     expect(claimErrorToast("local:list:offline", 11_000)).toBe(true)
+  })
+})
+
+describe("isServerNotFoundError", () => {
+  test("matches the 404 body the promise client throws", () => {
+    expect(isServerNotFoundError({ name: "NotFoundError", data: { message: "Session not found: ses_1" } })).toBe(true)
+    expect(isServerNotFoundError(new Error("Unknown error", { cause: { status: 404 } }))).toBe(true)
+  })
+
+  test("ignores other failures", () => {
+    expect(isServerNotFoundError({ name: "UnknownError", data: { message: "boom" } })).toBe(false)
+    expect(isServerNotFoundError(new Error("network down"))).toBe(false)
   })
 })

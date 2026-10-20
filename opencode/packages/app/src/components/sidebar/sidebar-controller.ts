@@ -38,6 +38,7 @@ import {
   drainPendingDeepLinks,
 } from "@/pages/layout/deep-links"
 import { errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
+import { isServerNotFoundError } from "@/utils/server-errors"
 import { pathKey } from "@/utils/path-key"
 import { Persist, persisted } from "@/utils/persist"
 import { sessionHref } from "@/utils/session-route"
@@ -409,17 +410,34 @@ export function createSidebarController() {
       title: language.t("secondBrain.sidebar.threadDeleted"),
       description: threadLabel(session),
       undo: restore,
-      commit: () =>
-        serverSDK()
+      commit: () => {
+        // The server deletes a thread's children with it, so drop the whole subtree here; otherwise a
+        // child row can linger and its own delete fails with "not found".
+        const removed = () => {
+          const all = mergeSidebarSessions(directoryLists(), indexStore.sessions)
+          const gone = new Set([session.id])
+          for (let size = 0; size !== gone.size; ) {
+            size = gone.size
+            all.forEach((item) => item.parentID && gone.has(item.parentID) && gone.add(item.id))
+          }
+          all
+            .filter((item) => gone.has(item.id))
+            .concat(session)
+            .forEach((item) => {
+              dropSession(item.id)
+              homeSessions().apply({ type: "session.deleted", properties: { sessionID: item.id, info: item } })
+            })
+        }
+        return serverSDK()
           .api.session.remove({ sessionID: session.id, directory: session.directory })
-          .then(() => {
-            dropSession(session.id)
-            homeSessions().apply({ type: "session.deleted", properties: { sessionID: session.id, info: session } })
-          })
+          .then(removed)
           .catch((cause: unknown) => {
+            // Already deleted, e.g. along with its parent: treat it as done.
+            if (isServerNotFoundError(cause)) return removed()
             restore()
             throw cause
-          }),
+          })
+      },
     })
   }
 
