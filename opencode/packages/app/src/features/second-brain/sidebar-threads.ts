@@ -16,10 +16,8 @@ export type ThreadNode<S extends SidebarSession = SidebarSession> = { session: S
 
 export type SidebarGroups<P extends SidebarProject, S extends SidebarSession> = {
   projects: Array<{ project: P; threads: ThreadNode<S>[] }>
-  /** Threads that run in the Brain folder itself and belong to no Project. */
-  brain: ThreadNode<S>[]
-  /** Threads in any other folder (non-git folders, unlinked Workspaces). */
-  other: ThreadNode<S>[]
+  /** Threads in the workspace folder outside every Project (its root or a non-project subfolder). */
+  workspace: ThreadNode<S>[]
 }
 
 const recent = (session: SidebarSession) => session.time.updated ?? session.time.created
@@ -49,48 +47,46 @@ export function buildThreadTree<S extends SidebarSession>(sessions: readonly S[]
   return roots.sort((a, b) => compareRoots(a.session, b.session))
 }
 
-/** The Project whose thread directory is exactly `directory`. */
+/** Whether `directory` is `parent` or inside it. */
+export function isWithinDirectory(parent: string, directory: string) {
+  const outer = pathKey(parent)
+  const inner = pathKey(directory)
+  return inner === outer || inner.startsWith(outer.endsWith("/") ? outer : `${outer}/`)
+}
+
+/** The Project whose thread directory holds `directory`; the deepest one wins for nested folders. */
 export function projectForDirectory<P extends SidebarProject>(projects: readonly P[], directory: string | undefined) {
   if (!directory) return
-  const key = pathKey(directory)
-  return projects.find((project) => pathKey(project.threadDirectory) === key)
+  return projects
+    .filter((project) => isWithinDirectory(project.threadDirectory, directory))
+    .sort((a, b) => pathKey(b.threadDirectory).length - pathKey(a.threadDirectory).length)[0]
 }
 
 /**
- * Split threads into Project groups, the Brain group and "Other threads".
- * Matching is by exact thread directory, so Projects that share a repository
- * through `projects/<id>/` folders don't show each other's threads.
+ * Split one workspace's threads into Project groups and the workspace group. A thread belongs to the
+ * Project whose folder holds it, otherwise to the workspace when it runs inside the workspace folder.
+ * Threads from anywhere else belong to another workspace and are left out, so workspaces never mix.
  */
 export function groupSidebarThreads<P extends SidebarProject, S extends SidebarSession>(input: {
   projects: readonly P[]
-  brainDirectory?: string
+  workspaceDirectory?: string
   sessions: readonly S[]
 }): SidebarGroups<P, S> {
-  const live = input.sessions.filter((session) => !session.time.archived)
   const byProject = new Map<string, S[]>()
-  const brain: S[] = []
-  const other: S[] = []
-  const brainKey = input.brainDirectory ? pathKey(input.brainDirectory) : undefined
-  // Reversed so the first Project for a directory wins, as in `projectForDirectory`.
-  const projectByKey = new Map(
-    [...input.projects].reverse().map((project) => [pathKey(project.threadDirectory), project] as const),
-  )
-  for (const session of live) {
-    const sessionKey = pathKey(session.directory)
-    const project = projectByKey.get(sessionKey)
+  const workspace: S[] = []
+  for (const session of input.sessions) {
+    if (session.time.archived) continue
+    const project = projectForDirectory(input.projects, session.directory)
     if (project) {
-      const list = byProject.get(project.id) ?? []
-      list.push(session)
-      byProject.set(project.id, list)
+      byProject.set(project.id, [...(byProject.get(project.id) ?? []), session])
       continue
     }
-    if (brainKey && sessionKey === brainKey) brain.push(session)
-    else other.push(session)
+    if (input.workspaceDirectory && isWithinDirectory(input.workspaceDirectory, session.directory))
+      workspace.push(session)
   }
   return {
     projects: input.projects.map((project) => ({ project, threads: buildThreadTree(byProject.get(project.id) ?? []) })),
-    brain: buildThreadTree(brain),
-    other: buildThreadTree(other),
+    workspace: buildThreadTree(workspace),
   }
 }
 

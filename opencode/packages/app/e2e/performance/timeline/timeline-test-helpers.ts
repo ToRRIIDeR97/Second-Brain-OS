@@ -48,10 +48,7 @@ export async function installStressSessionTabs(page: Page, input?: { draftID?: s
         }),
       )
       // Sidebar thread groups start expanded so benchmarks can click thread rows.
-      localStorage.setItem(
-        "opencode.window.browser.dat:sidebar",
-        JSON.stringify({ expanded: { __brain__: true, __other__: true } }),
-      )
+      localStorage.setItem("opencode.window.browser.dat:sidebar", JSON.stringify({ expanded: { __brain__: true } }))
       // Legacy tab keys: unsent drafts are imported into the drafts store on startup.
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",

@@ -20,41 +20,43 @@ const projects = [
 ]
 
 describe("sidebar thread grouping", () => {
-  test("puts threads under the Project with the exact thread directory", () => {
+  test("puts threads under the Project whose folder holds them, the rest of the workspace in its group", () => {
     const groups = groupSidebarThreads({
       projects,
-      brainDirectory: "/brain",
+      workspaceDirectory: "/brain",
       sessions: [
         session("a", "/work/repo", 1),
         session("b", "/brain/projects/prj_notes/", 2),
-        session("c", "/brain", 3),
-        session("d", "/tmp/scratch", 4),
+        session("nested", "/brain/projects/prj_notes/src", 3),
+        session("c", "/brain", 4),
+        session("dev", "/brain/development/tool", 5),
       ],
     })
 
     expect(groups.projects.map((group) => [group.project.id, group.threads.map((node) => node.session.id)])).toEqual([
       ["prj_repo", ["a"]],
-      ["prj_notes", ["b"]],
+      ["prj_notes", ["nested", "b"]],
     ])
-    expect(groups.brain.map((node) => node.session.id)).toEqual(["c"])
-    expect(groups.other.map((node) => node.session.id)).toEqual(["d"])
+    expect(groups.workspace.map((node) => node.session.id)).toEqual(["dev", "c"])
   })
 
-  test("does not let a Brain-folder Project absorb the Brain's own threads", () => {
+  test("leaves out threads from other workspaces so they never mix", () => {
     const groups = groupSidebarThreads({
       projects,
-      brainDirectory: "/brain",
-      sessions: [session("root", "/brain", 1), session("sub", "/brain/projects/other", 2)],
+      workspaceDirectory: "/brain",
+      sessions: [session("elsewhere", "/Users/me/Default Project", 1), session("tmp", "/tmp/scratch", 2)],
     })
-
-    expect(groups.brain.map((node) => node.session.id)).toEqual(["root"])
-    expect(groups.other.map((node) => node.session.id)).toEqual(["sub"])
+    expect(groups.workspace).toEqual([])
+    expect(groups.projects.every((group) => group.threads.length === 0)).toBe(true)
   })
 
-  test("without a Brain every unmatched thread is in Other threads", () => {
-    const groups = groupSidebarThreads({ projects: [], sessions: [session("a", "/brain", 1)] })
-    expect(groups.brain).toEqual([])
-    expect(groups.other.map((node) => node.session.id)).toEqual(["a"])
+  test("does not treat a folder that only shares a name prefix as inside the workspace", () => {
+    const groups = groupSidebarThreads({
+      projects: [],
+      workspaceDirectory: "/brain",
+      sessions: [session("sibling", "/brain-old", 1)],
+    })
+    expect(groups.workspace).toEqual([])
   })
 
   test("drops archived threads and duplicate copies of a thread", () => {
@@ -69,9 +71,13 @@ describe("sidebar thread grouping", () => {
     expect(groups.projects[0]?.threads.map((node) => node.session.id)).toEqual(["a"])
   })
 
-  test("matches thread directories regardless of a trailing slash", () => {
+  test("matches Project folders regardless of a trailing slash, preferring the deepest", () => {
     expect(projectForDirectory(projects, "/work/repo/")?.id).toBe("prj_repo")
-    expect(projectForDirectory(projects, "/work/repo/src")).toBeUndefined()
+    expect(projectForDirectory(projects, "/work/repo/src")?.id).toBe("prj_repo")
+    expect(projectForDirectory(projects, "/work/repository")).toBeUndefined()
+    expect(
+      projectForDirectory([...projects, { id: "inner", threadDirectory: "/work/repo/pkg" }], "/work/repo/pkg/a")?.id,
+    ).toBe("inner")
     expect(projectForDirectory(projects, undefined)).toBeUndefined()
   })
 })
@@ -107,19 +113,16 @@ describe("thread nesting", () => {
   test("sorts pins within each group", () => {
     const groups = groupSidebarThreads({
       projects,
-      brainDirectory: "/brain",
+      workspaceDirectory: "/brain",
       sessions: [
         session("a", "/work/repo", 1, { updated: 9 }),
         session("b", "/work/repo", 2, { pinned: 5 }),
         session("c", "/brain", 3, { updated: 9 }),
         session("d", "/brain", 4, { pinned: 5 }),
-        session("e", "/tmp", 5, { updated: 9 }),
-        session("f", "/tmp", 6, { pinned: 5 }),
       ],
     })
     expect(groups.projects[0]?.threads.map((node) => node.session.id)).toEqual(["b", "a"])
-    expect(groups.brain.map((node) => node.session.id)).toEqual(["d", "c"])
-    expect(groups.other.map((node) => node.session.id)).toEqual(["f", "e"])
+    expect(groups.workspace.map((node) => node.session.id)).toEqual(["d", "c"])
   })
 
   test("keeps a child whose parent is not loaded as a root", () => {

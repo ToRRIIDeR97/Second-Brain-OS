@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
+import { openFolderFromWorkspaceMenu } from "../utils/sidebar"
 
 const directory = "C:/OpenCode/NewProject"
 
@@ -70,17 +71,16 @@ test("opens a project from the sidebar, connects OpenCode Go, and selects its mo
     localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
   })
 
-  // Navigation is sidebar-only: open the folder from the Projects header, then start a new-thread draft.
+  // Navigation is sidebar-only: open the folder from the workspace menu, then start a new-thread draft.
   await page.goto("/")
-  const openFolder = page.getByRole("button", { name: "Open folder as project" })
-  await expectAppVisible(openFolder)
-  await openFolder.click()
+  await expectAppVisible(page.getByRole("button", { name: "Switch workspace" }))
+  await openFolderFromWorkspaceMenu(page)
   await page.locator("[data-directory-path]").click()
 
-  // The first opened folder becomes the Brain; its thread group offers the new-thread draft.
+  // The opened folder becomes the selected workspace; its General group offers the new-thread draft.
   const brain = page.locator('[data-sidebar-group="__brain__"]')
   await expect(brain).toBeVisible()
-  await brain.getByRole("button", { name: "Brain" }).click()
+  await brain.getByRole("button", { name: "General" }).click()
   await brain.locator("[data-sidebar-new-thread]").click()
   await expectAppVisible(page.locator('[data-component="prompt-input-v2"]'))
 

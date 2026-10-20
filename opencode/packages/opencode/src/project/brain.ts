@@ -389,7 +389,8 @@ export const link = Effect.fn("BrainProject.link")(function* (input: LinkInput) 
   const fs = yield* FSUtil.Service
   const root = path.resolve(location.directory)
   const folder = path.resolve(input.folder)
-  if (!path.isAbsolute(input.folder) || !(yield* fs.isDir(folder))) return yield* new InvalidError({ reason: "invalid_folder" })
+  if (!path.isAbsolute(input.folder) || !(yield* fs.isDir(folder)))
+    return yield* new InvalidError({ reason: "invalid_folder" })
   // Folders inside the workspace belong in its projects folder; an ancestor would contain the workspace.
   if (isWithin(root, folder) || isWithin(folder, root)) return yield* new InvalidError({ reason: "overlaps_workspace" })
   const manifest = yield* readManifest()
@@ -437,7 +438,8 @@ export const readInstructions = Effect.fn("BrainProject.readInstructions")(funct
 })
 
 export const writeInstructions = Effect.fn("BrainProject.writeInstructions")(function* (input: InstructionsInput) {
-  if (Buffer.byteLength(input.content, "utf8") > instructionsLimit) return yield* new InvalidError({ reason: "too_large" })
+  if (Buffer.byteLength(input.content, "utf8") > instructionsLimit)
+    return yield* new InvalidError({ reason: "too_large" })
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
   const target = yield* mutation.resolve({ path: instructionsFile, kind: "file" })

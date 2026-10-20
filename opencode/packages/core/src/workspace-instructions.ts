@@ -43,8 +43,10 @@ const workspaceFor = Effect.fnUntraced(function* (start: string, dataDir: string
   }
   const index = yield* fs.readJson(path.join(dataDir, linkIndexFile)).pipe(Effect.orElseSucceed(() => undefined))
   if (typeof index !== "object" || index === null) return undefined
-  const match = Object.entries(index as Record<string, unknown>)
-    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && isWithin(path.resolve(entry[0]), start))
+  const match = Object.entries(index)
+    .filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string" && isWithin(path.resolve(entry[0]), start),
+    )
     .sort((a, b) => b[0].length - a[0].length)[0]
   if (!match) return undefined
   const folder = path.resolve(match[0])

@@ -77,7 +77,8 @@ export type ProjectRecord = {
   nextMilestone?: string | null
   blocker?: string | null
   tags: ReadonlyArray<string>
-  location?: { workspaceId: string; displayPath: string } | null
+  /** `path` is the project folder: relative to the workspace root, or absolute for a linked folder. */
+  location?: { workspaceId?: string; displayPath: string; path?: string } | null
   createdAt: string
   updatedAt: string
 }
@@ -109,7 +110,7 @@ export type ProjectThreads = {
   project: ProjectRecord
   /** Absolute directory where the Project's threads run; use it verbatim as the session directory. */
   threadDirectory: string
-  threadDirectoryKind: "workspace" | "folder"
+  threadDirectoryKind: "workspace" | "folder" | "project"
   workspace: ProjectWorkspace | null
   rootSessionCount: number
   lastActivityAt: number | null
@@ -151,7 +152,8 @@ async function request<T>(client: Client, path: string, init?: RequestInit): Pro
   return (await response.json()) as T
 }
 
-export const listNotes = (client: Client, search = "") => request<NoteSummary[]>(client, `/second-brain/notes?search=${encodeURIComponent(search)}`)
+export const listNotes = (client: Client, search = "") =>
+  request<NoteSummary[]>(client, `/second-brain/notes?search=${encodeURIComponent(search)}`)
 
 export const readNote = (client: Client, path: string) =>
   request<NoteDocument>(client, `/second-brain/note?path=${encodeURIComponent(path)}`)
@@ -207,12 +209,29 @@ export const updateProject = (client: Client, id: string, input: ProjectUpdate) 
     body: JSON.stringify(input),
   })
 
-/** Projects with their resolved thread directory and root thread stats. Runs the one-shot Workspace migration. */
+/** Projects with their resolved thread directory and root thread stats. */
 export const listProjectThreads = (client: Client) => request<ProjectThreads[]>(client, "/second-brain/project-threads")
 
-/** Return the Project linked to an OpenCode project (Workspace) id, creating it when none links to it. */
-export const ensureWorkspaceProject = (client: Client, workspaceId: string) =>
-  request<ProjectRecord>(client, "/second-brain/projects/workspace", {
-    method: "POST",
-    body: JSON.stringify({ workspaceId }),
-  })
+export type ScanResult = { folders: number; created: number; missing: ReadonlyArray<string> }
+
+/** Give every folder in the workspace's projects folder, and every linked folder, a Project card. */
+export const scanProjects = (client: Client) =>
+  request<ScanResult>(client, "/second-brain/projects/scan", { method: "POST" })
+
+/** Add an absolute folder from outside the workspace as one of its Projects. */
+export const linkProjectFolder = (client: Client, folder: string) =>
+  request<ScanResult>(client, "/second-brain/projects/link", { method: "POST", body: JSON.stringify({ folder }) })
+
+export const unlinkProjectFolder = (client: Client, folder: string) =>
+  request<ScanResult>(client, "/second-brain/projects/unlink", { method: "POST", body: JSON.stringify({ folder }) })
+
+/** The target folder's own AGENTS.md; `content` is null when it has none. */
+export type Instructions = { path: string; content: string | null }
+
+export const readInstructions = (client: Client) => request<Instructions>(client, "/second-brain/instructions")
+
+export const writeInstructions = (client: Client, content: string) =>
+  request<Instructions>(client, "/second-brain/instructions", { method: "PUT", body: JSON.stringify({ content }) })
+
+export const removeInstructions = (client: Client) =>
+  request<Instructions>(client, "/second-brain/instructions", { method: "DELETE" })

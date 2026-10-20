@@ -7,6 +7,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { KeyedMutex } from "@opencode-ai/core/effect/keyed-mutex"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -141,19 +142,25 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
     })
 
     const scanProjects = Effect.fn("SecondBrain.scanProjects")(function* () {
-      return yield* serialized(filesystem(BrainProject.scan())).pipe(failure("scanProjects"))
+      return yield* serialized(
+        filesystem(BrainProject.scan().pipe(Effect.provideService(Global.Service, Global.make()))),
+      ).pipe(failure("scanProjects"))
     })
 
     const linkProjectFolder = Effect.fn("SecondBrain.linkProjectFolder")(function* (ctx: {
       payload: BrainProject.LinkInput
     }) {
-      return yield* serialized(filesystem(BrainProject.link(ctx.payload))).pipe(failure("linkProjectFolder"))
+      return yield* serialized(
+        filesystem(BrainProject.link(ctx.payload).pipe(Effect.provideService(Global.Service, Global.make()))),
+      ).pipe(failure("linkProjectFolder"))
     })
 
     const unlinkProjectFolder = Effect.fn("SecondBrain.unlinkProjectFolder")(function* (ctx: {
       payload: BrainProject.LinkInput
     }) {
-      return yield* serialized(filesystem(BrainProject.unlink(ctx.payload))).pipe(failure("unlinkProjectFolder"))
+      return yield* serialized(
+        filesystem(BrainProject.unlink(ctx.payload).pipe(Effect.provideService(Global.Service, Global.make()))),
+      ).pipe(failure("unlinkProjectFolder"))
     })
 
     const readInstructions = Effect.fn("SecondBrain.readInstructions")(function* () {

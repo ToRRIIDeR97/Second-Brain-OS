@@ -9,9 +9,7 @@ import { tmpdir } from "./fixture/tmpdir"
 
 const run = (directory: string, dataDir: string) =>
   Effect.runPromise(
-    WorkspaceInstructions.resolve(directory, dataDir).pipe(
-      Effect.provide(LayerNode.compile(FSUtil.node)),
-    ),
+    WorkspaceInstructions.resolve(directory, dataDir).pipe(Effect.provide(LayerNode.compile(FSUtil.node))),
   )
 
 const write = async (file: string, content = "") => {

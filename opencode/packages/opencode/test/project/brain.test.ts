@@ -323,7 +323,9 @@ describe("BrainProject workspace threads", () => {
     const alpha = await run(tmp.path, BrainProject.create({ name: "Alpha", outcome: "A" }))
     const beta = await run(tmp.path, BrainProject.create({ name: "Beta", outcome: "B" }))
     const timeline = (id: string) =>
-      PlannerCalendar.decode(readFileSync(path.join(tmp.path, ".tenon", "projects", id, "timeline", "calendar.json"), "utf8"))
+      PlannerCalendar.decode(
+        readFileSync(path.join(tmp.path, ".tenon", "projects", id, "timeline", "calendar.json"), "utf8"),
+      )
     const event = (title: string) => ({
       id: "event_a",
       title,
@@ -384,7 +386,13 @@ describe("BrainProject project folders", () => {
 
   /** The user's layout: `Projects/` (capital P) with plain folders, plus noise that is not a project. */
   const workspace = (root: string) => {
-    for (const folder of ["Projects/Alpha", "Projects/Beta", "Projects/.hidden", "projects/project_01OLD", "development/X"])
+    for (const folder of [
+      "Projects/Alpha",
+      "Projects/Beta",
+      "Projects/.hidden",
+      "projects/project_01OLD",
+      "development/X",
+    ])
       mkdirSync(path.join(root, folder), { recursive: true })
     writeFileSync(path.join(root, "Projects", "notes.md"), "not a folder")
   }
@@ -415,15 +423,23 @@ describe("BrainProject project folders", () => {
     const outside = path.join(tmp.path, "repos", "tool")
     workspace(root)
     mkdirSync(outside, { recursive: true })
-    expect(await run(root, data, BrainProject.link({ folder: outside }))).toEqual({ folders: 3, created: 3, missing: [] })
+    expect(await run(root, data, BrainProject.link({ folder: outside }))).toEqual({
+      folders: 3,
+      created: 3,
+      missing: [],
+    })
     expect(JSON.parse(readFileSync(path.join(data, "workspace-links.json"), "utf8"))).toEqual({ [outside]: root })
     const manifest = JSON.parse(readFileSync(path.join(root, ".tenon", "workspace.json"), "utf8"))
     expect(manifest).toEqual({ version: 1, linkedFolders: [outside] })
 
     const inside = await runExit(root, data, BrainProject.link({ folder: path.join(root, "development") }))
-    expect(Exit.isFailure(inside) ? Cause.squash(inside.cause) : undefined).toMatchObject({ reason: "overlaps_workspace" })
+    expect(Exit.isFailure(inside) ? Cause.squash(inside.cause) : undefined).toMatchObject({
+      reason: "overlaps_workspace",
+    })
     const relative = await runExit(root, data, BrainProject.link({ folder: "repos/tool" }))
-    expect(Exit.isFailure(relative) ? Cause.squash(relative.cause) : undefined).toMatchObject({ reason: "invalid_folder" })
+    expect(Exit.isFailure(relative) ? Cause.squash(relative.cause) : undefined).toMatchObject({
+      reason: "invalid_folder",
+    })
 
     await run(root, data, BrainProject.unlink({ folder: outside }))
     const tool = (await run(root, data, BrainProject.list())).find((project) => project.name === "tool")
