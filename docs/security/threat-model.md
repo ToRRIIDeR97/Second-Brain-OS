@@ -20,7 +20,30 @@ Detailed permission and request flows are in
 
 `POST /second-brain/projects/workspace` takes only an OpenCode project id. The
 server looks the id up in its own project table and rejects `global` and the
-Brain directory itself; it never accepts a renderer path. The resulting card
+Brain directory itself; it never accepts a renderer path. The renderer no longer
+calls it.
+
+Workspace Projects add three file surfaces:
+
+- `POST /second-brain/projects/scan` writes only under the workspace's
+  `.tenon/` (cards and `workspace.json`) through `LocationMutation`, lists
+  folders without reading their content, and refuses to overwrite a manifest it
+  cannot parse. It also writes `workspace-links.json` (linked folder ->
+  workspace) in the server data folder; that file is a rebuildable cache.
+- `POST /second-brain/projects/link` is the one Second Brain route that takes
+  an absolute renderer path. The server requires an existing directory that
+  neither contains nor sits inside the workspace, and only records it in the
+  manifest; it never reads, moves or writes files in that folder. The renderer
+  sends a folder the user picked in the folder dialog. Sessions can already run
+  in any directory the renderer names, so this adds no new reach.
+- `GET`/`PUT`/`DELETE /second-brain/instructions` read, write (64 KiB cap) and
+  remove `AGENTS.md` in the request's directory only, through
+  `LocationMutation`. `AGENTS.md` is agent instructions: the app injects it
+  into sessions in that workspace, and with the link index into linked folders
+  too. A workspace's `AGENTS.md` therefore steers agents working in its linked
+  folders. The app calls this route only from the Instructions dialog; an
+  agent with file-edit permission can still change `AGENTS.md` like any other
+  workspace file. The resulting card
 stores that Workspace's worktree as `location.displayPath`, and
 `GET /second-brain/project-threads` returns absolute thread directories the
 same way session responses already return `directory`.
@@ -28,8 +51,8 @@ same way session responses already return `directory`.
 `tenon://open-project` and `tenon://new-session` deep links are handled
 by the app shell's sidebar controller
 (`opencode/packages/app/src/components/sidebar/sidebar-controller.ts`) and
-only on a local server. A deep link can open a folder, link it to a Project
-and start an unsent draft (a `new-session` prompt is placed in the composer,
+only on a local server. A deep link can open a folder as a workspace (and
+select it) and start an unsent draft (a `new-session` prompt is placed in the composer,
 never sent). It never runs `git init`; only a folder the user picks in the
 folder dialog is initialized when empty.
 

@@ -7,34 +7,35 @@ language shared by design and engineering.
 ## Language
 
 **Brain**:
-The user's complete personal control center. It contains global knowledge,
-Project records, planning, and Activity.
-_Avoid_: Workspace, account, home
+The user's complete personal control center. In the app it is the selected
+workspace folder: its notes, Project cards, planning and Activity.
+_Avoid_: account, home
 
 **Project**:
 A bounded body of work with an intended outcome, status, plan, resources,
-instructions, and Activity. A Project may have a local location, but it is not
-the same thing as a folder or repository. Every thread belongs to a Project,
-and every Project owns a **thread directory**: its linked Workspace's folder
-when it has one, otherwise its Project folder. Opening a folder that no Project
-links to creates a Project for it. The sidebar lists threads under their
-Project; threads in the Brain folder itself show under **Brain**, and threads
-in any other folder under **Other threads**.
-_Avoid_: Workspace, folder, repository
+instructions, and Activity. A Project's folder is a subfolder of its
+workspace's `projects` folder (any letter case) or a folder linked from
+elsewhere in `.tenon/workspace.json`; **Scan for projects** gives each such
+folder a Project. Threads of a Project run in its folder, and the sidebar
+lists them under the Project. A Project's own `AGENTS.md` replaces the
+workspace default for its threads. Older Projects may instead link a Workspace
+(`location.workspaceId`) or have no folder and run in their card folder.
+_Avoid_: folder, repository
 
-**Project folder**:
-The app-managed directory containing one Project's card, notes, and
-calendar-derived timeline. It belongs to a Project but is not the Project
-itself or its optional linked Workspace. Threads of a Project without a linked
-Workspace run here.
+**Project card**:
+The Markdown file holding a Project's metadata, with its notes and
+calendar-derived timeline beside it, in `.tenon/projects/<id>/` (older cards:
+`projects/<id>/`). It belongs to a Project but is not the Project's folder.
 _Avoid_: Project, Workspace
 
 **Workspace**:
-A registered local root with its own identity, trust, and access policy. It is
-a security boundary and should not replace Project in ordinary product copy.
-In code it is an OpenCode project (a folder or repository); a Project links to
-at most one Workspace through `location.workspaceId`.
-_Avoid_: Project, Brain
+A folder opened in the app and chosen in the sidebar's workspace dropdown.
+Its `projects` folder and linked folders are its Projects; threads elsewhere
+in the folder show under **General**. Workspaces never share threads in the
+sidebar. Its root `AGENTS.md` is the default for Projects without their own.
+In code it is an OpenCode project (a folder or repository) and the Brain
+directory of the Second Brain routes.
+_Avoid_: Project
 
 **Resource**:
 An item that can be opened or referenced, such as a note, source file, task,

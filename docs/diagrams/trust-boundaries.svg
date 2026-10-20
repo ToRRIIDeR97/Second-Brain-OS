@@ -109,7 +109,7 @@
 <text x="690" y="86" text-anchor="start" class="zonet">Workspace filesystem</text>
 <rect class="store" x="700" y="100" width="260" height="100" rx="6"/>
 <text x="710" y="118" text-anchor="start" class="t">Canonical files</text>
-<text x="710" y="134" text-anchor="start" class="s">notes/, projects/</text>
+<text x="710" y="134" text-anchor="start" class="s">notes/, projects/*, .tenon/</text>
 <text x="710" y="150" text-anchor="start" class="s">.second-brain/calendar-v1.json</text>
 <text x="710" y="166" text-anchor="start" class="s">source of truth</text>
 <rect class="zone" x="680" y="250" width="300" height="180" rx="10"/>

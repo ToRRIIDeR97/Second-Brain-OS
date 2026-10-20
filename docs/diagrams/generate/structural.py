@@ -28,7 +28,7 @@ def component():
           "core/src/harness.ts: HarnessRuntime", "drivers: opencode, codex, acp", "core/src/permission.ts: PermissionV2",
           "EventV2 (durable events), Snapshot", "harness/registry.ts"], cls="sub")
     # stores
-    s.box(760, 335, 200, 76, "Workspace files", ["notes/, projects/,", ".second-brain/calendar-v1.json"], cls="store")
+    s.box(760, 335, 200, 76, "Workspace files", ["notes/, projects/*, .tenon/", ".second-brain/calendar-v1.json"], cls="store")
     s.box(760, 445, 200, 56, "Profile SQLite", ["sessions, events, permissions"], cls="store")
     s.box(760, 515, 200, 44, "Snapshot git repo", [], cls="store")
     s.box(760, 573, 200, 44, "harnesses.json (0600)", [], cls="store")
@@ -76,7 +76,7 @@ def trust():
     s.box(320, 268, 290, 84, "PermissionV2", ["rules: allow / ask / deny", "harness add: Settings only, no tool", "plan agent denies edits"], cls="sub")
     s.box(320, 364, 220, 70, "Secrets at rest", ["auth.json (data/tenon-workbench)", "SQLite profile, harnesses.json"], cls="store")
     s.zone(680, 70, 300, 150, "Workspace filesystem")
-    s.box(700, 100, 260, 100, "Canonical files", ["notes/, projects/", ".second-brain/calendar-v1.json", "source of truth"], cls="store")
+    s.box(700, 100, 260, 100, "Canonical files", ["notes/, projects/*, .tenon/", ".second-brain/calendar-v1.json", "source of truth"], cls="store")
     s.zone(680, 250, 300, 180, "Harness child processes (run as user)")
     s.box(700, 280, 260, 64, "Codex / ACP agents", ["incl. upstream OpenCode (opencode acp)", "own tools; ask via request_permission"], cls="proc")
     s.box(700, 354, 260, 60, "Filtered environment", ["allowlist + per-harness env"], cls="proc")
@@ -117,9 +117,9 @@ def deployment():
           "drafts.sqlite (+wal/shm)", "window-state-<id>.json", "logs/<stamp>/, Crashpad/", "tenon-workbench/ server state",
           "(XDG_STATE_HOME default)", "cli/<ver>/opencode-cli (v2)",
           ".user-data-migrated (dev copy)"], cls="store")
-    s.box(290, 430, 200, 100, "XDG data/tenon-workbench", ["auth.json, mcp-auth.json", "profile SQLite, snapshots", "copied once from opencode/"], cls="store")
+    s.box(290, 430, 200, 100, "XDG data/tenon-workbench", ["auth.json, mcp-auth.json", "profile SQLite, snapshots", "workspace-links.json", "copied once from opencode/"], cls="store")
     s.box(290, 545, 200, 64, "Global config dir", ["config/tenon-workbench", "harnesses.json"], cls="store")
-    s.box(510, 430, 230, 90, "Workspace directories", ["notes/, projects/", ".second-brain/"], cls="store")
+    s.box(510, 430, 230, 90, "Workspace directories", ["notes/, projects/* (Projects)", ".tenon/ (cards, manifest)", ".second-brain/"], cls="store")
     s.box(800, 100, 180, 60, "Google APIs", ["oauth2, calendar v3,", "tasks v1"], cls="ext")
     s.box(800, 180, 180, 60, "LLM provider APIs", ["opencode driver, agents"], cls="ext")
     s.box(800, 260, 180, 50, "System browser", [], cls="ext")
