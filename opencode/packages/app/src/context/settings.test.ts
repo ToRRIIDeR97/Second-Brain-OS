@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { hasExistingWebState, initialAgentVisibility, withVisibleModels } from "./settings"
+import { hasExistingWebState, initialAgentVisibility, modelProvider, withVisibleModels } from "./settings"
 
 describe("agent visibility", () => {
   test("shows the picker for existing profiles and hides it for first-time installs", () => {
@@ -30,5 +30,18 @@ describe("harness model visibility", () => {
     const instance = { id: "codex", models: [{ id: "a" }, { id: "b" }, { id: "new" }] }
     expect(withVisibleModels(instance, ["b"]).models.map((model) => model.id)).toEqual(["a", "new"])
     expect(withVisibleModels(instance, undefined)).toBe(instance)
+  })
+
+  test("leaves out every model of a hidden provider, including ones added later", () => {
+    const instance = {
+      id: "opencode-acp",
+      models: [{ id: "anthropic/claude" }, { id: "openrouter/openai/gpt" }, { id: "openrouter/new" }, { id: "plain" }],
+    }
+    expect(withVisibleModels(instance, [], ["openrouter"]).models.map((model) => model.id)).toEqual([
+      "anthropic/claude",
+      "plain",
+    ])
+    expect(modelProvider("openrouter/openai/gpt")).toBe("openrouter")
+    expect(modelProvider("plain")).toBeUndefined()
   })
 })

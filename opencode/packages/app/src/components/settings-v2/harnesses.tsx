@@ -1,19 +1,20 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Harness } from "@opencode-ai/schema/harness"
 import { useQueryClient } from "@tanstack/solid-query"
+import { createStore } from "solid-js/store"
 import { type Accessor, type Component, For, Show, createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { useSettings } from "@/context/settings"
+import { modelProvider, useSettings } from "@/context/settings"
 import { harnessSettingsChanged } from "@/components/prompt-input/harness-controller"
 import {
   addHarness,
@@ -66,8 +67,11 @@ export const SettingsHarnessesV2: Component<{
   const [updates, { mutate: setUpdates }] = createResource(directory, (dir) =>
     listHarnessUpdates(server(), dir).catch(() => []),
   )
-  const [confirming, setConfirming] = createSignal<string>()
-  const [busy, setBusy] = createSignal<string>()
+  const [state, setState] = createStore({
+    selected: undefined as string | undefined,
+    busy: undefined as string | undefined,
+    confirming: undefined as string | undefined,
+  })
 
   const builtIn = createMemo(() => (entries() ?? []).filter((entry) => entry.source !== "registry"))
   const registered = createMemo(() => (entries() ?? []).filter((entry) => entry.source === "registry"))
@@ -86,14 +90,11 @@ export const SettingsHarnessesV2: Component<{
 
   const run = (id: string, action: () => Promise<unknown>) => {
     const dir = directory()
-    if (!dir || busy()) return
-    setBusy(id)
+    if (!dir || state.busy) return
+    setState("busy", id)
     void action()
       .then(changed, failed)
-      .finally(() => {
-        setBusy(undefined)
-        setConfirming(undefined)
-      })
+      .finally(() => setState({ busy: undefined, confirming: undefined }))
   }
 
   const openAdd = () => {
@@ -139,21 +140,11 @@ export const SettingsHarnessesV2: Component<{
       })
     })
 
-  const details = (entry: Harness.SettingsEntry) => (
-    <HarnessDetails
-      entry={entry}
-      instance={instances()?.find((item) => item.id === entry.id)}
-      update={updates()?.find((item) => item.id === entry.id)}
-      busy={busy() === entry.id}
-      onRefresh={() => refreshModels(entry.id)}
-      onUpgrade={() => upgrade(entry)}
-    />
-  )
-
-  const sourceLabel = (entry: Harness.SettingsEntry) =>
-    entry.source === "built-in"
-      ? language.t("harness.settings.source.builtIn")
-      : language.t("harness.settings.source.config")
+  const entryList = createMemo(() => [...builtIn(), ...registered()])
+  // The first harness stays selected until the user picks another, or the selected one is removed.
+  const selected = createMemo(() => entryList().find((entry) => entry.id === state.selected) ?? entryList()[0])
+  const instance = (id: string) => instances()?.find((item) => item.id === id)
+  const update = (id: string) => updates()?.find((item) => item.id === id)
 
   return (
     <>
@@ -161,7 +152,7 @@ export const SettingsHarnessesV2: Component<{
         <h2 class="settings-v2-tab-title">{language.t("harness.settings.title")}</h2>
       </div>
 
-      <div class="settings-v2-tab-body settings-v2-providers" data-component="harness-settings">
+      <div class="settings-v2-tab-body" data-component="harness-settings">
         <Show when={!directory()}>
           <div class="settings-v2-provider-empty" role="alert">
             {language.t("harness.settings.noLocation")}
@@ -173,168 +164,303 @@ export const SettingsHarnessesV2: Component<{
           </div>
         </Show>
 
-        <div class="settings-v2-section">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="settings-v2-section-title">{language.t("harness.settings.section.added")}</h3>
-            <div class="flex items-center gap-2">
+        <div class="settings-v2-harness-layout">
+          <nav class="settings-v2-harness-nav" aria-label={language.t("harness.settings.title")}>
+            <For each={entryList()}>
+              {(entry) => (
+                <button
+                  type="button"
+                  class="settings-v2-harness-nav-item"
+                  data-harness={entry.id}
+                  aria-current={selected()?.id === entry.id}
+                  onClick={() => setState({ selected: entry.id, confirming: undefined })}
+                >
+                  <span class="settings-v2-harness-dot" data-state={harnessState(entry, instance(entry.id))} />
+                  <span class="min-w-0 flex-1 truncate">{entry.name}</span>
+                  <Show when={update(entry.id)?.updateAvailable}>
+                    <span
+                      class="settings-v2-harness-update-dot"
+                      title={language.t("harness.settings.updateAvailable", { latest: update(entry.id)?.latest ?? "" })}
+                    />
+                  </Show>
+                </button>
+              )}
+            </For>
+            <div class="settings-v2-harness-nav-actions">
+              <ButtonV2 size="normal" variant="ghost" icon="plus" disabled={!directory()} onClick={openAssistant}>
+                {language.t("harness.settings.assistant")}
+              </ButtonV2>
               <ButtonV2 size="normal" variant="ghost" disabled={!directory()} onClick={openAdd}>
                 {language.t("harness.settings.addManually")}
               </ButtonV2>
-              <ButtonV2
-                size="normal"
-                variant="ghost"
-                class="settings-v2-tonal"
-                icon="plus"
-                disabled={!directory()}
-                onClick={openAssistant}
-              >
-                {language.t("harness.settings.assistant")}
-              </ButtonV2>
             </div>
-          </div>
-          <SettingsListV2>
-            <Show
-              when={registered().length > 0}
-              fallback={<div class="settings-v2-provider-empty">{language.t("harness.settings.empty")}</div>}
-            >
-              <For each={registered()}>
-                {(entry) => (
-                  <div class="settings-v2-harness-item">
-                    <div class="settings-v2-provider-row" data-harness={entry.id}>
-                      <div class="settings-v2-provider-copy">
-                        <span class="settings-v2-provider-name truncate">{entry.name}</span>
-                        <span class="settings-v2-harness-command">
-                          {[entry.command, ...(entry.args ?? [])].join(" ")}
-                        </span>
-                      </div>
-                      <div class="settings-v2-harness-controls">
-                        <Switch
-                          checked={entry.enabled}
-                          disabled={busy() === entry.id}
-                          onChange={(checked) =>
-                            run(entry.id, () => setHarnessEnabled(server(), directory()!, entry.id, checked))
-                          }
-                        >
-                          {language.t("harness.settings.enabled")}
-                        </Switch>
-                        <Show
-                          when={confirming() === entry.id}
-                          fallback={
-                            <ButtonV2
-                              size="normal"
-                              variant="ghost"
-                              class="settings-v2-danger-text"
-                              disabled={busy() === entry.id}
-                              onClick={() => setConfirming(entry.id)}
-                            >
-                              {language.t("harness.settings.remove")}
-                            </ButtonV2>
-                          }
-                        >
-                          <ButtonV2
-                            size="normal"
-                            variant="danger"
-                            disabled={busy() === entry.id}
-                            onClick={() => run(entry.id, () => removeHarness(server(), directory()!, entry.id))}
-                          >
-                            {language.t("harness.settings.removeConfirm")}
-                          </ButtonV2>
-                        </Show>
-                      </div>
-                    </div>
-                    {details(entry)}
-                  </div>
-                )}
-              </For>
-            </Show>
-          </SettingsListV2>
-        </div>
+          </nav>
 
-        <Show when={builtIn().length > 0}>
-          <div class="settings-v2-section">
-            <h3 class="settings-v2-section-title">{language.t("harness.settings.section.readOnly")}</h3>
-            <SettingsListV2>
-              <For each={builtIn()}>
-                {(entry) => (
-                  <div class="settings-v2-harness-item">
-                    <div class="settings-v2-provider-row" data-harness={entry.id}>
-                      <span class="settings-v2-provider-name min-w-0 flex-1 truncate">{entry.name}</span>
-                      <Show when={!entry.enabled}>
-                        <span class="settings-v2-provider-env-hint">{language.t("harness.settings.disabled")}</span>
-                      </Show>
-                      <Tag>{sourceLabel(entry)}</Tag>
-                    </div>
-                    {details(entry)}
-                  </div>
-                )}
-              </For>
-            </SettingsListV2>
-          </div>
-        </Show>
+          <Show
+            when={selected()}
+            keyed
+            fallback={<div class="settings-v2-provider-empty">{language.t("harness.settings.empty")}</div>}
+          >
+            {(entry) => (
+              <HarnessDetails
+                entry={entry}
+                instance={instance(entry.id)}
+                update={update(entry.id)}
+                busy={state.busy === entry.id}
+                confirming={state.confirming === entry.id}
+                onToggle={(checked) =>
+                  run(entry.id, () => setHarnessEnabled(server(), directory()!, entry.id, checked))
+                }
+                onRemove={() =>
+                  state.confirming === entry.id
+                    ? run(entry.id, () => removeHarness(server(), directory()!, entry.id))
+                    : setState("confirming", entry.id)
+                }
+                onRefresh={() => refreshModels(entry.id)}
+                onUpgrade={() => upgrade(entry)}
+              />
+            )}
+          </Show>
+        </div>
       </div>
     </>
   )
 }
 
-// Version, update, and model visibility for one harness. The in-process loop has no CLI or model list.
+const harnessState = (entry: Harness.SettingsEntry, instance?: Harness.Instance) => {
+  if (!entry.enabled) return "off"
+  if (instance?.status === "unavailable") return "error"
+  return "on"
+}
+
+// Header, update, and model visibility for one harness. The in-process loop has no CLI or model list.
 const HarnessDetails: Component<{
   entry: Harness.SettingsEntry
   instance?: Harness.Instance
   update?: Harness.UpdateStatus
   busy: boolean
+  confirming: boolean
+  onToggle: (enabled: boolean) => void
+  onRemove: () => void
   onRefresh: () => void
   onUpgrade: () => void
 }> = (props) => {
   const language = useLanguage()
-  const settings = useSettings()
-  const [open, setOpen] = createSignal(false)
-  const models = () => props.instance?.models ?? []
-  const hidden = createMemo(() => new Set(settings.harnesses.hiddenModels(props.entry.id)))
-  const shown = () => models().filter((model) => !hidden().has(model.id)).length
+  const editable = () => props.entry.source === "registry"
+  const host = () => props.entry.driver === Harness.OpenCodeDriver
   const version = () => props.update?.version ?? props.instance?.version
+  const meta = () =>
+    [
+      editable()
+        ? undefined
+        : props.entry.source === "built-in"
+          ? language.t("harness.settings.source.builtIn")
+          : language.t("harness.settings.source.config"),
+      version() ? language.t("harness.settings.version", { version: version()! }) : undefined,
+      props.entry.enabled ? undefined : language.t("harness.settings.disabled"),
+    ]
+      .filter(Boolean)
+      .join(" · ")
 
   return (
-    <Show when={props.entry.enabled && props.entry.driver !== Harness.OpenCodeDriver}>
-      <div class="settings-v2-harness-details" data-component="harness-details">
-        <div class="flex flex-wrap items-center gap-2">
-          <Show when={version()}>
-            <span>{language.t("harness.settings.version", { version: version()! })}</span>
+    <section class="settings-v2-harness-detail-pane" data-component="harness-details" data-harness={props.entry.id}>
+      <header class="settings-v2-harness-head">
+        <div class="settings-v2-provider-copy">
+          <h3 class="settings-v2-harness-name">{props.entry.name}</h3>
+          <Show when={meta()}>
+            <span class="settings-v2-provider-description">{meta()}</span>
           </Show>
-          <Show when={props.update?.updateAvailable}>
-            <Tag>{language.t("harness.settings.updateAvailable", { latest: props.update?.latest ?? "" })}</Tag>
-            <Show when={props.update?.method} fallback={<span>{language.t("harness.settings.updateManual")}</span>}>
-              <ButtonV2 size="normal" variant="neutral" disabled={props.busy} onClick={props.onUpgrade}>
-                {props.busy ? language.t("harness.settings.updating") : language.t("harness.settings.update")}
-              </ButtonV2>
-              <span>{language.t("harness.settings.updateRestart")}</span>
-            </Show>
+        </div>
+        <div class="settings-v2-harness-controls">
+          <Show when={props.entry.enabled && !host()}>
+            <ButtonV2 size="normal" variant="ghost" icon="reset" disabled={props.busy} onClick={props.onRefresh}>
+              {language.t("harness.settings.models.refresh")}
+            </ButtonV2>
           </Show>
-          <span class="flex-1" />
-          <ButtonV2 size="normal" variant="ghost" aria-expanded={open()} onClick={() => setOpen(!open())}>
-            {language.t("harness.settings.models", { shown: shown(), total: models().length })}
-          </ButtonV2>
-          <ButtonV2 size="normal" variant="ghost" icon="reset" disabled={props.busy} onClick={props.onRefresh}>
-            {language.t("harness.settings.models.refresh")}
+          <Show when={editable()}>
+            <Switch checked={props.entry.enabled} disabled={props.busy} hideLabel onChange={props.onToggle}>
+              {language.t("harness.settings.enabled")}
+            </Switch>
+          </Show>
+        </div>
+      </header>
+
+      <Show when={editable()}>
+        <span class="settings-v2-harness-command">{[props.entry.command, ...(props.entry.args ?? [])].join(" ")}</span>
+      </Show>
+      <Show when={props.entry.enabled && props.instance?.status === "unavailable"}>
+        <span class="settings-v2-harness-detail" role="alert">
+          {props.instance?.error ?? language.t("harness.unavailable")}
+        </span>
+      </Show>
+
+      <Show when={props.update?.updateAvailable}>
+        <div class="settings-v2-harness-banner">
+          <span class="min-w-0 flex-1">
+            {language.t("harness.settings.updateAvailable", { latest: props.update?.latest ?? "" })}
+            {" · "}
+            {props.update?.method
+              ? language.t("harness.settings.updateRestart")
+              : language.t("harness.settings.updateManual")}
+          </span>
+          <Show when={props.update?.method}>
+            <ButtonV2 size="normal" variant="neutral" disabled={props.busy} onClick={props.onUpgrade}>
+              {props.busy ? language.t("harness.settings.updating") : language.t("harness.settings.update")}
+            </ButtonV2>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={host()}>
+        <span class="settings-v2-harness-detail">{language.t("harness.settings.hostModels")}</span>
+      </Show>
+      <Show when={props.entry.enabled && !host()}>
+        <HarnessModels entry={props.entry} models={props.instance?.models ?? []} />
+      </Show>
+
+      <Show when={editable()}>
+        <div class="settings-v2-harness-footer">
+          <ButtonV2
+            size="normal"
+            variant={props.confirming ? "danger" : "ghost"}
+            class={props.confirming ? undefined : "settings-v2-danger-text"}
+            disabled={props.busy}
+            onClick={props.onRemove}
+          >
+            {props.confirming ? language.t("harness.settings.removeConfirm") : language.t("harness.settings.remove")}
           </ButtonV2>
         </div>
-        <Show when={open()}>
-          <Show when={models().length > 0} fallback={<span>{language.t("harness.settings.models.empty")}</span>}>
-            <div class="settings-v2-harness-models">
-              <For each={models()}>
-                {(model) => (
-                  <Switch
-                    checked={!hidden().has(model.id)}
-                    onChange={(checked) => settings.harnesses.setModelHidden(props.entry.id, model.id, !checked)}
-                  >
-                    <span title={model.description}>{model.name}</span>
-                  </Switch>
-                )}
-              </For>
-            </div>
-          </Show>
+      </Show>
+    </section>
+  )
+}
+
+// Models grouped by their provider prefix, so a whole provider (for example OpenRouter) can be hidden at once.
+const HarnessModels: Component<{ entry: Harness.SettingsEntry; models: ReadonlyArray<Harness.Model> }> = (props) => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const [state, setState] = createStore({ query: "", open: undefined as string | undefined })
+  const hidden = createMemo(() => new Set(settings.harnesses.hiddenModels(props.entry.id)))
+  const hiddenProviders = createMemo(() => new Set(settings.harnesses.hiddenProviders(props.entry.id)))
+  const visible = (model: Harness.Model) =>
+    !hidden().has(model.id) && !hiddenProviders().has(modelProvider(model.id) ?? "")
+  const groups = createMemo(() =>
+    Object.entries(Object.groupBy(props.models, (model) => modelProvider(model.id) ?? "")).map(([id, models]) => ({
+      id,
+      // OpenCode names its models "Provider/Model"; the prefix is the readable provider name.
+      name: models?.[0]?.name.includes("/") ? models[0].name.split("/")[0] : id,
+      models: models ?? [],
+    })),
+  )
+  const grouped = () => groups().some((group) => group.id)
+  const matches = createMemo(() => {
+    const query = state.query.trim().toLowerCase()
+    if (!query) return []
+    return props.models.filter((model) => `${model.id} ${model.name}`.toLowerCase().includes(query))
+  })
+
+  // Inside a provider group the "Provider/" name prefix repeats the group, so it is dropped there.
+  const modelSwitch = (model: Harness.Model, inGroup = false) => (
+    <Switch
+      size="small"
+      checked={!hidden().has(model.id)}
+      disabled={hiddenProviders().has(modelProvider(model.id) ?? "")}
+      onChange={(checked) => settings.harnesses.setModelHidden(props.entry.id, model.id, !checked)}
+    >
+      <span title={model.description}>{inGroup ? model.name.slice(model.name.indexOf("/") + 1) : model.name}</span>
+    </Switch>
+  )
+
+  return (
+    <div class="settings-v2-section">
+      <div class="flex items-center justify-between gap-3">
+        <h4 class="settings-v2-section-title">
+          {language.t("harness.settings.models", {
+            shown: props.models.filter(visible).length,
+            total: props.models.length,
+          })}
+        </h4>
+        <Show when={props.models.length > 8}>
+          <TextInputV2
+            type="search"
+            class="settings-v2-harness-search"
+            value={state.query}
+            placeholder={language.t("harness.settings.models.search")}
+            aria-label={language.t("harness.settings.models.search")}
+            onInput={(event) => setState("query", event.currentTarget.value)}
+          />
         </Show>
       </div>
-    </Show>
+      <Show
+        when={props.models.length > 0}
+        fallback={<span class="settings-v2-harness-detail">{language.t("harness.settings.models.empty")}</span>}
+      >
+        <Show
+          when={!state.query.trim()}
+          fallback={
+            <Show
+              when={matches().length > 0}
+              fallback={<span class="settings-v2-harness-detail">{language.t("harness.settings.models.noMatch")}</span>}
+            >
+              <div class="settings-v2-harness-models">
+                <For each={matches()}>{(model) => modelSwitch(model)}</For>
+              </div>
+            </Show>
+          }
+        >
+          <Show
+            when={grouped()}
+            fallback={
+              <div class="settings-v2-harness-models">
+                <For each={props.models}>{(model) => modelSwitch(model)}</For>
+              </div>
+            }
+          >
+            <SettingsListV2>
+              <For each={groups()}>
+                {(group) => (
+                  <div class="settings-v2-harness-group" data-provider={group.id}>
+                    <div class="settings-v2-harness-group-row">
+                      <button
+                        type="button"
+                        class="settings-v2-harness-group-toggle"
+                        aria-expanded={state.open === group.id}
+                        onClick={() => setState("open", state.open === group.id ? undefined : group.id)}
+                      >
+                        <Icon name={state.open === group.id ? "chevron-down" : "chevron-right"} />
+                        <span class="settings-v2-provider-name truncate">{group.name || group.id}</span>
+                        <span class="settings-v2-provider-description">
+                          {language.t("harness.settings.models.count", {
+                            shown: group.models.filter(visible).length,
+                            total: group.models.length,
+                          })}
+                        </span>
+                      </button>
+                      <Show when={group.id}>
+                        <Switch
+                          checked={!hiddenProviders().has(group.id)}
+                          hideLabel
+                          onChange={(checked) =>
+                            settings.harnesses.setProviderHidden(props.entry.id, group.id, !checked)
+                          }
+                        >
+                          {group.name}
+                        </Switch>
+                      </Show>
+                    </div>
+                    <Show when={state.open === group.id}>
+                      <div class="settings-v2-harness-models settings-v2-harness-group-models">
+                        <For each={group.models}>{(model) => modelSwitch(model, true)}</For>
+                      </div>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </SettingsListV2>
+          </Show>
+        </Show>
+      </Show>
+    </div>
   )
 }
 

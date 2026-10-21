@@ -49,6 +49,8 @@ export interface Settings {
   harnesses?: {
     /** Model IDs left out of each harness's picker, by harness instance ID. New models show by default. */
     hiddenModels?: Record<string, string[]>
+    /** Provider prefixes (the part of a model ID before "/") left out of each harness's picker, new models included. */
+    hiddenProviders?: Record<string, string[]>
   }
 }
 
@@ -56,10 +58,21 @@ export interface Settings {
 export function withVisibleModels<T extends { id: string; models: ReadonlyArray<{ id: string }> }>(
   instance: T,
   hidden: ReadonlyArray<string> | undefined,
+  hiddenProviders?: ReadonlyArray<string>,
 ): T {
-  if (!hidden?.length) return instance
+  if (!hidden?.length && !hiddenProviders?.length) return instance
   const skip = new Set(hidden)
-  return { ...instance, models: instance.models.filter((model) => !skip.has(model.id)) }
+  const skipProviders = new Set(hiddenProviders)
+  return {
+    ...instance,
+    models: instance.models.filter((model) => !skip.has(model.id) && !skipProviders.has(modelProvider(model.id) ?? "")),
+  }
+}
+
+/** The provider prefix of a model ID such as "openrouter/anthropic/claude", or undefined for unprefixed IDs. */
+export function modelProvider(modelID: string) {
+  const index = modelID.indexOf("/")
+  return index > 0 ? modelID.slice(0, index) : undefined
 }
 
 export const monoDefault = "System Mono"
@@ -350,6 +363,15 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("harnesses", (value) => ({
             ...value,
             hiddenModels: { ...value?.hiddenModels, [instanceID]: next },
+          }))
+        },
+        hiddenProviders: (instanceID: string) => store.harnesses?.hiddenProviders?.[instanceID] ?? [],
+        setProviderHidden(instanceID: string, provider: string, hidden: boolean) {
+          const current = store.harnesses?.hiddenProviders?.[instanceID] ?? []
+          const next = hidden ? [...new Set([...current, provider])] : current.filter((item) => item !== provider)
+          setStore("harnesses", (value) => ({
+            ...value,
+            hiddenProviders: { ...value?.hiddenProviders, [instanceID]: next },
           }))
         },
       },

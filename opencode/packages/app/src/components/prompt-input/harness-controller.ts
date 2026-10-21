@@ -44,7 +44,9 @@ export function createPromptHarnessController(selection: HarnessSelection) {
   )
   // Models hidden in Settings never reach the picker or the default-model choice.
   const instances = createMemo(() =>
-    loaded()?.map((item) => withVisibleModels(item, settings.harnesses.hiddenModels(item.id))),
+    loaded()?.map((item) =>
+      withVisibleModels(item, settings.harnesses.hiddenModels(item.id), settings.harnesses.hiddenProviders(item.id)),
+    ),
   )
   const [refreshing, setRefreshing] = createSignal(false)
   // The refresh button asks the harness again instead of reading the server's recent check.

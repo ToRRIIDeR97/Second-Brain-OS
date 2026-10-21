@@ -88,7 +88,9 @@ export default function BrainHomePage() {
   // Models hidden in Settings never reach the picker or the default-model choice, as in the thread composer.
   // Reading `data` suspends, so callers outside the controls' Suspense boundary check `isPending` first.
   const harnesses = () =>
-    harnessQuery.data?.map((item) => withVisibleModels(item, settings.harnesses.hiddenModels(item.id)))
+    harnessQuery.data?.map((item) =>
+      withVisibleModels(item, settings.harnesses.hiddenModels(item.id), settings.harnesses.hiddenProviders(item.id)),
+    )
   const selectHarness = (instanceID: Harness.InstanceID) => {
     const next = harnesses()?.find((instance) => instance.id === instanceID)
     setState({ harnessInstanceID: instanceID, harnessModel: next ? defaultModel(next) : undefined })
