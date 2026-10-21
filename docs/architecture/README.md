@@ -374,6 +374,13 @@ Hidden model IDs and hidden providers are stored per harness in the renderer's
 the default-model choice. New models show by default, except under a hidden
 provider.
 
+The Default agent does not use these lists. Its models come from the providers
+the Tenon server has connected (API keys, config, or OpenCode account services
+such as OpenRouter). Settings → Models has a switch per provider, stored as
+`hiddenProviders` in the renderer's `model.v1` state. `useModels().visible`
+returns false for every model of a hidden provider, so both model pickers skip
+them, new models included. The provider stays connected.
+
 ### Harness CLI updates
 
 `core/src/harness/update.ts` finds where a harness CLI was installed from by
