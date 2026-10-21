@@ -364,11 +364,15 @@ longer saves them when adding a harness.
 
 `POST /api/harness/refresh` (`{ id? }`) clears both caches for one harness or
 all, then lists again. The composer's refresh button and Settings → Harnesses
-→ Refresh models call it. Settings also lists each harness's models with an
-on/off switch. Hidden model IDs are stored per harness in the renderer's
-`settings.v3` (`harnesses.hiddenModels`). `createPromptHarnessController` leaves
-them out of the picker and the default-model choice. New models show by
-default.
+→ Refresh models call it. Settings → Harnesses shows a harness list beside
+the selected harness's details. Models are grouped by their provider prefix
+(the part of the ID before `/`, such as `openrouter` in OpenCode's
+`openrouter/anthropic/...`), with one switch per provider and one per model.
+Hidden model IDs and hidden providers are stored per harness in the renderer's
+`settings.v3` (`harnesses.hiddenModels`, `harnesses.hiddenProviders`).
+`withVisibleModels` leaves both out of the composer and Brain Home pickers and
+the default-model choice. New models show by default, except under a hidden
+provider.
 
 ### Harness CLI updates
 
