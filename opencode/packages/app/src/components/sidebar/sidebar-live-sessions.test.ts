@@ -80,13 +80,13 @@ function setup() {
     const lists = [...stores].map(([directory, [store]]) => ({ directory, sessions: store.session }))
     const grouped = groupSidebarThreads({
       projects,
-      brainDirectory: BRAIN,
+      workspaceDirectory: BRAIN,
       sessions: mergeSidebarSessions(lists, index),
     })
     return {
       a: grouped.projects[0]!.threads.map((node) => node.session.id),
       b: grouped.projects[1]!.threads.map((node) => node.session.id),
-      other: grouped.other.map((node) => node.session.id),
+      workspace: grouped.workspace.map((node) => node.session.id),
     }
   }
   return { emit, groups, stores }
@@ -102,12 +102,13 @@ const updated = (info: Session): HomeSessionEvent => ({
 })
 
 describe("live session events reach the sidebar lists", () => {
-  test("a thread created in a background Project and in an unlisted folder appears", () => {
+  test("a thread created in a background Project and in an unlisted workspace folder appears", () => {
     const { emit, groups } = setup()
     emit(PROJECT_B, created(session("b1", PROJECT_B)))
     emit(PROJECT_A, created(session("a1", PROJECT_A)))
-    emit("/tmp/scratch", created(session("o1", "/tmp/scratch")))
-    expect(groups()).toEqual({ a: ["a1"], b: ["b1"], other: ["o1"] })
+    emit("/brain/development/tool", created(session("o1", "/brain/development/tool")))
+    emit("/tmp/scratch", created(session("x1", "/tmp/scratch")))
+    expect(groups()).toEqual({ a: ["a1"], b: ["b1"], workspace: ["o1"] })
   })
 
   test("archive removes the thread, unarchive brings it back", () => {

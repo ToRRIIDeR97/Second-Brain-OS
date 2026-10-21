@@ -174,3 +174,24 @@ test("list skips malformed notes and folders outside managed Projects", async ()
   const found = await Effect.runPromise(KnowledgeNote.list().pipe(provideNoteServices(AbsolutePath.make(tmp.path))))
   expect(found.map((note) => note.path)).toEqual(["notes/good.md"])
 })
+
+test("list includes project notes in the .tenon card folder and the legacy one", async () => {
+  await using tmp = await tmpdir()
+  const current = path.join(tmp.path, ".tenon", "projects", "project_01NEW", "notes")
+  const legacy = path.join(tmp.path, "projects", "project_01OLD", "notes")
+  await mkdir(current, { recursive: true })
+  await mkdir(legacy, { recursive: true })
+  await writeFile(path.join(current, "plan.md"), "# Plan\n")
+  await writeFile(path.join(legacy, "old.md"), "# Old\n")
+  const found = await Effect.runPromise(KnowledgeNote.list().pipe(provideNoteServices(AbsolutePath.make(tmp.path))))
+  expect(found.map((note) => note.path).toSorted()).toEqual([
+    ".tenon/projects/project_01NEW/notes/plan.md",
+    "projects/project_01OLD/notes/old.md",
+  ])
+  const read = await Effect.runPromise(
+    KnowledgeNote.read(".tenon/projects/project_01NEW/notes/plan.md").pipe(
+      provideNoteServices(AbsolutePath.make(tmp.path)),
+    ),
+  )
+  expect(read.info.title).toBe("Plan")
+})

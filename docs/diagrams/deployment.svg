@@ -107,15 +107,17 @@
 <text x="300" y="448" text-anchor="start" class="t">XDG data/tenon-workbench</text>
 <text x="300" y="464" text-anchor="start" class="s">auth.json, mcp-auth.json</text>
 <text x="300" y="480" text-anchor="start" class="s">profile SQLite, snapshots</text>
-<text x="300" y="496" text-anchor="start" class="s">copied once from opencode/</text>
+<text x="300" y="496" text-anchor="start" class="s">workspace-links.json</text>
+<text x="300" y="512" text-anchor="start" class="s">copied once from opencode/</text>
 <rect class="store" x="290" y="545" width="200" height="64" rx="6"/>
 <text x="300" y="563" text-anchor="start" class="t">Global config dir</text>
 <text x="300" y="579" text-anchor="start" class="s">config/tenon-workbench</text>
 <text x="300" y="595" text-anchor="start" class="s">harnesses.json</text>
 <rect class="store" x="510" y="430" width="230" height="90" rx="6"/>
 <text x="520" y="448" text-anchor="start" class="t">Workspace directories</text>
-<text x="520" y="464" text-anchor="start" class="s">notes/, projects/</text>
-<text x="520" y="480" text-anchor="start" class="s">.second-brain/</text>
+<text x="520" y="464" text-anchor="start" class="s">notes/, projects/* (Projects)</text>
+<text x="520" y="480" text-anchor="start" class="s">.tenon/ (cards, manifest)</text>
+<text x="520" y="496" text-anchor="start" class="s">.second-brain/</text>
 <rect class="ext" x="800" y="100" width="180" height="60" rx="6"/>
 <text x="810" y="118" text-anchor="start" class="t">Google APIs</text>
 <text x="810" y="134" text-anchor="start" class="s">oauth2, calendar v3,</text>

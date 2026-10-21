@@ -29,6 +29,46 @@ const instructionLayer = (input: {
   ])
 
 describe("InstructionContext", () => {
+  it.live("in a Tenon workspace, a project AGENTS.md replaces the workspace one", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const root = path.join(tmp.path, "Brain")
+          const project = path.join(root, "projects", "alpha")
+          const projectFile = path.join(project, "AGENTS.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(path.join(root, ".tenon"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(path.join(root, ".tenon", "workspace.json"), "{}")
+            await fs.writeFile(path.join(root, "AGENTS.md"), "workspace")
+            await fs.writeFile(projectFile, "project")
+          })
+          const load = SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: global,
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location({ directory: AbsolutePath.make(project) }, { projectDirectory: AbsolutePath.make(root) }),
+                  ),
+                ),
+              }),
+            ),
+          )
+          const initialized = yield* SystemContext.initialize(yield* load)
+          expect(initialized.baseline).toBe(`Instructions from: ${projectFile}\nproject`)
+        }),
+      ),
+    ),
+  )
+
   it.live("loads global and upward project AGENTS.md files as one aggregate context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

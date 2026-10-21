@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
+import { openFolderFromWorkspaceMenu } from "../utils/sidebar"
 
 const NAMES = ["alpha-service", "bravo-web", "charlie-api", "delta-tools", "echo-infra", "foxtrot-docs"]
 const worktrees = NAMES.map((name) => `/opencode-demo/${name}`)
@@ -36,9 +37,8 @@ async function openProjectDialog(page: Page) {
     )
   }, worktrees)
   await page.goto("/")
-  const add = page.getByRole("button", { name: "Open folder as project" }).first()
-  await expectAppVisible(add)
-  await add.click()
+  await expectAppVisible(page.getByRole("button", { name: "Switch workspace" }))
+  await openFolderFromWorkspaceMenu(page)
   await expect(rows(page)).toHaveCount(5)
   return page.getByRole("textbox").last()
 }

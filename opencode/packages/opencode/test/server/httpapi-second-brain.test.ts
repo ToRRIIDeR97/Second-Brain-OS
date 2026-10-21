@@ -61,7 +61,7 @@ afterEach(async () => {
 
 describe("second brain project threads HttpApi", () => {
   it.instance(
-    "lists Projects with thread directories, migrates Workspaces with threads once, and ensures idempotently",
+    "lists Projects with thread directories without migrating opened Workspaces, and ensures idempotently",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
@@ -81,8 +81,9 @@ describe("second brain project threads HttpApi", () => {
 
         const list = () =>
           request("/second-brain/project-threads", { headers }).pipe(Effect.flatMap(json<BrainProject.ThreadSummary[]>))
+        // Listing never turns opened Workspaces into Projects; only an explicit ensure does.
         const first = yield* list()
-        expect(first).toHaveLength(2)
+        expect(first).toHaveLength(1)
         const folder = first.find((item) => item.project.id === alpha.id)
         expect(folder).toMatchObject({
           threadDirectory: alphaDirectory,
@@ -91,7 +92,16 @@ describe("second brain project threads HttpApi", () => {
           rootSessionCount: 1,
         })
         expect(folder?.lastActivityAt).toBeNumber()
-        const linked = first.find((item) => item.project.id !== alpha.id)
+        const ensure = (workspaceId: string) =>
+          request("/second-brain/projects/workspace", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ workspaceId }),
+          })
+        const ensured = yield* ensure(externalSession.projectID).pipe(Effect.flatMap(json<BrainProject.Info>))
+        const second = yield* list()
+        const linked = second.find((item) => item.project.id !== alpha.id)
+        expect(linked?.project.id).toBe(ensured.id)
         expect(linked).toMatchObject({
           threadDirectory: external,
           threadDirectoryKind: "workspace",
@@ -104,24 +114,39 @@ describe("second brain project threads HttpApi", () => {
           },
         })
 
-        const second = yield* list()
-        expect(second.map((item) => item.project.id).toSorted()).toEqual(
-          first.map((item) => item.project.id).toSorted(),
-        )
-
-        const ensure = (workspaceId: string) =>
-          request("/second-brain/projects/workspace", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ workspaceId }),
-          })
-        const ensured = yield* ensure(externalSession.projectID).pipe(Effect.flatMap(json<BrainProject.Info>))
-        expect(ensured.id).toBe(linked!.project.id)
+        const again = yield* ensure(externalSession.projectID).pipe(Effect.flatMap(json<BrainProject.Info>))
+        expect(again.id).toBe(ensured.id)
         expect((yield* ensure("global")).status).toBe(400)
         expect((yield* ensure("does-not-exist")).status).toBe(404)
         expect((yield* list()).length).toBe(2)
       }),
     { git: true },
+  )
+})
+
+describe("second brain project folders HttpApi", () => {
+  it.instance("scans project folders into Projects whose threads run in the folder", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+      yield* Effect.promise(() => mkdir(path.join(test.directory, "Projects", "Alpha"), { recursive: true }))
+      const scanned = yield* request("/second-brain/projects/scan", { method: "POST", headers }).pipe(
+        Effect.flatMap(json<BrainProject.ScanResult>),
+      )
+      expect(scanned).toEqual({ folders: 1, created: 1, missing: [] })
+      const threads = yield* request("/second-brain/project-threads", { headers }).pipe(
+        Effect.flatMap(json<BrainProject.ThreadSummary[]>),
+      )
+      expect(threads.map((entry) => [entry.project.name, entry.threadDirectoryKind, entry.threadDirectory])).toEqual([
+        ["Alpha", "project", path.join(test.directory, "Projects", "Alpha")],
+      ])
+      const linked = yield* request("/second-brain/projects/link", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ folder: path.join(test.directory, "Projects") }),
+      })
+      expect(linked.status).toBe(400)
+    }),
   )
 })
 

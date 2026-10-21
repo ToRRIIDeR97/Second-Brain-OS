@@ -118,10 +118,7 @@ async function setup(page: Page) {
           lastProject: { local: directory },
         }),
       )
-      localStorage.setItem(
-        "opencode.window.browser.dat:sidebar",
-        JSON.stringify({ expanded: { __brain__: true, __other__: true } }),
-      )
+      localStorage.setItem("opencode.window.browser.dat:sidebar", JSON.stringify({ expanded: { __brain__: true } }))
     },
     { directory },
   )

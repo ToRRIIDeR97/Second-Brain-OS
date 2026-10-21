@@ -7,6 +7,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { KeyedMutex } from "@opencode-ai/core/effect/keyed-mutex"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -33,10 +34,8 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
     const opencodeProjects = yield* Project.Service
     const database = yield* Database.Service
     // One lock per Brain directory serializes calendar saves (with their timeline sync),
-    // Project mutations and the Workspace migration, so none of them interleave.
+    // Project mutations and project folder scans, so none of them interleave.
     const brainLocks = KeyedMutex.makeUnsafe<string>()
-    // Brain directories whose one-shot Workspace migration ran in this server process.
-    const migrated = new Set<string>()
     const filesystem = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
       return yield* effect.pipe(
         Effect.provide(
@@ -98,26 +97,8 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       )
     })
 
-    // One-shot migration hook: the Brain location is chosen by the renderer, so the
-    // server learns it on the first Project thread listing for that directory.
-    const migrateOnce = Effect.fn("SecondBrain.migrateOnce")(function* (known: ReadonlyArray<BrainProject.Workspace>) {
-      const brainDirectory = (yield* InstanceState.context).directory
-      if (migrated.has(brainDirectory)) return
-      const withThreads = yield* BrainProject.workspaceIdsWithThreads().pipe(
-        Effect.provideService(Database.Service, database),
-      )
-      const candidates = BrainProject.migrationCandidates({ workspaces: known, withThreads, brainDirectory })
-      const counts = yield* filesystem(BrainProject.migrateWorkspaces(candidates))
-      // A partial pass is retried on the next listing; ensureForWorkspace is idempotent.
-      if (counts.failed === 0) migrated.add(brainDirectory)
-      yield* Effect.logInfo("Second Brain workspace migration", { candidates: candidates.length, ...counts })
-    })
-
     const listProjectThreads = Effect.fn("SecondBrain.listProjectThreads")(function* () {
       const known = yield* workspaces()
-      yield* serialized(migrateOnce(known)).pipe(
-        Effect.catch(() => Effect.logWarning("Second Brain workspace migration failed; it will retry")),
-      )
       return yield* filesystem(
         Effect.gen(function* () {
           const projects = yield* BrainProject.list()
@@ -160,6 +141,44 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       return result.project
     })
 
+    const scanProjects = Effect.fn("SecondBrain.scanProjects")(function* () {
+      return yield* serialized(
+        filesystem(BrainProject.scan().pipe(Effect.provideService(Global.Service, Global.make()))),
+      ).pipe(failure("scanProjects"))
+    })
+
+    const linkProjectFolder = Effect.fn("SecondBrain.linkProjectFolder")(function* (ctx: {
+      payload: BrainProject.LinkInput
+    }) {
+      return yield* serialized(
+        filesystem(BrainProject.link(ctx.payload).pipe(Effect.provideService(Global.Service, Global.make()))),
+      ).pipe(failure("linkProjectFolder"))
+    })
+
+    const unlinkProjectFolder = Effect.fn("SecondBrain.unlinkProjectFolder")(function* (ctx: {
+      payload: BrainProject.LinkInput
+    }) {
+      return yield* serialized(
+        filesystem(BrainProject.unlink(ctx.payload).pipe(Effect.provideService(Global.Service, Global.make()))),
+      ).pipe(failure("unlinkProjectFolder"))
+    })
+
+    const readInstructions = Effect.fn("SecondBrain.readInstructions")(function* () {
+      return yield* filesystem(BrainProject.readInstructions()).pipe(failure("readInstructions", "AGENTS.md"))
+    })
+
+    const writeInstructions = Effect.fn("SecondBrain.writeInstructions")(function* (ctx: {
+      payload: BrainProject.InstructionsInput
+    }) {
+      return yield* filesystem(BrainProject.writeInstructions(ctx.payload)).pipe(
+        failure("writeInstructions", "AGENTS.md"),
+      )
+    })
+
+    const removeInstructions = Effect.fn("SecondBrain.removeInstructions")(function* () {
+      return yield* filesystem(BrainProject.removeInstructions()).pipe(failure("removeInstructions", "AGENTS.md"))
+    })
+
     const readProject = Effect.fn("SecondBrain.readProject")(function* (ctx: { query: { id: string } }) {
       return yield* filesystem(BrainProject.get(ctx.query.id)).pipe(failure("readProject", ctx.query.id))
     })
@@ -183,6 +202,12 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       .handle("createProject", createProject)
       .handle("listProjectThreads", listProjectThreads)
       .handle("ensureWorkspaceProject", ensureWorkspaceProject)
+      .handle("scanProjects", scanProjects)
+      .handle("linkProjectFolder", linkProjectFolder)
+      .handle("unlinkProjectFolder", unlinkProjectFolder)
+      .handle("readInstructions", readInstructions)
+      .handle("writeInstructions", writeInstructions)
+      .handle("removeInstructions", removeInstructions)
       .handle("readProject", readProject)
       .handle("updateProject", updateProject)
   }),

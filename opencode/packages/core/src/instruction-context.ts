@@ -10,6 +10,7 @@ import { AbsolutePath } from "./schema"
 import { SystemContext } from "./system-context/index"
 import { SystemContextRegistry } from "./system-context/registry"
 import { makeLocationNode } from "./effect/app-node"
+import { WorkspaceInstructions } from "./workspace-instructions"
 
 class File extends Schema.Class<File>("InstructionContext.File")({
   path: AbsolutePath,
@@ -43,15 +44,20 @@ const layer = Layer.effectDiscard(
       const fromProject = relative(stop, start)
       const insideProject =
         fromProject === "" || (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
+      // In a Tenon workspace the project's AGENTS.md replaces the workspace one instead of stacking.
+      const workspace = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+        ? undefined
+        : yield* WorkspaceInstructions.resolve(start, global.data).pipe(Effect.provideService(FSUtil.Service, fs))
       const discovered = new Set(
         yield* Effect.forEach(
-          Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
-            ? []
-            : yield* fs.up({
-                targets: ["AGENTS.md"],
-                start,
-                stop,
-              }),
+          workspace ??
+            (Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
+              ? []
+              : yield* fs.up({
+                  targets: ["AGENTS.md"],
+                  start,
+                  stop,
+                })),
           fs.resolve,
         ),
       )

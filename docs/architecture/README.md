@@ -60,11 +60,16 @@ controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with
 `serverSync().project.loadSessions(threadDirectory)` (kept live by
 `session.created/updated/deleted` events), adds the recent-session index for
-threads outside any Project, and groups them with
-`features/second-brain/sidebar-threads.ts` into Projects, Brain and Other
-threads. The active Project is derived from the route's thread or draft
-directory. Sidebar actions (archive, unarchive, pin through `PATCH /session/:id`;
-rename; delete through `session.remove`) apply the server's reply to every
+threads outside any Project folder, and groups them with
+`features/second-brain/sidebar-threads.ts` into Projects (the deepest Project
+folder holding the thread) and General (the rest of the workspace folder).
+Threads outside the selected workspace and its Project folders are left out.
+The active Project is derived from the route's thread or draft directory. The
+header is the workspace dropdown (`layout.home.selection`); the controller
+scans each workspace once per app session (`POST /second-brain/projects/scan`)
+and on **Scan for projects**. Sidebar actions (archive, unarchive, pin through `PATCH /session/:id`;
+rename; delete through `session.remove`, which also deletes child threads, so
+the sidebar drops the subtree and treats a 404 as already deleted) apply the server's reply to every
 loaded directory list and to the recent-session index at once, then offer a
 5-second undo from `utils/undo-action.ts` (in memory only; a deferred delete
 that has not run when the app closes is dropped). The renderer has one
@@ -91,8 +96,10 @@ state alive across route changes; it replaced the tab store.
 | Data                       | Owner and persistence                                                                                                 |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Notes                      | `packages/opencode/src/knowledge/note.ts`; workspace Markdown files                                                   |
-| Project records            | `packages/opencode/src/project/brain.ts`; workspace `projects/` Markdown cards and project folders                    |
-| Project thread directories | Derived, not stored: linked Workspace worktree, else `projects/<id>/`; thread counts read from `opencode.db`          |
+| Project records            | `packages/opencode/src/project/brain.ts`; workspace `.tenon/projects/<id>/` Markdown cards (legacy `projects/<id>/`)   |
+| Workspace manifest         | `brain.ts`; workspace `.tenon/workspace.json` (linked project folders)                                                |
+| Linked-folder index        | `brain.ts` writes, `core/src/workspace-instructions.ts` reads; `workspace-links.json` in the data folder; rebuilt by a scan |
+| Project thread directories | Derived, not stored: the card's `location.path` folder, else a linked Workspace worktree, else the card folder; thread counts read from `opencode.db` |
 | Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in `$XDG_DATA_HOME/tenon-workbench`            |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
@@ -105,33 +112,50 @@ assume the session or draft databases can be reconstructed from those files.
 
 ### Projects and thread directories
 
-Every thread belongs to a Project. `BrainProject.threadDirectory` resolves a
-Project's directory: the worktree of the OpenCode project named by
-`location.workspaceId`, otherwise the Project folder `projects/<id>/` in the
-Brain directory. Sessions keep their exact `directory`, so
-`GET /api/session?directory=<threadDirectory>` (or `project` plus `subpath`)
-returns only that Project's threads; sibling Project folders in the same Brain
-repository do not mix.
+A workspace's Projects are the subfolders of its `projects` folder (matched in
+any letter case, skipping hidden folders and legacy `project_<id>` card
+folders) and the absolute folders listed in `.tenon/workspace.json`. Each has a
+Project card whose `location.path` names the folder (workspace-relative, or
+absolute for a linked folder). `BrainProject.threadDirectory` resolves a
+Project's directory: that folder; otherwise the worktree of the OpenCode project
+named by a legacy `location.workspaceId`; otherwise the card folder. Sessions
+keep their exact `directory`, so `GET /api/session?directory=<threadDirectory>`
+returns only that Project's threads.
 
-Entry points (legacy instance routes, scoped to the Brain directory through
+Entry points (legacy instance routes, scoped to the workspace directory through
 workspace routing):
 
+- `POST /second-brain/projects/scan` writes `.tenon/workspace.json` when it is
+  missing, creates a card for every project folder without one, and points the
+  workspace's linked folders at it in the linked-folder index. It never moves or
+  deletes folders, refuses to overwrite a manifest it cannot parse, and skips a
+  folder that fails with a warning.
+- `POST /second-brain/projects/link` with `{ folder }` adds an absolute folder
+  outside the workspace (not containing it) to the manifest, then scans.
+  `POST /second-brain/projects/unlink` removes it and archives its card.
 - `GET /second-brain/project-threads` lists Projects with `threadDirectory`,
-  `threadDirectoryKind` (`workspace` or `folder`), the linked Workspace, and
-  root thread count and last activity. The first call per Brain directory in a
-  server process runs the Workspace migration: every OpenCode project with
-  root threads, other than `global` and the Brain itself, gets a Project
-  through `BrainProject.ensureForWorkspace`. It only creates Markdown cards,
-  never moves files, and logs counts only. A pass with any failure runs again
-  on the next listing. The server has no other way to
-  know which Workspace is the Brain, so the migration does not run at
-  bootstrap.
-- `POST /second-brain/projects/workspace` with `{ workspaceId }` returns the
-  Project linked to that OpenCode project id, creating one named after the
-  folder when none exists. The renderer calls it from `context/layout.tsx`
-  for folders opened during the app session, and from the sidebar's
-  open-folder flow (`mod+shift+n`, Home's Open Workspace, and
-  `tenon://open-project` deep links).
+  `threadDirectoryKind` (`project`, `workspace` or `folder`), the linked
+  Workspace, and root thread count and last activity. It no longer turns opened
+  Workspaces into Projects.
+- `GET`, `PUT` and `DELETE /second-brain/instructions` read, write (64 KiB cap)
+  and remove the `AGENTS.md` of the request's folder: the workspace root for the
+  workspace default, a Project folder for that Project's own file.
+- `POST /second-brain/projects/workspace` with `{ workspaceId }` still returns
+  or creates the Project linked to that OpenCode project id. The renderer no
+  longer calls it.
+
+### Workspace instructions
+
+`core/src/workspace-instructions.ts` resolves `AGENTS.md` for a session
+directory inside a workspace (an ancestor holds `.tenon/workspace.json`) or
+inside a linked folder (from the index): the nearest `AGENTS.md` between the
+session directory and the workspace root (exclusive), or up to the linked
+folder, wins; otherwise the workspace root's `AGENTS.md`. Both the legacy
+loader (`session/instruction.ts`) and the V2 `InstructionContext` use it, so a
+Project's file replaces the workspace default instead of stacking. Outside a
+workspace both loaders keep their usual upward lookup. External harnesses
+(Codex, ACP agents) also read `AGENTS.md` from their working folder themselves;
+that lookup is theirs and may still stack inside a git repository.
 
 ## Home navigation
 

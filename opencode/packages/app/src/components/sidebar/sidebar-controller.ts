@@ -19,14 +19,17 @@ import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import {
-  ensureWorkspaceProject,
+  linkProjectFolder,
   listProjectThreads,
+  scanProjects,
+  unlinkProjectFolder,
   updateProject,
   type ProjectThreads,
 } from "@/features/second-brain/client"
 import {
   flattenThreads,
   groupSidebarThreads,
+  isWithinDirectory,
   mergeSidebarSessions,
   projectForDirectory,
   type ThreadNode,
@@ -38,6 +41,7 @@ import {
   drainPendingDeepLinks,
 } from "@/pages/layout/deep-links"
 import { errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
+import { isServerNotFoundError } from "@/utils/server-errors"
 import { pathKey } from "@/utils/path-key"
 import { Persist, persisted } from "@/utils/persist"
 import { sessionHref } from "@/utils/session-route"
@@ -53,9 +57,8 @@ export type SidebarProjectItem = {
   entry: ProjectThreads
 }
 
+/** The group for threads in the workspace folder outside every Project. */
 export const BRAIN_GROUP = "__brain__"
-export const OTHER_GROUP = "__other__"
-const OTHER_THREAD_LIMIT = 50
 const HOME_SESSION_LIMIT = 64
 const ARCHIVED_THREAD_LIMIT = 500
 
@@ -85,7 +88,7 @@ export function createSidebarController() {
     createStore({ current: undefined as string | undefined, expanded: {} as Record<string, boolean> }),
   )
 
-  // The Brain is the Workspace selected on Home; its Second Brain data lives there.
+  // The selected workspace (also called the Brain): the sidebar shows only its Projects and threads.
   const brainDirectory = createMemo(() => {
     const available = layout.projects.list()
     const preferred = layout.home.selection().directory
@@ -112,6 +115,71 @@ export function createSidebarController() {
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
   const refreshProjects = () => invalidateProjectThreads(queryClient, server.key)
+
+  const workspaces = () => layout.projects.list()
+  const selectWorkspace = (directory: string) => layout.home.setSelection({ server: server.key, directory })
+
+  // Scan each workspace once per app session when it is first shown, so new project folders appear.
+  const scanned = new Set<string>()
+  const scan = (directory: string) =>
+    scanProjects(client(directory)).then(async (result) => {
+      await refreshProjects()
+      return result
+    })
+  createEffect(() => {
+    const directory = brainDirectory()
+    if (!directory || scanned.has(`${server.key}:${directory}`)) return
+    scanned.add(`${server.key}:${directory}`)
+    void scan(directory).catch(() => undefined)
+  })
+
+  /** "Scan for projects": rescan the selected workspace and report what changed. */
+  const scanFolders = () => {
+    const directory = brainDirectory()
+    if (!directory) return
+    void scan(directory)
+      .then((result) =>
+        showToast({
+          title: language.t("secondBrain.sidebar.scanDone"),
+          description: language.t("secondBrain.sidebar.scanResult", {
+            folders: result.folders,
+            created: result.created,
+          }),
+        }),
+      )
+      .catch(requestFailed)
+  }
+
+  /** Add a folder from anywhere on this computer as a Project of the selected workspace. */
+  const linkFolder = () => {
+    const directory = brainDirectory()
+    if (!directory || !server.current) return
+    pickDirectory({
+      server: server.current,
+      title: language.t("secondBrain.sidebar.linkFolder"),
+      multiple: false,
+      onSelect: (result) => {
+        const folder = homeProjectDirectories(result)[0]
+        if (!folder) return
+        void linkProjectFolder(client(directory), folder)
+          .then(() => refreshProjects())
+          .catch(requestFailed)
+      },
+    })
+  }
+
+  /** Linked Projects have an absolute folder; Projects inside the workspace's projects folder don't. */
+  const isLinked = (project: SidebarProjectItem) =>
+    /^([a-zA-Z]:)?[\\/]/.test(project.entry.project.location?.path ?? "")
+
+  const unlinkProject = (project: SidebarProjectItem) => {
+    const directory = brainDirectory()
+    const folder = project.entry.project.location?.path
+    if (!directory || !folder) return
+    void unlinkProjectFolder(client(directory), folder)
+      .then(() => refreshProjects())
+      .catch(requestFailed)
+  }
 
   // Per-directory thread lists, kept live by session.created/updated/deleted events.
   const directories = createMemo(() => {
@@ -184,12 +252,11 @@ export function createSidebarController() {
     return all.filter((session) => !hidden(session.id))
   })
   const groups = createMemo(() => {
-    const grouped = groupSidebarThreads({
+    return groupSidebarThreads({
       projects: projects(),
-      brainDirectory: brainDirectory(),
+      workspaceDirectory: brainDirectory(),
       sessions: sessions(),
     })
-    return { ...grouped, other: grouped.other.slice(0, OTHER_THREAD_LIMIT) }
   })
 
   const route = layout.route
@@ -233,7 +300,7 @@ export function createSidebarController() {
     const project = projectForDirectory(projects(), directory)
     if (project) return project.id
     const brain = brainDirectory()
-    if (brain && pathKey(brain) === pathKey(directory)) return BRAIN_GROUP
+    if (brain && isWithinDirectory(brain, directory)) return BRAIN_GROUP
   })
   createEffect(() => {
     const id = activeProjectID()
@@ -253,8 +320,7 @@ export function createSidebarController() {
     const value = groups()
     const nodes: ThreadNode<Session>[] = [
       ...value.projects.flatMap((group) => (expanded(group.project.id) ? group.threads : [])),
-      ...(expanded(BRAIN_GROUP) ? value.brain : []),
-      ...(expanded(OTHER_GROUP) ? value.other : []),
+      ...(expanded(BRAIN_GROUP) ? value.workspace : []),
     ]
     return flattenThreads(nodes)
   })
@@ -409,17 +475,34 @@ export function createSidebarController() {
       title: language.t("secondBrain.sidebar.threadDeleted"),
       description: threadLabel(session),
       undo: restore,
-      commit: () =>
-        serverSDK()
+      commit: () => {
+        // The server deletes a thread's children with it, so drop the whole subtree here; otherwise a
+        // child row can linger and its own delete fails with "not found".
+        const removed = () => {
+          const all = mergeSidebarSessions(directoryLists(), indexStore.sessions)
+          const gone = new Set([session.id])
+          for (let size = 0; size !== gone.size; ) {
+            size = gone.size
+            all.forEach((item) => item.parentID && gone.has(item.parentID) && gone.add(item.id))
+          }
+          all
+            .filter((item) => gone.has(item.id))
+            .concat(session)
+            .forEach((item) => {
+              dropSession(item.id)
+              homeSessions().apply({ type: "session.deleted", properties: { sessionID: item.id, info: item } })
+            })
+        }
+        return serverSDK()
           .api.session.remove({ sessionID: session.id, directory: session.directory })
-          .then(() => {
-            dropSession(session.id)
-            homeSessions().apply({ type: "session.deleted", properties: { sessionID: session.id, info: session } })
-          })
+          .then(removed)
           .catch((cause: unknown) => {
+            // Already deleted, e.g. along with its parent: treat it as done.
+            if (isServerNotFoundError(cause)) return removed()
             restore()
             throw cause
-          }),
+          })
+      },
     })
   }
 
@@ -471,7 +554,8 @@ export function createSidebarController() {
       .then((result) => result.data.filter((session) => !!session.time.archived) as Session[])
 
   /**
-   * Open a folder and make sure a Project links to it (Phase 3 merged Project model).
+   * Open a folder as a workspace and switch the sidebar to it. Its Projects come from its own
+   * projects folder, so opening a folder never adds a Project to another workspace.
    * `initEmpty` runs `git init` in an empty folder; only user-picked folders get it, never deep links.
    */
   const openFolder = async (directory: string, options: { initEmpty?: boolean } = {}) => {
@@ -492,13 +576,7 @@ export function createSidebarController() {
     ).catch(() => undefined)
     if (!project) return
     serverSync().child(directory, { bootstrap: false })[1]("project", project.id)
-    const brain = brainDirectory()
-    if (project.id === "global" || !brain || pathKey(brain) === pathKey(directory)) return
-    const linked = await ensureWorkspaceProject(client(brain), project.id).catch(() => undefined)
-    await refreshProjects()
-    if (!linked) return
-    setState("current", linked.id)
-    setState("expanded", linked.id, true)
+    selectWorkspace(directory)
   }
 
   const chooseFolder = () =>
@@ -620,6 +698,12 @@ export function createSidebarController() {
   return {
     location,
     brainDirectory,
+    workspaces,
+    selectWorkspace,
+    scanFolders,
+    linkFolder,
+    isLinked,
+    unlinkProject,
     projects,
     groups,
     loading: () => projectsQuery.isLoading,

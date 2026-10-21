@@ -51,6 +51,10 @@ export const SecondBrainPaths = {
   project: "/second-brain/project",
   projectThreads: "/second-brain/project-threads",
   projectWorkspace: "/second-brain/projects/workspace",
+  projectScan: "/second-brain/projects/scan",
+  projectLink: "/second-brain/projects/link",
+  projectUnlink: "/second-brain/projects/unlink",
+  instructions: "/second-brain/instructions",
 } as const
 
 export const SecondBrainApi = HttpApi.make("secondBrain").add(
@@ -103,6 +107,39 @@ export const SecondBrainApi = HttpApi.make("secondBrain").add(
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         payload: BrainProject.EnsureWorkspaceInput,
         success: described(BrainProject.Info, "Project linked to the Workspace"),
+        error: errors,
+      }),
+      HttpApiEndpoint.post("scanProjects", SecondBrainPaths.projectScan, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        success: described(BrainProject.ScanResult, "Project folders scanned"),
+        error: errors,
+      }),
+      HttpApiEndpoint.post("linkProjectFolder", SecondBrainPaths.projectLink, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        payload: BrainProject.LinkInput,
+        success: described(BrainProject.ScanResult, "Folder linked as a Project"),
+        error: errors,
+      }),
+      HttpApiEndpoint.post("unlinkProjectFolder", SecondBrainPaths.projectUnlink, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        payload: BrainProject.LinkInput,
+        success: described(BrainProject.ScanResult, "Linked folder removed"),
+        error: errors,
+      }),
+      HttpApiEndpoint.get("readInstructions", SecondBrainPaths.instructions, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        success: described(BrainProject.Instructions, "AGENTS.md in this folder"),
+        error: errors,
+      }),
+      HttpApiEndpoint.put("writeInstructions", SecondBrainPaths.instructions, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        payload: BrainProject.InstructionsInput,
+        success: described(BrainProject.Instructions, "AGENTS.md saved"),
+        error: errors,
+      }),
+      HttpApiEndpoint.delete("removeInstructions", SecondBrainPaths.instructions, {
+        query: Schema.Struct(WorkspaceRoutingQueryFields),
+        success: described(BrainProject.Instructions, "AGENTS.md removed"),
         error: errors,
       }),
       HttpApiEndpoint.get("readProject", SecondBrainPaths.project, {

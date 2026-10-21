@@ -3,15 +3,17 @@
 - Status: implemented (sidebar-only navigation, roadmap Phase 4)
 - Companion: [`PRODUCT-BRIEF-V1.md`](./PRODUCT-BRIEF-V1.md)
 - Roadmap: [`t3-parity-roadmap`](../../implementations/t3-parity-roadmap/implementation.md)
-- Updated: 2026-10-14
+- Updated: 2026-10-20
 
 ## Navigation model
 
-Tenon Workbench has one Brain: the Workspace selected on Home, where notes,
-Project cards and the calendar live. Every thread belongs to a Project, and
-every Project owns a thread directory (its linked Workspace, otherwise its
-Project folder). The left sidebar is the only navigation. There is no tab
-strip and no separate workspace page.
+The sidebar shows one workspace at a time: an opened folder, chosen from the
+workspace dropdown at the top of the sidebar (the same selection as Home's
+picker). Its notes, Project cards and calendar live in that folder. The
+workspace's Projects are the folders inside its `projects` folder (any letter
+case) plus folders linked from elsewhere on the computer. A Project's threads
+run in its folder. Threads from other workspaces never show. The left sidebar
+is the only navigation. There is no tab strip and no separate workspace page.
 
 ```mermaid
 flowchart LR
@@ -19,16 +21,16 @@ flowchart LR
     Sidebar --> Notes[Notes]
     Sidebar --> Calendar[Calendar]
     Sidebar --> Activity[Activity]
-    Sidebar --> Projects[Projects section]
+    Sidebar --> Workspace[Workspace dropdown]
     Sidebar --> Settings[Settings dialog]
 
-    Projects --> Project[Project row]
+    Workspace --> Project[Project row]
     Project --> NewThread[New thread draft]
     Project --> Thread[Root thread]
     Thread --> Child[Child threads, shown while their lineage is open]
-    Projects --> Brain[Brain group]
-    Projects --> Other[Other threads]
-    Projects --> Cards[Projects page: cards and management]
+    Workspace --> General[General group]
+    Workspace --> Menu[Switch, open folder, scan, link, instructions]
+    Menu --> Cards[Projects page: cards and management]
 ```
 
 ## Sidebar
@@ -40,30 +42,36 @@ Projects panel beside it.
    then **Home**, **Notes** (labelled Knowledge), **Calendar** and
    **Activity** as icons with a label underneath (the current page gets a
    pill highlight), and **Settings** at the bottom.
-2. **Projects** panel. The heading opens `/projects`, the card management
-   page. The folder button opens a folder as a Project.
+2. **Workspace** panel. The heading is a dropdown: the opened folders (the
+   current one checked), **Open folder as workspace**, **Scan for projects**,
+   **Link a folder as a project**, **Workspace instructions** (the workspace's
+   default `AGENTS.md`) and **Manage projects** (`/projects`). The button next
+   to it scans again. Each workspace is also scanned once per app session when
+   it is first shown.
    - One row per active Project, sorted by name, expandable. Expanding shows
      **New thread** and the Project's root threads: pinned threads first (most
      recently pinned first, with a pin icon), then the rest newest first. A
      running thread shows an accent dot. Child threads (`parentID`) nest under their
      parent while that parent or one of its children is open.
-   - **Brain**: threads that run in the Brain folder itself and belong to no
-     Project.
-   - **Other threads**: threads in any other folder, such as non-git folders
-     (OpenCode project `global`) or Workspaces no Project links to. Shows the
-     50 most recent. Nothing is hidden because it lacks a Project.
+     A thread belongs to the Project whose folder holds it (the deepest one for
+     nested folders).
+   - **General**: threads elsewhere in the workspace folder, at its root or in
+     a subfolder that is not a Project.
+   - Threads in folders outside the workspace and its linked folders belong
+     to another workspace and are not listed. Home still lists recent threads
+     from every folder.
 3. **Settings** at the bottom opens the settings dialog.
 
 Row actions:
 
 | Row | Actions |
 |---|---|
-| Project | New thread, open project card (`/projects?project=<id>`), archived threads, archive project |
+| Project | New thread, open project card (`/projects?project=<id>`), archived threads, instructions, archive project (unlink folder for a linked folder) |
 | Thread | Rename (also double-click), pin / unpin, fork, archive, delete |
 
 Pins are stored on the thread (`metadata.pinned`, the pin time) so they survive
-restarts. Pinned threads sort first inside their own group (Project, Brain or
-Other threads); pinning a child thread does not move it out of its parent.
+restarts. Pinned threads sort first inside their own group (a Project or
+General); pinning a child thread does not move it out of its parent.
 
 **Archived threads** opens a dialog listing the Project's archived threads
 (threads in its thread directory, up to the 500 most recently updated), each
@@ -96,9 +104,9 @@ The titlebar is window chrome only: the sidebar toggle, back and forward
 |---|---|---|
 | `/` | Home | Home |
 | `/notes`, `/calendar`, `/activity` | That page | That item |
-| `/projects`, `/projects?project=<id>` | Project cards; a selected card | Projects heading |
+| `/projects`, `/projects?project=<id>` | Project cards; a selected card | None |
 | `/new-thread?project=<id>&draftId=<id>` | Draft composer in the Project's thread directory | The Project |
-| `/server/<server>/session/<id>` | A thread | The Project whose thread directory equals the thread's directory, else Brain |
+| `/server/<server>/session/<id>` | A thread | The Project whose folder holds the thread's directory, else General |
 
 Redirects keep old links working: `/brain` and `/workspaces` go to `/`,
 `/new-session?draftId=<id>` goes to the new-thread route, `/<dir>/session/<id>`
@@ -120,8 +128,8 @@ deleted.
 
 | Key | Action |
 |---|---|
-| `mod+n` | New thread in the current Project (else in the Brain) |
-| `mod+shift+n` | Open a folder as a Project |
+| `mod+n` | New thread in the current Project (else in the workspace folder) |
+| `mod+shift+n` | Open a folder as a workspace |
 | `mod+b` | Toggle the sidebar |
 | `alt+up` / `alt+down` | Previous / next visible thread in the sidebar |
 | `mod+shift+[` / `mod+shift+]` | Previous / next Project |
@@ -142,14 +150,14 @@ Shortcuts):
 | `ArrowUp` | Previous prompt from history (empty composer) |
 
 The desktop File menu uses `Cmd+N` for a new thread, `Cmd+Shift+N` to open a
-folder as a Project and `Cmd+Alt+N` for a new window. `mod+t`, `mod+shift+t`
+folder as a workspace and `Cmd+Alt+N` for a new window. `mod+t`, `mod+shift+t`
 and tab-closing `mod+w` were removed with the tab strip. In-session panels
 keep their own `mod+w`.
 
 ## Deep links
 
 The app shell handles `tenon://open-project?directory=<path>` (opens the
-folder as a Project) and `tenon://new-session?directory=<path>&prompt=<text>`
+folder as a workspace and selects it) and `tenon://new-session?directory=<path>&prompt=<text>`
 (opens a draft in that folder's Project, or in the folder itself).
 
 ## Pages

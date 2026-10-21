@@ -80,7 +80,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (path === "/api/health" && config.protocol === "v2")
       return json(route, { healthy: true, version: "2.0.0", pid: 1 })
     if (path.startsWith("/second-brain/")) {
-      const threads = (typeof config.projectThreads === "function" ? config.projectThreads() : config.projectThreads) ?? []
+      const threads =
+        (typeof config.projectThreads === "function" ? config.projectThreads() : config.projectThreads) ?? []
       if (path === "/second-brain/project-threads") return json(route, threads)
       if (path === "/second-brain/projects")
         return json(
@@ -89,6 +90,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         )
       if (path === "/second-brain/calendar") return json(route, { version: 2, revision: "e2e", events: [], tasks: [] })
       if (path === "/second-brain/notes") return json(route, [])
+      if (path === "/second-brain/projects/scan")
+        return json(route, { folders: threads.length, created: 0, missing: [] })
     }
     if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })
     if (path === "/provider")

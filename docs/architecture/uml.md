@@ -78,10 +78,15 @@ Notes on the class view:
   rules, scoped to a project.
 - `BrainProject` and `KnowledgeNote` are Markdown files. `CalendarSnapshot` is
   one JSON file per location. None of them is stored in SQLite.
-- `BrainProject.location.workspaceId` is an OpenCode `Project.id`. A
-  BrainProject's thread directory is that Project's worktree, or
-  `projects/<id>/` when it is unlinked. Sessions belong to it by exact
+- `BrainProject.location.path` names the Project's folder (inside the
+  workspace's `projects` folder, or an absolute linked folder). A legacy
+  `location.workspaceId` is an OpenCode `Project.id`. A BrainProject's thread
+  directory is its folder, else that Project's worktree, else its card folder
+  `.tenon/projects/<id>/`. Sessions belong to it by the folder holding their
   `directory`, not by a stored foreign key.
+- `WorkspaceManifest` (`.tenon/workspace.json`, linked folders) marks a
+  workspace root. The linked-folder index (`workspace-links.json` in the data
+  folder) maps linked folders back to their workspace; a scan rebuilds it.
 
 ## Behavioral views
 
@@ -178,11 +183,12 @@ Later turns in the same runtime send only the user message. See
 | Subject | Kind | Views | Source |
 | --- | --- | --- | --- |
 | Renderer routing and server connection | Subsystem | Component, Deployment, Sequence: startup | `app/src/app.tsx`, `app/src/utils/server-protocol.ts` |
-| Sidebar navigation (rail, Projects panel, Brain, Other threads) and drafts | Subsystem | Component; text in [README](README.md#product-entry-points-and-persistence) and the [navigation map](../product/NAVIGATION-MAP-V1.md) | `app/src/components/second-brain-sidebar.tsx`, `app/src/components/sidebar/sidebar-controller.ts`, `app/src/features/second-brain/sidebar-threads.ts`, `app/src/context/global-sync/home-session-index.ts` (recent-session index shared with Home), `app/src/context/drafts.tsx`, `app/src/components/sidebar/dialog-archived-threads.tsx` |
+| Sidebar navigation (rail, workspace dropdown, Projects, General) and drafts | Subsystem | Component; text in [README](README.md#product-entry-points-and-persistence) and the [navigation map](../product/NAVIGATION-MAP-V1.md) | `app/src/components/second-brain-sidebar.tsx`, `app/src/components/sidebar/sidebar-controller.ts`, `app/src/features/second-brain/sidebar-threads.ts`, `app/src/context/global-sync/home-session-index.ts` (recent-session index shared with Home), `app/src/context/drafts.tsx`, `app/src/components/sidebar/dialog-archived-threads.tsx`, `app/src/components/sidebar/dialog-instructions.tsx` |
 | Page frame and visual system (Material 3 shape and motion tokens) | Subsystem | Text in [README](README.md#product-entry-points-and-persistence) | `app/src/components/page.tsx`, `ui/src/v2/styles/theme.css`, `ui/src/theme/v2/mapping.ts`, `ui/src/v2/components/*-v2.css` |
 | Preload and IPC | Subsystem | Component, Sequence: startup | `desktop/src/preload/index.ts`, `desktop/src/main/ipc.ts` |
 | Server launch and lifecycle | Subsystem | Deployment, State: sidecar, Sequence: startup | `desktop/src/main/server.ts`, `desktop/src/main/sidecar.ts`, `desktop/src/main/sidecar-supervisor.ts` |
 | Second Brain notes, projects, calendar | Subsystem | Component, Class, Activity: write, State: project status | `opencode/src/knowledge/`, `opencode/src/project/brain.ts`, `opencode/src/planner/calendar.ts` |
+| Workspace project scan and AGENTS.md defaults | Critical workflow | Class; text in [README](README.md#projects-and-thread-directories) | `opencode/src/project/brain.ts` (`scan`, `link`, `unlink`, instructions), `core/src/workspace-instructions.ts`, `core/src/instruction-context.ts`, `opencode/src/session/instruction.ts` |
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
 | Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |

@@ -1,12 +1,18 @@
 import { expect, type Page } from "@playwright/test"
 
-/** Start with the sidebar's Brain and Other threads groups expanded so their threads are clickable. */
+/** Start with the sidebar's workspace thread group (General) expanded so its threads are clickable. */
+
+/** Open the sidebar's workspace dropdown and choose "Open folder as workspace". */
+export async function openFolderFromWorkspaceMenu(page: Page) {
+  const menu = page.getByRole("button", { name: "Switch workspace" })
+  await expect(menu).toBeVisible()
+  await menu.click()
+  await page.getByRole("menuitem", { name: "Open folder as workspace" }).click()
+}
+
 export async function expandSidebarThreadGroups(page: Page) {
   await page.addInitScript(() => {
-    localStorage.setItem(
-      "opencode.window.browser.dat:sidebar",
-      JSON.stringify({ expanded: { __brain__: true, __other__: true } }),
-    )
+    localStorage.setItem("opencode.window.browser.dat:sidebar", JSON.stringify({ expanded: { __brain__: true } }))
   })
 }
 

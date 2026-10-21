@@ -5,7 +5,10 @@ import { mockOpenCodeServer } from "../utils/mock-server"
 
 const brain = fixture.directory
 const repo = "C:/OpenCode/Repo"
-const scratch = "C:/Temp/scratch"
+// A non-project folder inside the workspace: its threads show in the General group.
+const scratch = `${brain}/development/scratch`
+// A folder in no open workspace: its threads never show in this workspace's sidebar.
+const outside = "C:/Temp/outside"
 
 const project = {
   project: {
@@ -86,11 +89,15 @@ test("the sidebar is the only navigation", async ({ page }) => {
     await sidebar(page).locator(`[data-sidebar-item="${item}"]`).click()
     await expect(page).toHaveURL(path)
   }
-  await sidebar(page).getByRole("button", { name: "Projects", exact: true }).click()
+  // The Projects page is reached from the workspace menu.
+  await sidebar(page).getByRole("button", { name: "Switch workspace" }).click()
+  await page.getByRole("menuitem", { name: "Manage projects" }).click()
   await expect(page).toHaveURL(/\/projects$/)
 })
 
-test("groups threads by Project, Brain and Other threads, and starts a thread in a Project", async ({ page }) => {
+test("groups threads by Project and the workspace, hides other workspaces, and starts a thread in a Project", async ({
+  page,
+}) => {
   await openApp(page, {
     projects: [project],
     sessions: [
@@ -98,6 +105,7 @@ test("groups threads by Project, Brain and Other threads, and starts a thread in
       thread("ses_child", repo, "Repo child thread", 1_700_000_000_500, "ses_repo"),
       thread("ses_brain", brain, "Brain thread", 1_700_000_001_000),
       thread("ses_scratch", scratch, "Scratch thread", 1_700_000_002_000),
+      thread("ses_outside", outside, "Outside thread", 1_700_000_003_000),
     ],
   })
   await page.goto("/")
@@ -110,12 +118,11 @@ test("groups threads by Project, Brain and Other threads, and starts a thread in
   await expect(projectGroup.getByText("Brain thread", { exact: true })).toHaveCount(0)
 
   const brainGroup = sidebar(page).locator('[data-sidebar-group="__brain__"]')
-  await brainGroup.getByRole("button", { name: "Brain", exact: true }).click()
+  await brainGroup.getByRole("button", { name: "General", exact: true }).click()
   await expect(brainGroup.getByText("Brain thread", { exact: true })).toBeVisible()
-
-  const otherGroup = sidebar(page).locator('[data-sidebar-group="__other__"]')
-  await otherGroup.getByRole("button", { name: "Other threads", exact: true }).click()
-  await expect(otherGroup.getByText("Scratch thread", { exact: true })).toBeVisible()
+  await expect(brainGroup.getByText("Scratch thread", { exact: true })).toBeVisible()
+  // Workspaces never mix: a thread from another folder stays out of this sidebar.
+  await expect(sidebar(page).getByText("Outside thread", { exact: true })).toHaveCount(0)
 
   await projectGroup.locator("[data-sidebar-new-thread]").click()
   await expect(page).toHaveURL(/\/new-thread\?project=prj_repo&draftId=[^&]+$/)
@@ -166,8 +173,8 @@ test("threads created or archived elsewhere update the sidebar live", async ({ p
   await openApp(page, { projects: [project], sessions, events: () => events.splice(0, 1) })
   await page.goto("/")
 
-  const otherGroup = sidebar(page).locator('[data-sidebar-group="__other__"]')
-  await otherGroup.getByRole("button", { name: "Other threads", exact: true }).click()
+  const otherGroup = sidebar(page).locator('[data-sidebar-group="__brain__"]')
+  await otherGroup.getByRole("button", { name: "General", exact: true }).click()
   await expect(otherGroup.getByText("Scratch thread", { exact: true })).toBeVisible()
 
   const created = thread("ses_live", scratch, "Live thread", 1_700_000_003_000)

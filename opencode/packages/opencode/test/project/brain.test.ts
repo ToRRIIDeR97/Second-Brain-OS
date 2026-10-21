@@ -5,6 +5,7 @@ import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -87,7 +88,7 @@ Release an installable beta.
 
 Keep this body intact.
 `
-    const card = BrainProject.decode(source)
+    const card = BrainProject.decode(source, "projects/project_01ABC.md")
 
     expect(card.info.outcome).toBe("Release an installable beta.")
     expect(card.info.folder).toBe("projects/project_01ABC")
@@ -187,7 +188,8 @@ Keep this body intact.
     )
     expect(Exit.isFailure(second)).toBe(true)
     expect(Exit.isFailure(second) ? Cause.squash(second.cause) : undefined).toBeInstanceOf(BrainProject.ConflictError)
-    const folders = existsSync(path.join(tmp.path, "projects")) ? readdirSync(path.join(tmp.path, "projects")) : []
+    const cards = path.join(tmp.path, ".tenon", "projects")
+    const folders = existsSync(cards) ? readdirSync(cards) : []
     expect(folders).toHaveLength(1)
   })
 
@@ -267,38 +269,11 @@ describe("BrainProject workspace threads", () => {
     expect(existsSync(path.join(tmp.path, "projects", "project_01FLAT", "notes", ".gitkeep"))).toBe(true)
   })
 
-  test("migration only targets real Workspaces with threads and is idempotent", async () => {
-    await using tmp = await tmpdir()
-    const workspaces = [
-      { id: "global", worktree: "/" },
-      { id: "proj_brain", worktree: tmp.path },
-      { id: "proj_busy", worktree: "/work/busy" },
-      { id: "proj_idle", worktree: "/work/idle" },
-    ]
-    const candidates = BrainProject.migrationCandidates({
-      workspaces,
-      withThreads: new Set(["global", "proj_brain", "proj_busy"]),
-      brainDirectory: tmp.path,
-    })
-    expect(candidates.map((workspace) => workspace.id)).toEqual(["proj_busy"])
-    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({
-      created: 1,
-      linked: 0,
-      failed: 0,
-    })
-    expect(await run(tmp.path, BrainProject.migrateWorkspaces(candidates))).toEqual({
-      created: 0,
-      linked: 1,
-      failed: 0,
-    })
-    const projects = await run(tmp.path, BrainProject.list())
-    expect(projects.map((project) => project.location?.workspaceId)).toEqual(["proj_busy"])
-  })
-
   test("list skips stray and malformed cards, prefers the managed card, and ignores mismatched ids", async () => {
     await using tmp = await tmpdir()
     const created = await run(tmp.path, BrainProject.create({ name: "Valid", outcome: "Keep listing" }))
     const projects = path.join(tmp.path, "projects")
+    mkdirSync(projects, { recursive: true })
     const card = (id: string, title: string) =>
       `---\nversion: 2\nid: ${id}\ntitle: ${title}\nstatus: active\n---\n${title} outcome.\n`
     writeFileSync(path.join(projects, "README.md"), "# Projects\n\nHand-written index.\n")
@@ -348,7 +323,9 @@ describe("BrainProject workspace threads", () => {
     const alpha = await run(tmp.path, BrainProject.create({ name: "Alpha", outcome: "A" }))
     const beta = await run(tmp.path, BrainProject.create({ name: "Beta", outcome: "B" }))
     const timeline = (id: string) =>
-      PlannerCalendar.decode(readFileSync(path.join(tmp.path, "projects", id, "timeline", "calendar.json"), "utf8"))
+      PlannerCalendar.decode(
+        readFileSync(path.join(tmp.path, ".tenon", "projects", id, "timeline", "calendar.json"), "utf8"),
+      )
     const event = (title: string) => ({
       id: "event_a",
       title,
@@ -372,5 +349,124 @@ describe("BrainProject workspace threads", () => {
     await sync("rev_3", "Renamed kickoff")
     expect(timeline(alpha.id)).toMatchObject({ revision: "rev_3", events: [{ title: "Renamed kickoff" }] })
     expect(timeline(beta.id).revision).toBe("")
+  })
+})
+
+describe("BrainProject project folders", () => {
+  const run = <A, E>(
+    directory: string,
+    data: string,
+    effect: Effect.Effect<
+      A,
+      E,
+      Location.Service | LocationMutation.Service | FSUtil.Service | FileMutation.Service | Global.Service
+    >,
+  ) =>
+    Effect.runPromise(
+      effect.pipe(
+        Effect.provide(LocationMutation.locationLayer),
+        Effect.provideService(Location.Service, {
+          directory: AbsolutePath.make(directory),
+          project: { id: ProjectV2.ID.global, directory: AbsolutePath.make(directory) },
+        }),
+        Effect.provide(LayerNode.compile(FSUtil.node)),
+        Effect.provide(LayerNode.compile(FileMutation.node)),
+        Effect.provide(Global.layerWith({ data })),
+      ),
+    )
+  const runExit = <A, E>(
+    directory: string,
+    data: string,
+    effect: Effect.Effect<
+      A,
+      E,
+      Location.Service | LocationMutation.Service | FSUtil.Service | FileMutation.Service | Global.Service
+    >,
+  ) => run(directory, data, Effect.exit(effect))
+
+  /** The user's layout: `Projects/` (capital P) with plain folders, plus noise that is not a project. */
+  const workspace = (root: string) => {
+    for (const folder of [
+      "Projects/Alpha",
+      "Projects/Beta",
+      "Projects/.hidden",
+      "projects/project_01OLD",
+      "development/X",
+    ])
+      mkdirSync(path.join(root, folder), { recursive: true })
+    writeFileSync(path.join(root, "Projects", "notes.md"), "not a folder")
+  }
+
+  test("scan gives each projects/ subfolder one card and is idempotent", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    const data = path.join(tmp.path, "data")
+    workspace(root)
+    expect(await run(root, data, BrainProject.scan())).toEqual({ folders: 2, created: 2, missing: [] })
+    expect(existsSync(path.join(root, ".tenon", "workspace.json"))).toBe(true)
+    expect(await run(root, data, BrainProject.scan())).toEqual({ folders: 2, created: 0, missing: [] })
+    const listed = await run(root, data, BrainProject.list())
+    expect(listed.map((project) => project.name).toSorted()).toEqual(["Alpha", "Beta"])
+    const alpha = listed.find((project) => project.name === "Alpha")!
+    expect(await run(root, data, BrainProject.threadDirectory(alpha))).toMatchObject({
+      kind: "project",
+      directory: path.join(root, "Projects", "Alpha"),
+    })
+    // The project folders themselves are untouched; cards live under .tenon.
+    expect(readdirSync(path.join(root, "Projects", "Alpha"))).toEqual([])
+  })
+
+  test("link adds an outside folder, indexes it for AGENTS.md lookup, and unlink archives its card", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    const data = path.join(tmp.path, "data")
+    const outside = path.join(tmp.path, "repos", "tool")
+    workspace(root)
+    mkdirSync(outside, { recursive: true })
+    expect(await run(root, data, BrainProject.link({ folder: outside }))).toEqual({
+      folders: 3,
+      created: 3,
+      missing: [],
+    })
+    expect(JSON.parse(readFileSync(path.join(data, "workspace-links.json"), "utf8"))).toEqual({ [outside]: root })
+    const manifest = JSON.parse(readFileSync(path.join(root, ".tenon", "workspace.json"), "utf8"))
+    expect(manifest).toEqual({ version: 1, linkedFolders: [outside] })
+
+    const inside = await runExit(root, data, BrainProject.link({ folder: path.join(root, "development") }))
+    expect(Exit.isFailure(inside) ? Cause.squash(inside.cause) : undefined).toMatchObject({
+      reason: "overlaps_workspace",
+    })
+    const relative = await runExit(root, data, BrainProject.link({ folder: "repos/tool" }))
+    expect(Exit.isFailure(relative) ? Cause.squash(relative.cause) : undefined).toMatchObject({
+      reason: "invalid_folder",
+    })
+
+    await run(root, data, BrainProject.unlink({ folder: outside }))
+    const tool = (await run(root, data, BrainProject.list())).find((project) => project.name === "tool")
+    expect(tool?.status).toBe("archived")
+    expect(JSON.parse(readFileSync(path.join(data, "workspace-links.json"), "utf8"))).toEqual({})
+  })
+
+  test("a manifest that cannot be read is never overwritten", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    mkdirSync(path.join(root, ".tenon"), { recursive: true })
+    writeFileSync(path.join(root, ".tenon", "workspace.json"), "{ hand edited")
+    const exit = await runExit(root, path.join(tmp.path, "data"), BrainProject.scan())
+    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({ reason: "invalid_manifest" })
+    expect(readFileSync(path.join(root, ".tenon", "workspace.json"), "utf8")).toBe("{ hand edited")
+  })
+
+  test("instructions read, write and remove the folder's own AGENTS.md", async () => {
+    await using tmp = await tmpdir()
+    const data = path.join(tmp.path, "data")
+    expect(await run(tmp.path, data, BrainProject.readInstructions())).toEqual({
+      path: path.join(tmp.path, "AGENTS.md"),
+      content: null,
+    })
+    expect((await run(tmp.path, data, BrainProject.writeInstructions({ content: "Be brief." }))).content).toBe(
+      "Be brief.",
+    )
+    expect((await run(tmp.path, data, BrainProject.removeInstructions())).content).toBeNull()
   })
 })

@@ -27,7 +27,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Toggle sidebar",
   "command.project.open": "Open project",
-  "secondBrain.command.openFolder": "Open folder as project",
+  "secondBrain.command.openFolder": "Open folder as workspace",
   "secondBrain.command.undo": "Undo last sidebar action",
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
@@ -432,7 +432,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Runs after creating a new workspace (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
 
-
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
   "context.breakdown.system": "System",
@@ -509,8 +508,6 @@ export const dict = {
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
-
-
   "toast.session.export.success.title": "Session exported",
   "toast.session.export.success.description": "Saved session to {{filename}}",
   "toast.session.export.failed.title": "Failed to export session",
@@ -560,7 +557,8 @@ export const dict = {
   "error.chain.didYouMean": "Did you mean: {{suggestions}}",
   "error.chain.modelNotFound": "Model not found: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Check your config (opencode.json) provider/model names",
-  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, Tenon Workbench does not support MCP authentication yet.',
+  "error.chain.mcpFailed":
+    'MCP server "{{name}}" failed. Note, Tenon Workbench does not support MCP authentication yet.',
   "error.chain.providerAuthFailed": "Provider authentication failed ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Failed to initialize provider "{{provider}}". Check credentials and configuration.',
@@ -701,7 +699,8 @@ export const dict = {
   "session.revertDock.expand": "Expand rolled back messages",
   "session.revertDock.restore": "Restore message",
   "secondBrain.editFromHere.title": "Restore files?",
-  "secondBrain.editFromHere.description": "Editing from here also restores these files to their state before this message.",
+  "secondBrain.editFromHere.description":
+    "Editing from here also restores these files to their state before this message.",
   "secondBrain.editFromHere.unavailable": "The list of changed files could not be loaded.",
   "secondBrain.editFromHere.confirm": "Restore files",
 
@@ -835,10 +834,7 @@ export const dict = {
   "secondBrain.sidebar.projectsSection": "Projects",
   "secondBrain.sidebar.manageProjects": "Manage projects",
   "secondBrain.sidebar.newThread": "New thread",
-  "secondBrain.sidebar.brain": "Brain",
-  "secondBrain.sidebar.otherThreads": "Other threads",
   "secondBrain.sidebar.noThreads": "No threads yet",
-  "secondBrain.sidebar.noProjects": "Open a folder to add a project",
   "secondBrain.sidebar.running": "Running",
   "secondBrain.sidebar.projectActions": "Project actions",
   "secondBrain.sidebar.threadActions": "Thread actions",
@@ -857,6 +853,26 @@ export const dict = {
   "secondBrain.sidebar.archivedThreads": "Archived threads",
   "secondBrain.sidebar.noArchivedThreads": "No archived threads",
   "secondBrain.sidebar.unarchive": "Unarchive",
+  "secondBrain.sidebar.workspaceThreads": "General",
+  "secondBrain.sidebar.switchWorkspace": "Switch workspace",
+  "secondBrain.sidebar.noWorkspace": "Open a folder to start",
+  "secondBrain.sidebar.scanProjects": "Scan for projects",
+  "secondBrain.sidebar.scanDone": "Projects scanned",
+  "secondBrain.sidebar.scanResult": "{{folders}} project folders, {{created}} new",
+  "secondBrain.sidebar.linkFolder": "Link a folder as a project",
+  "secondBrain.sidebar.unlinkFolder": "Unlink folder",
+  "secondBrain.sidebar.workspaceInstructions": "Workspace instructions",
+  "secondBrain.sidebar.projectInstructions": "Instructions",
+  "secondBrain.sidebar.noProjectFolders": "Add folders to this workspace's projects folder, then scan",
+  "secondBrain.instructions.workspaceHint":
+    "The default AGENTS.md for every project in this workspace that has none of its own.",
+  "secondBrain.instructions.projectOwn": "This project's AGENTS.md replaces the workspace default.",
+  "secondBrain.instructions.projectDefault": "This project uses the workspace default.",
+  "secondBrain.instructions.customize": "Customize for this project",
+  "secondBrain.instructions.useDefault": "Use workspace default",
+  "secondBrain.instructions.confirmUseDefault": "Delete this project's AGENTS.md?",
+  "secondBrain.instructions.placeholder": "Instructions for agents working here, in Markdown",
+  "secondBrain.instructions.saved": "Instructions saved",
   "secondBrain.workspace": "Workspace",
   "secondBrain.empty.workspace": "Open a project to use this feature",
   "secondBrain.error.request": "The request could not be completed",
@@ -1243,7 +1259,6 @@ export const dict = {
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
   "settings.general.row.wayland.tooltip":
     "On Linux with mixed refresh-rate monitors, native Wayland can be more stable.",
-
 
   "settings.updates.row.startup.title": "Check for updates on startup",
   "settings.updates.row.startup.description": "Automatically check for updates when Tenon Workbench launches",

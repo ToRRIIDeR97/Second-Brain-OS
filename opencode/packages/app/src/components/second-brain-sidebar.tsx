@@ -1,6 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
-import { createSignal, For, type JSX, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
@@ -12,11 +12,11 @@ import { useSettingsDialog } from "@/components/settings-dialog"
 import {
   BRAIN_GROUP,
   createSidebarController,
-  OTHER_GROUP,
   type SidebarController,
   type SidebarProjectItem,
 } from "@/components/sidebar/sidebar-controller"
 import { DialogArchivedThreads } from "@/components/sidebar/dialog-archived-threads"
+import { DialogInstructions } from "@/components/sidebar/dialog-instructions"
 import type { ThreadNode } from "@/features/second-brain/sidebar-threads"
 import { sessionPinnedAt } from "@/utils/session"
 import { sessionTitle } from "@/utils/session-title"
@@ -97,41 +97,29 @@ export function SecondBrainSidebar() {
             data-sidebar-section="projects"
             class="flex min-h-0 w-[248px] flex-1 flex-col overflow-y-auto pb-3 pr-2 pt-1"
           >
-            <SectionHeader
-              id="projects"
-              label={language.t("secondBrain.sidebar.projectsSection")}
-              active={path() === "/projects"}
-              onLabel={() => navigate("/projects")}
-              labelTitle={language.t("secondBrain.sidebar.manageProjects")}
-              action={{
-                label: language.t("secondBrain.command.openFolder"),
-                icon: <Icon name="folder-add-left" size="small" />,
-                run: ctrl.chooseFolder,
-              }}
-            />
-            <For each={ctrl.groups().projects}>
-              {(group) => <ProjectGroup ctrl={ctrl} project={group.project} threads={group.threads} />}
-            </For>
-            <Show when={!ctrl.loading() && ctrl.projects().length === 0}>
-              <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">
-                {language.t("secondBrain.sidebar.noProjects")}
-              </p>
-            </Show>
-            <Show when={ctrl.brainDirectory()}>
+            <WorkspaceHeader ctrl={ctrl} />
+            <Show
+              when={ctrl.brainDirectory()}
+              fallback={
+                <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">
+                  {language.t("secondBrain.sidebar.noWorkspace")}
+                </p>
+              }
+            >
+              <For each={ctrl.groups().projects}>
+                {(group) => <ProjectGroup ctrl={ctrl} project={group.project} threads={group.threads} />}
+              </For>
+              <Show when={!ctrl.loading() && ctrl.projects().length === 0}>
+                <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">
+                  {language.t("secondBrain.sidebar.noProjectFolders")}
+                </p>
+              </Show>
               <ThreadGroup
                 ctrl={ctrl}
                 id={BRAIN_GROUP}
-                label={language.t("secondBrain.sidebar.brain")}
-                threads={ctrl.groups().brain}
+                label={language.t("secondBrain.sidebar.workspaceThreads")}
+                threads={ctrl.groups().workspace}
                 onNewThread={ctrl.newBrainThread}
-              />
-            </Show>
-            <Show when={ctrl.groups().other.length > 0}>
-              <ThreadGroup
-                ctrl={ctrl}
-                id={OTHER_GROUP}
-                label={language.t("secondBrain.sidebar.otherThreads")}
-                threads={ctrl.groups().other}
               />
             </Show>
           </div>
@@ -169,41 +157,87 @@ function RailItem(props: { id: string; icon: string; label: string; active?: boo
   )
 }
 
-function SectionHeader(props: {
-  id?: string
-  label: string
-  labelTitle?: string
-  active?: boolean
-  onLabel?: () => void
-  action?: { label: string; icon: JSX.Element; run: () => void }
-}) {
+/** The workspace switcher that heads the sidebar, with the workspace's Project actions. */
+function WorkspaceHeader(props: { ctrl: SidebarController }) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const navigate = useNavigate()
+  const name = (directory: string) => {
+    const item = props.ctrl.workspaces().find((workspace) => workspace.worktree === directory)
+    return item?.name || directory.split(/[\\/]/).filter(Boolean).pop() || directory
+  }
   return (
     <div class="flex h-10 shrink-0 items-center gap-1 pl-1 pr-0.5">
-      <button
-        type="button"
-        data-sidebar-item={props.id}
-        data-selected={props.active ? "" : undefined}
-        aria-current={props.active ? "page" : undefined}
-        class="min-w-0 truncate rounded-full px-3 py-1 text-left text-[13px] text-v2-text-text-base [font-weight:600] transition-colors duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus data-[selected]:bg-v2-background-bg-accent-container data-[selected]:text-v2-text-text-on-accent-container"
-        title={props.labelTitle}
-        onClick={() => props.onLabel?.()}
-      >
-        {props.label}
-      </button>
+      <MenuV2 gutter={4} modal={false} placement="bottom-start">
+        <MenuV2.Trigger
+          as="button"
+          type="button"
+          data-sidebar-item="workspace"
+          class="flex min-w-0 items-center gap-1 rounded-full px-3 py-1 text-left text-[13px] text-v2-text-text-base [font-weight:600] transition-colors duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
+          aria-label={language.t("secondBrain.sidebar.switchWorkspace")}
+        >
+          <span class="min-w-0 truncate">
+            {props.ctrl.brainDirectory()
+              ? name(props.ctrl.brainDirectory()!)
+              : language.t("secondBrain.sidebar.workspace")}
+          </span>
+          <Icon name="chevron-down" size="small" />
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content>
+            <For each={props.ctrl.workspaces()}>
+              {(workspace) => (
+                <MenuV2.Item onSelect={() => props.ctrl.selectWorkspace(workspace.worktree)}>
+                  <span class="flex min-w-0 items-center gap-2">
+                    <span class="flex size-4 shrink-0 items-center justify-center">
+                      <Show when={workspace.worktree === props.ctrl.brainDirectory()}>
+                        <Icon name="check" size="small" />
+                      </Show>
+                    </span>
+                    <span class="min-w-0 truncate" title={workspace.worktree}>
+                      {name(workspace.worktree)}
+                    </span>
+                  </span>
+                </MenuV2.Item>
+              )}
+            </For>
+            <MenuV2.Item onSelect={props.ctrl.chooseFolder}>{language.t("secondBrain.command.openFolder")}</MenuV2.Item>
+            <Show when={props.ctrl.brainDirectory()}>
+              {(directory) => (
+                <>
+                  <MenuV2.Separator />
+                  <MenuV2.Item onSelect={props.ctrl.scanFolders}>
+                    {language.t("secondBrain.sidebar.scanProjects")}
+                  </MenuV2.Item>
+                  <MenuV2.Item onSelect={props.ctrl.linkFolder}>
+                    {language.t("secondBrain.sidebar.linkFolder")}
+                  </MenuV2.Item>
+                  <MenuV2.Item
+                    onSelect={() => dialog.show(() => <DialogInstructions workspaceDirectory={directory()} />)}
+                  >
+                    {language.t("secondBrain.sidebar.workspaceInstructions")}
+                  </MenuV2.Item>
+                  <MenuV2.Item onSelect={() => navigate("/projects")}>
+                    {language.t("secondBrain.sidebar.manageProjects")}
+                  </MenuV2.Item>
+                </>
+              )}
+            </Show>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
       <div class="flex-1" />
-      <Show when={props.action}>
-        {(action) => (
-          <TooltipV2 placement="right" value={action().label}>
-            <IconButtonV2
-              type="button"
-              variant="ghost-muted"
-              size="large"
-              icon={action().icon}
-              aria-label={action().label}
-              onClick={action().run}
-            />
-          </TooltipV2>
-        )}
+      <Show when={props.ctrl.brainDirectory()}>
+        <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.scanProjects")}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            icon={<Icon name="reset" size="small" />}
+            aria-label={language.t("secondBrain.sidebar.scanProjects")}
+            onClick={props.ctrl.scanFolders}
+          />
+        </TooltipV2>
       </Show>
     </div>
   )
@@ -278,10 +312,28 @@ function ProjectGroup(props: { ctrl: SidebarController; project: SidebarProjectI
                 >
                   {language.t("secondBrain.sidebar.archivedThreads")}
                 </MenuV2.Item>
-                <MenuV2.Separator />
-                <MenuV2.Item onSelect={() => void props.ctrl.archiveProject(props.project)}>
-                  {language.t("secondBrain.sidebar.archiveProject")}
+                <MenuV2.Item
+                  onSelect={() => {
+                    const workspace = props.ctrl.brainDirectory()
+                    if (workspace)
+                      dialog.show(() => <DialogInstructions workspaceDirectory={workspace} project={props.project} />)
+                  }}
+                >
+                  {language.t("secondBrain.sidebar.projectInstructions")}
                 </MenuV2.Item>
+                <MenuV2.Separator />
+                <Show
+                  when={props.ctrl.isLinked(props.project)}
+                  fallback={
+                    <MenuV2.Item onSelect={() => void props.ctrl.archiveProject(props.project)}>
+                      {language.t("secondBrain.sidebar.archiveProject")}
+                    </MenuV2.Item>
+                  }
+                >
+                  <MenuV2.Item onSelect={() => props.ctrl.unlinkProject(props.project)}>
+                    {language.t("secondBrain.sidebar.unlinkFolder")}
+                  </MenuV2.Item>
+                </Show>
               </MenuV2.Content>
             </MenuV2.Portal>
           </MenuV2>
