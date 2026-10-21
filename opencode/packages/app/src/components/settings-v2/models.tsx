@@ -128,6 +128,14 @@ export const SettingsModelsV2: Component = () => {
                           <span class="settings-v2-section-title">{group.items[0].provider.name}</span>
                         </span>
                       </button>
+                      <Switch
+                        class="settings-v2-models-provider-switch"
+                        checked={models.providerVisible(group.category)}
+                        onChange={(checked) => models.setProviderVisible(group.category, checked)}
+                        hideLabel
+                      >
+                        {group.items[0].provider.name}
+                      </Switch>
                     </h3>
                     <Show when={expanded()}>
                       <SettingsListV2>
@@ -139,6 +147,7 @@ export const SettingsModelsV2: Component = () => {
                                 <div>
                                   <Switch
                                     checked={models.visible(key)}
+                                    disabled={!models.providerVisible(item.provider.id)}
                                     onChange={(checked) => {
                                       models.setVisibility(key, checked)
                                     }}

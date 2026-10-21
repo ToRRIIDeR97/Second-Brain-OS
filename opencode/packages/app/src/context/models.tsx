@@ -14,6 +14,8 @@ type Store = {
   user: User[]
   recent: ModelKey[]
   variant?: Record<string, string | undefined>
+  /** Providers turned off in Settings → Models; their models stay out of pickers, new ones included. */
+  hiddenProviders?: string[]
 }
 
 const RECENT_LIMIT = 5
@@ -112,7 +114,18 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("user", store.user.length, { ...model, visibility: state })
     }
 
+    const providerVisible = (providerID: string) => !store.hiddenProviders?.includes(providerID)
+
+    const setProviderVisible = (providerID: string, state: boolean) => {
+      const current = store.hiddenProviders ?? []
+      setStore(
+        "hiddenProviders",
+        state ? current.filter((id) => id !== providerID) : [...new Set([...current, providerID])],
+      )
+    }
+
     const visible = (model: ModelKey) => {
+      if (!providerVisible(model.providerID)) return false
       const key = modelKey(model)
       const state = visibility().get(key)
       if (state === "hide") return false
@@ -160,6 +173,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       find,
       visible,
       setVisibility,
+      providerVisible,
+      setProviderVisible,
       recent: {
         list: () => recentModels()!,
         push,
