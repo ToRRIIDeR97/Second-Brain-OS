@@ -183,6 +183,8 @@ const layer = Layer.effect(
 
     const generateTitle = Effect.fn("SessionRunner.generateTitle")(function* (sessionID: SessionSchema.ID) {
       const session = yield* getSession(sessionID)
+      // Cheap checks first, so named and child sessions don't reload their history every run.
+      if (session.parentID || !SessionTitle.isDefault(session.title)) return
       const users = (yield* getContext(sessionID)).filter(
         (message): message is SessionMessage.User => message.type === "user",
       )
@@ -209,6 +211,8 @@ const layer = Layer.effect(
             Stream.filter(LLMEvent.is.textDelta),
             Stream.map((event) => event.text),
             Stream.mkString,
+            // A stalled title call must not hold a fiber for the life of the runner.
+            Effect.timeout(TITLE_TIMEOUT),
           ),
       )
       if (!title) return
@@ -634,6 +638,8 @@ const localToolCallsSinceLastUser = (context: ReadonlyArray<SessionMessage.Messa
               : [],
           ),
     )
+
+const TITLE_TIMEOUT = "30 seconds"
 
 const PROVIDER_RETRY_LIMIT = 5
 const PROVIDER_RETRY_BASE_MS = 2_000

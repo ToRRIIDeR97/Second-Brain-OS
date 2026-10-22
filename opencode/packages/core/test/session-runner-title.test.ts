@@ -45,18 +45,29 @@ import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { eq } from "drizzle-orm"
 import { Effect, Layer, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { testEffect } from "./lib/effect"
 
 // Title calls go through the LLM client; turn replies come from the harness runtime, so the two never mix.
 const titleRequests: LLMRequest[] = []
 let titleReply = "<think>naming</think>\nFix login redirect\n"
 let titleFails = false
+let titleHangs = false
+let titleAbandoned = false
 const client = Layer.succeed(
   LLMClient.Service,
   LLMClient.Service.of({
     prepare: () => Effect.die("unused"),
     stream: ((request: LLMRequest) => {
       titleRequests.push(request)
+      if (titleHangs)
+        return Stream.never.pipe(
+          Stream.ensuring(
+            Effect.sync(() => {
+              titleAbandoned = true
+            }),
+          ),
+        )
       if (titleFails)
         return Stream.fail(
           new LLMError({ module: "test", method: "stream", reason: new TransportReason({ message: "down" }) }),
@@ -176,6 +187,8 @@ const setup = (input: { harness?: boolean; agentModel?: boolean } = {}) =>
     titleRequests.length = 0
     titleReply = "<think>naming</think>\nFix login redirect\n"
     titleFails = false
+    titleHangs = false
+    titleAbandoned = false
     yield* agents.transform((editor) =>
       editor.update(AgentV2.ID.make("title"), (info) => {
         info.hidden = true
@@ -282,6 +295,26 @@ describe("session runner titles", () => {
       expect(titleRequests).toHaveLength(1)
       expect(yield* storedTitle).toBe(defaultTitle)
       expect(yield* assistantReplies).toBe(1)
+    }),
+  )
+
+  it.effect("gives up on a title call after 30 seconds and keeps the default title", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      titleHangs = true
+      yield* ask("Users land on /login after signing in")
+      yield* settle
+
+      expect(titleRequests).toHaveLength(1)
+      expect(yield* assistantReplies).toBe(1)
+      yield* TestClock.adjust("29 seconds")
+      yield* settle
+      expect(titleAbandoned).toBe(false)
+
+      yield* TestClock.adjust("1 second")
+      yield* settle
+      expect(titleAbandoned).toBe(true)
+      expect(yield* storedTitle).toBe(defaultTitle)
     }),
   )
 
