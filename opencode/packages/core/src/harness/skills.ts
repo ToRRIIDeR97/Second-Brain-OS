@@ -2,18 +2,26 @@ export * as HarnessSkills from "./skills"
 
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Harness as HarnessSchema } from "@opencode-ai/schema/harness"
 import { ConfigMarkdown } from "../config/markdown"
 import { Global } from "../global"
 import { HarnessRuntime } from "../harness"
 import { Location } from "../location"
 import { SkillV2 } from "../skill"
+import { SkillToggle } from "../skill/toggle"
 import { Glob } from "../util/glob"
 
 export type Harness = { id: string; driver: string; command?: string }
 export type Reported = ReadonlyArray<{ name: string; description?: string }>
-export type Skill = { name: string; description?: string; location?: string; scope: "global" | "project" }
+export type Skill = {
+  name: string
+  description?: string
+  location?: string
+  scope: "global" | "project"
+  /** Tenon skills only: false when switched off in Settings → Skills. */
+  enabled?: boolean
+}
 export type Source = "filesystem" | "reported" | "none"
 
 /**
@@ -29,9 +37,13 @@ export const scan = Effect.fn("HarnessSkills.scan")(function* (input: {
 }) {
   const folders = locations(input.harness)
   if (!folders) return fromReport(input.harness, input.reported)
+  const levels = yield* projectLevels(input.directory)
   const roots = [
     ...folders.global.map((folder) => ({ root: path.join(input.home, folder), scope: "global" as const })),
-    ...folders.project.map((folder) => ({ root: path.join(input.directory, folder), scope: "project" as const })),
+    ...(folders.system ?? []).map((root) => ({ root, scope: "global" as const })),
+    ...levels.flatMap((level) =>
+      folders.project.map((folder) => ({ root: path.join(level, folder), scope: "project" as const })),
+    ),
   ]
   const seen = new Set<string>()
   const skills: Skill[] = []
@@ -55,7 +67,11 @@ export const catalog = Effect.fn("HarnessSkills.catalog")(function* () {
   const skills = yield* SkillV2.Service
   const harnesses = yield* HarnessRuntime.Service
   const location = yield* Location.Service
-  const tenon = tenonSkills(yield* skills.list(), yield* skills.sources())
+  const tenon = tenonSkills(
+    yield* skills.all(),
+    yield* skills.sources(),
+    yield* SkillToggle.disabled(Global.make().config),
+  )
   const external = (yield* harnesses.settings()).filter((entry) => entry.driver !== HarnessSchema.OpenCodeDriver)
   return {
     tenon,
@@ -71,8 +87,25 @@ export const catalog = Effect.fn("HarnessSkills.catalog")(function* () {
   }
 })
 
+export class UnknownSkill extends Schema.TaggedErrorClass<UnknownSkill>()("HarnessSkills.UnknownSkill", {
+  message: Schema.String,
+}) {}
+
+/** Switches one of Tenon's skills on or off. Only Tenon skills can be switched; harness skills are read-only. */
+export const setEnabled = Effect.fn("HarnessSkills.setEnabled")(function* (name: string, enabled: boolean) {
+  const skills = yield* SkillV2.Service
+  if (!(yield* skills.all()).some((skill) => skill.name === name))
+    return yield* new UnknownSkill({ message: `"${name}" isn't one of Tenon's skills.` })
+  const disabled = yield* SkillToggle.set(Global.make().config, name, enabled)
+  return { name, enabled: !disabled.has(name) }
+})
+
 /** Tenon's skills for the catalog. Embedded skills ship inside the app, so they have no file location. */
-export function tenonSkills(skills: ReadonlyArray<SkillV2.Info>, sources: ReadonlyArray<SkillV2.Source>): Skill[] {
+export function tenonSkills(
+  skills: ReadonlyArray<SkillV2.Info>,
+  sources: ReadonlyArray<SkillV2.Source>,
+  disabled: ReadonlySet<string> = new Set(),
+): Skill[] {
   // A file-based skill can replace an embedded one of the same name, so match the location too.
   const embedded = new Set(
     sources.flatMap((source) => (source.type === "embedded" ? [`${source.skill.name}\0${source.skill.location}`] : [])),
@@ -82,24 +115,53 @@ export function tenonSkills(skills: ReadonlyArray<SkillV2.Info>, sources: Readon
     ...(skill.description === undefined ? {} : { description: skill.description }),
     ...(embedded.has(`${skill.name}\0${skill.location}`) ? {} : { location: skill.location }),
     scope: "global",
+    enabled: !disabled.has(skill.name),
   }))
 }
 
-/** Folders relative to the home and project directories, or undefined when the harness has none known. */
-export function locations(harness: Harness) {
+/**
+ * Each harness's documented skill folders: `global` relative to the home directory, `system` absolute, and
+ * `project` relative to every level from the working directory up to the repository root.
+ * Codex: https://learn.chatgpt.com/docs/build-skills (`~/.codex/skills` also holds the skills Codex installs
+ * itself). OpenCode: https://opencode.ai/docs/skills/ (plus the legacy singular `skill` folder).
+ * Claude Code: https://code.claude.com/docs/en/skills. Undefined when the harness has none known.
+ */
+export function locations(harness: Harness): { global: string[]; system?: string[]; project: string[] } | undefined {
   if (harness.driver === "codex")
-    return { global: [".codex/skills", ".agents/skills"], project: [".codex/skills", ".agents/skills"] }
+    return { global: [".agents/skills", ".codex/skills"], system: ["/etc/codex/skills"], project: [".agents/skills"] }
   if (harness.driver !== "acp") return undefined
   const command = commandName(harness.command)
-  // Assumed from OpenCode's documented skill folders, which include Claude and agent-standard ones.
   if (command.startsWith("opencode"))
     return {
-      global: [".config/opencode/skill", ".config/opencode/skills", ".claude/skills", ".agents/skills"],
-      project: [".opencode/skill", ".opencode/skills", ".claude/skills", ".agents/skills"],
+      global: [".config/opencode/skills", ".config/opencode/skill", ".claude/skills", ".agents/skills"],
+      project: [".opencode/skills", ".opencode/skill", ".claude/skills", ".agents/skills"],
     }
   if (command.startsWith("claude")) return { global: [".claude/skills"], project: [".claude/skills"] }
   return undefined
 }
+
+/**
+ * The working directory and each parent up to the repository root (the first level holding `.git`), nearest
+ * first, the way Codex, OpenCode and Claude Code walk up for project skills. Outside a repository only the
+ * working directory itself is searched.
+ */
+const projectLevels = Effect.fn("HarnessSkills.projectLevels")(function* (directory: string) {
+  const levels: string[] = []
+  let current = path.resolve(directory)
+  while (true) {
+    levels.push(current)
+    const repository = yield* Effect.promise(() =>
+      fs.stat(path.join(current, ".git")).then(
+        () => true,
+        () => false,
+      ),
+    )
+    if (repository) return levels
+    const parent = path.dirname(current)
+    if (parent === current) return [path.resolve(directory)]
+    current = parent
+  }
+})
 
 /** The command's file name, lowercased and without extension, for either path style. */
 function commandName(command: string | undefined) {

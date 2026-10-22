@@ -469,29 +469,44 @@ skills apart from each harness's own. `GET /api/skill/catalog` (location
 scoped) returns `{ tenon, harnesses }`, assembled by `HarnessSkills.catalog`
 (`core/src/harness/skills.ts`):
 
-- `tenon` is `SkillV2.list()`, the skills Tenon's own agent loads from the
-  Tenon config folder and config `skills` entries. Built-in skills have no
-  location.
+- `tenon` is every skill Tenon's own agent loads from the Tenon config folder
+  and config `skills` entries (`SkillV2.all()`), each with an `enabled` flag.
+  Built-in skills have no location.
 - `harnesses` has one entry per harness in settings, except the in-process
   agent. `HarnessSkills.scan` reads `**/SKILL.md` frontmatter from each
-  harness's known folders, global then project:
-  - Codex: `~/.codex/skills`, `~/.agents/skills`, and the project's
-    `.codex/skills` and `.agents/skills`.
-  - An ACP command named `opencode…`: `~/.config/opencode/skill(s)`,
-    `~/.claude/skills`, `~/.agents/skills`, and the project's
-    `.opencode/skill(s)`, `.claude/skills` and `.agents/skills`.
-  - An ACP command named `claude…`: `~/.claude/skills` and the project's
-    `.claude/skills`.
+  harness's documented folders. Global folders come first. Project folders are
+  read at every level from the working directory up to the repository root
+  (the first level with `.git`), nearest first; outside a repository only the
+  working directory.
+  - Codex: `~/.agents/skills`, `~/.codex/skills` (where Codex installs its own
+    skills), `/etc/codex/skills`, and project `.agents/skills`
+    ([docs](https://learn.chatgpt.com/docs/build-skills)).
+  - An ACP command named `opencode…`: `~/.config/opencode/skills` (and the
+    legacy `skill`), `~/.claude/skills`, `~/.agents/skills`, and project
+    `.opencode/skills`, `.claude/skills` and `.agents/skills`
+    ([docs](https://opencode.ai/docs/skills/)).
+  - An ACP command named `claude…`: `~/.claude/skills` and project
+    `.claude/skills` ([docs](https://code.claude.com/docs/en/skills)).
+    Enterprise, plugin and nested-subdirectory skills aren't listed.
   - Any other ACP harness shows the commands it reported, if it has run in
     this server process.
 
 Only names, descriptions and paths leave the server, never skill content.
-Harness sections are read-only. Tenon rows offer Open file on a local desktop
-server, otherwise Copy path. The Codex and OpenCode folder lists come from
-those tools' conventions and haven't been checked against their docs. The app's
-vendored client predates the endpoint, so `listSkillCatalog`
-(`app/src/utils/server.ts`) calls it directly with the same location query and
-auth as other calls.
+Harness sections are read-only. Each Tenon row has a switch, plus Open file on
+a local desktop server, otherwise Copy path.
+
+Switching a Tenon skill off calls `POST /api/skill/enabled` (`{ name,
+enabled }`), which `HarnessSkills.setEnabled` checks against `SkillV2.all()`
+and `SkillToggle.set` (`core/src/skill/toggle.ts`) saves to `skills.json` in
+the Tenon config directory (`{ "disabled": [...] }`, mode `0600`, atomic
+rename, serialized). `SkillV2.list()` reads that file on every call and leaves
+switched-off skills out, so the agent's skill guidance and the `skill` tool
+stop offering them from the next turn. A malformed `skills.json` switches
+nothing off and is reported instead of overwritten.
+
+The app's vendored client predates these endpoints, so `listSkillCatalog` and
+`setSkillEnabled` (`app/src/utils/server.ts`) call them directly with the same
+location query and auth as other calls.
 
 ## Chat diagram windows
 

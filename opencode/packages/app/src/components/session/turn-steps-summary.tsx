@@ -157,7 +157,7 @@ export function TurnStepsSummary(props: {
           when={props.working}
           fallback={<Icon name="check" size="small" class="shrink-0 text-v2-text-text-muted" />}
         >
-          <LoaderV2 width={14} height={14} style={{ color: "var(--v2-icon-icon-accent)" }} />
+          <LoaderV2 width={14} height={14} class="text-v2-icon-icon-accent" />
         </Show>
         <span data-slot="turn-steps-title" class="shrink-0 [font-weight:500] tabular-nums">
           {title()}

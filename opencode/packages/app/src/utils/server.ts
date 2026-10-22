@@ -187,6 +187,20 @@ export async function listSkillCatalog(input: HarnessServer, directory: string) 
   return decodeSkillCatalog(await locationRequest(input, directory, "/api/skill/catalog", "Skills request failed")).data
 }
 
+const decodeSkillEnabled = Schema.decodeUnknownSync(
+  Location.response(Schema.Struct({ name: Schema.String, enabled: Schema.Boolean })),
+)
+
+/** Switches one of Tenon's skills on or off; harness skills can't be switched. */
+export async function setSkillEnabled(input: HarnessServer, directory: string, name: string, enabled: boolean) {
+  return decodeSkillEnabled(
+    await locationRequest(input, directory, "/api/skill/enabled", "Skills request failed", {
+      method: "POST",
+      body: JSON.stringify({ name, enabled }),
+    }),
+  ).data
+}
+
 export async function listHarnessSettings(input: HarnessServer, directory: string) {
   return decodeSettingsList(await harnessSettingsRequest(input, directory, "/settings")).data
 }

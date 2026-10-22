@@ -3,6 +3,8 @@ export interface CatalogSkill {
   readonly description?: string
   readonly location?: string
   readonly scope: "global" | "project"
+  /** Tenon skills only: false when switched off. */
+  readonly enabled?: boolean
 }
 
 export type SkillSource = "filesystem" | "reported" | "none"

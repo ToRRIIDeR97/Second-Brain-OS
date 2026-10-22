@@ -20,7 +20,7 @@ await write(path.join(home, ".config/opencode/skills/oc-global/SKILL.md"), "---\
 await write(path.join(home, ".agents/skills/shared/SKILL.md"), "---\ndescription: Shared skill\n---\nx")
 await write(path.join(home, ".agents/skills/notes.md"), "---\nname: not-a-skill\n---\nx")
 await write(path.join(project, ".opencode/skill/group/nested/SKILL.md"), "---\nname: nested\n---\nx")
-await write(path.join(project, ".codex/skills/proj-codex/SKILL.md"), "---\nname: proj-codex\n---\nx")
+await write(path.join(project, ".agents/skills/proj-codex/SKILL.md"), "---\nname: proj-codex\n---\nx")
 
 const scan = (input: { home?: string; harness: HarnessSkills.Harness; reported?: HarnessSkills.Reported }) =>
   Effect.runPromise(
@@ -35,6 +35,8 @@ describe("verify AC-9 / AC-10 harness skill discovery", () => {
       ["oc-global", "global"],
       ["shared", "global"],
       ["nested", "project"],
+      // OpenCode also reads the project's .agents/skills, shared with Codex.
+      ["proj-codex", "project"],
     ])
   })
 
@@ -53,7 +55,7 @@ describe("verify AC-9 / AC-10 harness skill discovery", () => {
     expect(result).toEqual({
       source: "filesystem",
       skills: [
-        { name: "proj-codex", location: path.join(project, ".codex/skills/proj-codex/SKILL.md"), scope: "project" },
+        { name: "proj-codex", location: path.join(project, ".agents/skills/proj-codex/SKILL.md"), scope: "project" },
       ],
     })
   })

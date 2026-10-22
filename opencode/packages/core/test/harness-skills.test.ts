@@ -33,14 +33,44 @@ describe("HarnessSkills.scan", () => {
     const result = await scan({ id: "opencode-acp", driver: "acp", command: "opencode" })
     expect(result.source).toBe("filesystem")
     expect(result.skills.map((item) => [item.name, item.scope])).toEqual([
-      ["a-skill", "global"],
       ["beta", "global"],
+      ["a-skill", "global"],
       ["deep", "global"],
       ["local", "project"],
       ["broken", "project"],
     ])
-    expect(result.skills[0]).toMatchObject({ description: "No name here" })
+    expect(result.skills.find((item) => item.name === "a-skill")).toMatchObject({ description: "No name here" })
     expect(result.skills.some((item) => item.name === "loose")).toBe(false)
+  })
+
+  test("project folders are read from the working directory up to the repository root", async () => {
+    const repo = path.join(root, "repo")
+    const nested = path.join(repo, "packages/app")
+    await fs.mkdir(path.join(repo, ".git"), { recursive: true })
+    await write(path.join(repo, ".agents/skills/root-skill/SKILL.md"), "---\nname: root-skill\n---\nBody\n")
+    await write(path.join(nested, ".agents/skills/app-skill/SKILL.md"), "---\nname: app-skill\n---\nBody\n")
+    // Above the repository root: not part of the project.
+    await write(path.join(root, ".agents/skills/outside/SKILL.md"), "---\nname: outside\n---\nBody\n")
+    const empty = path.join(root, "empty-home")
+    const result = await Effect.runPromise(
+      HarnessSkills.scan({ home: empty, directory: nested, harness: { id: "codex", driver: "codex" } }),
+    )
+    expect(result.skills.map((item) => [item.name, item.scope])).toEqual([
+      ["app-skill", "project"],
+      ["root-skill", "project"],
+    ])
+  })
+
+  test("Codex reads ~/.agents/skills and ~/.codex/skills but no project .codex/skills", async () => {
+    const codexHome = path.join(root, "codex-home")
+    const codexProject = path.join(root, "codex-project")
+    await write(path.join(codexHome, ".agents/skills/user/SKILL.md"), "---\nname: user\n---\nBody\n")
+    await write(path.join(codexHome, ".codex/skills/.system/plan/SKILL.md"), "---\nname: plan\n---\nBody\n")
+    await write(path.join(codexProject, ".codex/skills/old/SKILL.md"), "---\nname: old\n---\nBody\n")
+    const result = await Effect.runPromise(
+      HarnessSkills.scan({ home: codexHome, directory: codexProject, harness: { id: "codex", driver: "codex" } }),
+    )
+    expect(result.skills.map((item) => item.name)).toEqual(["user", "plan"])
   })
 
   test("recognizes a Claude command by its file name in any path style", async () => {
@@ -103,8 +133,8 @@ describe("HarnessSkills.tenonSkills", () => {
       ],
     )
     expect(result).toEqual([
-      { name: "customize-opencode", description: "Customize", scope: "global" },
-      { name: "notes", location: "/t/notes/SKILL.md", scope: "global" },
+      { name: "customize-opencode", description: "Customize", scope: "global", enabled: true },
+      { name: "notes", location: "/t/notes/SKILL.md", scope: "global", enabled: true },
     ])
     expect(JSON.stringify(result)).not.toContain("Body")
   })
@@ -116,6 +146,13 @@ describe("HarnessSkills.tenonSkills", () => {
       [file],
       [SkillV2.EmbeddedSource.make({ type: "embedded", skill: builtIn })],
     )
-    expect(result).toEqual([{ name: "notes", location: "/t/notes/SKILL.md", scope: "global" }])
+    expect(result).toEqual([{ name: "notes", location: "/t/notes/SKILL.md", scope: "global", enabled: true }])
+  })
+
+  test("marks switched-off skills", () => {
+    const file = { name: "notes", location: AbsolutePath.make("/t/notes/SKILL.md"), content: "Body" }
+    expect(HarnessSkills.tenonSkills([file], [], new Set(["notes"]))).toEqual([
+      { name: "notes", location: "/t/notes/SKILL.md", scope: "global", enabled: false },
+    ])
   })
 })

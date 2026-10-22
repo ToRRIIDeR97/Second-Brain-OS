@@ -1,21 +1,32 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Switch as ToggleSwitch } from "@opencode-ai/ui/v2/switch-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { type Accessor, type Component, For, Match, Show, Switch, createMemo, createResource } from "solid-js"
+import {
+  type Accessor,
+  type Component,
+  For,
+  Match,
+  Show,
+  Switch,
+  createMemo,
+  createResource,
+  createSignal,
+} from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { listSkillCatalog } from "@/utils/server"
+import { listSkillCatalog, setSkillEnabled } from "@/utils/server"
 import { showToast } from "@/utils/toast"
 import { SettingsListV2 } from "./parts/list"
 import { type CatalogSkill, type SkillSection, isBuiltInSkill, skillSections } from "./skills-sections"
 import "./settings-v2.css"
 
-/** Settings → Skills: Tenon's skills, then each harness's skills, read-only. */
+/** Settings → Skills: Tenon's skills, which can be switched off, then each harness's skills, read-only. */
 export const SettingsSkillsV2: Component<{ directory: Accessor<string | undefined> }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
@@ -31,9 +42,31 @@ export const SettingsSkillsV2: Component<{ directory: Accessor<string | undefine
       serverSync().data.path.home ||
       undefined,
   )
-  const [catalog, { refetch }] = createResource(directory, (dir) =>
-    listSkillCatalog({ server: serverSdk().server.http, fetch: platform.fetch }, dir).then(skillSections),
-  )
+  const server = () => ({ server: serverSdk().server.http, fetch: platform.fetch })
+  const [catalog, { refetch }] = createResource(directory, (dir) => listSkillCatalog(server(), dir).then(skillSections))
+  // One switch at a time per skill, so a slow save can't be overtaken by a second click.
+  const [busy, setBusy] = createSignal<ReadonlySet<string>>(new Set())
+  // Saved switches apply on top of the loaded catalog, so rows (and keyboard focus) stay in place.
+  const [saved, setSaved] = createSignal<Readonly<Record<string, boolean>>>({})
+  const reload = () => {
+    setSaved({})
+    void refetch()
+  }
+  const toggle = (name: string, enabled: boolean) => {
+    const dir = directory()
+    if (!dir || busy().has(name)) return
+    setBusy((current) => new Set([...current, name]))
+    void setSkillEnabled(server(), dir, name, enabled)
+      .then((result) => setSaved((current) => ({ ...current, [result.name]: result.enabled })))
+      .catch((error: unknown) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        }),
+      )
+      .finally(() => setBusy((current) => new Set([...current].filter((item) => item !== name))))
+  }
 
   return (
     <>
@@ -44,7 +77,7 @@ export const SettingsSkillsV2: Component<{ directory: Accessor<string | undefine
           variant="ghost"
           icon="reset"
           disabled={!directory() || catalog.loading}
-          onClick={() => void refetch()}
+          onClick={reload}
         >
           {language.t("secondBrain.skills.refresh")}
         </ButtonV2>
@@ -69,7 +102,11 @@ export const SettingsSkillsV2: Component<{ directory: Accessor<string | undefine
             </div>
           </Match>
           <Match when={catalog.latest}>
-            {(sections) => <For each={sections()}>{(section) => <SkillSectionView section={section} />}</For>}
+            {(sections) => (
+              <For each={sections()}>
+                {(section) => <SkillSectionView section={section} busy={busy()} saved={saved()} onToggle={toggle} />}
+              </For>
+            )}
           </Match>
         </Switch>
       </div>
@@ -77,7 +114,12 @@ export const SettingsSkillsV2: Component<{ directory: Accessor<string | undefine
   )
 }
 
-const SkillSectionView: Component<{ section: SkillSection }> = (props) => {
+const SkillSectionView: Component<{
+  section: SkillSection
+  busy: ReadonlySet<string>
+  saved: Readonly<Record<string, boolean>>
+  onToggle: (name: string, enabled: boolean) => void
+}> = (props) => {
   const language = useLanguage()
   const empty = () => {
     if (props.section.editable) return language.t("secondBrain.skills.empty.tenon")
@@ -104,7 +146,15 @@ const SkillSectionView: Component<{ section: SkillSection }> = (props) => {
       <Show when={props.section.skills.length > 0} fallback={<div class="settings-v2-provider-empty">{empty()}</div>}>
         <SettingsListV2>
           <For each={props.section.skills}>
-            {(skill) => <SkillRow skill={skill} openable={props.section.editable} />}
+            {(skill) => (
+              <SkillRow
+                skill={skill}
+                enabled={props.section.editable ? (props.saved[skill.name] ?? skill.enabled) : undefined}
+                openable={props.section.editable}
+                busy={props.busy.has(skill.name)}
+                onToggle={(enabled) => props.onToggle(skill.name, enabled)}
+              />
+            )}
           </For>
         </SettingsListV2>
       </Show>
@@ -112,7 +162,14 @@ const SkillSectionView: Component<{ section: SkillSection }> = (props) => {
   )
 }
 
-const SkillRow: Component<{ skill: CatalogSkill; openable: boolean }> = (props) => {
+const SkillRow: Component<{
+  skill: CatalogSkill
+  /** Tenon skills only. */
+  enabled: boolean | undefined
+  openable: boolean
+  busy: boolean
+  onToggle: (enabled: boolean) => void
+}> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const server = useServer()
@@ -141,8 +198,8 @@ const SkillRow: Component<{ skill: CatalogSkill; openable: boolean }> = (props) 
       .catch(failed)
 
   return (
-    <div data-component="settings-v2-row">
-      <div data-slot="settings-v2-row-copy">
+    <div data-component="settings-v2-row" data-enabled={props.enabled === false ? "false" : undefined}>
+      <div data-slot="settings-v2-row-copy" classList={{ "opacity-60": props.enabled === false }}>
         <span data-slot="settings-v2-row-title" class="truncate">
           {props.skill.name}
         </span>
@@ -190,6 +247,11 @@ const SkillRow: Component<{ skill: CatalogSkill; openable: boolean }> = (props) 
             </Show>
           </div>
         )}
+      </Show>
+      <Show when={props.openable && props.enabled !== undefined}>
+        <ToggleSwitch checked={props.enabled !== false} disabled={props.busy} hideLabel onChange={props.onToggle}>
+          {language.t("secondBrain.skills.enabled", { name: props.skill.name })}
+        </ToggleSwitch>
       </Show>
     </div>
   )

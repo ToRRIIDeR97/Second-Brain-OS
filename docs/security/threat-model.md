@@ -229,9 +229,11 @@ you'd trust with the credentials you configure for them.
 
 `GET /api/skill/catalog` reads `SKILL.md` frontmatter from fixed folders under
 the user's home (`~/.codex/skills`, `~/.claude/skills`, `~/.agents/skills`,
-`~/.config/opencode/skill(s)`) and under the request's location directory
-(the project equivalents). The location is the same validated scope the other
-location routes use. Controls:
+`~/.config/opencode/skill(s)`), from `/etc/codex/skills`, and from the project
+equivalents at each level from the request's location directory up to its
+repository root. The location is the same validated scope the other location
+routes use, and the walk never goes above the first directory holding `.git`.
+Controls:
 
 - Read-only. No shell runs and no harness process starts; the harness list
   comes from settings.
@@ -243,6 +245,13 @@ location routes use. Controls:
 - Missing or unreadable folders are skipped. Folder scans follow symlinks, the
   same as Tenon's own skill loading, so a symlinked skill folder can expose
   the frontmatter of files outside these folders.
+
+`POST /api/skill/enabled` is the only write. It accepts a skill name and a
+boolean, refuses names that aren't one of Tenon's loaded skills, and writes
+only `skills.json` in the Tenon config directory (mode `0600`, atomic rename,
+serialized, never overwriting a malformed file). Harness skill folders are
+never written. Switching a skill off only hides it from Tenon's agent; it isn't
+a security control, since the skill file stays readable on disk.
 
 ### ACP subagent transcripts
 
