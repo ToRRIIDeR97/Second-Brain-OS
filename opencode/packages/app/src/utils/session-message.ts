@@ -372,17 +372,37 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       providerState: tool.providerState,
       providerResultState: tool.providerResultState,
       ...(acpSteps(tool) ? { acpSteps: acpSteps(tool) } : {}),
+      ...(acpSubagent(tool) ? { acpSubagent: acpSubagent(tool) } : {}),
     },
   }
 }
 
 /** Steps an ACP subagent ran: live checkpoints while it runs, the final list once it settles. */
 function acpSteps(tool: SessionMessageAssistantTool) {
-  const pick = (value: unknown) =>
-    record(value) && record(value.acp) && Array.isArray(value.acp.steps) ? value.acp.steps : undefined
+  return acpPick(tool, (acp) => (Array.isArray(acp.steps) ? acp.steps : undefined))
+}
+
+/** An ACP subagent's conversation, usage and truncation flag, picked like its steps. */
+function acpSubagent(tool: SessionMessageAssistantTool) {
+  return acpPick(tool, (acp) =>
+    Array.isArray(acp.transcript)
+      ? {
+          transcript: acp.transcript,
+          ...(record(acp.usage) ? { usage: acp.usage } : {}),
+          ...(acp.truncated === true ? { truncated: true } : {}),
+        }
+      : undefined,
+  )
+}
+
+/** Reads the `acp` metadata from the settled result, else from the live checkpoint while the call runs. */
+function acpPick<T>(tool: SessionMessageAssistantTool, pick: (acp: Record<string, unknown>) => T | undefined) {
+  const from = (value: unknown) => (record(value) && record(value.acp) ? pick(value.acp) : undefined)
   // The vendored client types predate `provider` and `structured`, which the server does send.
   const loose: unknown = tool
   if (!record(loose)) return undefined
-  return pick(record(loose.provider) ? loose.provider.resultMetadata : undefined) ??
-    pick(record(loose.state) ? loose.state.structured : undefined)
+  return (
+    from(record(loose.provider) ? loose.provider.resultMetadata : undefined) ??
+    from(record(loose.state) ? loose.state.structured : undefined)
+  )
 }
