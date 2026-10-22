@@ -50,6 +50,9 @@ export type NavigateToSessionFn = (sessionID: string) => void
 
 export type SessionHrefFn = (sessionID: string) => string
 
+/** Opens a harness subagent's own view (the app's right-panel agent tab) for one tool part. */
+export type OpenSubagentFn = (input: { sessionID: string; partID: string }) => void
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -58,6 +61,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     sessionID?: string
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    onOpenSubagent?: OpenSubagentFn
   }) => {
     return {
       get store() {
@@ -71,6 +75,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      // A getter so the app can offer it only where the panel can show it (desktop).
+      get openSubagent() {
+        return props.onOpenSubagent
+      },
     }
   },
 })

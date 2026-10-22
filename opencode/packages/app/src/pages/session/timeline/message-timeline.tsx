@@ -70,6 +70,7 @@ import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
 import { TurnStepsSummary } from "@/components/session/turn-steps-summary"
+import { useData } from "@opencode-ai/session-ui/context"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -259,6 +260,7 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const sessionArchive = useSessionArchive()
   const language = useLanguage()
+  const data = useData()
   const { params, sessionKey } = useSessionKey()
   const ownerSessionKey = sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
@@ -1108,6 +1110,11 @@ export function MessageTimeline(props: {
                 startedAt={userMessageCreated(turnStepsRow().userMessageID)}
                 durationMs={turnDurationMs(turnStepsRow().userMessageID)}
                 open={turnStepsOpen(turnStepsRow())}
+                onOpenSubagent={
+                  data.openSubagent
+                    ? (part) => data.openSubagent?.({ sessionID: part.sessionID, partID: part.id })
+                    : undefined
+                }
                 onToggle={(open) => {
                   setToolOpen(`turn:${turnStepsRow().userMessageID}:${turnStepsRow().segment}`, open)
                   onSizeChange?.()

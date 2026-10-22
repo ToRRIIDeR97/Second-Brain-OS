@@ -22,6 +22,12 @@ type TabsInput = {
   fileBrowser?: Accessor<boolean>
 }
 
+/** Right-panel tabs that show one subagent, keyed by its tool part ID. */
+export const AGENT_TAB_PREFIX = "agent://"
+export const agentTab = (partID: string) => `${AGENT_TAB_PREFIX}${partID}`
+export const isAgentTab = (tab: string | undefined) => !!tab?.startsWith(AGENT_TAB_PREFIX)
+export const agentTabPartID = (tab: string) => (isAgentTab(tab) ? tab.slice(AGENT_TAB_PREFIX.length) : undefined)
+
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
 
 export function shouldShowFileTree(input: { visible: boolean; opened: boolean }) {
@@ -45,7 +51,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review") return []
+          if (tab === "context" || tab === "review" || isAgentTab(tab)) return []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
@@ -59,14 +65,16 @@ export const createSessionTabs = (input: TabsInput) => {
   const openedTabs = createMemo(() => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB), emptyTabs, {
     equals: same,
   })
+  const agentTabs = createMemo(() => [...new Set(input.tabs().all().filter(isAgentTab))], emptyTabs, { equals: same })
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
+    if (active && agentTabs().includes(active)) return active
 
-    const first = openedTabs()[0]
+    const first = openedTabs()[0] ?? agentTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
     if (review() && hasReview()) return "review"
@@ -81,6 +89,7 @@ export const createSessionTabs = (input: TabsInput) => {
     const active = activeTab()
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
+    if (agentTabs().includes(active)) return active
     if (!openedTabs().includes(active)) return
     return active
   })
@@ -90,6 +99,7 @@ export const createSessionTabs = (input: TabsInput) => {
     openFileOpen,
     panelTabs,
     openedTabs,
+    agentTabs,
     activeTab,
     activeFileTab,
     closableTab,

@@ -126,6 +126,38 @@ describe("createSessionTabs", () => {
     })
   })
 
+  test("falls back to a file tab, then an agent tab, then context when nothing is active", () => {
+    const fallback = (all: string[]) =>
+      createRoot((dispose) => {
+        const [state] = createStore({ active: undefined as string | undefined, all })
+        const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+        const result = createSessionTabs({
+          tabs,
+          pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+          normalizeTab: (tab) => tab,
+        })
+        const active = result.activeTab()
+        dispose()
+        return active
+      })
+
+    expect(fallback(["agent://prt_1", "file://src/a.ts", "context"])).toBe("file://src/a.ts")
+    expect(fallback(["context", "agent://prt_1", "agent://prt_2"])).toBe("agent://prt_1")
+    expect(fallback(["context"])).toBe("context")
+  })
+
+  test("ignores an active agent tab that is no longer open", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({ active: "agent://prt_gone" as string | undefined, all: ["context"] })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({ tabs, pathFromTab: () => undefined, normalizeTab: (tab) => tab })
+
+      expect(result.activeTab()).toBe("context")
+      expect(result.agentTabs()).toEqual([])
+      dispose()
+    })
+  })
+
   test("prefers context and review fallbacks when no file tab is active", () => {
     createRoot((dispose) => {
       const [state] = createStore({

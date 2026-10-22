@@ -35,6 +35,7 @@ const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab, SortableTab, SortableTabV2, FileVisual } from "@/components/session"
 import { OpenInAppV2 } from "@/components/session/open-in-app-v2"
 import { SessionTabClose } from "@/components/session/session-tab-close"
+import { SubagentTab, SubagentTabLabel } from "@/components/session/subagent-tab"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -45,6 +46,7 @@ import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
   SESSION_OPEN_FILE_TAB,
+  agentTabPartID,
   createOpenSessionFileTab,
   createSessionTabs,
   getTabReorderIndex,
@@ -184,6 +186,7 @@ export function SessionSidePanel(props: {
   const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
+  const agentTabs = tabState.agentTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
 
@@ -237,7 +240,7 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty"
+    return active !== "review" && active !== "context" && active !== "empty" && !agentTabPartID(active)
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
@@ -301,6 +304,29 @@ export function SessionSidePanel(props: {
         <span>{language.t("secondBrain.sessionTab.title")}</span>
         {closeButton("context")}
       </TabsV2.Trigger>
+    </Show>
+  )
+
+  const agentTriggers = () => (
+    <For each={agentTabs()}>
+      {(tab) => (
+        <TabsV2.Trigger value={tab} onMiddleClick={() => tabs().close(tab)}>
+          <SubagentTabLabel partID={agentTabPartID(tab)!} />
+          {closeButton(tab)}
+        </TabsV2.Trigger>
+      )}
+    </For>
+  )
+
+  const agentContent = () => (
+    <Show when={agentTabPartID(activeTab())} keyed>
+      {(partID) => (
+        <TabsV2.Content value={activeTab()} class="flex min-h-0 flex-col !overflow-hidden contain-strict">
+          <div class="relative flex-1 min-h-0 overflow-hidden">
+            <SubagentTab partID={partID} />
+          </div>
+        </TabsV2.Content>
+      )}
     </Show>
   )
 
@@ -428,6 +454,7 @@ export function SessionSidePanel(props: {
                                 </TabsV2.Trigger>
                               </Show>
                               {contextTrigger()}
+                              {agentTriggers()}
                               <SortableProvider ids={openedTabs()}>
                                 <For each={panelTabs()}>
                                   {(tab) => (
@@ -458,6 +485,7 @@ export function SessionSidePanel(props: {
                           {reviewContent()}
                           {selectToOpen()}
                           {contextContent()}
+                          {agentContent()}
 
                           <Show when={activeFileTab()} keyed>
                             {(tab) => <FileTabContent tab={tab} />}
@@ -534,6 +562,7 @@ export function SessionSidePanel(props: {
                               </TabsV2.Trigger>
                             </Show>
                             {contextTrigger()}
+                            {agentTriggers()}
                             <For each={panelTabs()}>
                               {(tab) => (
                                 <Show
@@ -566,6 +595,7 @@ export function SessionSidePanel(props: {
                         {reviewContent()}
                         {selectToOpen()}
                         {contextContent()}
+                        {agentContent()}
 
                         <Show when={fileBrowserMounted()}>
                           <div

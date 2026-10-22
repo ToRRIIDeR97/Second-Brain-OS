@@ -1407,7 +1407,9 @@ export function UserMessageDisplay(props: {
               <DropdownMenu.Portal>
                 <DropdownMenu.Content>
                   <DropdownMenu.Item onSelect={() => revert(false)}>
-                    <DropdownMenu.ItemLabel>{i18n.t("secondBrain.message.editFromHere.messages")}</DropdownMenu.ItemLabel>
+                    <DropdownMenu.ItemLabel>
+                      {i18n.t("secondBrain.message.editFromHere.messages")}
+                    </DropdownMenu.ItemLabel>
                   </DropdownMenu.Item>
                   <DropdownMenu.Item onSelect={() => revert(true)}>
                     <DropdownMenu.ItemLabel>{i18n.t("secondBrain.message.editFromHere.files")}</DropdownMenu.ItemLabel>
@@ -1502,6 +1504,8 @@ export interface ToolProps {
   metadata: Record<string, any>
   tool: string
   sessionID?: string
+  /** The tool part's ID, for renderers that open a view of that one call. */
+  partID?: string
   output?: string
   status?: string
   hideDetails?: boolean
@@ -1608,6 +1612,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   })
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
+  // Error cards name tools with their own renderer generically; an ACP subagent keeps its agent title.
+  const namedByRenderer = () => !!ToolRegistry.render(part().tool) && part().tool !== "acp_subagent"
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
   const handleToolOpenChange = (open: boolean) => props.onToolOpenChange?.(open)
 
@@ -1634,7 +1640,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   title={
                     part().tool === "websearch"
                       ? webSearchProviderLabel(partMetadata().provider, i18n)
-                      : ToolRegistry.render(part().tool)
+                      : namedByRenderer()
                         ? undefined
                         : getToolInfo(part().tool, input()).title
                   }
@@ -1642,8 +1648,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   open={controlledOpen()}
                   onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
                   subtitle={
-                    taskSubtitle() ??
-                    (ToolRegistry.render(part().tool) ? undefined : getToolInfo(part().tool, input()).subtitle)
+                    taskSubtitle() ?? (namedByRenderer() ? undefined : getToolInfo(part().tool, input()).subtitle)
                   }
                   href={taskHref()}
                   onSubtitleClick={(event) => {
@@ -1664,6 +1669,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               input={input()}
               tool={part().tool}
               sessionID={part().sessionID}
+              partID={part().id}
               metadata={partMetadata()}
               // @ts-expect-error
               output={part().state.output}
@@ -2127,6 +2133,91 @@ ToolRegistry.register({
         onTriggerClick={navigate}
         onTriggerKeyDown={navigateKey}
       />
+    )
+  },
+})
+
+// A harness subagent (ACP). Its conversation lives on the tool part, so the card opens the app's
+// agent tab instead of navigating to a child session; without that opener it stays a plain tool row.
+ToolRegistry.register({
+  name: "acp_subagent",
+  render(props) {
+    const data = useData()
+    const i18n = useI18n()
+    const open = createMemo(() => {
+      const opener = data.openSubagent
+      const sessionID = props.sessionID
+      const partID = props.partID
+      if (!opener || !sessionID || !partID) return undefined
+      return () => opener({ sessionID, partID })
+    })
+    const title = createMemo(() => {
+      const agent = props.input.subagent_type
+      if (typeof agent !== "string" || !agent) return i18n.t("ui.tool.agent.default")
+      return i18n.t("ui.tool.agent", { type: agent[0]!.toUpperCase() + agent.slice(1) })
+    })
+    const subtitle = createMemo(() =>
+      typeof props.input.description === "string" && props.input.description ? props.input.description : undefined,
+    )
+    const running = createMemo(() => props.status === "pending" || props.status === "running")
+
+    return (
+      <Show when={open()} fallback={<GenericTool {...props} />}>
+        {(openTab) => (
+          <BasicTool
+            icon="task"
+            status={props.status}
+            trigger={
+              <div data-component="task-tool-card">
+                <div data-component="task-tool-surface">
+                  <div data-slot="basic-tool-tool-info-structured">
+                    <div data-slot="basic-tool-tool-info-main">
+                      <Show
+                        when={running()}
+                        fallback={
+                          <Show when={newLayout()}>
+                            <span data-component="task-tool-icon">
+                              <Icon name="subagent" size="small" />
+                            </span>
+                          </Show>
+                        }
+                      >
+                        <span data-component="task-tool-spinner" style={{ color: "var(--v2-icon-icon-accent)" }}>
+                          <Show when={newLayout()} fallback={<Spinner />}>
+                            <SessionProgressIndicatorV2
+                              style={{ color: "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                            />
+                          </Show>
+                        </span>
+                      </Show>
+                      <span data-component="task-tool-title">{title()}</span>
+                      <Show when={subtitle()}>
+                        <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+                      </Show>
+                    </div>
+                  </div>
+                </div>
+                <div data-component="task-tool-action">
+                  <Icon name="square-arrow-top-right" size="small" />
+                </div>
+              </div>
+            }
+            hideDetails
+            triggerAsLink
+            clickable
+            onTriggerClick={(event) => {
+              if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+              event.preventDefault()
+              openTab()()
+            }}
+            onTriggerKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              openTab()()
+            }}
+          />
+        )}
+      </Show>
     )
   },
 })
