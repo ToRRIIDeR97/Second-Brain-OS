@@ -80,8 +80,13 @@ generated client in `packages/client`.
     Consecutive chunks with the same kind and message ID merge.
   - `usage`: `{ used?, size?, cost? (USD amount), inputTokens?, outputTokens?, thoughtTokens?, cachedReadTokens?, cachedWriteTokens? }`
     from child-tagged `usage_update`; absent keys are omitted.
-  - `truncated: true` once a subagent's transcript text passes 100,000
-    characters; later text is dropped.
+  - `truncated: true` once a subagent's transcript passes 100,000 characters,
+    counting text, reasoning and tool `output`; later text and outputs are cut
+    or dropped. Tool entries still record tool, title and status.
+  - Live `tool-progress` carries at most the last 50 transcript entries with
+    tool `output` left out; the tool result carries the full capped
+    transcript. (Changed during P3 after verification showed that live
+    checkpoints, which are all stored, otherwise grew without bound.)
   - `AcpState.commands?: Array<{ name: string; description?: string }>` from
     `available_commands_update` (`availableCommands`).
 - `core/src/harness/skills.ts`, `export * as HarnessSkills`:
@@ -216,4 +221,67 @@ Repository checks before handoff: `bun run typecheck`, `bun run lint`,
 
 ## Completion evidence
 
-Pending.
+Branch `impl/subagent-inspector-skills`, from the plan commit `ced1d21`.
+
+### Phases (verifier results)
+
+| Phase | Verified SHA | Correction rounds | Notes |
+|---|---|---|---|
+| P1 | `82d8e12` | 0 | Turn-summary indicator uses `LoaderV2`. |
+| P2 | `746fbbd`, follow-up `a173620` | 0 (+ follow-up) | Follow-up: skip history for named sessions; 30 s title timeout. |
+| P3 | `9f71605` | 1 | Probe: 40 child tools × 32k output stored 51.4 MB of progress before the fix, 0.21 MB after. AC-4 contract revised (see Interfaces). |
+| P4 | `26b865b` | 1 | Fix: registered harness names in "Not reported by…"; one shared part lookup per panel. |
+| P5 | `b112242` | 0 | `GET /api/skill/catalog`; generated client current. |
+| P6 | `31094d9` | 0 | Direct call via `listSkillCatalog` (vendored client lacks the endpoint); `secondBrain.skills.*` keys (i18n parity rule). |
+| Polish | `b38b36e`, fix `e5e1528` | 1 | From the plan author's visual check: one-line disclosure rows; built-in Tenon skills have no location. Fix: "Built-in" applies to the Tenon section only, not to reported harness commands. |
+
+Verifier full sweep at `31094d9`: root typecheck, lint (0 errors),
+`check:generated` and build pass. `bun run test` passes everywhere except
+`httpapi-codegen` (a `%20` in the repository path, failing the same at
+`ced1d21`). `test:engine`: core 1203 pass / 1 fail (`node:sqlite` missing in
+Bun 1.3.14, failing the same at `ced1d21`); opencode 2836 pass after one
+intermittent Bun SIGTRAP crash that didn't recur. `test:second-brain` 34 pass.
+
+### Plan author checks at `b38b36e` (re-run at `e5e1528`)
+
+- Acceptance and verification sets: core 36 pass, app 18 pass, 0 fail. The
+  acceptance files are unchanged from `ced1d21`. One verification expectation
+  was corrected during P4 (`"a.ts"` → `"file://a.ts"`): with an identity
+  `normalizeTab` the tab keeps its `file://` form, which is existing behavior.
+- Diff read in full for core (`title.ts`, `runner/llm.ts`, `harness/acp.ts`);
+  the app diff was reviewed by the verifier.
+- Visual check in an isolated web preview (scratch XDG profile, a scratch ACP
+  agent that runs an `explore` subagent):
+  - The live lane showed the subagent and its current step.
+  - The `acp_subagent` card opened an `explore` tab in the right panel:
+    prompt, collapsible reasoning, the tool row with output, and the reply.
+  - Context 21% (41k / 200k), tokens "1,200 in · — out", cache hit 40%
+    (800 / 2,000). Usage showed "Not reported by Scratch ACP" for values the
+    agent didn't send.
+  - Closing the tab fell back to Review.
+  - Settings → Skills listed Tenon (the built-in skill), Codex and OpenCode
+    (read-only, from the real `~/.codex/skills` and `~/.claude/skills`), and
+    Scratch ACP (empty state).
+  - The thread stayed "New session". The isolated profile has no model, so this
+    is the AC-3 fallback.
+  - Two polish issues found here were fixed in `b38b36e`; the API then returned
+    the built-in skill without a location, and summaries render as one row.
+
+### Not verified
+
+- A generated title in the running app (needs a configured model). Covered by
+  `core/test/session-runner-title.test.ts` (7 cases).
+- Clicking a lane while the subagent is still running (the scratch turn ended
+  first); the card path was checked, and both call the same opener.
+- Reduced-motion behavior seen running; the CSS rule was checked.
+- Whether upstream OpenCode sends child `usage_update` or
+  `available_commands_update`.
+- The Codex and OpenCode skill folder lists against those tools' docs.
+- The timeline benchmark baseline asked for in `opencode/packages/app/AGENTS.md`.
+
+### Follow-ups noticed
+
+- `app/src/app.tsx:409` passes the accent color to `LoaderV2` as a class, which
+  loses to the loader's unlayered CSS, so that loader probably shows the muted
+  color.
+- `httpapi-codegen`'s fixture test fails when the repository path has a space.

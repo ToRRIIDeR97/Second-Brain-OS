@@ -299,13 +299,32 @@ because agents announce calls before their arguments exist: OpenCode's
 `pending` update carries only `cwd`, and the command or path follows. OpenCode
 forwards a subagent's updates under the parent session ID, marked with
 `_meta["opencode/child-session"]`. Those updates never reach the parent turn.
-The child's tool steps are attached to the subagent call (`acp_subagent`) that
-started it, published as `tool-progress` checkpoints while it runs
-(`session.next.tool.progress`, `structured.acp.steps`) and as
-`provider.resultMetadata.acp.steps` on the result. The child's text and
-reasoning are dropped; its report arrives as the subagent tool's output. The
-turn card in the timeline (`TurnStepsSummary`) shows these steps as subagent
-lanes.
+The child's updates are attached to the subagent call (`acp_subagent`) that
+started it:
+
+- `steps`: the child's tool steps (tool, title, status).
+- `transcript`: the child's text, reasoning and tool calls in arrival order.
+  Chunks of one message merge. Text, reasoning and tool output share a
+  100,000-character budget per subagent (`TRANSCRIPT_LIMIT`); past it the
+  transcript is cut and marked `truncated`.
+- `usage`: the child's own `usage_update` (`used`, `size`, USD `cost`, and any
+  token fields the agent sends). It never changes the parent turn's usage.
+
+The result carries all of it as `provider.resultMetadata.acp`. While the
+subagent runs, `tool-progress` checkpoints (`session.next.tool.progress`,
+`structured.acp`) fire when a child step starts or changes status and when a
+child message block ends. Because every checkpoint is stored, it carries only
+the last 50 transcript entries and no tool output (`PROGRESS_ENTRIES`). The
+app maps these to `part.metadata.acpSteps` and `part.metadata.acpSubagent`
+(`app/src/utils/session-message.ts`). The turn card (`TurnStepsSummary`) shows
+the steps as subagent lanes. Clicking a lane, or the subagent's card in the
+timeline, opens that agent's tab in the side panel (see
+[Session compatibility and review](#session-compatibility-and-review)).
+
+The ACP driver also records `available_commands_update` as the harness's
+reported commands (`HarnessRuntime.reportedCommands`), kept in memory per
+harness for the life of the server. The skills catalog uses them (see
+[Harness skills](#harness-skills)).
 
 ### Harness handoff
 
@@ -438,6 +457,37 @@ Brain system prompt, the task instructions travel in the first user message.
    short prompt in the proposed agent, refusing tool permissions.
 3. A failed test is sent back to the chat, up to three times automatically.
 4. A passed test enables Save. The assistant can't save anything itself.
+
+### Harness skills
+
+Settings → Skills (`app/src/components/settings-v2/skills.tsx`) lists Tenon's
+skills apart from each harness's own. `GET /api/skill/catalog` (location
+scoped) returns `{ tenon, harnesses }`, assembled by `HarnessSkills.catalog`
+(`core/src/harness/skills.ts`):
+
+- `tenon` is `SkillV2.list()`, the skills Tenon's own agent loads from the
+  Tenon config folder and config `skills` entries. Built-in skills have no
+  location.
+- `harnesses` has one entry per harness in settings, except the in-process
+  agent. `HarnessSkills.scan` reads `**/SKILL.md` frontmatter from each
+  harness's known folders, global then project:
+  - Codex: `~/.codex/skills`, `~/.agents/skills`, and the project's
+    `.codex/skills` and `.agents/skills`.
+  - An ACP command named `opencode…`: `~/.config/opencode/skill(s)`,
+    `~/.claude/skills`, `~/.agents/skills`, and the project's
+    `.opencode/skill(s)`, `.claude/skills` and `.agents/skills`.
+  - An ACP command named `claude…`: `~/.claude/skills` and the project's
+    `.claude/skills`.
+  - Any other ACP harness shows the commands it reported, if it has run in
+    this server process.
+
+Only names, descriptions and paths leave the server, never skill content.
+Harness sections are read-only. Tenon rows offer Open file on a local desktop
+server, otherwise Copy path. The Codex and OpenCode folder lists come from
+those tools' conventions and haven't been checked against their docs. The app's
+vendored client predates the endpoint, so `listSkillCatalog`
+(`app/src/utils/server.ts`) calls it directly with the same location query and
+auth as other calls.
 
 ## Session compatibility and review
 
@@ -591,6 +641,34 @@ above 0. ACP turns get a per-turn cost from `usage_update`
 context window still comes from `getSessionContext` (last message, provider
 limit). Subagents are built-in `task` parts. Tool counts come from
 `summarizeTurn` over the harness's parts.
+
+ACP subagents open as agent tabs (`agent://<partID>`) in the same side panel.
+`createSessionTabs` (`app/src/pages/session/helpers.ts`) keeps them apart from
+file tabs; with nothing active, a file tab wins, then an agent tab, then
+context, then review. The opener (`onOpenSubagent` in the session-ui data
+context, wired in `pages/directory-layout.tsx`) appends the tab without
+replacing a file preview and focuses it if it's already open. It only exists
+on desktop widths. `SubagentTab` (`components/session/subagent-tab.tsx`)
+reads `subagentDetail(part)` (`components/session/subagent-detail.ts`) and
+shows the prompt and transcript, the context window (`used / size`), and
+usage with cache hit `cacheRead / (input + cacheRead + cacheWrite)`. Values
+the harness didn't send read "Not reported by <harness>", using the session's
+harness list for the name.
+
+### Thread titles
+
+After the first step of a run, the core runner
+(`core/src/session/runner/llm.ts`, `generateTitle`) titles a top-level session
+that still has its default title and exactly one user message. This covers
+harness sessions too. It runs in the background, with a 30-second timeout, and
+never delays the turn. It uses the hidden `title` agent's prompt through the
+host LLM client. The model is the title agent's model, else the small model
+of the session's provider, else the session's model (in-process sessions only),
+else the catalog default. The reply is cleaned by `SessionTitle.clean`
+(`core/src/session/title.ts`). The rename is published as
+`SessionV1.Event.Updated` after re-reading the row, so a rename made meanwhile
+wins. If no model resolves or the call fails, the session keeps its default
+title and the sidebar shows "New session".
 
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the
