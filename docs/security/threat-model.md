@@ -299,6 +299,29 @@ Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
 picker refreshes don't relaunch every agent.
 
+## Agent-authored SVG in chat
+
+Agents can draw diagrams by writing a fenced code block tagged `svg`. Once the
+fence is closed, `session-ui/src/components/svg-window.ts` shows it as a
+diagram window in place of the code. The markup is model output and may
+include workspace content, so it is untrusted:
+
+- DOMPurify's SVG profile sanitizes it first. Scripts, event handlers,
+  `<a>`, `<foreignObject>` and `<use>` are removed, and URL-valued attributes
+  keep only fragment references (`#id`) and inline `data:` images.
+- The result is shown in an `<iframe sandbox="">` (no scripts, opaque origin,
+  no navigation, forms or popups) whose `srcdoc` carries the CSP
+  `default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:`.
+  No request leaves the frame. The SVG's own `<style>` rules apply only inside
+  it.
+- The renderer reads nothing back from the frame. Download saves the
+  sanitized markup as `diagram.svg` through the browser download flow.
+
+The guidance that tells agents about this (`core/src/chat-display.ts`) is
+fixed text with no workspace content. It goes into the native system context
+and, wrapped in `<tenon-display>`, at the start of each harness runtime's
+first prompt.
+
 ## Checks
 
 From the repository root, `bun run typecheck` checks every workspace package
@@ -309,7 +332,8 @@ checks `opencode/`, and `bun run check:generated` fails when the generated
 client is stale. These commands are defined in the root `package.json`.
 Relevant focused tests include
 `opencode/packages/desktop/src/main/google-calendar-domain.test.ts`,
-`opencode/packages/opencode/test/project/brain.test.ts`, and the note tests
+`opencode/packages/opencode/test/project/brain.test.ts`,
+`opencode/packages/session-ui/src/components/svg-window.test.ts`, and the note tests
 under `opencode/packages/opencode/test/knowledge/`. Run server tests from
 `opencode/packages/opencode` with Bun when changing those paths. These checks
 run locally; GitHub Actions workflows are disabled. Local test results do not

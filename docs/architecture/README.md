@@ -334,6 +334,10 @@ handoff. Codex and ACP keep their own native thread or session, so
 - The history sits inside `<handoff-history>` with a notice that it is context
   only, not a new request, and carries no instructions. The new user message
   follows after a `---` separator.
+- The first prompt of each runtime (any handoff other than none) starts
+  with the chat display guidance inside `<tenon-display>`
+  (`renderHarnessPrompt`), because harness agents don't receive Tenon's
+  system context. See [Chat diagram windows](#chat-diagram-windows).
 
 `metadata.harnessRevision` still increases on every switch to a different
 instance. It keys the in-memory runtimes, so a harness that is switched back
@@ -438,6 +442,31 @@ Brain system prompt, the task instructions travel in the first user message.
    short prompt in the proposed agent, refusing tool permissions.
 3. A failed test is sent back to the chat, up to three times automatically.
 4. A passed test enables Save. The assistant can't save anything itself.
+
+## Chat diagram windows
+
+Agents draw diagrams in chat by writing a fenced code block tagged `svg`. The
+`Markdown` component (`session-ui/src/components/markdown.tsx`) calls
+`mountSvgWindows` from `svg-window.ts` after each render. Every completed
+`pre > code.language-svg` block gets a window: a bar with Source/Preview and
+Download, and a sandboxed iframe holding the sanitized SVG, sized from its
+`viewBox` (up to 640 px high). The code stays in the DOM, so copy and the
+Source view use it. A block that is still streaming stays as code until its
+fence closes. Shiki has no `svg` grammar, so the markdown worker highlights
+these blocks as XML but keeps the `svg` language label on both the streamed
+and the parsed path.
+
+The iframe document defines `--tenon-fg`, `--tenon-muted`, `--tenon-accent`,
+`--tenon-surface` and `--tenon-border` from the current theme, plus the
+app's font and `color-scheme`, so diagrams read in light and dark themes. A
+theme change applies to windows mounted after it.
+
+Agents learn about this from one fixed text, `ChatDisplay.svgGuidance` in
+`core/src/chat-display.ts`. It goes into the `core/chat-display` system
+context entry (v2 runner), the legacy `SystemPrompt.environment`, and the
+first prompt of each Codex or ACP runtime (see
+[Harness handoff](#harness-handoff)). Sanitizing and sandbox limits are in
+the [threat model](../security/threat-model.md#agent-authored-svg-in-chat).
 
 ## Session compatibility and review
 

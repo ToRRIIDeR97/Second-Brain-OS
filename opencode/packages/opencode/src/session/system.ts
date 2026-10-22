@@ -23,6 +23,7 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { ChatDisplay } from "@opencode-ai/core/chat-display"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("muse")) {
@@ -81,6 +82,7 @@ const layer = Layer.effect(
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
           ].join("\n"),
+          ChatDisplay.svgGuidance,
           references.length === 0
             ? undefined
             : [

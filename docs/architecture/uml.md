@@ -178,7 +178,8 @@ Handoff text in the first prompt of a runtime (not drawn in the diagram):
 4. When a turn ends without an error, publish `HarnessContinuationSet` with the
    answered user message as `lastSeenMessageID`.
 
-Later turns in the same runtime send only the user message. See
+The first prompt of a runtime also starts with the chat display guidance in
+`<tenon-display>` (`renderHarnessPrompt`). Later turns in the same runtime send only the user message. See
 [Harness handoff](README.md#harness-handoff) for the budget and wrapper.
 
 ## Coverage index
@@ -195,7 +196,8 @@ Later turns in the same runtime send only the user message. See
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
 | Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |
-| Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `continuationFor`), `core/src/session/projector.ts` |
+| Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `renderHarnessPrompt`, `continuationFor`), `core/src/session/projector.ts` |
+| Chat diagram windows (agent ```svg blocks in a sandboxed iframe, agent guidance) | Subsystem | Trust boundaries; text in [README](README.md#chat-diagram-windows) | `session-ui/src/components/svg-window.ts`, `session-ui/src/components/markdown.tsx`, `session-ui/src/components/markdown.worker.ts`, `core/src/chat-display.ts`, `core/src/system-context/builtins.ts`, `opencode/src/session/system.ts` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |
 | Workspace files | Shared store | Component, Deployment, Activity: write | `notes/`, `projects/`, `.second-brain/calendar-v1.json` |
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |

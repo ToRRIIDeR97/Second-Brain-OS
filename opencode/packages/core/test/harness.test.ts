@@ -8,6 +8,7 @@ import {
   parseCodexNotification,
   renderCodexPrompt,
   renderHandoffHistory,
+  renderHarnessPrompt,
 } from "@opencode-ai/core/harness"
 import { Token } from "@opencode-ai/core/util/token"
 
@@ -73,6 +74,16 @@ describe("Codex harness", () => {
       type: "step-finish",
       usage: { inputTokens: 100, nonCachedInputTokens: 60, cacheReadInputTokens: 40, outputTokens: 20 },
     })
+  })
+
+  test("adds the chat display guidance only to a runtime's first turn", () => {
+    const model = Model.make({ id: "gpt-test", provider: "test", route })
+    const request = LLM.request({ model, prompt: "Map the codebase" })
+
+    expect(renderHarnessPrompt(request, "full")).toStartWith("<tenon-display>")
+    expect(renderHarnessPrompt(request, "full")).toContain("```svg")
+    expect(renderHarnessPrompt(request, "full")).toEndWith("Map the codebase")
+    expect(renderHarnessPrompt(request, "none")).toBe(renderCodexPrompt(request, "none"))
   })
 
   test("renders only the latest user turn for a persistent Codex thread", () => {
