@@ -211,4 +211,62 @@ describe("normalizeSessionMessages", () => {
       }),
     ])
   })
+
+  test("maps an ACP subagent's transcript and usage from the result, or from the live checkpoint", () => {
+    const transcript = [
+      { type: "reasoning", text: "Plan" },
+      { type: "tool", tool: "acp_search", title: "grep", status: "completed", output: "14 hits" },
+      { type: "text", text: "Found 3." },
+    ]
+    const subagent = (id: string, state: Record<string, unknown>, provider?: Record<string, unknown>) => ({
+      type: "tool",
+      id,
+      name: "acp_subagent",
+      state: { input: { description: "Find usages" }, content: [], ...state },
+      ...(provider ? { provider } : {}),
+      time: { created: 2, ran: 2 },
+    })
+    const source = [
+      { id: "msg_user", type: "user", text: "audit", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "opencode", providerID: "opencode-acp" },
+        content: [
+          subagent(
+            "done",
+            { status: "completed" },
+            {
+              executed: true,
+              resultMetadata: { acp: { steps: [], transcript, usage: { used: 41000, size: 200000 }, truncated: true } },
+            },
+          ),
+          subagent("live", {
+            status: "running",
+            structured: { acp: { steps: [], transcript: transcript.slice(0, 1) } },
+          }),
+          {
+            type: "tool",
+            id: "plain",
+            name: "acp_read",
+            state: { status: "running", input: {}, structured: {}, content: [] },
+            time: { created: 2 },
+          },
+        ],
+        time: { created: 2 },
+      },
+    ] as unknown as SessionMessageInfo[]
+
+    const parts = normalizeSessionMessages("ses_1", source).parts.get("msg_assistant") ?? []
+    const metadata = (id: string) => {
+      const part = parts.find((item) => item.id === id)
+      return part?.type === "tool" ? part.metadata : undefined
+    }
+
+    expect(metadata("done")?.acpSubagent).toEqual({ transcript, usage: { used: 41000, size: 200000 }, truncated: true })
+    expect(metadata("done")?.acpSteps).toEqual([])
+    expect(metadata("live")?.acpSubagent).toEqual({ transcript: transcript.slice(0, 1) })
+    expect(metadata("plain")?.acpSubagent).toBeUndefined()
+  })
 })

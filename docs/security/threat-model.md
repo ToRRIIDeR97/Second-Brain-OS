@@ -225,6 +225,35 @@ the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.
 
+### Harness skill catalog
+
+`GET /api/skill/catalog` reads `SKILL.md` frontmatter from fixed folders under
+the user's home (`~/.codex/skills`, `~/.claude/skills`, `~/.agents/skills`,
+`~/.config/opencode/skill(s)`) and under the request's location directory
+(the project equivalents). The location is the same validated scope the other
+location routes use. Controls:
+
+- Read-only. No shell runs and no harness process starts; the harness list
+  comes from settings.
+- Only skill names, descriptions and absolute paths reach the renderer. Skill
+  bodies are read to parse frontmatter and are never returned or logged.
+- Commands an ACP agent reports through `available_commands_update` are kept
+  in memory per harness and shown as data. They are agent output: the app
+  never runs them.
+- Missing or unreadable folders are skipped. Folder scans follow symlinks, the
+  same as Tenon's own skill loading, so a symlinked skill folder can expose
+  the frontmatter of files outside these folders.
+
+### ACP subagent transcripts
+
+An ACP agent's subagent text, reasoning and tool output are now stored on the
+subagent's tool call (`provider.resultMetadata.acp.transcript`) and shown in
+the agent tab. Treat it as untrusted model output: the tab renders text as
+Markdown through the same sanitizing renderer as chat, and tool output as
+plain text. Each subagent's transcript is capped at 100,000 characters, and
+live checkpoints carry at most 50 entries without tool output, which bounds
+what an agent can make the app store per subagent call.
+
 ### Upstream OpenCode harness
 
 The built-in `opencode-acp` instance starts upstream OpenCode from `PATH` as

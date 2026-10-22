@@ -12,8 +12,10 @@ import {
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { RequestExecutor } from "@opencode-ai/llm/route"
 import { Harness } from "@opencode-ai/schema/harness"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Scope, Semaphore, Stream } from "effect"
+import { eq } from "drizzle-orm"
 import { AgentV2 } from "../../agent"
+import { Catalog } from "../../catalog"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
@@ -37,6 +39,9 @@ import { SessionInput } from "../input"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
+import { SessionTable } from "../sql"
+import { SessionTitle } from "../title"
+import { SessionV1 } from "../../v1/session"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
@@ -94,7 +99,8 @@ const harnessRequestModel = (session: SessionSchema.Info) =>
  * - Post-run maintenance
  *   - [ ] Settle final status and expose durable output events to replayable consumers.
  *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
- *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
+ *   - [x] Update the title in bounded background work.
+ *   - [ ] Update summaries, compaction state, and cleanup in bounded background work.
  *
  * Use `llm.stream(request)` for each provider turn. Keep tool execution and continuation here.
  * Durable continuation recovery remains a separate future slice with an explicit retry policy.
@@ -122,6 +128,8 @@ const layer = Layer.effect(
     const permissions = yield* PermissionV2.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
+    const catalog = yield* Catalog.Service
+    const scope = yield* Scope.Scope
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
@@ -152,6 +160,66 @@ const layer = Layer.effect(
           })
         }
       }
+    })
+
+    // Title model order: the title agent's model, the small model of the session's provider, the
+    // session's own model (host sessions only), then the catalog default.
+    const titleModel = Effect.fn("SessionRunner.titleModel")(function* (
+      session: SessionSchema.Info,
+      agent: AgentV2.Info,
+    ) {
+      const resolve = (model: SessionSchema.Info["model"]) =>
+        models.resolve({ ...session, model }).pipe(Effect.option, Effect.map(Option.getOrUndefined))
+      const configured = agent.model ? yield* resolve(agent.model) : undefined
+      if (configured) return configured
+      const sessionModel =
+        harnesses.driver(session.harnessInstanceID) === Harness.OpenCodeDriver
+          ? yield* resolve(session.model)
+          : undefined
+      const small = sessionModel ? yield* catalog.model.small(ProviderV2.ID.make(sessionModel.provider)) : undefined
+      const smallModel = small ? yield* resolve({ id: small.id, providerID: small.providerID }) : undefined
+      return smallModel ?? sessionModel ?? (yield* resolve(undefined))
+    })
+
+    const generateTitle = Effect.fn("SessionRunner.generateTitle")(function* (sessionID: SessionSchema.ID) {
+      const session = yield* getSession(sessionID)
+      // Cheap checks first, so named and child sessions don't reload their history every run.
+      if (session.parentID || !SessionTitle.isDefault(session.title)) return
+      const users = (yield* getContext(sessionID)).filter(
+        (message): message is SessionMessage.User => message.type === "user",
+      )
+      if (
+        !users[0] ||
+        !SessionTitle.eligible({ parentID: session.parentID, title: session.title, userMessages: users.length })
+      )
+        return
+      const agent = yield* agents.get(AgentV2.ID.make("title"))
+      if (!agent) return
+      const model = yield* titleModel(session, agent)
+      if (!model) return
+      const title = SessionTitle.clean(
+        yield* llm
+          .stream(
+            LLM.request({
+              model,
+              system: agent.system ? [SystemPart.make(agent.system)] : [],
+              messages: [Message.user(SessionTitle.prompt(users[0]))],
+              tools: [],
+            }),
+          )
+          .pipe(
+            Stream.filter(LLMEvent.is.textDelta),
+            Stream.map((event) => event.text),
+            Stream.mkString,
+            // A stalled title call must not hold a fiber for the life of the runner.
+            Effect.timeout(TITLE_TIMEOUT),
+          ),
+      )
+      if (!title) return
+      // Re-read so a rename made while the title was generating wins, and the snapshot is current.
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      if (!row || !SessionTitle.isDefault(row.title)) return
+      yield* events.publish(SessionV1.Event.Updated, { sessionID, info: SessionTitle.renamed(row, title) })
     })
 
     const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
@@ -522,11 +590,25 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      let titleStarted = false
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step)
+          if (!titleStarted) {
+            titleStarted = true
+            // Runs beside the turn in the runner's scope; a failure only leaves the default title.
+            yield* generateTitle(input.sessionID).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError("failed to generate session title", {
+                  sessionID: input.sessionID,
+                  error: Cause.squash(cause),
+                }),
+              ),
+              Effect.forkIn(scope),
+            )
+          }
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
@@ -557,6 +639,8 @@ const localToolCallsSinceLastUser = (context: ReadonlyArray<SessionMessage.Messa
           ),
     )
 
+const TITLE_TIMEOUT = "30 seconds"
+
 const PROVIDER_RETRY_LIMIT = 5
 const PROVIDER_RETRY_BASE_MS = 2_000
 const PROVIDER_RETRY_MAX_BACKOFF_MS = 30_000
@@ -586,6 +670,7 @@ export const node = makeLocationNode({
     llmClient,
     HarnessRuntime.node,
     AgentV2.node,
+    Catalog.node,
     ToolRegistry.node,
     SessionRunnerModel.node,
     SessionStore.node,

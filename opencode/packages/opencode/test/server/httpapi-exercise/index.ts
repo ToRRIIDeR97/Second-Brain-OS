@@ -729,6 +729,14 @@ const scenarios: Scenario[] = [
     .status(204, undefined, "status"),
   http.protected.get("/api/command", "v2.command.list").json(200, locationData(array)),
   http.protected.get("/api/skill", "v2.skill.list").json(200, locationData(array)),
+  http.protected.get("/api/skill/catalog", "v2.skill.catalog").json(
+    200,
+    locationData((value) => {
+      object(value)
+      array(value.tenon)
+      array(value.harnesses)
+    }),
+  ),
   http.protected
     .get("/api/event", "v2.event.subscribe")
     .stream()

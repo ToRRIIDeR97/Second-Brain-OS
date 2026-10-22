@@ -6,6 +6,7 @@ import {
   createSessionForServer,
   fallbackHarnesses,
   listHarnessesForServer,
+  listSkillCatalog,
   switchHarnessForServer,
 } from "./server"
 
@@ -119,5 +120,40 @@ describe("switchHarnessForServer", () => {
       instanceID: Harness.Codex,
       model: { id: "gpt-5.6", reasoningEffort: "high" },
     })
+  })
+})
+
+describe("listSkillCatalog", () => {
+  test("reads the location-scoped skills catalog", async () => {
+    let request: Request | undefined
+    const fetcher = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        request = new Request(input, init)
+        return Response.json({
+          location: { directory: "/repo", project: { id: "global", directory: "/repo" } },
+          data: {
+            tenon: [{ name: "notes", location: "/t/notes/SKILL.md", scope: "global" }],
+            harnesses: [{ id: "codex", name: "Codex", source: "none", skills: [] }],
+          },
+        })
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+
+    const catalog = await listSkillCatalog({ server: { url: "http://localhost:4096/" }, fetch: fetcher }, "/repo")
+
+    expect(catalog.tenon.map((skill) => skill.name)).toEqual(["notes"])
+    expect(catalog.harnesses[0]).toMatchObject({ id: "codex", source: "none" })
+    expect(new URL(request!.url).pathname).toBe("/api/skill/catalog")
+    expect(new URL(request!.url).searchParams.get("location[directory]")).toBe("/repo")
+  })
+
+  test("surfaces the server's failure message", async () => {
+    const fetcher = Object.assign(async () => Response.json({ message: "Nope" }, { status: 500 }), {
+      preconnect: globalThis.fetch.preconnect,
+    })
+    await expect(
+      listSkillCatalog({ server: { url: "http://localhost:4096" }, fetch: fetcher }, "/repo"),
+    ).rejects.toThrow("Nope")
   })
 })

@@ -12,6 +12,9 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
 import { useServerSync } from "@/context/server-sync"
+import { createMediaQuery } from "@solid-primitives/media"
+import { useSessionLayout } from "@/pages/session/session-layout"
+import { agentTab } from "@/pages/session/helpers"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -25,6 +28,8 @@ export function DirectoryDataProvider(
   const params = useParams()
   const sync = useSync()
   const serverSync = useServerSync()
+  const sessionLayout = useSessionLayout()
+  const isDesktop = createMediaQuery("(min-width: 768px)")
   const directory = () => (typeof props.directory === "function" ? props.directory() : props.directory)
   const slug = createMemo(() => base64Encode(directory()))
   const href = (sessionID: string) => {
@@ -57,6 +62,18 @@ export function DirectoryDataProvider(
     onCleanup(() => serverSync().session.unpin(sessionID))
   })
 
+  // Opens the right panel on the subagent's tab; a second click on the same agent only focuses it.
+  const openSubagent = (input: { sessionID: string; partID: string }) => {
+    if (input.sessionID !== params.id) return
+    const view = sessionLayout.view()
+    const tabs = sessionLayout.tabs()
+    const tab = agentTab(input.partID)
+    view.reviewPanel.open(view.reviewPanel.opened() ? "other" : "context-button")
+    // Appended directly so opening an agent never replaces a file preview tab.
+    if (!tabs.all().includes(tab)) tabs.setAll([...tabs.all(), tab])
+    tabs.setActive(tab)
+  }
+
   return (
     <Show when={directory()} keyed>
       {(directory) => (
@@ -66,6 +83,7 @@ export function DirectoryDataProvider(
           sessionID={params.id}
           onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
           onSessionHref={href}
+          onOpenSubagent={isDesktop() && params.id ? openSubagent : undefined}
         >
           <LocalProvider>{props.children}</LocalProvider>
         </DataProvider>

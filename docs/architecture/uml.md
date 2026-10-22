@@ -221,6 +221,10 @@ The first prompt of a runtime also starts with the chat display guidance in
 | npm registry, Homebrew | External integration | Deployment, trust boundaries | `core/src/harness/update.ts` |
 | Renderer event stream reconnect and resync (backoff, directory list reload, busy status reconcile) | Critical workflow | Text in [README](README.md#product-entry-points-and-persistence) | `app/src/context/server-sdk.tsx` (`reconnectDelay`), `app/src/context/server-sync.tsx` (`createResyncTracker`, `reconcileActiveSessionStatuses`), `app/src/context/global-sync/event-names.ts` |
 | Home one-step start (draft sends on open) | Critical workflow | Text in [README](README.md#home-navigation) | `app/src/pages/brain-home.tsx`, `app/src/context/drafts.tsx` (`takeSend`, `canSendOnOpen`), `app/src/pages/new-session/new-session-draft-controller.ts` |
+| ACP subagent transcript and agent tabs (transcript, usage, live checkpoints, side-panel agent tab) | Critical workflow | Sequence: ACP turn (subagent updates); text in [README](README.md#harness-drivers-and-registration) and [README](README.md#session-compatibility-and-review) | `core/src/harness/acp.ts` (`recordChild`, `subagentSnapshot`), `app/src/utils/session-message.ts`, `app/src/pages/session/helpers.ts` (`agentTabs`), `app/src/components/session/subagent-detail.ts`, `app/src/components/session/subagent-tab.tsx`, `session-ui/src/components/message-part.tsx` (`acp_subagent` card), `app/src/components/session/turn-steps-summary.tsx` |
+| Thread titles for harness and V2 sessions | Critical workflow | Text in [README](README.md#thread-titles) | `core/src/session/runner/llm.ts` (`generateTitle`), `core/src/session/title.ts`, `core/src/plugin/agent.ts` (`title` agent) |
+| Skills catalog (Tenon and per-harness skills, Settings → Skills) | Subsystem | Text in [README](README.md#harness-skills); trust boundaries | `core/src/harness/skills.ts`, `core/src/harness.ts` (`reportedCommands`), `schema/src/skill.ts`, `protocol/src/groups/skill.ts`, `server/src/handlers/skill.ts`, `app/src/utils/server.ts` (`listSkillCatalog`), `app/src/components/settings-v2/skills.tsx` |
+| Harness skill folders (`~/.codex/skills`, `~/.claude/skills`, `~/.agents/skills`, `~/.config/opencode/skill(s)`, project equivalents) | Shared store (read-only) | Text in [README](README.md#harness-skills) | `core/src/harness/skills.ts` |
 
 ## Unverified relationships and assumptions
 
@@ -230,6 +234,12 @@ The following were inferred from source and haven't been confirmed at runtime.
   routes (authorization outermost) was inferred from Effect layer types.
 - **Process-local write lock.** File compare-and-swap uses a process-local
   mutex. A second process writing the same workspace isn't excluded.
+- **Harness skill folders.** The Codex and OpenCode skill folder lists in
+  `core/src/harness/skills.ts` follow those tools' conventions and haven't
+  been checked against their documentation.
+- **Per-subagent usage.** Whether an ACP agent sends `usage_update` for a
+  child session at all is up to the agent. Upstream OpenCode's behavior wasn't
+  confirmed; the agent tab shows "Not reported" when it doesn't.
 - **Dead ACP runtimes.** An ACP agent that exits mid-turn is turned into
   error events, not a stream error. The dead runtime may stay cached until
   the harness revision changes.

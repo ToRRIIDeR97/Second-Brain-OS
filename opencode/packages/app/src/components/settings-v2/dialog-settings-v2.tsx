@@ -9,6 +9,7 @@ import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import { SettingsHarnessesV2 } from "./harnesses"
+import { SettingsSkillsV2 } from "./skills"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -88,6 +89,10 @@ export const DialogSettings: Component<{
                       <Icon name="console" />
                       {language.t("harness.settings.title")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="skills">
+                      <Icon name="book" />
+                      {language.t("secondBrain.skills.title")}
+                    </TabsV2.Trigger>
                   </div>
                 </div>
               </div>
@@ -115,6 +120,9 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="harnesses" class="settings-v2-panel">
           <SettingsHarnessesV2 directory={directory} onBack={showHarnesses} />
+        </TabsV2.Content>
+        <TabsV2.Content value="skills" class="settings-v2-panel">
+          <SettingsSkillsV2 directory={directory} />
         </TabsV2.Content>
       </TabsV2>
     </Dialog>

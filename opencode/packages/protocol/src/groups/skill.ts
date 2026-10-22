@@ -19,6 +19,21 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.get("skill.catalog", "/api/skill/catalog", {
+      query: LocationQuery,
+      success: Location.response(Skill.Catalog),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.skill.catalog",
+          summary: "List skills by harness",
+          description:
+            "Tenon skills, then the skills each external harness can use, read-only. Names, descriptions and paths only.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "skills",

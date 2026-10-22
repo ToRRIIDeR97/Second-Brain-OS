@@ -113,6 +113,148 @@ describe("ACP harness", () => {
     expect(events[7]).toMatchObject({ name: "acp_read", input: { path: "/w/a.txt" } })
   })
 
+  test("keeps parallel subagent transcripts separate, including a child that starts with a chunk", () => {
+    const state = AcpHarness.acpState()
+    const childOf = (id: string, title: string) => ({
+      "opencode/child-session": { id, parentID: "s1", depth: 1, title },
+    })
+    const spawn = (id: string, description: string) => [
+      update({ sessionUpdate: "tool_call", toolCallId: id, name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: id,
+        status: "in_progress",
+        rawInput: { agent: "explore", description, prompt: description },
+      }),
+    ]
+    const done = (id: string) => update({ sessionUpdate: "tool_call_update", toolCallId: id, status: "completed" })
+    const events = [
+      ...spawn("a", "Alpha"),
+      ...spawn("b", "Beta"),
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "from a" }, _meta: childOf("ca", "Alpha") }),
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m2", content: { type: "text", text: "from b" }, _meta: childOf("cb", "Beta") }),
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: " again" }, _meta: childOf("ca", "Alpha") }),
+      done("a"),
+      done("b"),
+    ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
+
+    const results = events.filter((event) => event.type === "tool-result")
+    expect(results).toHaveLength(2)
+    expect(results[0]).toMatchObject({ id: "a", providerMetadata: { acp: { transcript: [{ type: "text", text: "from a again" }] } } })
+    expect(results[1]).toMatchObject({ id: "b", providerMetadata: { acp: { transcript: [{ type: "text", text: "from b" }] } } })
+    expect(events.some((event) => event.type === "text-delta")).toBe(false)
+  })
+
+  test("checkpoints a subagent when a child message block ends, not on every chunk", () => {
+    const state = AcpHarness.acpState()
+    const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Look" } }
+    const chunk = (sessionUpdate: string, messageId: string, text: string) =>
+      update({ sessionUpdate, messageId, content: { type: "text", text }, _meta: child })
+    const events = [
+      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Look" } }),
+      chunk("agent_thought_chunk", "m1", "think "),
+      chunk("agent_thought_chunk", "m1", "more"),
+      chunk("agent_message_chunk", "m2", "answer "),
+      chunk("agent_message_chunk", "m2", "done"),
+      chunk("agent_message_chunk", "m3", "next"),
+    ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
+
+    const progress = events.filter((event) => event.type === "tool-progress")
+    expect(progress).toHaveLength(2)
+    expect(progress[0]).toMatchObject({
+      structured: { acp: { transcript: [{ type: "reasoning", text: "think more" }, { type: "text", text: "answer " }] } },
+    })
+    expect(progress[1]).toMatchObject({
+      structured: {
+        acp: {
+          transcript: [
+            { type: "reasoning", text: "think more" },
+            { type: "text", text: "answer done" },
+            { type: "text", text: "next" },
+          ],
+        },
+      },
+    })
+  })
+
+  test("caps a subagent transcript and marks it truncated", () => {
+    const state = AcpHarness.acpState()
+    const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
+    const events = [
+      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Read" } }),
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "a".repeat(60_000) }, _meta: child }),
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "b".repeat(60_000) }, _meta: child }),
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m2", content: { type: "text", text: "dropped" }, _meta: child }),
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "completed" }),
+    ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
+
+    const result = events.find((event) => event.type === "tool-result") as unknown as {
+      providerMetadata: { acp: { transcript: Array<{ text: string }>; truncated?: boolean } }
+    }
+    expect(result.providerMetadata.acp.truncated).toBe(true)
+    expect(result.providerMetadata.acp.transcript).toHaveLength(1)
+    expect(result.providerMetadata.acp.transcript[0]?.text.length).toBe(AcpHarness.TRANSCRIPT_LIMIT)
+  })
+
+  test("bounds tool output in a subagent transcript and keeps live progress small", () => {
+    const state = AcpHarness.acpState()
+    const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
+    const tools = Array.from({ length: 40 }, (_, index) => [
+      update({ sessionUpdate: "tool_call", toolCallId: `c1:t${index}`, kind: "read", title: "Read: read", status: "pending", rawInput: {}, _meta: child }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: `c1:t${index}`,
+        kind: "read",
+        status: "completed",
+        rawInput: { path: `/w/${index}.txt` },
+        content: [{ type: "content", content: { type: "text", text: "x".repeat(32_000) } }],
+        _meta: child,
+      }),
+    ]).flat()
+    const events = [
+      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Read" } }),
+      ...tools,
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "completed" }),
+    ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
+
+    type Entry = { type: string; text?: string; output?: string; status?: string }
+    const result = events.find((event) => event.type === "tool-result") as unknown as {
+      providerMetadata: { acp: { transcript: Entry[]; truncated?: boolean } }
+    }
+    const size = (entries: Entry[]) => entries.reduce((total, item) => total + (item.text ?? item.output ?? "").length, 0)
+    expect(result.providerMetadata.acp.truncated).toBe(true)
+    expect(size(result.providerMetadata.acp.transcript)).toBeLessThanOrEqual(AcpHarness.TRANSCRIPT_LIMIT)
+    // Every tool still shows that it ran, even after outputs stop being kept.
+    expect(result.providerMetadata.acp.transcript).toHaveLength(40)
+    expect(result.providerMetadata.acp.transcript.every((item) => item.status === "completed")).toBe(true)
+
+    const progress = events.filter((event) => event.type === "tool-progress") as unknown as {
+      structured: { acp: { transcript: Entry[] } }
+    }[]
+    expect(progress.length).toBeGreaterThan(0)
+    for (const item of progress) {
+      expect(item.structured.acp.transcript.length).toBeLessThanOrEqual(AcpHarness.PROGRESS_ENTRIES)
+      expect(item.structured.acp.transcript.some((entry) => "output" in entry)).toBe(false)
+    }
+  })
+
+  test("counts a parent usage update for the turn while a child's stays on the subagent", () => {
+    const state = AcpHarness.acpState()
+    const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
+    ;[
+      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Read" } }),
+      update({ sessionUpdate: "usage_update", used: 900, size: 1000, _meta: child }),
+      update({ sessionUpdate: "usage_update", used: 50, size: 1000, cost: { amount: 0.5, currency: "USD" } }),
+    ].forEach((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
+
+    expect(state.usage).toEqual({ used: 50, size: 1000, cost: 0.5 })
+    expect(state.tools.get("sub")?.usage).toEqual({ used: 900, size: 1000 })
+  })
+
   test("maps tool kinds to permission actions", () => {
     expect(["execute", "edit", "move", "search", "fetch", "think", undefined].map(AcpHarness.permissionAction)).toEqual(
       ["bash", "edit", "edit", "read", "webfetch", "acp_tool", "acp_tool"],

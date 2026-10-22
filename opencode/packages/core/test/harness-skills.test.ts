@@ -1,0 +1,121 @@
+import { afterAll, describe, expect, test } from "bun:test"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { Effect } from "effect"
+import { AcpHarness } from "@opencode-ai/core/harness/acp"
+import { HarnessSkills } from "@opencode-ai/core/harness/skills"
+import { SkillV2 } from "@opencode-ai/core/skill"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+
+const root = await fs.mkdtemp(path.join(os.tmpdir(), "harness-skills-core-"))
+const home = path.join(root, "home")
+const project = path.join(root, "project")
+afterAll(() => fs.rm(root, { recursive: true, force: true }))
+
+async function write(file: string, content: string) {
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await fs.writeFile(file, content)
+}
+
+await write(path.join(home, ".config/opencode/skills/b-skill/SKILL.md"), "---\nname: beta\n---\nBody\n")
+await write(path.join(home, ".config/opencode/skill/a-skill/SKILL.md"), "---\ndescription: No name here\n---\nBody\n")
+await write(path.join(home, ".agents/skills/nested/deep/SKILL.md"), "---\nname: deep\n---\nBody\n")
+await write(path.join(project, ".opencode/skills/local/SKILL.md"), "---\nname: local\n---\nBody\n")
+await write(path.join(project, ".opencode/skills/notes.md"), "---\nname: loose\n---\nNot a skill\n")
+await write(path.join(project, ".claude/skills/broken/SKILL.md"), "---\nname: [unclosed\n---\nBody\n")
+
+const scan = (harness: HarnessSkills.Harness, reported?: HarnessSkills.Reported, directory = project) =>
+  Effect.runPromise(HarnessSkills.scan({ home, directory, harness, reported }))
+
+describe("HarnessSkills.scan", () => {
+  test("an OpenCode ACP harness reads its folders, global first, each sorted by path", async () => {
+    const result = await scan({ id: "opencode-acp", driver: "acp", command: "opencode" })
+    expect(result.source).toBe("filesystem")
+    expect(result.skills.map((item) => [item.name, item.scope])).toEqual([
+      ["a-skill", "global"],
+      ["beta", "global"],
+      ["deep", "global"],
+      ["local", "project"],
+      ["broken", "project"],
+    ])
+    expect(result.skills[0]).toMatchObject({ description: "No name here" })
+    expect(result.skills.some((item) => item.name === "loose")).toBe(false)
+  })
+
+  test("recognizes a Claude command by its file name in any path style", async () => {
+    for (const command of ["C:\\Tools\\Claude.EXE", "/opt/bin/claude", "claude-code-acp.js"]) {
+      const result = await scan({ id: "claude", driver: "acp", command })
+      expect(result.source).toBe("filesystem")
+    }
+  })
+
+  test("known folders that don't exist give an empty filesystem result", async () => {
+    const missing = path.join(root, "missing")
+    const result = await Effect.runPromise(
+      HarnessSkills.scan({ home: missing, directory: missing, harness: { id: "codex", driver: "codex" } }),
+    )
+    expect(result).toEqual({ source: "filesystem", skills: [] })
+  })
+
+  test("lists a file once when the project is the home directory", async () => {
+    const result = await scan({ id: "opencode-acp", driver: "acp", command: "opencode" }, undefined, home)
+    const locations = result.skills.map((item) => item.location)
+    expect(new Set(locations).size).toBe(locations.length)
+    expect(result.skills.every((item) => item.scope === "global")).toBe(true)
+  })
+
+  test("the in-process agent and drivers without folders have no harness skills", async () => {
+    expect(await scan({ id: "opencode", driver: "opencode" }, [{ name: "x" }])).toEqual({ source: "none", skills: [] })
+    expect(await scan({ id: "gem", driver: "acp", command: "gemini" }, [])).toEqual({ source: "none", skills: [] })
+  })
+})
+
+describe("AcpHarness.reportedCommands", () => {
+  test("reads commands from available_commands_update only", () => {
+    const update = (value: Record<string, unknown>) => ({
+      method: "session/update",
+      params: { sessionId: "s", update: value },
+    })
+    expect(
+      AcpHarness.reportedCommands(
+        update({ sessionUpdate: "available_commands_update", availableCommands: [{ name: "init", input: null }, {}] }),
+      ),
+    ).toEqual([{ name: "init" }])
+    expect(AcpHarness.reportedCommands(update({ sessionUpdate: "agent_message_chunk" }))).toBeUndefined()
+  })
+})
+
+describe("HarnessSkills.tenonSkills", () => {
+  test("omits the location of embedded skills and keeps file-based ones", () => {
+    const builtIn = {
+      name: "customize-opencode",
+      description: "Customize",
+      location: AbsolutePath.make("/builtin/customize-opencode.md"),
+      content: "Body",
+    }
+    const file = { name: "notes", location: AbsolutePath.make("/t/notes/SKILL.md"), content: "Body" }
+    const result = HarnessSkills.tenonSkills(
+      [builtIn, file],
+      [
+        SkillV2.EmbeddedSource.make({ type: "embedded", skill: builtIn }),
+        SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/t") }),
+      ],
+    )
+    expect(result).toEqual([
+      { name: "customize-opencode", description: "Customize", scope: "global" },
+      { name: "notes", location: "/t/notes/SKILL.md", scope: "global" },
+    ])
+    expect(JSON.stringify(result)).not.toContain("Body")
+  })
+
+  test("a file skill that replaces an embedded one keeps its location", () => {
+    const builtIn = { name: "notes", location: AbsolutePath.make("/builtin/notes.md"), content: "Body" }
+    const file = { name: "notes", location: AbsolutePath.make("/t/notes/SKILL.md"), content: "Body" }
+    const result = HarnessSkills.tenonSkills(
+      [file],
+      [SkillV2.EmbeddedSource.make({ type: "embedded", skill: builtIn })],
+    )
+    expect(result).toEqual([{ name: "notes", location: "/t/notes/SKILL.md", scope: "global" }])
+  })
+})

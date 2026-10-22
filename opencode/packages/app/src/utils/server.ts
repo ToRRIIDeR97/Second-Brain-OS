@@ -10,6 +10,7 @@ import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { Harness } from "@opencode-ai/schema/harness"
 import { Harness as HarnessSchema } from "@opencode-ai/schema/harness"
 import { Location } from "@opencode-ai/schema/location"
+import { Skill as SkillSchema } from "@opencode-ai/schema/skill"
 import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { decode64 } from "@/utils/base64"
@@ -148,8 +149,19 @@ type HarnessServer = {
 }
 
 // Settings routes return `{ reason, message }` on failure; the message is written for people.
-async function harnessSettingsRequest(input: HarnessServer, directory: string, route: string, init?: RequestInit) {
-  const url = new URL(`${input.server.url.replace(/\/+$/, "")}/api/harness${route}`)
+function harnessSettingsRequest(input: HarnessServer, directory: string, route: string, init?: RequestInit) {
+  return locationRequest(input, directory, `/api/harness${route}`, "Harness request failed", init)
+}
+
+// The vendored client predates some routes, so settings pages call them directly with the location query.
+async function locationRequest(
+  input: HarnessServer,
+  directory: string,
+  route: string,
+  failure: string,
+  init?: RequestInit,
+) {
+  const url = new URL(`${input.server.url.replace(/\/+$/, "")}${route}`)
   url.searchParams.set("location[directory]", directory)
   const headers = new Headers(init?.headers)
   if (init?.body !== undefined) headers.set("content-type", "application/json")
@@ -164,8 +176,15 @@ async function harnessSettingsRequest(input: HarnessServer, directory: string, r
   const message =
     typeof body === "object" && body !== null && "message" in body && typeof body.message === "string"
       ? body.message
-      : `Harness request failed (${response.status}).`
+      : `${failure} (${response.status}).`
   throw new Error(message)
+}
+
+const decodeSkillCatalog = Schema.decodeUnknownSync(Location.response(SkillSchema.Catalog))
+
+/** Tenon's skills and each harness's skills, read-only, for Settings → Skills. */
+export async function listSkillCatalog(input: HarnessServer, directory: string) {
+  return decodeSkillCatalog(await locationRequest(input, directory, "/api/skill/catalog", "Skills request failed")).data
 }
 
 export async function listHarnessSettings(input: HarnessServer, directory: string) {

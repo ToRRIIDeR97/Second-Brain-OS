@@ -53,3 +53,27 @@ export const Source = Object.assign(
           : `embedded:${source.skill.name}`,
   },
 )
+
+/** A skill as the catalog lists it: where it lives, never its content. */
+export interface CatalogSkill extends Schema.Schema.Type<typeof CatalogSkill> {}
+export const CatalogSkill = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String.pipe(optional),
+  location: Schema.String.pipe(optional),
+  scope: Schema.Literals(["global", "project"]),
+}).annotate({ identifier: "SkillV2.CatalogSkill" })
+
+export interface HarnessCatalog extends Schema.Schema.Type<typeof HarnessCatalog> {}
+export const HarnessCatalog = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  source: Schema.Literals(["filesystem", "reported", "none"]),
+  skills: Schema.Array(CatalogSkill),
+}).annotate({ identifier: "SkillV2.HarnessCatalog" })
+
+/** Tenon's own skills, then each external harness's skills, read-only. */
+export interface Catalog extends Schema.Schema.Type<typeof Catalog> {}
+export const Catalog = Schema.Struct({
+  tenon: Schema.Array(CatalogSkill),
+  harnesses: Schema.Array(HarnessCatalog),
+}).annotate({ identifier: "SkillV2.Catalog" })

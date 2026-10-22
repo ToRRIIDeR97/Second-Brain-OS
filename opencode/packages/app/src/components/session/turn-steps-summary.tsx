@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
 import type { Part, ToolPart } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { Icon as StepIcon } from "@opencode-ai/ui/icon"
 import {
   stepIcon,
@@ -103,6 +104,8 @@ export function TurnStepsSummary(props: {
   durationMs?: number
   open: boolean
   onToggle: (open: boolean) => void
+  /** Opens a harness subagent's tab; its lanes become buttons when this is set. */
+  onOpenSubagent?: (part: ToolPart) => void
 }) {
   const language = useLanguage()
   const summary = createMemo(() => summarizeTurn(props.parts))
@@ -136,6 +139,7 @@ export function TurnStepsSummary(props: {
     if (step.kind === "subagent" && typeof agent === "string" && agent) return agent
     return language.t(stepVerbKey(step.kind, isRunning(part)))
   }
+  const openable = (part: ToolPart) => (part.tool === "acp_subagent" ? props.onOpenSubagent : undefined)
   const startOf = (part: ToolPart) => (part.state.status === "running" ? part.state.time.start : undefined)
 
   return (
@@ -153,7 +157,7 @@ export function TurnStepsSummary(props: {
           when={props.working}
           fallback={<Icon name="check" size="small" class="shrink-0 text-v2-text-text-muted" />}
         >
-          <Spinner />
+          <LoaderV2 width={14} height={14} style={{ color: "var(--v2-icon-icon-accent)" }} />
         </Show>
         <span data-slot="turn-steps-title" class="shrink-0 [font-weight:500] tabular-nums">
           {title()}
@@ -213,58 +217,80 @@ export function TurnStepsSummary(props: {
             )}
           </Show>
           <For each={lanes()}>
-            {(lane) => (
-              <div data-slot="turn-steps-lane" data-running={lane.running ? "" : undefined} class="flex flex-col gap-1">
-                <div class="flex min-w-0 items-center gap-2">
-                  <span class="shrink-0 [font-weight:500]">{label(lane.part)}</span>
-                  <Show when={stepOf(lane.part).target}>
-                    {(target) => <span class="min-w-0 truncate text-v2-text-text-muted">{target()}</span>}
+            {(lane) => {
+              const content = () => (
+                <>
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="shrink-0 [font-weight:500]">{label(lane.part)}</span>
+                    <Show when={stepOf(lane.part).target}>
+                      {(target) => <span class="min-w-0 truncate text-v2-text-text-muted">{target()}</span>}
+                    </Show>
+                    <span class="flex-1" />
+                    <Show when={lane.steps.length > 0}>
+                      <span class="shrink-0 tabular-nums text-[12px] text-v2-text-text-muted">
+                        {language.plural("secondBrain.turnSteps.laneSteps", lane.steps.length, {
+                          count: lane.steps.length.toLocaleString(language.intl()),
+                        })}
+                      </span>
+                    </Show>
+                  </div>
+                  <div data-slot="turn-steps-lane-bar">
+                    <div data-slot="turn-steps-lane-fill" />
+                  </div>
+                  <Show when={lane.current} keyed>
+                    {(step) => {
+                      const current = toolStep(step.tool, { title: step.title })
+                      return (
+                        <div
+                          data-slot="turn-steps-ticker-step"
+                          class="flex min-w-0 items-center gap-2 text-[12px] text-v2-text-text-muted"
+                        >
+                          <StepIcon name={stepIcon(current.kind)} size="small" class="shrink-0" />
+                          <span class="shrink-0">
+                            {language.t(
+                              stepVerbKey(current.kind, step.status === "pending" || step.status === "in_progress"),
+                            )}
+                          </span>
+                          <Show when={current.target}>
+                            {(target) => <span class="min-w-0 truncate font-mono">{target()}</span>}
+                          </Show>
+                        </div>
+                      )
+                    }}
                   </Show>
-                  <span class="flex-1" />
-                  <Show when={lane.steps.length > 0}>
-                    <span class="shrink-0 tabular-nums text-[12px] text-v2-text-text-muted">
-                      {language.plural("secondBrain.turnSteps.laneSteps", lane.steps.length, {
-                        count: lane.steps.length.toLocaleString(language.intl()),
-                      })}
-                    </span>
-                  </Show>
-                </div>
-                <div data-slot="turn-steps-lane-bar">
-                  <div data-slot="turn-steps-lane-fill" />
-                </div>
-                <Show when={lane.current} keyed>
-                  {(step) => {
-                    const current = toolStep(step.tool, { title: step.title })
-                    return (
-                      <div
-                        data-slot="turn-steps-ticker-step"
-                        class="flex min-w-0 items-center gap-2 text-[12px] text-v2-text-text-muted"
-                      >
-                        <StepIcon name={stepIcon(current.kind)} size="small" class="shrink-0" />
-                        <span class="shrink-0">
-                          {language.t(stepVerbKey(current.kind, step.status === "pending" || step.status === "in_progress"))}
-                        </span>
-                        <Show when={current.target}>
-                          {(target) => <span class="min-w-0 truncate font-mono">{target()}</span>}
-                        </Show>
-                      </div>
-                    )
-                  }}
+                </>
+              )
+              return (
+                <Show
+                  when={openable(lane.part)}
+                  fallback={
+                    <div
+                      data-slot="turn-steps-lane"
+                      data-running={lane.running ? "" : undefined}
+                      class="flex flex-col gap-1"
+                    >
+                      {content()}
+                    </div>
+                  }
+                >
+                  {(open) => (
+                    <button
+                      type="button"
+                      data-slot="turn-steps-lane"
+                      data-running={lane.running ? "" : undefined}
+                      aria-label={language.t("secondBrain.agentTab.open", { agent: label(lane.part) })}
+                      class="-mx-1.5 flex w-[calc(100%+12px)] cursor-pointer flex-col gap-1 rounded-[8px] px-1.5 py-0.5 text-left hover:bg-v2-background-bg-layer-02 focus-visible:outline focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
+                      onClick={() => open()(lane.part)}
+                    >
+                      {content()}
+                    </button>
+                  )}
                 </Show>
-              </div>
-            )}
+              )
+            }}
           </For>
         </div>
       </Show>
     </div>
-  )
-}
-
-function Spinner() {
-  return (
-    <span
-      aria-hidden="true"
-      class="size-3.5 shrink-0 animate-spin rounded-full border-2 border-v2-border-border-muted border-t-v2-icon-icon-accent motion-reduce:animate-none"
-    />
   )
 }

@@ -38,6 +38,13 @@ export interface OpenInput {
   readonly directory: string
   readonly continuation?: string
   readonly approve: (request: PermissionRequest) => Effect.Effect<boolean>
+  /** Called with the slash commands the agent reports, whenever it reports them. */
+  readonly onCommands?: (commands: ReadonlyArray<AcpCommand>) => Effect.Effect<void>
+}
+
+export interface AcpCommand {
+  readonly name: string
+  readonly description?: string
 }
 
 export interface Session {
@@ -215,7 +222,14 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   const items = yield* Queue.unbounded<Item>()
   const { client, initialize } = yield* connect(process, input.settings, input.directory, {
     handleRequest: (request) => handleRequest(request, input.approve),
-    onNotification: (notification) => Queue.offer(items, { type: "update", notification }).pipe(Effect.asVoid),
+    onNotification: (notification) => {
+      // Agents often report commands right after session/new, before any turn reads the queue.
+      const commands = input.onCommands ? reportedCommands(notification) : undefined
+      return (commands ? input.onCommands!(commands) : Effect.void).pipe(
+        Effect.andThen(Queue.offer(items, { type: "update", notification })),
+        Effect.asVoid,
+      )
+    },
   }).pipe(
     Effect.timeoutOrElse({
       duration: "30 seconds",
@@ -322,6 +336,16 @@ export interface AcpTool {
   done: boolean
   /** Steps a subagent ran in its own child session, keyed by the child's tool call ID. */
   readonly steps: Map<string, AcpStep>
+  /** A subagent's conversation in arrival order; tool entries update in place. */
+  readonly transcript: AcpTranscriptEntry[]
+  /** The transcript entry of each child tool call, keyed by the child's tool call ID. */
+  readonly entries: Map<string, AcpTranscriptTool>
+  /** The text or reasoning entry later chunks of the same message merge into. */
+  block?: { readonly type: "text" | "reasoning"; readonly messageId?: string; readonly entry: AcpTranscriptText }
+  /** Characters of text, reasoning and tool output kept so far, for the transcript cap. */
+  chars: number
+  truncated?: boolean
+  usage?: AcpUsage
 }
 
 export interface AcpStep {
@@ -329,6 +353,39 @@ export interface AcpStep {
   title?: string
   status: string
 }
+
+export interface AcpTranscriptText {
+  readonly type: "text" | "reasoning"
+  text: string
+}
+
+export interface AcpTranscriptTool {
+  readonly type: "tool"
+  readonly tool: string
+  title?: string
+  status: string
+  output?: string
+}
+
+export type AcpTranscriptEntry = AcpTranscriptText | AcpTranscriptTool
+
+/** A subagent's context and token use as its child session reported it; absent keys were not reported. */
+export interface AcpUsage {
+  readonly used?: number
+  readonly size?: number
+  /** USD amount. */
+  readonly cost?: number
+  readonly inputTokens?: number
+  readonly outputTokens?: number
+  readonly thoughtTokens?: number
+  readonly cachedReadTokens?: number
+  readonly cachedWriteTokens?: number
+}
+
+/** A subagent's transcript stops growing past this many characters of text, reasoning and tool output. */
+export const TRANSCRIPT_LIMIT = 100_000
+/** Live progress is stored for every checkpoint, so it carries only the latest entries and no tool output. */
+export const PROGRESS_ENTRIES = 50
 
 export interface AcpState {
   readonly tools: Map<string, AcpTool>
@@ -342,6 +399,8 @@ export interface AcpState {
   readonly previousCost?: number
   usage?: { readonly used?: number; readonly size?: number; readonly cost?: number }
   sessionCost?: number
+  /** Slash commands the agent reported through `available_commands_update`. */
+  commands?: AcpCommand[]
 }
 
 export const acpState = (previousCost?: number): AcpState => ({
@@ -365,7 +424,7 @@ export function parseAcpNotification(
   // OpenCode forwards a subagent's updates under the parent session ID and marks them with
   // `_meta["opencode/child-session"]`. They belong to the subagent's row, not the parent turn.
   const child = childSession(update)
-  if (child && child.id !== sessionId) return recordChildStep(state, child, kind, update)
+  if (child && child.id !== sessionId) return recordChild(state, child, kind, update)
   if (kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
     const content = isRecord(update.content) ? update.content : undefined
     const text = content?.type === "text" ? string(content.text) : undefined
@@ -384,6 +443,9 @@ export function parseAcpNotification(
       called: false,
       done: false,
       steps: new Map(),
+      transcript: [],
+      entries: new Map(),
+      chars: 0,
     }
     state.tools.set(id, tool)
     if (!tool.called) tool.input = toolInput(tool.name, update, tool.input)
@@ -405,13 +467,21 @@ export function parseAcpNotification(
         name: tool.name,
         providerExecuted: true,
         result: status === "failed" ? { type: "error", value } : { type: "text", value },
-        ...(tool.steps.size === 0 ? {} : { providerMetadata: { acp: { steps: [...tool.steps.values()] } } }),
+        ...(tool.name === "acp_subagent"
+          ? { providerMetadata: { acp: subagentSnapshot(tool) } }
+          : tool.steps.size === 0
+            ? {}
+            : { providerMetadata: { acp: { steps: [...tool.steps.values()] } } }),
       }),
     ]
   }
   if (kind === "usage_update") {
     const cost = isRecord(update.cost) && update.cost.currency === "USD" ? number(update.cost.amount) : undefined
     state.usage = { used: number(update.used), size: number(update.size), cost }
+    return []
+  }
+  if (kind === "available_commands_update") {
+    state.commands = commandList(update)
     return []
   }
   return []
@@ -549,20 +619,40 @@ function childSession(update: Record<string, unknown>) {
 }
 
 /**
- * Attach a child session's tool step to the subagent call that started it, and checkpoint the
- * subagent's steps when one starts or changes status so its row can show progress while it runs.
+ * Route a child session's update to the subagent call that started it. Tool steps checkpoint the
+ * subagent when one starts or changes status, and so does the end of a child message block, so the
+ * row can show progress while it runs without an event per chunk.
  */
-function recordChildStep(
+function recordChild(
   state: AcpState,
   child: { readonly id: string; readonly title?: string },
   kind: string | undefined,
   update: Record<string, unknown>,
 ): ReadonlyArray<LLMEvent> {
-  if (kind !== "tool_call" && kind !== "tool_call_update") return []
   const parentId = state.children.get(child.id) ?? subagentFor(state, child.title)
   const parent = parentId === undefined ? undefined : state.tools.get(parentId)
+  if (parentId === undefined || !parent) return []
+  if (kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
+    state.children.set(child.id, parentId)
+    const content = isRecord(update.content) ? update.content : undefined
+    const text = content?.type === "text" ? string(content.text) : undefined
+    if (!text) return []
+    const ended = appendChunk(
+      parent,
+      kind === "agent_message_chunk" ? "text" : "reasoning",
+      string(update.messageId),
+      text,
+    )
+    return ended ? progress(parentId, parent) : []
+  }
+  if (kind === "usage_update") {
+    state.children.set(child.id, parentId)
+    parent.usage = { ...parent.usage, ...childUsage(update) }
+    return []
+  }
+  if (kind !== "tool_call" && kind !== "tool_call_update") return []
   const id = string(update.toolCallId)
-  if (parentId === undefined || !parent || !id) return []
+  if (!id) return []
   state.children.set(child.id, parentId)
   const before = parent.steps.get(id)
   const previous = before ? `${before.status}:${before.title}` : undefined
@@ -574,10 +664,103 @@ function recordChildStep(
   if (title) step.title = title
   step.status = string(update.status) ?? step.status
   parent.steps.set(id, step)
-  if (!parent.called || parent.done || previous === `${step.status}:${step.title}`) return []
-  return [
-    LLMEvent.toolProgress({ id: parentId, name: parent.name, structured: { acp: { steps: [...parent.steps.values()].map((item) => ({ ...item })) } } }),
-  ]
+  const entry = parent.entries.get(id) ?? { type: "tool" as const, tool: step.tool, status: step.status }
+  if (!parent.entries.has(id)) {
+    parent.entries.set(id, entry)
+    parent.transcript.push(entry)
+    parent.block = undefined
+  }
+  if (step.title) entry.title = step.title
+  entry.status = step.status
+  if ((step.status === "completed" || step.status === "failed") && entry.output === undefined) {
+    const output = withinBudget(parent, toolOutput(update))
+    if (output) entry.output = output
+  }
+  if (previous === `${step.status}:${step.title}`) return []
+  return progress(parentId, parent)
+}
+
+/** Adds a child chunk to the transcript; true when it ended the previous text or reasoning block. */
+function appendChunk(tool: AcpTool, type: "text" | "reasoning", messageId: string | undefined, text: string) {
+  const block = tool.block
+  const merges = block?.type === type && (messageId === undefined || messageId === block.messageId)
+  if (tool.truncated) return false
+  const kept = withinBudget(tool, text)
+  if (merges) {
+    block.entry.text += kept
+    return false
+  }
+  if (kept) {
+    const entry = { type, text: kept }
+    tool.transcript.push(entry)
+    tool.block = { type, messageId, entry }
+  }
+  return block !== undefined
+}
+
+/** The part of `text` that fits the subagent's transcript budget; marks the transcript truncated when cut. */
+function withinBudget(tool: AcpTool, text: string) {
+  if (tool.truncated) return ""
+  const room = TRANSCRIPT_LIMIT - tool.chars
+  if (text.length > room) tool.truncated = true
+  const kept = text.length > room ? text.slice(0, room) : text
+  tool.chars += kept.length
+  return kept
+}
+
+/** The commands in an `available_commands_update`, or undefined for any other notification. */
+export function reportedCommands(notification: Notification) {
+  if (notification.method !== "session/update") return undefined
+  const params = isRecord(notification.params) ? notification.params : {}
+  const update = isRecord(params.update) ? params.update : {}
+  return update.sessionUpdate === "available_commands_update" ? commandList(update) : undefined
+}
+
+function commandList(update: Record<string, unknown>): AcpCommand[] {
+  const commands = Array.isArray(update.availableCommands) ? update.availableCommands.filter(isRecord) : []
+  return commands.flatMap((command) => {
+    const name = string(command.name)
+    const description = string(command.description)
+    return name ? [{ name, ...(description === undefined ? {} : { description }) }] : []
+  })
+}
+
+function childUsage(update: Record<string, unknown>): AcpUsage {
+  const cost = isRecord(update.cost) && update.cost.currency === "USD" ? number(update.cost.amount) : undefined
+  const fields = {
+    used: number(update.used),
+    size: number(update.size),
+    cost,
+    inputTokens: number(update.inputTokens),
+    outputTokens: number(update.outputTokens),
+    thoughtTokens: number(update.thoughtTokens),
+    cachedReadTokens: number(update.cachedReadTokens),
+    cachedWriteTokens: number(update.cachedWriteTokens),
+  }
+  return Object.fromEntries(Object.entries(fields).filter((entry) => entry[1] !== undefined))
+}
+
+function progress(id: string, tool: AcpTool): ReadonlyArray<LLMEvent> {
+  if (!tool.called || tool.done) return []
+  return [LLMEvent.toolProgress({ id, name: tool.name, structured: { acp: subagentSnapshot(tool, true) } })]
+}
+
+/**
+ * A copy of the subagent's steps, transcript and usage, safe to publish while they keep changing.
+ * A live checkpoint keeps the last entries without tool output; the result carries the full capped transcript.
+ */
+function subagentSnapshot(tool: AcpTool, live = false) {
+  const transcript = live ? tool.transcript.slice(-PROGRESS_ENTRIES) : tool.transcript
+  return {
+    steps: [...tool.steps.values()].map((item) => ({ ...item })),
+    transcript: transcript.map((item) => {
+      if (!live || item.type !== "tool") return { ...item }
+      const { output: _, ...rest } = item
+      return rest
+    }),
+    ...(tool.usage ? { usage: { ...tool.usage } } : {}),
+    ...(tool.truncated ? { truncated: true } : {}),
+  }
 }
 
 function subagentFor(state: AcpState, title: string | undefined) {
