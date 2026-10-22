@@ -345,6 +345,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         })
         return
       }
+      case "tool-progress": {
+        const tool = tools.get(event.id)
+        // A checkpoint that races the call's settlement carries nothing the result doesn't.
+        if (!tool?.called || tool.settled) return
+        yield* events.publish(SessionEvent.Tool.Progress, {
+          sessionID: input.sessionID,
+          timestamp: yield* timestamp,
+          assistantMessageID: tool.assistantMessageID,
+          callID: event.id,
+          structured: event.structured,
+          content: [],
+        })
+        return
+      }
       case "tool-result": {
         const tool = tools.get(event.id)
         if (!tool?.called) return yield* Effect.die(`Tool result before call: ${event.id}`)

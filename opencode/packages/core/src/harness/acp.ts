@@ -315,8 +315,25 @@ function createSession(client: Client, params: { readonly cwd: string; readonly 
   )
 }
 
+export interface AcpTool {
+  readonly name: string
+  input: Record<string, unknown>
+  called: boolean
+  done: boolean
+  /** Steps a subagent ran in its own child session, keyed by the child's tool call ID. */
+  readonly steps: Map<string, AcpStep>
+}
+
+export interface AcpStep {
+  readonly tool: string
+  title?: string
+  status: string
+}
+
 export interface AcpState {
-  readonly tools: Map<string, { readonly name: string; readonly input: unknown; done: boolean }>
+  readonly tools: Map<string, AcpTool>
+  /** Child session ID to the parent tool call that started it. */
+  readonly children: Map<string, string>
   text?: { readonly id: string; readonly messageId?: string }
   reasoning?: { readonly id: string; readonly messageId?: string }
   blocks: number
@@ -329,6 +346,7 @@ export interface AcpState {
 
 export const acpState = (previousCost?: number): AcpState => ({
   tools: new Map(),
+  children: new Map(),
   blocks: 0,
   finished: false,
   previousCost,
@@ -344,6 +362,10 @@ export function parseAcpNotification(
   if (params.sessionId !== sessionId || !isRecord(params.update)) return []
   const update = params.update
   const kind = string(update.sessionUpdate)
+  // OpenCode forwards a subagent's updates under the parent session ID and marks them with
+  // `_meta["opencode/child-session"]`. They belong to the subagent's row, not the parent turn.
+  const child = childSession(update)
+  if (child && child.id !== sessionId) return recordChildStep(state, child, kind, update)
   if (kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
     const content = isRecord(update.content) ? update.content : undefined
     const text = content?.type === "text" ? string(content.text) : undefined
@@ -356,16 +378,23 @@ export function parseAcpNotification(
     const id = string(update.toolCallId)
     if (!id) return []
     const closed = closeBlocks(state)
-    const known = state.tools.get(id)
-    const tool = known ?? {
-      name: toolName(string(update.kind)),
-      input: isRecord(update.rawInput) ? update.rawInput : { title: string(update.title) ?? "Tool" },
+    const tool = state.tools.get(id) ?? {
+      name: toolName(update),
+      input: {},
+      called: false,
       done: false,
+      steps: new Map(),
     }
-    const start = known ? [] : [LLMEvent.toolCall({ id, name: tool.name, input: tool.input, providerExecuted: true })]
     state.tools.set(id, tool)
+    if (!tool.called) tool.input = toolInput(tool.name, update, tool.input)
     const status = string(update.status)
-    if (tool.done || (status !== "completed" && status !== "failed")) return [...closed, ...start]
+    const terminal = status === "completed" || status === "failed"
+    // A pending call can carry partial arguments (OpenCode sends only `cwd`); the command or path
+    // arrives with `in_progress`, so the call is published then, or when it finishes.
+    const ready = !tool.called && (terminal || status === "in_progress")
+    if (ready) tool.called = true
+    const start = ready ? [LLMEvent.toolCall({ id, name: tool.name, input: tool.input, providerExecuted: true })] : []
+    if (tool.done || !terminal) return [...closed, ...start]
     tool.done = true
     const value = toolOutput(update)
     return [
@@ -376,6 +405,7 @@ export function parseAcpNotification(
         name: tool.name,
         providerExecuted: true,
         result: status === "failed" ? { type: "error", value } : { type: "text", value },
+        ...(tool.steps.size === 0 ? {} : { providerMetadata: { acp: { steps: [...tool.steps.values()] } } }),
       }),
     ]
   }
@@ -487,8 +517,72 @@ function permissionResources(tool: Record<string, unknown>, title: string) {
   return resources.length > 0 ? resources : [title]
 }
 
-function toolName(kind: string | undefined) {
+function toolName(update: Record<string, unknown>) {
+  // OpenCode reports its subagent tool with the generic `think` kind; its own tool name is clearer.
+  const name = string(update.name)
+  if (name === "subagent" || name === "task") return "acp_subagent"
+  const kind = string(update.kind)
   return kind ? `acp_${kind}` : "acp_tool"
+}
+
+/** The call's arguments plus the agent's title and first location, which rows fall back to. */
+function toolInput(name: string, update: Record<string, unknown>, previous: Record<string, unknown>) {
+  const raw = isRecord(update.rawInput) ? update.rawInput : {}
+  const location = Array.isArray(update.locations) ? update.locations.find(isRecord) : undefined
+  const path = string(location?.path)
+  const title = string(update.title)
+  const input = { ...previous, ...raw }
+  if (Object.keys(raw).length === 0) return input
+  return {
+    ...input,
+    ...(title && raw.title === undefined ? { title } : {}),
+    ...(path && input.path === undefined ? { path } : {}),
+    ...(name === "acp_subagent" && typeof raw.agent === "string" ? { subagent_type: raw.agent } : {}),
+  }
+}
+
+function childSession(update: Record<string, unknown>) {
+  const meta = isRecord(update._meta) ? update._meta["opencode/child-session"] : undefined
+  if (!isRecord(meta)) return undefined
+  const id = string(meta.id)
+  return id ? { id, title: string(meta.title) } : undefined
+}
+
+/**
+ * Attach a child session's tool step to the subagent call that started it, and checkpoint the
+ * subagent's steps when one starts or changes status so its row can show progress while it runs.
+ */
+function recordChildStep(
+  state: AcpState,
+  child: { readonly id: string; readonly title?: string },
+  kind: string | undefined,
+  update: Record<string, unknown>,
+): ReadonlyArray<LLMEvent> {
+  if (kind !== "tool_call" && kind !== "tool_call_update") return []
+  const parentId = state.children.get(child.id) ?? subagentFor(state, child.title)
+  const parent = parentId === undefined ? undefined : state.tools.get(parentId)
+  const id = string(update.toolCallId)
+  if (parentId === undefined || !parent || !id) return []
+  state.children.set(child.id, parentId)
+  const before = parent.steps.get(id)
+  const previous = before ? `${before.status}:${before.title}` : undefined
+  const step = parent.steps.get(id) ?? { tool: toolName(update), status: "pending" }
+  // Titles arrive as "<subagent description>: <command or tool>"; the row already shows the description.
+  const raw = isRecord(update.rawInput) ? update.rawInput : {}
+  const title =
+    string(raw.command) ?? string(raw.path) ?? string(update.title)?.replace(child.title ? `${child.title}: ` : "", "")
+  if (title) step.title = title
+  step.status = string(update.status) ?? step.status
+  parent.steps.set(id, step)
+  if (!parent.called || parent.done || previous === `${step.status}:${step.title}`) return []
+  return [
+    LLMEvent.toolProgress({ id: parentId, name: parent.name, structured: { acp: { steps: [...parent.steps.values()].map((item) => ({ ...item })) } } }),
+  ]
+}
+
+function subagentFor(state: AcpState, title: string | undefined) {
+  const open = [...state.tools.entries()].filter((entry) => entry[1].name === "acp_subagent" && !entry[1].done)
+  return (open.find((entry) => entry[1].input.description === title) ?? open.at(-1))?.[0]
 }
 
 function toolOutput(update: Record<string, unknown>) {

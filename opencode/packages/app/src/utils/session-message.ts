@@ -368,6 +368,21 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
     callID: tool.id,
     tool: tool.name,
     state,
-    metadata: { providerState: tool.providerState, providerResultState: tool.providerResultState },
+    metadata: {
+      providerState: tool.providerState,
+      providerResultState: tool.providerResultState,
+      ...(acpSteps(tool) ? { acpSteps: acpSteps(tool) } : {}),
+    },
   }
+}
+
+/** Steps an ACP subagent ran: live checkpoints while it runs, the final list once it settles. */
+function acpSteps(tool: SessionMessageAssistantTool) {
+  const pick = (value: unknown) =>
+    record(value) && record(value.acp) && Array.isArray(value.acp.steps) ? value.acp.steps : undefined
+  // The vendored client types predate `provider` and `structured`, which the server does send.
+  const loose: unknown = tool
+  if (!record(loose)) return undefined
+  return pick(record(loose.provider) ? loose.provider.resultMetadata : undefined) ??
+    pick(record(loose.state) ? loose.state.structured : undefined)
 }

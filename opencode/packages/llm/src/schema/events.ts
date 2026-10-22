@@ -159,6 +159,18 @@ export const ToolCall = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ToolCall" })
 export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
+/**
+ * Checkpoint for a provider-executed tool that is still running, such as a harness subagent
+ * reporting the steps it has taken so far. Replaces the previous checkpoint for the call.
+ */
+export const ToolProgress = Schema.Struct({
+  type: Schema.tag("tool-progress"),
+  id: ToolCallID,
+  name: Schema.String,
+  structured: Schema.Record(Schema.String, Schema.Unknown),
+}).annotate({ identifier: "LLM.Event.ToolProgress" })
+export type ToolProgress = Schema.Schema.Type<typeof ToolProgress>
+
 export const ToolResult = Schema.Struct({
   type: Schema.tag("tool-result"),
   id: ToolCallID,
@@ -218,6 +230,7 @@ const llmEventTagged = Schema.Union([
   ToolInputDelta,
   ToolInputEnd,
   ToolCall,
+  ToolProgress,
   ToolResult,
   ToolError,
   StepFinish,
@@ -255,6 +268,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     ToolInputDelta.make({ ...input, id: toolCallID(input.id) }),
   toolInputEnd: (input: WithID<ToolInputEnd, ToolCallID>) => ToolInputEnd.make({ ...input, id: toolCallID(input.id) }),
   toolCall: (input: WithID<ToolCall, ToolCallID>) => ToolCall.make({ ...input, id: toolCallID(input.id) }),
+  toolProgress: (input: WithID<ToolProgress, ToolCallID>) => ToolProgress.make({ ...input, id: toolCallID(input.id) }),
   toolResult: (input: WithID<ToolResult, ToolCallID>) =>
     ToolResult.make({
       ...input,
@@ -285,6 +299,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolInputDelta: llmEventTagged.guards["tool-input-delta"],
     toolInputEnd: llmEventTagged.guards["tool-input-end"],
     toolCall: llmEventTagged.guards["tool-call"],
+    toolProgress: llmEventTagged.guards["tool-progress"],
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
     stepFinish: llmEventTagged.guards["step-finish"],

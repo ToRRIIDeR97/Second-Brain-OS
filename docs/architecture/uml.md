@@ -99,6 +99,9 @@ Runtime notes:
 - Tools run by Codex or ACP agents are provider-executed. The runner only
   records them, and their approvals arrive through the harness permission
   bridge.
+- A provider-executed subagent can report progress while it runs. A
+  `tool-progress` stream event becomes `session.next.tool.progress`, which
+  replaces the running tool's `structured` checkpoint.
 - If the user declines a local tool, the drain stops. A declined ACP
   permission instead sends a reject option back to the agent.
 

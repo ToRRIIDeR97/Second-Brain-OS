@@ -7,10 +7,12 @@ import {
   stepOf,
   stepVerbKey,
   summarizeTurn,
+  toolStep,
   type StepKind,
   type TurnSteps,
 } from "@opencode-ai/session-ui/step-kind"
 import { useLanguage } from "@/context/language"
+import "./turn-steps-summary.css"
 
 // Fixed order so the phrase list doesn't reshuffle while a turn streams.
 const KIND_ORDER: StepKind[] = [
@@ -29,22 +31,58 @@ const KIND_ORDER: StepKind[] = [
 
 /** One complete localized phrase per step kind that occurred, e.g. "Read 3 files". */
 export function stepCountPhrases(language: ReturnType<typeof useLanguage>, counts: TurnSteps["counts"]) {
+  return stepCounts(counts).map((item) => stepCountPhrase(language, item.kind, item.count))
+}
+
+function stepCounts(counts: TurnSteps["counts"]) {
   return KIND_ORDER.flatMap((kind) => {
     const count = counts[kind]
-    if (!count) return []
-    return [language.plural(`secondBrain.turnSteps.${kind}`, count, { count: count.toLocaleString(language.intl()) })]
+    return count ? [{ kind, count }] : []
   })
 }
 
-const TICKER_SIZE = 3
-const isRunning = (part: ToolPart) => part.state.status === "pending" || part.state.status === "running"
+function stepCountPhrase(language: ReturnType<typeof useLanguage>, kind: StepKind, count: number) {
+  return language.plural(`secondBrain.turnSteps.${kind}`, count, { count: count.toLocaleString(language.intl()) })
+}
 
-/** The latest in-progress step and the steps just before it, oldest first; the last steps when none is running. */
-export function tickerSteps(parts: readonly Part[]) {
-  const tools = parts.filter((part): part is ToolPart => part.type === "tool")
-  const current = tools.findLastIndex(isRunning)
-  const end = current === -1 ? tools.length : current + 1
-  return tools.slice(Math.max(0, end - TICKER_SIZE), end)
+const isRunning = (part: ToolPart) => part.state.status === "pending" || part.state.status === "running"
+const isSubagent = (part: ToolPart) => stepOf(part).kind === "subagent"
+
+/** The step the ticker shows: the latest one still in progress, else the latest one. Subagents have lanes instead. */
+export function tickerStep(parts: readonly Part[]) {
+  const tools = parts.filter((part): part is ToolPart => part.type === "tool" && !isSubagent(part))
+  return tools.findLast(isRunning) ?? tools.at(-1)
+}
+
+export interface LaneStep {
+  readonly tool: string
+  readonly title?: string
+  readonly status: string
+}
+
+/** Subagents started in the turn, with the steps an ACP harness reported for each one. */
+export function subagentLanes(parts: readonly Part[]) {
+  return parts
+    .filter((part): part is ToolPart => part.type === "tool" && isSubagent(part))
+    .map((part) => {
+      const steps = laneSteps(part.metadata?.acpSteps)
+      return {
+        part,
+        steps,
+        running: isRunning(part),
+        // The newest step still going, else the newest one, so the lane reads as "what it's doing now".
+        current: steps.findLast((step) => step.status === "pending" || step.status === "in_progress") ?? steps.at(-1),
+      }
+    })
+}
+
+function laneSteps(value: unknown): LaneStep[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) =>
+    typeof item === "object" && item !== null && typeof item.tool === "string" && typeof item.status === "string"
+      ? [{ tool: item.tool, status: item.status, title: typeof item.title === "string" ? item.title : undefined }]
+      : [],
+  )
 }
 
 export function formatTurnDuration(language: ReturnType<typeof useLanguage>, ms: number | undefined) {
@@ -68,9 +106,11 @@ export function TurnStepsSummary(props: {
 }) {
   const language = useLanguage()
   const summary = createMemo(() => summarizeTurn(props.parts))
-  const phrases = createMemo(() => stepCountPhrases(language, summary().counts))
-  const toolCount = createMemo(() => props.parts.filter((part) => part.type === "tool").length)
-  const ticker = createMemo(() => (props.working && !props.open ? tickerSteps(props.parts) : []))
+  const counts = createMemo(() => stepCounts(summary().counts))
+  const live = () => props.working && !props.open
+  const ticker = createMemo(() => (live() ? tickerStep(props.parts) : undefined))
+  // Finished lanes stay, with a full bar, until the turn ends so parallel subagents don't jump around.
+  const lanes = createMemo(() => (live() ? subagentLanes(props.parts) : []))
   // One clock drives the turn and step timers; it only ticks while the turn works.
   const [now, setNow] = createSignal(Date.now())
   const timer = setInterval(() => props.working && setNow(Date.now()), 1000)
@@ -109,34 +149,35 @@ export function TurnStepsSummary(props: {
         class="flex h-9 w-full min-w-0 items-center gap-2 rounded-[16px] px-3 text-left text-[14px] leading-5 text-v2-text-text-base"
         onClick={() => props.onToggle(!props.open)}
       >
+        <Show
+          when={props.working}
+          fallback={<Icon name="check" size="small" class="shrink-0 text-v2-text-text-muted" />}
+        >
+          <Spinner />
+        </Show>
         <span data-slot="turn-steps-title" class="shrink-0 [font-weight:500] tabular-nums">
           {title()}
         </span>
-        <span
-          data-slot="turn-steps-counts"
-          class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted"
-        >
-          <For each={phrases()}>
-            {(phrase, index) => (
-              <>
-                <Show when={index() > 0}>
-                  <span aria-hidden="true"> · </span>
-                </Show>
-                <span>{phrase}</span>
-              </>
+        <span data-slot="turn-steps-counts" class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+          <For each={counts()}>
+            {(item) => (
+              <span
+                data-slot="turn-steps-count"
+                title={stepCountPhrase(language, item.kind, item.count)}
+                class="flex h-5 shrink-0 items-center gap-1 rounded-full bg-v2-background-bg-base px-2 text-[12px] tabular-nums text-v2-text-text-muted"
+              >
+                <StepIcon name={stepIcon(item.kind)} size="small" aria-hidden="true" />
+                <span aria-hidden="true">{item.count.toLocaleString(language.intl())}</span>
+                <span class="sr-only">{stepCountPhrase(language, item.kind, item.count)}</span>
+              </span>
             )}
           </For>
         </span>
         <Show when={summary().failed > 0}>
-          <span data-slot="turn-steps-failed" class="shrink-0 text-v2-text-text-critical">
+          <span data-slot="turn-steps-failed" class="shrink-0 text-[13px] text-v2-text-text-critical">
             {language.plural("secondBrain.turnSteps.failed", summary().failed, {
               count: summary().failed.toLocaleString(language.intl()),
             })}
-          </span>
-        </Show>
-        <Show when={ticker().length > 0 && toolCount() > ticker().length}>
-          <span data-slot="turn-steps-show-all" class="shrink-0 text-[13px] text-v2-text-text-accent">
-            {language.t("secondBrain.turnSteps.showAll", { count: toolCount().toLocaleString(language.intl()) })}
           </span>
         </Show>
         <Icon
@@ -145,50 +186,85 @@ export function TurnStepsSummary(props: {
           class="shrink-0 text-v2-text-text-muted"
         />
       </button>
-      <Show when={ticker().length > 0}>
-        {/* Fixed height while the turn works, so steps starting and finishing never move the rows below. */}
-        <ol
-          data-slot="turn-steps-ticker"
-          aria-live="polite"
-          class="flex h-[84px] flex-col gap-1 overflow-hidden px-3 pb-2 text-[13px] leading-5"
-        >
-          <For each={ticker()}>
-            {(part) => {
-              const running = () => isRunning(part)
-              const step = () => stepOf(part)
-              return (
-                <li
+      <Show when={ticker() || lanes().length > 0}>
+        <div class="flex flex-col gap-2 px-3 pb-2.5 text-[13px] leading-5">
+          {/* One line, fixed height: a new step replaces the old one instead of pushing rows below it. */}
+          <Show when={ticker()} keyed>
+            {(part) => (
+              <div data-slot="turn-steps-ticker" aria-live="polite" class="h-5 overflow-hidden">
+                <div
                   data-slot="turn-steps-ticker-step"
-                  data-running={running() ? "" : undefined}
-                  class="flex min-w-0 shrink-0 items-center gap-2"
-                  classList={{
-                    "text-v2-text-text-muted": !running(),
-                    "-mx-2 h-8 rounded-[12px] bg-v2-background-bg-base px-2 text-v2-text-text-base": running(),
-                  }}
+                  data-running={isRunning(part) ? "" : undefined}
+                  class="flex min-w-0 items-center gap-2 text-v2-text-text-base"
                 >
-                  <Show
-                    when={running()}
-                    fallback={<StepIcon name={stepIcon(step().kind)} size="small" class="shrink-0" />}
-                  >
-                    <span
-                      aria-hidden="true"
-                      class="size-3.5 shrink-0 animate-spin rounded-full border-2 border-v2-border-border-muted border-t-v2-icon-icon-accent motion-reduce:animate-none"
-                    />
-                  </Show>
+                  <StepIcon name={stepIcon(stepOf(part).kind)} size="small" class="shrink-0 text-v2-text-text-muted" />
                   <span class="shrink-0 [font-weight:500]">{label(part)}</span>
-                  <Show when={step().target}>
-                    {(target) => <span class="min-w-0 truncate font-mono text-[12px]">{target()}</span>}
+                  <Show when={stepOf(part).target}>
+                    {(target) => (
+                      <span class="min-w-0 truncate font-mono text-[12px] text-v2-text-text-muted">{target()}</span>
+                    )}
                   </Show>
                   <span class="flex-1" />
-                  <Show when={running() && elapsed(startOf(part))}>
+                  <Show when={isRunning(part) && elapsed(startOf(part))}>
                     {(time) => <span class="shrink-0 tabular-nums text-v2-text-text-muted">{time()}</span>}
                   </Show>
-                </li>
-              )
-            }}
+                </div>
+              </div>
+            )}
+          </Show>
+          <For each={lanes()}>
+            {(lane) => (
+              <div data-slot="turn-steps-lane" data-running={lane.running ? "" : undefined} class="flex flex-col gap-1">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="shrink-0 [font-weight:500]">{label(lane.part)}</span>
+                  <Show when={stepOf(lane.part).target}>
+                    {(target) => <span class="min-w-0 truncate text-v2-text-text-muted">{target()}</span>}
+                  </Show>
+                  <span class="flex-1" />
+                  <Show when={lane.steps.length > 0}>
+                    <span class="shrink-0 tabular-nums text-[12px] text-v2-text-text-muted">
+                      {language.plural("secondBrain.turnSteps.laneSteps", lane.steps.length, {
+                        count: lane.steps.length.toLocaleString(language.intl()),
+                      })}
+                    </span>
+                  </Show>
+                </div>
+                <div data-slot="turn-steps-lane-bar">
+                  <div data-slot="turn-steps-lane-fill" />
+                </div>
+                <Show when={lane.current} keyed>
+                  {(step) => {
+                    const current = toolStep(step.tool, { title: step.title })
+                    return (
+                      <div
+                        data-slot="turn-steps-ticker-step"
+                        class="flex min-w-0 items-center gap-2 text-[12px] text-v2-text-text-muted"
+                      >
+                        <StepIcon name={stepIcon(current.kind)} size="small" class="shrink-0" />
+                        <span class="shrink-0">
+                          {language.t(stepVerbKey(current.kind, step.status === "pending" || step.status === "in_progress"))}
+                        </span>
+                        <Show when={current.target}>
+                          {(target) => <span class="min-w-0 truncate font-mono">{target()}</span>}
+                        </Show>
+                      </div>
+                    )
+                  }}
+                </Show>
+              </div>
+            )}
           </For>
-        </ol>
+        </div>
       </Show>
     </div>
+  )
+}
+
+function Spinner() {
+  return (
+    <span
+      aria-hidden="true"
+      class="size-3.5 shrink-0 animate-spin rounded-full border-2 border-v2-border-border-muted border-t-v2-icon-icon-accent motion-reduce:animate-none"
+    />
   )
 }

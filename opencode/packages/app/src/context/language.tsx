@@ -36,6 +36,7 @@ type PluralKey =
   | "session.revertDock.summary"
   | "secondBrain.sessionTab.messages"
   | "secondBrain.turnSteps.failed"
+  | "secondBrain.turnSteps.laneSteps"
   | `secondBrain.turnSteps.${StepKind}`
 type Source = { dict: Record<string, string> }
 

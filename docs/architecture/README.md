@@ -293,6 +293,20 @@ the legacy `models` field or as a `configOptions` select of category `model`.
 The driver switches models with `session/set_model` or
 `session/set_config_option` to match.
 
+`AcpHarness.parseAcpNotification` turns `session/update` notifications into
+stream events. A tool call is published at `in_progress` (or when it finishes),
+because agents announce calls before their arguments exist: OpenCode's
+`pending` update carries only `cwd`, and the command or path follows. OpenCode
+forwards a subagent's updates under the parent session ID, marked with
+`_meta["opencode/child-session"]`. Those updates never reach the parent turn.
+The child's tool steps are attached to the subagent call (`acp_subagent`) that
+started it, published as `tool-progress` checkpoints while it runs
+(`session.next.tool.progress`, `structured.acp.steps`) and as
+`provider.resultMetadata.acp.steps` on the result. The child's text and
+reasoning are dropped; its report arrives as the subagent tool's output. The
+turn card in the timeline (`TurnStepsSummary`) shows these steps as subagent
+lanes.
+
 ### Harness handoff
 
 The `opencode` driver reads the Run's native messages, so it needs no

@@ -468,7 +468,7 @@ type NextData = {
   delta: string
   text: string
   input: Record<string, unknown>
-  provider: { executed: boolean; metadata?: unknown }
+  provider: { executed: boolean; metadata?: unknown; resultMetadata?: unknown }
   structured: Record<string, unknown>
   content: unknown[]
   result: unknown
@@ -607,11 +607,18 @@ function reduceNext(
         state: { status: "running", input: data.input, metadata: {} } as Tool["state"],
         time: { ...item.time, ran: data.timestamp },
       }))
+    case "session.next.tool.progress":
+      return tool((item) =>
+        item.state.status === "running"
+          ? { ...item, state: { ...item.state, structured: data.structured } as unknown as Tool["state"] }
+          : item,
+      )
     case "session.next.tool.success":
       return tool((item) =>
         item.state.status === "running"
           ? {
               ...item,
+              provider: { ...item.provider, executed: item.provider?.executed === true, resultMetadata: data.provider.metadata },
               state: {
                 status: "completed",
                 input: item.state.input,

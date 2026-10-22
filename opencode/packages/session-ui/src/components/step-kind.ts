@@ -55,6 +55,7 @@ const KINDS: Record<string, StepKind> = {
   mcp_tool_call: "mcp",
   skill: "skill",
   task: "subagent",
+  acp_subagent: "subagent",
   todowrite: "todo",
   question: "question",
 }
