@@ -38,6 +38,13 @@ export interface OpenInput {
   readonly directory: string
   readonly continuation?: string
   readonly approve: (request: PermissionRequest) => Effect.Effect<boolean>
+  /** Called with the slash commands the agent reports, whenever it reports them. */
+  readonly onCommands?: (commands: ReadonlyArray<AcpCommand>) => Effect.Effect<void>
+}
+
+export interface AcpCommand {
+  readonly name: string
+  readonly description?: string
 }
 
 export interface Session {
@@ -215,7 +222,14 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   const items = yield* Queue.unbounded<Item>()
   const { client, initialize } = yield* connect(process, input.settings, input.directory, {
     handleRequest: (request) => handleRequest(request, input.approve),
-    onNotification: (notification) => Queue.offer(items, { type: "update", notification }).pipe(Effect.asVoid),
+    onNotification: (notification) => {
+      // Agents often report commands right after session/new, before any turn reads the queue.
+      const commands = input.onCommands ? reportedCommands(notification) : undefined
+      return (commands ? input.onCommands!(commands) : Effect.void).pipe(
+        Effect.andThen(Queue.offer(items, { type: "update", notification })),
+        Effect.asVoid,
+      )
+    },
   }).pipe(
     Effect.timeoutOrElse({
       duration: "30 seconds",
@@ -386,7 +400,7 @@ export interface AcpState {
   usage?: { readonly used?: number; readonly size?: number; readonly cost?: number }
   sessionCost?: number
   /** Slash commands the agent reported through `available_commands_update`. */
-  commands?: Array<{ name: string; description?: string }>
+  commands?: AcpCommand[]
 }
 
 export const acpState = (previousCost?: number): AcpState => ({
@@ -467,12 +481,7 @@ export function parseAcpNotification(
     return []
   }
   if (kind === "available_commands_update") {
-    const commands = Array.isArray(update.availableCommands) ? update.availableCommands.filter(isRecord) : []
-    state.commands = commands.flatMap((command) => {
-      const name = string(command.name)
-      const description = string(command.description)
-      return name ? [{ name, ...(description === undefined ? {} : { description }) }] : []
-    })
+    state.commands = commandList(update)
     return []
   }
   return []
@@ -697,6 +706,23 @@ function withinBudget(tool: AcpTool, text: string) {
   const kept = text.length > room ? text.slice(0, room) : text
   tool.chars += kept.length
   return kept
+}
+
+/** The commands in an `available_commands_update`, or undefined for any other notification. */
+export function reportedCommands(notification: Notification) {
+  if (notification.method !== "session/update") return undefined
+  const params = isRecord(notification.params) ? notification.params : {}
+  const update = isRecord(params.update) ? params.update : {}
+  return update.sessionUpdate === "available_commands_update" ? commandList(update) : undefined
+}
+
+function commandList(update: Record<string, unknown>): AcpCommand[] {
+  const commands = Array.isArray(update.availableCommands) ? update.availableCommands.filter(isRecord) : []
+  return commands.flatMap((command) => {
+    const name = string(command.name)
+    const description = string(command.description)
+    return name ? [{ name, ...(description === undefined ? {} : { description }) }] : []
+  })
 }
 
 function childUsage(update: Record<string, unknown>): AcpUsage {

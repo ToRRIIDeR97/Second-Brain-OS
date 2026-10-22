@@ -95,6 +95,7 @@ const harnessID = Harness.InstanceID.make("fake-acp")
 const harnesses = Layer.mock(HarnessRuntime.Service, {
   driver: (id) => (id === harnessID ? Harness.DriverKind.make("acp") : Harness.OpenCodeDriver),
   stream: () => Stream.fromIterable(turn),
+  reportedCommands: () => undefined,
 })
 
 const models = SessionRunnerModel.layerWith((session) =>

@@ -73,6 +73,8 @@ export interface Interface {
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
   ) => Stream.Stream<LLMEvent, LLMError>
   readonly settings: () => Effect.Effect<ReadonlyArray<Harness.SettingsEntry>>
+  /** Slash commands an ACP harness last reported in this app process, if any. */
+  readonly reportedCommands: (id: Harness.InstanceID) => ReadonlyArray<AcpHarness.AcpCommand> | undefined
   readonly add: (input: unknown) => Effect.Effect<Harness.SettingsEntry, HarnessRegistry.RegisterError>
   readonly setEnabled: (
     id: string,
@@ -140,6 +142,8 @@ const layer = Layer.effect(
     // Models each harness reported, kept until the app restarts or the user refreshes. A failed check
     // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
     const catalogs = new Map<string, ReadonlyArray<Harness.Model>>()
+    // Commands each ACP harness last reported; the skills catalog lists them for harnesses without skill folders.
+    const commands = new Map<Harness.InstanceID, ReadonlyArray<AcpHarness.AcpCommand>>()
     const instanceKey = (instance: InstanceConfig) =>
       `${instance.id}:${JSON.stringify([instance.name, instance.config])}`
     const cachedProbe = (
@@ -351,6 +355,10 @@ const layer = Layer.effect(
         settings,
         directory: input.directory,
         continuation: continuation?.nativeID,
+        onCommands: (reported) =>
+          Effect.sync(() => {
+            commands.set(instance.id, reported)
+          }),
         approve: (request) =>
           approve(permissions, {
             sessionID: input.sessionID,
@@ -525,6 +533,7 @@ const layer = Layer.effect(
 
     return Service.of({
       list,
+      reportedCommands: (id) => commands.get(id),
       updates: () =>
         instances.pipe(
           Effect.flatMap((current) =>
