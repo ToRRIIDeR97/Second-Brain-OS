@@ -34,12 +34,21 @@ const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { ty
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
   dispose: (key) => void projections.delete(key),
 })
+// ```svg blocks highlight as XML but keep their own language so svg-window.ts can find them.
+const aliases = new Map([["svg", "xml"]])
+
+function shikiLanguage(language: string) {
+  const name = aliases.get(language) ?? language
+  return name in bundledLanguages ? name : "text"
+}
+
 const parser = createMarkdownParser(async (code, language) => {
   const instance = await getHighlighter()
-  const name = language in bundledLanguages ? language : "text"
+  const name = shikiLanguage(language)
   if (!instance.getLoadedLanguages().includes(name))
     await instance.loadLanguage(bundledLanguages[name as BundledLanguage])
-  return instance.codeToHtml(code, { lang: name as BundledLanguage, theme: "OpenCode", tabindex: false })
+  const html = instance.codeToHtml(code, { lang: name as BundledLanguage, theme: "OpenCode", tabindex: false })
+  return aliases.has(language) ? html.replace("<code>", `<code class="language-${language}">`) : html
 })
 
 self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
@@ -86,7 +95,8 @@ async function runProject(request: Extract<MarkdownWorkerRequest, { type: "proje
 async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
   try {
     const instance = await getHighlighter()
-    const language = request.language in bundledLanguages ? request.language : "text"
+    const language = shikiLanguage(request.language)
+    const label = aliases.has(request.language) ? request.language : language
     if (!instance.getLoadedLanguages().includes(language))
       await instance.loadLanguage(bundledLanguages[language as BundledLanguage])
 
@@ -97,7 +107,7 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
         type: "highlight",
         id: request.id,
         key: request.key,
-        language,
+        language: label,
         reset: true,
         stable: result.tokens
           .flatMap((line, index) =>
@@ -113,7 +123,7 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
     const reset = !previous || previous.language !== language || !request.text.startsWith(previous.source)
     const stream = reset
       ? {
-          language,
+          language: label,
           source: "",
           tokenizer: new ShikiStreamTokenizer({ highlighter: instance, lang: language, theme: "OpenCode" }),
         }

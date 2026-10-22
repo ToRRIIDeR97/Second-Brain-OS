@@ -37,6 +37,7 @@ import { HarnessRegistry } from "./harness/registry"
 import { HarnessUpdate } from "./harness/update"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
+import { ChatDisplay } from "./chat-display"
 import { PermissionV2 } from "./permission"
 import { AppProcess } from "./process"
 import { QuestionV2 } from "./question"
@@ -420,7 +421,7 @@ const layer = Layer.effect(
       Stream.unwrap(
         getAcpRuntime(instance, settings, input).pipe(
           Effect.map((runtime) => {
-            const text = renderCodexPrompt(input.request, runtime.handoff)
+            const text = renderHarnessPrompt(input.request, runtime.handoff)
             runtime.handoff = "none"
             return onTurnSuccess(
               runtime.session
@@ -901,7 +902,7 @@ function codexStream(
     runtime.pipe(
       Effect.flatMap((runtime) =>
         Effect.sync(() => {
-          const prompt = renderCodexPrompt(input.request, runtime.handoff)
+          const prompt = renderHarnessPrompt(input.request, runtime.handoff)
           runtime.handoff = "none"
           return prompt
         }).pipe(
@@ -1243,6 +1244,13 @@ function renderCodexInstructions(request: LLMRequest) {
 }
 
 export const HANDOFF_TOKEN_BUDGET = 16_000
+
+/** A harness turn's text; the first turn of each runtime also carries Tenon's chat display guidance. */
+export function renderHarnessPrompt(request: LLMRequest, handoff: Handoff = "none") {
+  const prompt = renderCodexPrompt(request, handoff)
+  if (handoff === "none") return prompt
+  return `<tenon-display>\n${ChatDisplay.svgGuidance}\n</tenon-display>\n\n${prompt}`
+}
 
 export function renderCodexPrompt(request: LLMRequest, handoff: Handoff = "none", budget = HANDOFF_TOKEN_BUDGET) {
   const messages = request.messages.filter((message) => message.role !== "system")
