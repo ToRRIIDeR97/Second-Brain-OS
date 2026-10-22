@@ -139,10 +139,10 @@
 <text class="lbl" x="591" y="397" text-anchor="start">harness.continuation.set</text>
 <rect class="lblbg" x="653.1" y="431.0" width="253.8" height="13" rx="2"/>
 <text class="lbl" x="780.0" y="441" text-anchor="middle">session/prompt (handoff transcript if new)</text>
-<rect class="lblbg" x="715.0" y="463.0" width="129.9" height="13" rx="2"/>
-<text class="lbl" x="780.0" y="473" text-anchor="middle">session/update chunks</text>
-<rect class="lblbg" x="485.9" y="493.0" width="118.1" height="13" rx="2"/>
-<text class="lbl" x="545.0" y="503" text-anchor="middle">LLM events (stream)</text>
+<rect class="lblbg" x="682.6" y="463.0" width="194.8" height="13" rx="2"/>
+<text class="lbl" x="780.0" y="473" text-anchor="middle">session/update (+ child-session)</text>
+<rect class="lblbg" x="465.3" y="493.0" width="159.4" height="13" rx="2"/>
+<text class="lbl" x="545.0" y="503" text-anchor="middle">LLM events · tool-progress</text>
 <rect class="lblbg" x="131.7" y="523.0" width="206.6" height="13" rx="2"/>
 <text class="lbl" x="235.0" y="533" text-anchor="middle">durable events → SSE /global/event</text>
 <rect class="lblbg" x="700.3" y="563.0" width="159.4" height="13" rx="2"/>

@@ -48,6 +48,71 @@ describe("ACP harness", () => {
     expect(finish[1]).toMatchObject({ reason: "length" })
   })
 
+  test("keeps subagent updates out of the parent turn and waits for tool input", () => {
+    const state = AcpHarness.acpState()
+    const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "List dir" } }
+    const events = [
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "Spawning." } }),
+      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "sub",
+        kind: "think",
+        status: "in_progress",
+        rawInput: { agent: "explore", description: "List dir", prompt: "Run ls" },
+      }),
+      update({ sessionUpdate: "tool_call", toolCallId: "c1:t1", kind: "execute", title: "List dir: shell", status: "pending", rawInput: {}, _meta: child }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "c1:t1",
+        kind: "execute",
+        title: "List dir: ls -la",
+        status: "completed",
+        rawInput: { command: "ls -la" },
+        _meta: child,
+      }),
+      update({ sessionUpdate: "agent_message_chunk", messageId: "m2", content: { type: "text", text: "a.txt" }, _meta: child }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "sub",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: "report" } }],
+      }),
+      update({ sessionUpdate: "tool_call", toolCallId: "t2", kind: "read", status: "pending", rawInput: { cwd: "/w" } }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "t2",
+        kind: "read",
+        status: "in_progress",
+        locations: [{ path: "/w/a.txt" }],
+        rawInput: { path: "/w/a.txt" },
+      }),
+    ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
+
+    expect(events.map((event) => event.type)).toEqual([
+      "text-start",
+      "text-delta",
+      "text-end",
+      "tool-call",
+      "tool-progress",
+      "tool-progress",
+      "tool-result",
+      "tool-call",
+    ])
+    expect(events[3]).toMatchObject({
+      name: "acp_subagent",
+      input: { description: "List dir", subagent_type: "explore" },
+    })
+    expect(events[4]).toMatchObject({
+      id: "sub",
+      structured: { acp: { steps: [{ tool: "acp_execute", title: "shell", status: "pending" }] } },
+    })
+    expect(events[6]).toMatchObject({
+      providerMetadata: { acp: { steps: [{ tool: "acp_execute", title: "ls -la", status: "completed" }] } },
+    })
+    expect(events[7]).toMatchObject({ name: "acp_read", input: { path: "/w/a.txt" } })
+  })
+
   test("maps tool kinds to permission actions", () => {
     expect(["execute", "edit", "move", "search", "fetch", "think", undefined].map(AcpHarness.permissionAction)).toEqual(
       ["bash", "edit", "edit", "read", "webfetch", "acp_tool", "acp_tool"],

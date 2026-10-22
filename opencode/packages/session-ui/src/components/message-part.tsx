@@ -507,7 +507,8 @@ export function getToolInfo(
         title: webSearchProviderLabel(metadata?.provider, i18n),
         subtitle: input.query,
       }
-    case "task": {
+    case "task":
+    case "acp_subagent": {
       const type =
         typeof input.subagent_type === "string" && input.subagent_type
           ? input.subagent_type[0]!.toUpperCase() + input.subagent_type.slice(1)

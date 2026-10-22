@@ -331,6 +331,12 @@ export function GenericTool(props: {
   const data = useData()
   const step = createMemo(() => toolStep(props.tool, props.input, { mcpServers: Object.keys(data.store.mcp ?? {}) }))
   const running = () => props.status === "pending" || props.status === "running"
+  // Subagent rows name the agent ("Explore Agent"), as the built-in task row does.
+  const title = () => {
+    const agent = props.input?.subagent_type
+    if (step().kind !== "subagent" || typeof agent !== "string" || !agent) return i18n.t(stepVerbKey(step().kind, running()))
+    return i18n.t("ui.tool.agent", { type: agent[0]!.toUpperCase() + agent.slice(1) })
+  }
   const detail = createMemo(() => {
     const input = props.input && Object.keys(props.input).length > 0 ? JSON.stringify(props.input, null, 2) : ""
     return [input && "```json\n" + input + "\n```", props.output ?? ""].filter(Boolean).join("\n\n")
@@ -341,7 +347,7 @@ export function GenericTool(props: {
       icon={stepIcon(step().kind)}
       status={props.status}
       trigger={{
-        title: i18n.t(stepVerbKey(step().kind, running())),
+        title: title(),
         subtitle: step().target,
       }}
       hideDetails={props.hideDetails}

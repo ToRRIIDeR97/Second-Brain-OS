@@ -1,0 +1,57 @@
+/* Live activity card: the ticker line slides in when the step changes; subagent lanes show an
+   indeterminate bar while they run because an agent's step count isn't known in advance. */
+[data-slot="turn-steps-ticker-step"] {
+  animation: turn-steps-enter 220ms ease-out both;
+}
+
+[data-slot="turn-steps-lane-bar"] {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--v2-border-border-muted, currentColor);
+}
+
+[data-slot="turn-steps-lane-fill"] {
+  position: absolute;
+  inset: 0;
+  background: var(--v2-icon-icon-accent, currentColor);
+  transform-origin: left;
+}
+
+[data-slot="turn-steps-lane"][data-running] [data-slot="turn-steps-lane-fill"] {
+  width: 40%;
+  animation: turn-steps-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes turn-steps-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes turn-steps-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="turn-steps-ticker-step"],
+  [data-slot="turn-steps-lane"][data-running] [data-slot="turn-steps-lane-fill"] {
+    animation: none;
+  }
+
+  [data-slot="turn-steps-lane"][data-running] [data-slot="turn-steps-lane-fill"] {
+    width: 100%;
+    opacity: 0.5;
+  }
+}

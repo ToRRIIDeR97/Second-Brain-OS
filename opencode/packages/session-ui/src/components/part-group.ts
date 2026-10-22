@@ -3,7 +3,17 @@ import { stepOf } from "./step-kind"
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 // File changes, questions and subagents stay visible as their own rows.
-const UNGROUPED_TOOLS = new Set(["edit", "write", "patch", "apply_patch", "multiedit", "question", "task", "todowrite"])
+const UNGROUPED_TOOLS = new Set([
+  "edit",
+  "write",
+  "patch",
+  "apply_patch",
+  "multiedit",
+  "question",
+  "task",
+  "acp_subagent",
+  "todowrite",
+])
 
 export type PartRef = {
   messageID: string
