@@ -328,7 +328,7 @@ export interface AcpTool {
   readonly entries: Map<string, AcpTranscriptTool>
   /** The text or reasoning entry later chunks of the same message merge into. */
   block?: { readonly type: "text" | "reasoning"; readonly messageId?: string; readonly entry: AcpTranscriptText }
-  /** Characters of text and reasoning kept so far, for the transcript cap. */
+  /** Characters of text, reasoning and tool output kept so far, for the transcript cap. */
   chars: number
   truncated?: boolean
   usage?: AcpUsage
@@ -368,8 +368,10 @@ export interface AcpUsage {
   readonly cachedWriteTokens?: number
 }
 
-/** A subagent's transcript stops growing past this many characters of text and reasoning. */
+/** A subagent's transcript stops growing past this many characters of text, reasoning and tool output. */
 export const TRANSCRIPT_LIMIT = 100_000
+/** Live progress is stored for every checkpoint, so it carries only the latest entries and no tool output. */
+export const PROGRESS_ENTRIES = 50
 
 export interface AcpState {
   readonly tools: Map<string, AcpTool>
@@ -661,7 +663,10 @@ function recordChild(
   }
   if (step.title) entry.title = step.title
   entry.status = step.status
-  if (step.status === "completed" || step.status === "failed") entry.output = toolOutput(update)
+  if ((step.status === "completed" || step.status === "failed") && entry.output === undefined) {
+    const output = withinBudget(parent, toolOutput(update))
+    if (output) entry.output = output
+  }
   if (previous === `${step.status}:${step.title}`) return []
   return progress(parentId, parent)
 }
@@ -671,10 +676,7 @@ function appendChunk(tool: AcpTool, type: "text" | "reasoning", messageId: strin
   const block = tool.block
   const merges = block?.type === type && (messageId === undefined || messageId === block.messageId)
   if (tool.truncated) return false
-  const room = TRANSCRIPT_LIMIT - tool.chars
-  const kept = text.length > room ? text.slice(0, room) : text
-  if (text.length > room) tool.truncated = true
-  tool.chars += kept.length
+  const kept = withinBudget(tool, text)
   if (merges) {
     block.entry.text += kept
     return false
@@ -685,6 +687,16 @@ function appendChunk(tool: AcpTool, type: "text" | "reasoning", messageId: strin
     tool.block = { type, messageId, entry }
   }
   return block !== undefined
+}
+
+/** The part of `text` that fits the subagent's transcript budget; marks the transcript truncated when cut. */
+function withinBudget(tool: AcpTool, text: string) {
+  if (tool.truncated) return ""
+  const room = TRANSCRIPT_LIMIT - tool.chars
+  if (text.length > room) tool.truncated = true
+  const kept = text.length > room ? text.slice(0, room) : text
+  tool.chars += kept.length
+  return kept
 }
 
 function childUsage(update: Record<string, unknown>): AcpUsage {
@@ -704,14 +716,22 @@ function childUsage(update: Record<string, unknown>): AcpUsage {
 
 function progress(id: string, tool: AcpTool): ReadonlyArray<LLMEvent> {
   if (!tool.called || tool.done) return []
-  return [LLMEvent.toolProgress({ id, name: tool.name, structured: { acp: subagentSnapshot(tool) } })]
+  return [LLMEvent.toolProgress({ id, name: tool.name, structured: { acp: subagentSnapshot(tool, true) } })]
 }
 
-/** A copy of the subagent's steps, transcript and usage, safe to publish while they keep changing. */
-function subagentSnapshot(tool: AcpTool) {
+/**
+ * A copy of the subagent's steps, transcript and usage, safe to publish while they keep changing.
+ * A live checkpoint keeps the last entries without tool output; the result carries the full capped transcript.
+ */
+function subagentSnapshot(tool: AcpTool, live = false) {
+  const transcript = live ? tool.transcript.slice(-PROGRESS_ENTRIES) : tool.transcript
   return {
     steps: [...tool.steps.values()].map((item) => ({ ...item })),
-    transcript: tool.transcript.map((item) => ({ ...item })),
+    transcript: transcript.map((item) => {
+      if (!live || item.type !== "tool") return { ...item }
+      const { output: _, ...rest } = item
+      return rest
+    }),
     ...(tool.usage ? { usage: { ...tool.usage } } : {}),
     ...(tool.truncated ? { truncated: true } : {}),
   }

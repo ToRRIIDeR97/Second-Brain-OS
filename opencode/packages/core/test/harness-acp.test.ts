@@ -198,6 +198,49 @@ describe("ACP harness", () => {
     expect(result.providerMetadata.acp.transcript[0]?.text.length).toBe(AcpHarness.TRANSCRIPT_LIMIT)
   })
 
+  test("bounds tool output in a subagent transcript and keeps live progress small", () => {
+    const state = AcpHarness.acpState()
+    const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
+    const tools = Array.from({ length: 40 }, (_, index) => [
+      update({ sessionUpdate: "tool_call", toolCallId: `c1:t${index}`, kind: "read", title: "Read: read", status: "pending", rawInput: {}, _meta: child }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: `c1:t${index}`,
+        kind: "read",
+        status: "completed",
+        rawInput: { path: `/w/${index}.txt` },
+        content: [{ type: "content", content: { type: "text", text: "x".repeat(32_000) } }],
+        _meta: child,
+      }),
+    ]).flat()
+    const events = [
+      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Read" } }),
+      ...tools,
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "completed" }),
+    ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
+
+    type Entry = { type: string; text?: string; output?: string; status?: string }
+    const result = events.find((event) => event.type === "tool-result") as unknown as {
+      providerMetadata: { acp: { transcript: Entry[]; truncated?: boolean } }
+    }
+    const size = (entries: Entry[]) => entries.reduce((total, item) => total + (item.text ?? item.output ?? "").length, 0)
+    expect(result.providerMetadata.acp.truncated).toBe(true)
+    expect(size(result.providerMetadata.acp.transcript)).toBeLessThanOrEqual(AcpHarness.TRANSCRIPT_LIMIT)
+    // Every tool still shows that it ran, even after outputs stop being kept.
+    expect(result.providerMetadata.acp.transcript).toHaveLength(40)
+    expect(result.providerMetadata.acp.transcript.every((item) => item.status === "completed")).toBe(true)
+
+    const progress = events.filter((event) => event.type === "tool-progress") as unknown as {
+      structured: { acp: { transcript: Entry[] } }
+    }[]
+    expect(progress.length).toBeGreaterThan(0)
+    for (const item of progress) {
+      expect(item.structured.acp.transcript.length).toBeLessThanOrEqual(AcpHarness.PROGRESS_ENTRIES)
+      expect(item.structured.acp.transcript.some((entry) => "output" in entry)).toBe(false)
+    }
+  })
+
   test("counts a parent usage update for the turn while a child's stays on the subagent", () => {
     const state = AcpHarness.acpState()
     const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
