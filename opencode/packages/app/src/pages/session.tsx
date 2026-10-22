@@ -2157,6 +2157,7 @@ export default function Page() {
                     reviewSnap={ui.reviewSnap}
                     size={size}
                     stacked={desktopV2PanelLayout().stacked}
+                    harnessName={(id) => sessionHarness.instances()?.find((item) => item.id === id)?.name}
                   />
                 </Suspense>
               </div>

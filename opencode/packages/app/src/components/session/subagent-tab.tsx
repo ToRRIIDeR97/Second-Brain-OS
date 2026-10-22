@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js"
-import type { Message } from "@opencode-ai/sdk/v2/client"
+import type { Message, ToolPart } from "@opencode-ai/sdk/v2/client"
 import { Harness } from "@opencode-ai/schema/harness"
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
@@ -13,32 +13,46 @@ import { subagentDetail, type SubagentTranscriptEntry } from "./subagent-detail"
 
 type View = "conversation" | "context" | "usage"
 
-/** The `acp_subagent` tool part behind an agent tab, with the harness that ran it, from the open session. */
-export function useSubagentPart(partID: () => string) {
+export interface SubagentPart {
+  readonly part: ToolPart
+  /** The harness instance that ran the assistant message holding the part. */
+  readonly harness?: string
+}
+
+/**
+ * The `acp_subagent` parts behind the open agent tabs, keyed by part ID, from the open session. One
+ * lookup serves every tab's label and content. Messages are searched newest first and the search stops
+ * once every tab is found, since agent tabs are usually opened for recent turns.
+ */
+export function useSubagentParts(partIDs: () => readonly string[]) {
   const sync = useSync()
   const { params } = useSessionLayout()
   return createMemo(() => {
+    const found = new Map<string, SubagentPart>()
+    const wanted = new Set(partIDs())
     const sessionID = params.id
-    if (!sessionID) return undefined
+    if (!sessionID || wanted.size === 0) return found
     const messages = sync().data.message[sessionID] ?? []
-    for (const message of messages) {
-      const part = sync().data.part[message.id]?.find((item) => item.id === partID())
-      if (part?.type !== "tool") continue
-      return {
-        part,
-        harness: (message as Message & { harnessInstanceID?: string }).harnessInstanceID,
+    for (let index = messages.length - 1; index >= 0 && found.size < wanted.size; index--) {
+      const message = messages[index]
+      for (const part of sync().data.part[message.id] ?? []) {
+        if (part.type !== "tool" || !wanted.has(part.id)) continue
+        found.set(part.id, {
+          part,
+          harness: (message as Message & { harnessInstanceID?: string }).harnessInstanceID,
+        })
       }
     }
-    return undefined
+    return found
   })
 }
 
 const running = (status: string | undefined) => status === "pending" || status === "running"
 
 /** Agent tab trigger content: the agent's name and a running indicator. */
-export function SubagentTabLabel(props: { partID: string }) {
+export function SubagentTabLabel(props: { found?: SubagentPart }) {
   const language = useLanguage()
-  const found = useSubagentPart(() => props.partID)
+  const found = () => props.found
   const name = () => {
     const agent = found()?.part.state.input?.subagent_type
     return typeof agent === "string" && agent ? agent : language.t("secondBrain.agentTab.agentFallback")
@@ -53,9 +67,13 @@ export function SubagentTabLabel(props: { partID: string }) {
   )
 }
 
-export function SubagentTab(props: { partID: string }) {
+export function SubagentTab(props: {
+  found?: SubagentPart
+  /** Display name of a harness instance from the harness list; undefined when it isn't known. */
+  harnessName?: (id: string) => string | undefined
+}) {
   const language = useLanguage()
-  const found = useSubagentPart(() => props.partID)
+  const found = () => props.found
   const detail = createMemo(() => {
     const value = found()
     return value ? subagentDetail(value.part) : undefined
@@ -69,6 +87,8 @@ export function SubagentTab(props: { partID: string }) {
 
   const harnessName = () => {
     const id = found()?.harness
+    const listed = id ? props.harnessName?.(id) : undefined
+    if (listed) return listed
     if (id === Harness.OpenCode) return language.t("harness.tenonWorkbench")
     if (id === Harness.OpenCodeAcp) return language.t("harness.openCode")
     if (id === Harness.Codex) return language.t("harness.codex")

@@ -35,7 +35,7 @@ const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab, SortableTab, SortableTabV2, FileVisual } from "@/components/session"
 import { OpenInAppV2 } from "@/components/session/open-in-app-v2"
 import { SessionTabClose } from "@/components/session/session-tab-close"
-import { SubagentTab, SubagentTabLabel } from "@/components/session/subagent-tab"
+import { SubagentTab, SubagentTabLabel, useSubagentParts } from "@/components/session/subagent-tab"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -82,6 +82,8 @@ export function SessionSidePanel(props: {
   reviewSnap: boolean
   size: Sizing
   stacked?: boolean
+  /** Display name of a harness instance, for agent tabs; undefined when the harness isn't listed. */
+  harnessName?: (id: string) => string | undefined
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -187,6 +189,7 @@ export function SessionSidePanel(props: {
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
   const agentTabs = tabState.agentTabs
+  const subagentParts = useSubagentParts(() => agentTabs().flatMap((tab) => agentTabPartID(tab) ?? []))
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
 
@@ -311,7 +314,7 @@ export function SessionSidePanel(props: {
     <For each={agentTabs()}>
       {(tab) => (
         <TabsV2.Trigger value={tab} onMiddleClick={() => tabs().close(tab)}>
-          <SubagentTabLabel partID={agentTabPartID(tab)!} />
+          <SubagentTabLabel found={subagentParts().get(agentTabPartID(tab)!)} />
           {closeButton(tab)}
         </TabsV2.Trigger>
       )}
@@ -323,7 +326,7 @@ export function SessionSidePanel(props: {
       {(partID) => (
         <TabsV2.Content value={activeTab()} class="flex min-h-0 flex-col !overflow-hidden contain-strict">
           <div class="relative flex-1 min-h-0 overflow-hidden">
-            <SubagentTab partID={partID} />
+            <SubagentTab found={subagentParts().get(partID)} harnessName={props.harnessName} />
           </div>
         </TabsV2.Content>
       )}
