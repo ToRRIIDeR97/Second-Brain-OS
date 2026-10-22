@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
 import type { Part, ToolPart } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { Icon as StepIcon } from "@opencode-ai/ui/icon"
 import {
   stepIcon,
@@ -153,7 +154,7 @@ export function TurnStepsSummary(props: {
           when={props.working}
           fallback={<Icon name="check" size="small" class="shrink-0 text-v2-text-text-muted" />}
         >
-          <Spinner />
+          <LoaderV2 width={14} height={14} style={{ color: "var(--v2-icon-icon-accent)" }} />
         </Show>
         <span data-slot="turn-steps-title" class="shrink-0 [font-weight:500] tabular-nums">
           {title()}
@@ -257,14 +258,5 @@ export function TurnStepsSummary(props: {
         </div>
       </Show>
     </div>
-  )
-}
-
-function Spinner() {
-  return (
-    <span
-      aria-hidden="true"
-      class="size-3.5 shrink-0 animate-spin rounded-full border-2 border-v2-border-border-muted border-t-v2-icon-icon-accent motion-reduce:animate-none"
-    />
   )
 }
