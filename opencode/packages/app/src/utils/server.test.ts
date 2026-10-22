@@ -7,6 +7,7 @@ import {
   fallbackHarnesses,
   listHarnessesForServer,
   listSkillCatalog,
+  setSkillEnabled,
   switchHarnessForServer,
 } from "./server"
 
@@ -155,5 +156,34 @@ describe("listSkillCatalog", () => {
     await expect(
       listSkillCatalog({ server: { url: "http://localhost:4096" }, fetch: fetcher }, "/repo"),
     ).rejects.toThrow("Nope")
+  })
+})
+
+describe("setSkillEnabled", () => {
+  test("posts the switch to the location-scoped route", async () => {
+    let request: Request | undefined
+    const fetcher = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        request = new Request(input, init)
+        return Response.json({
+          location: { directory: "/repo", project: { id: "global", directory: "/repo" } },
+          data: { name: "notes", enabled: false },
+        })
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+
+    const result = await setSkillEnabled(
+      { server: { url: "http://localhost:4096" }, fetch: fetcher },
+      "/repo",
+      "notes",
+      false,
+    )
+
+    expect(result).toEqual({ name: "notes", enabled: false })
+    expect(request!.method).toBe("POST")
+    expect(new URL(request!.url).pathname).toBe("/api/skill/enabled")
+    expect(new URL(request!.url).searchParams.get("location[directory]")).toBe("/repo")
+    expect(await request!.json()).toEqual({ name: "notes", enabled: false })
   })
 })

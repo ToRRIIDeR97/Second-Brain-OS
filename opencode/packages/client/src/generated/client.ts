@@ -121,6 +121,8 @@ import type {
   SkillsListOutput,
   SkillsCatalogInput,
   SkillsCatalogOutput,
+  SkillsSetEnabledInput,
+  SkillsSetEnabledOutput,
   EventsSubscribeOutput,
   PtysListInput,
   PtysListOutput,
@@ -1067,6 +1069,19 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      setEnabled: (input: SkillsSetEnabledInput, requestOptions?: RequestOptions) =>
+        request<SkillsSetEnabledOutput>(
+          {
+            method: "POST",
+            path: `/api/skill/enabled`,
+            query: { location: input["location"] },
+            body: { name: input["name"], enabled: input["enabled"] },
+            successStatus: 200,
+            declaredStatuses: [404, 500, 401, 400],
             empty: false,
           },
           requestOptions,

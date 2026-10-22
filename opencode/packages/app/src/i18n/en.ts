@@ -939,6 +939,7 @@ export const dict = {
   "secondBrain.skills.openFile": "Open file",
   "secondBrain.skills.copyPath": "Copy path",
   "secondBrain.skills.builtIn": "Built-in",
+  "secondBrain.skills.enabled": "Let Tenon's agent use {{name}}",
   "harness.settings.title": "Harnesses",
   "harness.settings.section.added": "Added harnesses",
   "harness.settings.section.readOnly": "Built-in and config file",

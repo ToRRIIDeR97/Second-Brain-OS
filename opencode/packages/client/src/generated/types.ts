@@ -114,6 +114,22 @@ export type PermissionNotFoundError = {
 export const isPermissionNotFoundError = (value: unknown): value is PermissionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PermissionNotFoundError"
 
+export type SkillNotFoundError = {
+  readonly _tag: "SkillNotFoundError"
+  readonly reason: string
+  readonly message: string
+}
+export const isSkillNotFoundError = (value: unknown): value is SkillNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillNotFoundError"
+
+export type SkillToggleWriteError = {
+  readonly _tag: "SkillToggleWriteError"
+  readonly reason: string
+  readonly message: string
+}
+export const isSkillToggleWriteError = (value: unknown): value is SkillToggleWriteError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillToggleWriteError"
+
 export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly ptyID: string; readonly message: string }
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
@@ -3611,6 +3627,7 @@ export type SkillsCatalogOutput = {
       readonly description?: string
       readonly location?: string
       readonly scope: "global" | "project"
+      readonly enabled?: boolean
     }>
     readonly harnesses: ReadonlyArray<{
       readonly id: string
@@ -3621,9 +3638,27 @@ export type SkillsCatalogOutput = {
         readonly description?: string
         readonly location?: string
         readonly scope: "global" | "project"
+        readonly enabled?: boolean
       }>
     }>
   }
+}
+
+export type SkillsSetEnabledInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly name: { readonly name: string; readonly enabled: boolean }["name"]
+  readonly enabled: { readonly name: string; readonly enabled: boolean }["enabled"]
+}
+
+export type SkillsSetEnabledOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: { readonly name: string; readonly enabled: boolean }
 }
 
 export type EventsSubscribeOutput = OpenCodeEventEncoded

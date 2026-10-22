@@ -7,9 +7,11 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { AgentV2 } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
 import { FSUtil } from "./fs-util"
+import { Global } from "./global"
 import { PermissionV2 } from "./permission"
 import { AbsolutePath } from "./schema"
 import { SkillDiscovery } from "./skill/discovery"
+import { SkillToggle } from "./skill/toggle"
 import { State } from "./state"
 
 export const DirectorySource = Skill.DirectorySource
@@ -48,7 +50,10 @@ export type Draft = {
 
 export interface Interface extends State.Transformable<Draft> {
   readonly sources: () => Effect.Effect<Source[]>
+  /** Skills the agent can use: every loaded skill except those switched off in Settings → Skills. */
   readonly list: () => Effect.Effect<Info[]>
+  /** Every loaded skill, switched off or not. */
+  readonly all: () => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Skill") {}
@@ -107,7 +112,7 @@ const layer = Layer.effect(
     // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
     // events, following the reload policy chosen for other context sources?
     const cache = new Map<string, Info[]>()
-    const list = Effect.fn("SkillV2.list")(function* () {
+    const all = Effect.fn("SkillV2.all")(function* () {
       const skills = new Map<string, Info>()
       for (const source of state.get().sources) {
         const key = Source.key(source)
@@ -118,6 +123,12 @@ const layer = Layer.effect(
       return Array.from(skills.values())
     })
 
+    const list = Effect.fn("SkillV2.list")(function* () {
+      // Read on every call so a switch in Settings applies to the next turn without a reload.
+      const disabled = yield* SkillToggle.disabled(Global.make().config)
+      return (yield* all()).filter((skill) => !disabled.has(skill.name))
+    })
+
     return Service.of({
       transform: state.transform,
       reload: state.reload,
@@ -125,6 +136,7 @@ const layer = Layer.effect(
         return state.get().sources
       }),
       list,
+      all,
     })
   }),
 )

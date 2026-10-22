@@ -711,7 +711,23 @@ type Endpoint13_1Input = { readonly location?: Endpoint13_1Request["query"]["loc
 const Endpoint13_1 = (raw: RawClient["server.skill"]) => (input?: Endpoint13_1Input) =>
   raw["skill.catalog"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup13 = (raw: RawClient["server.skill"]) => ({ list: Endpoint13_0(raw), catalog: Endpoint13_1(raw) })
+type Endpoint13_2Request = Parameters<RawClient["server.skill"]["skill.setEnabled"]>[0]
+type Endpoint13_2Input = {
+  readonly location?: Endpoint13_2Request["query"]["location"]
+  readonly name: Endpoint13_2Request["payload"]["name"]
+  readonly enabled: Endpoint13_2Request["payload"]["enabled"]
+}
+const Endpoint13_2 = (raw: RawClient["server.skill"]) => (input: Endpoint13_2Input) =>
+  raw["skill.setEnabled"]({
+    query: { location: input["location"] },
+    payload: { name: input["name"], enabled: input["enabled"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+const adaptGroup13 = (raw: RawClient["server.skill"]) => ({
+  list: Endpoint13_0(raw),
+  catalog: Endpoint13_1(raw),
+  setEnabled: Endpoint13_2(raw),
+})
 
 const Endpoint14_0 = (raw: RawClient["server.event"]) => () =>
   Stream.unwrap(

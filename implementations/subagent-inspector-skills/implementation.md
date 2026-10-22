@@ -148,15 +148,24 @@ generated client in `packages/client`.
 - **AC-9** The catalog returns Tenon skills from `SkillV2.list()` and one entry
   per harness except the in-process agent (`driver: "opencode"`, whose skills
   are Tenon's). Skill content is never returned.
-- **AC-10** Harness locations, each searched for `**/SKILL.md`, global folders
-  first, then project folders, each sorted by path:
-  - `codex` driver: `~/.codex/skills`, `~/.agents/skills`; project
-    `.codex/skills`, `.agents/skills`.
-  - ACP command basename starting with `opencode`: `~/.config/opencode/skill`,
-    `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`; project
-    `.opencode/skill`, `.opencode/skills`, `.claude/skills`, `.agents/skills`.
+- **AC-10** Harness locations, each searched for `**/SKILL.md`. Global folders
+  come first, then project folders. Project folders are read at every level
+  from the working directory up to the repository root (the first level with
+  `.git`), nearest first; outside a repository only the working directory.
+  (Revised 2026-10-22 after checking each tool's docs; the first version read
+  only the working directory and listed an undocumented project
+  `.codex/skills`.)
+  - `codex` driver: `~/.agents/skills`, `~/.codex/skills` (where Codex installs
+    its own skills), `/etc/codex/skills`; project `.agents/skills`
+    ([Codex docs](https://learn.chatgpt.com/docs/build-skills)).
+  - ACP command basename starting with `opencode`: `~/.config/opencode/skills`,
+    `~/.config/opencode/skill`, `~/.claude/skills`, `~/.agents/skills`; project
+    `.opencode/skills`, `.opencode/skill`, `.claude/skills`, `.agents/skills`
+    ([OpenCode docs](https://opencode.ai/docs/skills/)).
   - ACP command basename starting with `claude` (case-insensitive, any path
-    style, extension ignored): `~/.claude/skills`; project `.claude/skills`.
+    style, extension ignored): `~/.claude/skills`; project `.claude/skills`
+    ([Claude Code docs](https://code.claude.com/docs/en/skills)). Enterprise,
+    plugin and nested-subdirectory skills aren't listed.
   - Name from frontmatter `name`, else the folder name. Description from
     frontmatter. Loose `.md` files that aren't `SKILL.md` are ignored.
   - Known locations give `source: "filesystem"`, even with no skills. Missing or
@@ -165,8 +174,6 @@ generated client in `packages/client`.
     `scope: "global"`, no location), else `{ source: "none", skills: [] }`.
     The server keeps each ACP harness's last reported commands in memory for
     the app process.
-  - The folder lists for Codex and OpenCode are assumptions to confirm against
-    those tools' docs.
 - **AC-11** Settings → Skills (Server group). `skillSections` puts Tenon first
   (`{ id: "tenon", title: "Tenon", editable: true, source: "filesystem" }`),
   then harnesses in catalog order (`editable: false`, title is the harness
@@ -174,7 +181,10 @@ generated client in `packages/client`.
   page shows a lock icon on read-only sections, an "Open file" action on Tenon
   skills, an empty state per section, and a refresh control.
 
-Deferred: on/off toggles for Tenon skills (needs a config write path). Native
+On/off switches for Tenon skills were added in a follow-up (2026-10-22,
+`feat/skills-followups`): `skills.json` in the Tenon config directory,
+`POST /api/skill/enabled`, and `SkillV2.list()` leaving switched-off skills
+out. Native
 `task` subagents keep their current navigation. Codex app-server subagents are
 out of scope.
 
@@ -276,12 +286,37 @@ intermittent Bun SIGTRAP crash that didn't recur. `test:second-brain` 34 pass.
 - Reduced-motion behavior seen running; the CSS rule was checked.
 - Whether upstream OpenCode sends child `usage_update` or
   `available_commands_update`.
-- The Codex and OpenCode skill folder lists against those tools' docs.
-- The timeline benchmark baseline asked for in `opencode/packages/app/AGENTS.md`.
+- ~~The Codex and OpenCode skill folder lists against those tools' docs.~~
+  Checked in the follow-up; see the revised AC-10.
+- ~~The timeline benchmark baseline asked for in `opencode/packages/app/AGENTS.md`.~~
+  Recorded in the follow-up; see "Timeline benchmark" below.
+
+### Timeline benchmark (follow-up, 2026-10-22)
+
+`e2e/performance/timeline/session-timeline-benchmark.spec.ts`, production
+build, 30x CPU throttle, one run per column unless noted. Baseline `a45ecad`
+(`main` after #105, before #106).
+
+| Streaming scenario | Metric | `a45ecad` | Branch before fix (2 runs) | Branch with fix |
+|---|---|---|---|---|
+| No remount/oscillation | completion ms | 106,114 | 150,519 / 127,864 | 107,499 |
+| | long-task ms | 62,908 | 94,928 / 77,741 | 63,475 |
+| Review pane closed | completion ms | 105,821 | 133,947 / 128,231 | 114,017 |
+| | long-task ms | 63,134 | 81,549 / 76,268 | 66,254 |
+| Review diffs, pane closed | completion ms | 106,598 | 129,436 / 149,816 | 118,821 |
+| | long-task ms | 64,211 | 79,475 / 96,044 | 72,516 |
+| Review pane open | completion ms | 114,455 | 139,172 / 161,262 | 116,553 |
+| | long-task ms | 70,126 | 90,209 / 109,791 | 71,576 |
+
+The regression came from P1: before it the turn-summary ring never animated,
+and afterwards it spun for the whole streaming turn on the main thread.
+Turning the animation off brought the "review pane closed" run back to
+106,743 ms / 62,655 ms. `will-change: transform` on `LoaderV2` moves the spin
+to the compositor; the remaining 1–13% gap is about the size of run-to-run
+noise seen above. The review pane benchmark passed in every run.
 
 ### Follow-ups noticed
 
-- `app/src/app.tsx:409` passes the accent color to `LoaderV2` as a class, which
-  loses to the loader's unlayered CSS, so that loader probably shows the muted
-  color.
+- ~~`app/src/app.tsx:409` loader color.~~ Fixed in the follow-up: the
+  loader's CSS is in the `components` layer, so utility classes set its color.
 - `httpapi-codegen`'s fixture test fails when the repository path has a space.
