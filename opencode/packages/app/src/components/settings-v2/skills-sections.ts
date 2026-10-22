@@ -43,3 +43,11 @@ export function skillSections(catalog: SkillCatalog): SkillSection[] {
 function sorted(skills: ReadonlyArray<CatalogSkill>) {
   return skills.toSorted((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
 }
+
+/**
+ * A Tenon skill without a file location ships inside the app. Harness sections can list location-less
+ * entries too (commands a harness reported), and those are not built-in.
+ */
+export function isBuiltInSkill(skill: CatalogSkill, tenonSection: boolean) {
+  return tenonSection && !skill.location
+}

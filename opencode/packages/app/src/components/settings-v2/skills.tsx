@@ -12,7 +12,7 @@ import { useServerSync } from "@/context/server-sync"
 import { listSkillCatalog } from "@/utils/server"
 import { showToast } from "@/utils/toast"
 import { SettingsListV2 } from "./parts/list"
-import { type CatalogSkill, type SkillSection, skillSections } from "./skills-sections"
+import { type CatalogSkill, type SkillSection, isBuiltInSkill, skillSections } from "./skills-sections"
 import "./settings-v2.css"
 
 /** Settings → Skills: Tenon's skills, then each harness's skills, read-only. */
@@ -165,7 +165,7 @@ const SkillRow: Component<{ skill: CatalogSkill; openable: boolean }> = (props) 
           )}
         </Show>
       </div>
-      <Show when={!props.skill.location}>
+      <Show when={isBuiltInSkill(props.skill, props.openable)}>
         <span class="shrink-0 text-[12px] text-v2-text-text-muted">{language.t("secondBrain.skills.builtIn")}</span>
       </Show>
       <Show when={props.openable && props.skill.location}>
