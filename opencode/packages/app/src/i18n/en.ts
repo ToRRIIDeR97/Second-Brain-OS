@@ -938,6 +938,7 @@ export const dict = {
   "secondBrain.skills.empty.filesystem": "No skills in this harness's folders",
   "secondBrain.skills.openFile": "Open file",
   "secondBrain.skills.copyPath": "Copy path",
+  "secondBrain.skills.builtIn": "Built-in",
   "harness.settings.title": "Harnesses",
   "harness.settings.section.added": "Added harnesses",
   "harness.settings.section.readOnly": "Built-in and config file",

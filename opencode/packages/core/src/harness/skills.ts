@@ -55,14 +55,7 @@ export const catalog = Effect.fn("HarnessSkills.catalog")(function* () {
   const skills = yield* SkillV2.Service
   const harnesses = yield* HarnessRuntime.Service
   const location = yield* Location.Service
-  const tenon = (yield* skills.list()).map(
-    (skill): Skill => ({
-      name: skill.name,
-      ...(skill.description === undefined ? {} : { description: skill.description }),
-      location: skill.location,
-      scope: "global",
-    }),
-  )
+  const tenon = tenonSkills(yield* skills.list(), yield* skills.sources())
   const external = (yield* harnesses.settings()).filter((entry) => entry.driver !== HarnessSchema.OpenCodeDriver)
   return {
     tenon,
@@ -77,6 +70,20 @@ export const catalog = Effect.fn("HarnessSkills.catalog")(function* () {
     ),
   }
 })
+
+/** Tenon's skills for the catalog. Embedded skills ship inside the app, so they have no file location. */
+export function tenonSkills(skills: ReadonlyArray<SkillV2.Info>, sources: ReadonlyArray<SkillV2.Source>): Skill[] {
+  // A file-based skill can replace an embedded one of the same name, so match the location too.
+  const embedded = new Set(
+    sources.flatMap((source) => (source.type === "embedded" ? [`${source.skill.name}\0${source.skill.location}`] : [])),
+  )
+  return skills.map((skill) => ({
+    name: skill.name,
+    ...(skill.description === undefined ? {} : { description: skill.description }),
+    ...(embedded.has(`${skill.name}\0${skill.location}`) ? {} : { location: skill.location }),
+    scope: "global",
+  }))
+}
 
 /** Folders relative to the home and project directories, or undefined when the harness has none known. */
 export function locations(harness: Harness) {

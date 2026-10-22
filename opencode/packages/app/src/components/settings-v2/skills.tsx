@@ -165,6 +165,9 @@ const SkillRow: Component<{ skill: CatalogSkill; openable: boolean }> = (props) 
           )}
         </Show>
       </div>
+      <Show when={!props.skill.location}>
+        <span class="shrink-0 text-[12px] text-v2-text-text-muted">{language.t("secondBrain.skills.builtIn")}</span>
+      </Show>
       <Show when={props.openable && props.skill.location}>
         {(location) => (
           <div class="flex shrink-0 items-center">

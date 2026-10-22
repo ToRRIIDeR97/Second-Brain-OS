@@ -5,6 +5,8 @@ import path from "node:path"
 import { Effect } from "effect"
 import { AcpHarness } from "@opencode-ai/core/harness/acp"
 import { HarnessSkills } from "@opencode-ai/core/harness/skills"
+import { SkillV2 } from "@opencode-ai/core/skill"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "harness-skills-core-"))
 const home = path.join(root, "home")
@@ -81,5 +83,39 @@ describe("AcpHarness.reportedCommands", () => {
       ),
     ).toEqual([{ name: "init" }])
     expect(AcpHarness.reportedCommands(update({ sessionUpdate: "agent_message_chunk" }))).toBeUndefined()
+  })
+})
+
+describe("HarnessSkills.tenonSkills", () => {
+  test("omits the location of embedded skills and keeps file-based ones", () => {
+    const builtIn = {
+      name: "customize-opencode",
+      description: "Customize",
+      location: AbsolutePath.make("/builtin/customize-opencode.md"),
+      content: "Body",
+    }
+    const file = { name: "notes", location: AbsolutePath.make("/t/notes/SKILL.md"), content: "Body" }
+    const result = HarnessSkills.tenonSkills(
+      [builtIn, file],
+      [
+        SkillV2.EmbeddedSource.make({ type: "embedded", skill: builtIn }),
+        SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/t") }),
+      ],
+    )
+    expect(result).toEqual([
+      { name: "customize-opencode", description: "Customize", scope: "global" },
+      { name: "notes", location: "/t/notes/SKILL.md", scope: "global" },
+    ])
+    expect(JSON.stringify(result)).not.toContain("Body")
+  })
+
+  test("a file skill that replaces an embedded one keeps its location", () => {
+    const builtIn = { name: "notes", location: AbsolutePath.make("/builtin/notes.md"), content: "Body" }
+    const file = { name: "notes", location: AbsolutePath.make("/t/notes/SKILL.md"), content: "Body" }
+    const result = HarnessSkills.tenonSkills(
+      [file],
+      [SkillV2.EmbeddedSource.make({ type: "embedded", skill: builtIn })],
+    )
+    expect(result).toEqual([{ name: "notes", location: "/t/notes/SKILL.md", scope: "global" }])
   })
 })

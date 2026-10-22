@@ -3,6 +3,7 @@ import type { Message, ToolPart } from "@opencode-ai/sdk/v2/client"
 import { Harness } from "@opencode-ai/schema/harness"
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { useLanguage } from "@/context/language"
@@ -264,8 +265,11 @@ function TranscriptEntry(props: { entry: SubagentTranscriptEntry }) {
       </Match>
       <Match when={props.entry.type === "reasoning" && props.entry}>
         {(entry) => (
-          <details class="text-[13px] text-v2-text-text-muted">
-            <summary class="cursor-pointer select-none">{language.t("secondBrain.agentTab.reasoning")}</summary>
+          <details class="group text-[13px] text-v2-text-text-muted">
+            <summary class={SUMMARY}>
+              <Disclosure />
+              {language.t("secondBrain.agentTab.reasoning")}
+            </summary>
             <div class="mt-1 whitespace-pre-wrap break-words">{(entry() as { text: string }).text}</div>
           </details>
         )}
@@ -273,20 +277,32 @@ function TranscriptEntry(props: { entry: SubagentTranscriptEntry }) {
       <Match when={props.entry.type === "tool" && props.entry}>
         {(entry) => {
           const tool = () => entry() as Extract<SubagentTranscriptEntry, { type: "tool" }>
-          const row = (
-            <span class="flex min-w-0 items-center gap-2">
+          const row = () => (
+            <>
               <span class="min-w-0 flex-1 truncate font-mono text-[12px] text-v2-text-text-base">
                 {tool().title ?? tool().tool}
               </span>
               <span class="shrink-0 text-[12px] text-v2-text-text-muted">{statusText(language, tool().status)}</span>
-            </span>
+            </>
           )
           return (
             <div class="rounded-[12px] bg-v2-background-bg-layer-01 px-3 py-1.5">
-              <Show when={tool().output} fallback={row}>
+              <Show
+                when={tool().output}
+                fallback={
+                  <div class="flex min-w-0 items-center gap-2">
+                    {/* Keeps titles aligned with expandable rows. */}
+                    <span class="size-3 shrink-0" aria-hidden="true" />
+                    {row()}
+                  </div>
+                }
+              >
                 {(output) => (
-                  <details>
-                    <summary class="cursor-pointer select-none">{row}</summary>
+                  <details class="group">
+                    <summary class={SUMMARY}>
+                      <Disclosure />
+                      {row()}
+                    </summary>
                     <pre class="mt-1.5 max-h-80 overflow-auto whitespace-pre-wrap break-words text-[12px] text-v2-text-text-muted">
                       {output()}
                     </pre>
@@ -298,6 +314,20 @@ function TranscriptEntry(props: { entry: SubagentTranscriptEntry }) {
         }}
       </Match>
     </Switch>
+  )
+}
+
+// The summary is the row itself, so the disclosure marker sits on the same line as its content.
+const SUMMARY =
+  "flex min-w-0 cursor-pointer list-none items-center gap-2 select-none rounded-[6px] [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
+
+function Disclosure() {
+  return (
+    <Icon
+      name="chevron-right"
+      size="small"
+      class="size-3 shrink-0 text-v2-icon-icon-muted transition-transform group-open:rotate-90 motion-reduce:transition-none"
+    />
   )
 }
 
