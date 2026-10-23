@@ -500,9 +500,23 @@ export function finishAcpTurn(exit: Exit.Exit<unknown, ProtocolError>, state: Ac
     ]
   }
   const response = isRecord(exit.value) ? exit.value : {}
-  const reason = finishReason(string(response.stopReason))
   const harness = harnessUsage(state)
   const usage = normalizeUsage(isRecord(response.usage) ? response.usage : undefined, harness)
+  // OpenCode swallows provider failures (expired key, no credits, blocked free tier) and still
+  // answers `end_turn`, so a turn with no output at all is reported instead of left blank.
+  const empty =
+    response.stopReason !== "cancelled" && state.blocks === 0 && state.tools.size === 0 && !usage?.outputTokens
+  if (empty)
+    return [
+      ...closed,
+      LLMEvent.providerError({
+        message:
+          "The agent ended the turn without a reply. Its provider may have rejected the request: check the selected model and the agent's credentials.",
+      }),
+      LLMEvent.stepFinish({ index: 0, reason: "error", usage }),
+      LLMEvent.finish({ reason: "error", usage }),
+    ]
+  const reason = finishReason(string(response.stopReason))
   return [...closed, LLMEvent.stepFinish({ index: 0, reason, usage }), LLMEvent.finish({ reason, usage })]
 }
 

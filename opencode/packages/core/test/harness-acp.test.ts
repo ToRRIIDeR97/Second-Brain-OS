@@ -241,6 +241,16 @@ describe("ACP harness", () => {
     }
   })
 
+  test("reports a turn that ends with no output as an error, unless it was cancelled", () => {
+    const empty = { stopReason: "end_turn", usage: { totalTokens: 0, inputTokens: 0, outputTokens: 0 } }
+    const finish = AcpHarness.finishAcpTurn(Exit.succeed(empty), AcpHarness.acpState())
+    const cancelled = AcpHarness.finishAcpTurn(Exit.succeed({ stopReason: "cancelled" }), AcpHarness.acpState())
+
+    expect(finish.map((event) => event.type)).toEqual(["provider-error", "step-finish", "finish"])
+    expect(finish[2]).toMatchObject({ reason: "error" })
+    expect(cancelled.map((event) => event.type)).toEqual(["step-finish", "finish"])
+  })
+
   test("counts a parent usage update for the turn while a child's stays on the subagent", () => {
     const state = AcpHarness.acpState()
     const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
