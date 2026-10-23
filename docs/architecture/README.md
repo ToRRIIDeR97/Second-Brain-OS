@@ -321,6 +321,14 @@ the steps as subagent lanes. Clicking a lane, or the subagent's card in the
 timeline, opens that agent's tab in the side panel (see
 [Session compatibility and review](#session-compatibility-and-review)).
 
+`AcpHarness.finishAcpTurn` maps the `session/prompt` response to the turn's
+finish. OpenCode answers `end_turn` even when its provider rejected the request
+(expired key, no credits, or its free tier refused outside OpenCode's own
+client), and leaves the error only in its own log. So a turn that wasn't
+cancelled and produced no text, reasoning, tool call or output tokens ends as
+a provider error, which the session shows as a failed reply that asks the user
+to check the model and the agent's credentials.
+
 The ACP driver also records `available_commands_update` as the harness's
 reported commands (`HarnessRuntime.reportedCommands`), kept in memory per
 harness for the life of the server. The skills catalog uses them (see
