@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -12,7 +13,7 @@ import {
   requireDraftValue,
 } from "./draft-store.ts"
 
-void test("flushes the latest buffered draft and stores blobs", () => {
+void test("flushes the latest buffered draft and stores blobs", async () => {
   const store = createDesktopDraftStore(":memory:")
   store.set("prompt", "first")
   store.set("prompt", "latest")
@@ -21,8 +22,10 @@ void test("flushes the latest buffered draft and stores blobs", () => {
   assert.equal(store.get("prompt"), "latest")
 
   const bytes = new TextEncoder().encode("image")
-  const id = store.putBlob(bytes)
+  const id = await store.putBlob(bytes)
   assert.deepEqual(new Uint8Array(store.getBlob(id)!), bytes)
+  assert.equal(id, createHash("sha256").update(bytes).digest("hex"))
+  assert.equal(await store.putBlob(bytes), id)
   store.close()
 })
 
@@ -58,18 +61,20 @@ void test("keeps a failed flush batch for the next attempt", () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-void test("removes unreferenced blobs on open", () => {
+void test("removes unreferenced blobs on open", async () => {
   const dir = mkdtempSync(join(tmpdir(), "draft-store-"))
   const filename = join(dir, "drafts.sqlite")
   const first = createDesktopDraftStore(filename)
-  const kept = first.putBlob(new TextEncoder().encode("kept"))
-  const orphan = first.putBlob(new TextEncoder().encode("orphan"))
+  const kept = await first.putBlob(new TextEncoder().encode("kept"))
+  const orphan = await first.putBlob(new TextEncoder().encode("orphan"))
+  const another = await first.putBlob(new TextEncoder().encode("another orphan"))
   first.set("prompt", JSON.stringify([{ type: "image", blob: { id: kept } }]))
   first.close()
 
   const second = createDesktopDraftStore(filename)
   assert.notEqual(second.getBlob(kept), null)
   assert.equal(second.getBlob(orphan), null)
+  assert.equal(second.getBlob(another), null)
   second.close()
   rmSync(dir, { recursive: true, force: true })
 })

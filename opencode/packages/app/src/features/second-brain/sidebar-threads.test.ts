@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { buildThreadTree, flattenThreads, groupSidebarThreads, projectForDirectory } from "./sidebar-threads"
+import {
+  buildThreadTree,
+  createThreadNodeCache,
+  flattenThreads,
+  groupSidebarThreads,
+  projectForDirectory,
+} from "./sidebar-threads"
 
 const session = (
   id: string,
@@ -128,5 +134,38 @@ describe("thread nesting", () => {
   test("keeps a child whose parent is not loaded as a root", () => {
     const tree = buildThreadTree([session("orphan", "/w", 1, { parentID: "missing" })])
     expect(tree.map((node) => node.session.id)).toEqual(["orphan"])
+  })
+})
+
+describe("thread node cache", () => {
+  test("keeps unchanged nodes and replaces only the changed ones", () => {
+    const stable = createThreadNodeCache<ReturnType<typeof session>>()
+    const group = (sessions: ReturnType<typeof session>[]) =>
+      stable(groupSidebarThreads({ projects, workspaceDirectory: "/brain", sessions }))
+    const parent = session("parent", "/work/repo", 1)
+    const child = session("child", "/work/repo", 2, { parentID: "parent" })
+    const other = session("other", "/work/repo", 3)
+    const side = session("side", "/brain", 5)
+
+    const first = group([parent, child, other, side])
+    const before = first.projects[0].threads.find((node) => node.session.id === "parent")!
+    const second = group([parent, child, other, side])
+    expect(second.projects[0].threads).toEqual(first.projects[0].threads)
+    second.projects[0].threads.forEach((node, index) => expect(node).toBe(first.projects[0].threads[index]))
+    expect(second.workspace[0]).toBe(first.workspace[0])
+
+    // Only `other` changes: its node is new; the parent subtree keeps identity.
+    const updated = { ...other, time: { ...other.time, updated: 9 } }
+    const [moved, kept] = group([parent, child, updated, side]).projects[0].threads
+    expect(moved?.session).toBe(updated)
+    expect(kept).toBe(before)
+    expect(kept?.children[0]).toBe(before.children[0])
+
+    // A new child replaces its parent's node, since the parent's children changed.
+    const sibling = session("sibling", "/work/repo", 6, { parentID: "parent" })
+    const regrown = group([parent, child, sibling, updated, side]).projects[0].threads
+    const grown = regrown.find((node) => node.session.id === "parent")!
+    expect(grown).not.toBe(before)
+    expect(grown.children[0]).toBe(before.children[0])
   })
 })

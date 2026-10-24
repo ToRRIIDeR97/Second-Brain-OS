@@ -36,6 +36,8 @@ export type TimelineRowMap = {
 }
 
 export namespace Timeline {
+  export type Turn = { user: UserMessage; assistants: AssistantMessage[]; shell?: true }
+
   export function constructSessionMessageRows(
     messages: SessionMessageInfo[],
     getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
@@ -45,7 +47,23 @@ export namespace Timeline {
     inlineComments: boolean,
     projectedUserMessages: UserMessage[],
   ) {
-    const turns: { user: UserMessage; assistants: AssistantMessage[]; shell?: true }[] = []
+    const turns = constructSessionTurns(messages, getMessage, projectedUserMessages)
+    const activeMessageID = turns.at(-1)?.user.id
+    return {
+      activeMessageID,
+      rows: turns.flatMap((turn, index) =>
+        constructTurnRows(turn, getMessageParts, index, showReasoning, status, activeMessageID, inlineComments),
+      ),
+    }
+  }
+
+  /** Groups messages into turns. It reads messages only, so streamed parts don't re-run it. */
+  export function constructSessionTurns(
+    messages: SessionMessageInfo[],
+    getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
+    projectedUserMessages: UserMessage[],
+  ) {
+    const turns: Turn[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
     messages.forEach((message) => {
       const projected = getMessage(message.id)
@@ -87,23 +105,29 @@ export namespace Timeline {
       if (index >= 0) turns.splice(index, 0, turn)
       turnByUserID.set(user.id, turn)
     })
-    const activeMessageID = turns.at(-1)?.user.id
-    return {
-      activeMessageID,
-      rows: turns.flatMap((turn, index) =>
-        constructMessageRows(
-          turn.user,
-          getMessageParts,
-          turn.assistants,
-          index,
-          showReasoning,
-          status,
-          turn.user.id === activeMessageID,
-          inlineComments,
-          !turn.shell,
-        ),
-      ),
-    }
+    return turns
+  }
+
+  export function constructTurnRows(
+    turn: Turn,
+    getMessageParts: (messageID: string) => Part[],
+    index: number,
+    showReasoning: boolean,
+    status: SessionStatus["type"],
+    activeMessageID: string | undefined,
+    inlineComments: boolean,
+  ) {
+    return constructMessageRows(
+      turn.user,
+      getMessageParts,
+      turn.assistants,
+      index,
+      showReasoning,
+      status,
+      turn.user.id === activeMessageID,
+      inlineComments,
+      !turn.shell,
+    )
   }
 
   export function constructMessageRows(

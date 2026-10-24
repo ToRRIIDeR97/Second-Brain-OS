@@ -1,6 +1,6 @@
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
-import { createMemo, type Accessor } from "solid-js"
+import { createMemo, createSelector, mapArray, type Accessor } from "solid-js"
 import { foldTimelineRows, reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"
 import { same } from "@/utils/same"
@@ -32,21 +32,44 @@ export function createTimelineProjection(input: {
     })
     return result
   })
-  const projection = createMemo(() =>
-    Timeline.constructSessionMessageRows(
+  // Turns read messages only. Each turn builds its rows in its own memo, so a streamed part rebuilds
+  // the active turn's rows instead of the whole session's.
+  const turns = createMemo(() =>
+    Timeline.constructSessionTurns(
       input.sessionMessages(),
       (messageID) => messageByID().get(messageID) as UserMessage | AssistantMessage | undefined,
-      input.parts,
-      input.showReasoningSummaries(),
-      input.status().type,
-      input.inlineComments(),
       input.userMessages(),
     ),
   )
-  const activeMessageID = createMemo(() => projection().activeMessageID)
-  const allRows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
-    reuseTimelineRows(previous, projection().rows),
+  const activeMessageID = createMemo(() => turns().at(-1)?.user.id)
+  const isActive = createSelector(activeMessageID)
+  const turnByID = createMemo(() => new Map(turns().map((turn, index) => [turn.user.id, { turn, index }] as const)))
+  const turnRows = mapArray(
+    () => turns().map((turn) => turn.user.id),
+    (userMessageID) => {
+      const entry = createMemo(() => turnByID().get(userMessageID), undefined, { equals: sameTurn })
+      return createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
+        const current = entry()
+        if (!current) return []
+        return reuseTimelineRows(
+          previous,
+          Timeline.constructTurnRows(
+            current.turn,
+            input.parts,
+            current.index,
+            input.showReasoningSummaries(),
+            input.status().type,
+            isActive(userMessageID) ? userMessageID : undefined,
+            input.inlineComments(),
+          ),
+        )
+      })
+    },
   )
+  const allRows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
+    const next = turnRows().flatMap((rows) => rows())
+    return previous && same(previous, next) ? previous : next
+  })
   const rows = createMemo(() => foldTimelineRows(allRows(), input.folded, activeMessageID()), undefined, {
     equals: same,
   })
@@ -84,4 +107,18 @@ export function createTimelineProjection(input: {
     rowByKey,
     rows,
   }
+}
+
+type TurnEntry = { turn: Timeline.Turn; index: number }
+
+// Same messages in the same position class (first turn or not) build the same rows.
+function sameTurn(a: TurnEntry | undefined, b: TurnEntry | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.turn.user === b.turn.user &&
+    a.turn.shell === b.turn.shell &&
+    a.index > 0 === b.index > 0 &&
+    same(a.turn.assistants, b.turn.assistants)
+  )
 }

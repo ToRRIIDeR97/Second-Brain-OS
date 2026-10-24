@@ -46,14 +46,36 @@ function normalizeToolMetadata(name: string, metadata: Record<string, unknown>) 
   }
 }
 
-export function normalizeSessionMessages(sessionID: string, source: readonly SessionMessageInfo[]) {
+/** True for entries that start a turn: the normalized output from here on doesn't depend on earlier turns. */
+export function isTurnStart(message: SessionMessageInfo) {
+  return (
+    message.type === "user" ||
+    message.type === "shell" ||
+    (message.type === "synthetic" && !!message.description?.trim())
+  )
+}
+
+/**
+ * `from`, when set, must be a turn start (see `isTurnStart`). Entries before it only carry the agent and
+ * model forward, so streaming can normalize the active turn instead of the whole session.
+ */
+export function normalizeSessionMessages(sessionID: string, source: readonly SessionMessageInfo[], from = 0) {
   const messages: Message[] = []
   const parts = new Map<string, Part[]>()
   let agent = ""
   let model = emptyModel
   let parentID: string | undefined
 
-  source.forEach((message) => {
+  source.forEach((message, index) => {
+    if (index < from) {
+      if (message.type === "agent-switched") agent = message.agent
+      if (message.type === "model-switched") model = message.model
+      if (message.type === "assistant") {
+        agent = message.agent
+        model = message.model
+      }
+      return
+    }
     if (message.type === "agent-switched") {
       agent = message.agent
       return

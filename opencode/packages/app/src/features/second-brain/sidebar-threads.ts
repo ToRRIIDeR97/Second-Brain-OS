@@ -91,6 +91,37 @@ export function groupSidebarThreads<P extends SidebarProject, S extends SidebarS
 }
 
 /**
+ * Keep the previous thread node objects wherever their content is unchanged. The sidebar's `<For>`
+ * rows are keyed by object identity, so a fresh node would remount its row and drop the row's state
+ * (an open menu, a rename in progress). A node is reused while its session object and its children
+ * are the same; sessions come from reconciled stores, so they keep identity across updates.
+ */
+export function createThreadNodeCache<S extends SidebarSession>() {
+  let nodes = new Map<string, ThreadNode<S>>()
+  return <P extends SidebarProject>(value: SidebarGroups<P, S>): SidebarGroups<P, S> => {
+    const next = new Map<string, ThreadNode<S>>()
+    const reuse = (list: ThreadNode<S>[]): ThreadNode<S>[] =>
+      list.map((node) => {
+        const old = nodes.get(node.session.id)
+        const children = reuse(node.children)
+        const stable =
+          old && old.session === node.session && sameItems(old.children, children) ? old : { ...node, children }
+        next.set(node.session.id, stable)
+        return stable
+      })
+    const result = {
+      projects: value.projects.map((group) => ({ ...group, threads: reuse(group.threads) })),
+      workspace: reuse(value.workspace),
+    }
+    nodes = next
+    return result
+  }
+}
+
+const sameItems = <T>(a: readonly T[], b: readonly T[]) =>
+  a.length === b.length && a.every((item, index) => item === b[index])
+
+/**
  * Combine the loaded directory lists with the recent-session index. A directory list
  * contributes only threads that run in that directory: server events for a thread
  * reach only its own directory's list, so a copy held by another list (e.g. the Brain

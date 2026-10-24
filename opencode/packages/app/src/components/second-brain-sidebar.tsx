@@ -106,8 +106,15 @@ export function SecondBrainSidebar() {
                 </p>
               }
             >
-              <For each={ctrl.groups().projects}>
-                {(group) => <ProjectGroup ctrl={ctrl} project={group.project} threads={group.threads} />}
+              {/* Keyed by the Project, not its group: a group is rebuilt on every thread change. */}
+              <For each={ctrl.projects()}>
+                {(project) => (
+                  <ProjectGroup
+                    ctrl={ctrl}
+                    project={project}
+                    threads={ctrl.groups().projects.find((group) => group.project.id === project.id)?.threads ?? []}
+                  />
+                )}
               </For>
               <Show when={!ctrl.loading() && ctrl.projects().length === 0}>
                 <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">

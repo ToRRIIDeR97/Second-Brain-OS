@@ -122,6 +122,16 @@ describe("DatabaseMigration", () => {
         )
         expect(global).toContain("session_time_updated_id_idx")
         expect(global).not.toContain("USE TEMP B-TREE")
+        const created = yield* plan(
+          sql`SELECT * FROM session WHERE (time_created < 5 OR (time_created = 5 AND id < 'ses_b')) ORDER BY time_created DESC, id DESC LIMIT 100`,
+        )
+        expect(created).toContain("session_time_created_id_idx")
+        expect(created).not.toContain("USE TEMP B-TREE")
+        const project = yield* plan(
+          sql`SELECT * FROM session WHERE project_id = 'global' ORDER BY time_created DESC, id DESC LIMIT 100`,
+        )
+        expect(project).toContain("session_project_time_created_id_idx")
+        expect(project).not.toContain("USE TEMP B-TREE")
         expect(
           yield* db.all(
             sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('session_project_idx', 'part_session_idx', 'todo_session_idx', 'session_message_time_created_idx', 'session_message_session_time_created_id_idx')`,
