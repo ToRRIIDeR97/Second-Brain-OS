@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
@@ -47,16 +48,19 @@ describe("Ripgrep", () => {
   )
 })
 
-it.live("file search observes additions and deletions after initialization", () =>
+it.effect("file search reuses its listing within the TTL and observes changes after it", () =>
   withTmp((cwd) =>
     Effect.gen(function* () {
       const search = yield* FileSystemSearch.Service
       expect(yield* search.find({ query: "fresh", type: "file" })).toEqual([])
       yield* Effect.promise(() => fs.writeFile(path.join(cwd, "fresh.md"), "created after initialization"))
+      expect(yield* search.find({ query: "fresh", type: "file" })).toEqual([])
+      yield* TestClock.adjust(FileSystemSearch.LISTING_TTL)
       expect((yield* search.find({ query: "fresh", type: "file" })).map((entry) => entry.path)).toEqual([
         RelativePath.make("fresh.md"),
       ])
       yield* Effect.promise(() => fs.unlink(path.join(cwd, "fresh.md")))
+      yield* TestClock.adjust(FileSystemSearch.LISTING_TTL)
       expect(yield* search.find({ query: "fresh", type: "file" })).toEqual([])
     }).pipe(
       Effect.provide(FileSystemSearch.ripgrepLayer),

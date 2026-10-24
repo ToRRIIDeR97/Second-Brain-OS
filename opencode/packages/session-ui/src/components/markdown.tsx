@@ -492,6 +492,7 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+  let appliedLabels: CopyLabels | undefined
 
   createEffect(() => {
     const container = root()
@@ -516,21 +517,28 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
-    content.forEach((block, index) => updateBlock(container, index, block, labels))
+    const changed = content.flatMap((block, index) => updateBlock(container, index, block, labels) ?? [])
     while (container.children.length > content.length) {
       const child = container.lastElementChild
       if (!child) break
       disposeCopyButtons(child)
       child.remove()
     }
-    container
-      .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-      .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
-    mountSvgWindows(container, {
+    // Only replaced or morphed blocks need their buttons and SVG windows refreshed, unless the
+    // locale changed the copy labels; a streamed update would otherwise rescan the whole message.
+    const relabel = appliedLabels?.copy !== labels.copy || appliedLabels?.copied !== labels.copied
+    appliedLabels = labels
+    const svgLabels = {
       title: i18n.t("secondBrain.message.svg.title"),
       preview: i18n.t("secondBrain.message.svg.preview"),
       source: i18n.t("secondBrain.message.svg.source"),
       download: i18n.t("secondBrain.message.svg.download"),
+    }
+    ;(relabel ? [container] : changed).forEach((block) => {
+      block
+        .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
+        .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+      mountSvgWindows(block, svgLabels)
     })
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
@@ -593,18 +601,21 @@ function disposeCode(key: string) {
   disposeStreamingCode(key)
 }
 
-function updateBlock(container: HTMLDivElement, index: number, block: RenderedBlock, labels: CopyLabels) {
+/** Brings the block at `index` up to date and returns its element when it was added, replaced or morphed. */
+function updateBlock(
+  container: HTMLDivElement,
+  index: number,
+  block: RenderedBlock,
+  labels: CopyLabels,
+): HTMLElement | undefined {
   const current = container.children[index]
-  if (block.mode === "code") {
-    updateCodeBlock(container, current, block, labels)
-    return
-  }
+  if (block.mode === "code") return updateCodeBlock(container, current, block, labels)
   if (
     current instanceof HTMLDivElement &&
     current.dataset.markdownKey === block.key &&
     current.dataset.markdownHash === block.hash
   )
-    return
+    return undefined
 
   const next = document.createElement("div")
   next.dataset.markdownBlock = ""
@@ -616,7 +627,7 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
 
   if (!(current instanceof HTMLDivElement)) {
     container.appendChild(next)
-    return
+    return next
   }
 
   morphdom(current, next, {
@@ -637,6 +648,7 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
       return true
     },
   })
+  return current
 }
 
 function updateCodeBlock(
@@ -646,11 +658,14 @@ function updateCodeBlock(
   labels: CopyLabels,
 ) {
   const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  const complete = block.complete ? "true" : "false"
+  const changed =
+    !existing || existing.dataset.markdownHash !== block.hash || existing.dataset.markdownComplete !== complete
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
   next.dataset.markdownKey = block.key
   next.dataset.markdownHash = block.hash
-  next.dataset.markdownComplete = block.complete ? "true" : "false"
+  next.dataset.markdownComplete = complete
   next.style.display = "contents"
 
   const code = existing?.querySelector("code")
@@ -682,7 +697,7 @@ function updateCodeBlock(
       unstable: block.unstable,
       raw: block.raw,
     })
-    return
+    return changed ? next : undefined
   }
 
   const wrapper = document.createElement("div")
@@ -707,9 +722,10 @@ function updateCodeBlock(
   if (current) {
     disposeCopyButtons(current)
     current.replaceWith(next)
-    return
+    return next
   }
   container.appendChild(next)
+  return next
 }
 
 function sameToken(left: MarkdownToken, right: MarkdownToken | undefined) {

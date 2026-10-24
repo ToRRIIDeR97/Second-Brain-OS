@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto"
 import { DatabaseSync } from "node:sqlite"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-sqlite"
 import { blob, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
@@ -32,6 +31,8 @@ export function requireDraftBlob(value: unknown) {
   if (!(value instanceof ArrayBuffer) && !ArrayBuffer.isView(value)) throw new Error("Invalid draft blob")
   if (value.byteLength > MAX_DRAFT_BLOB_BYTES) throw new Error("Draft blob too large")
   if (value instanceof ArrayBuffer) return new Uint8Array(value)
+  // IPC never delivers shared memory, and WebCrypto hashing needs a plain ArrayBuffer.
+  if (!(value.buffer instanceof ArrayBuffer)) throw new Error("Invalid draft blob")
   return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
 }
 
@@ -51,13 +52,12 @@ export function createDesktopDraftStore(filename: string, onFlushError?: (error:
         return item
       }),
     )
+  // One statement for all orphans; json_each sidesteps SQLite's bound-parameter limit.
   db.transaction((tx) =>
     tx
-      .select({ id: blobs.id })
-      .from(blobs)
-      .all()
-      .filter(({ id }) => !used.has(id))
-      .forEach(({ id }) => tx.delete(blobs).where(eq(blobs.id, id)).run()),
+      .delete(blobs)
+      .where(sql`${blobs.id} NOT IN (SELECT value FROM json_each(${JSON.stringify([...used])}))`)
+      .run(),
   )
   const pending = new Map<string, string | null>()
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -99,10 +99,13 @@ export function createDesktopDraftStore(filename: string, onFlushError?: (error:
       pending.set(key, value)
       schedule()
     },
-    putBlob(data: Uint8Array) {
-      const id = createHash("sha256").update(data).digest("hex")
+    // Hashing a large paste runs on libuv's thread pool, and a blob that is already
+    // stored is not written again, so only the insert of new bytes holds the main thread.
+    async putBlob(data: Uint8Array<ArrayBuffer>) {
+      const id = Buffer.from(await crypto.subtle.digest("SHA-256", data)).toString("hex")
+      if (db.select({ id: blobs.id }).from(blobs).where(eq(blobs.id, id)).get()) return id
       db.insert(blobs)
-        .values({ id, data: Buffer.from(data) })
+        .values({ id, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) })
         .onConflictDoNothing()
         .run()
       return id

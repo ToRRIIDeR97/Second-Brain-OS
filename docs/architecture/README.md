@@ -592,8 +592,12 @@ harness and model.
 snapshots after the selected user prompt, stopping at the next user prompt.
 Snapshot capture discovers Git initialized after a workspace is already open.
 Renderer Last turn review uses this endpoint; working-tree and branch review
-use the managed server's legacy Git routes. File search refreshes the
-ripgrep fallback on each query so newly written files are discoverable.
+use the managed server's legacy Git routes. File search reuses the ripgrep
+fallback's file listing for 3 seconds (`LISTING_TTL` in
+`core/src/filesystem/search.ts`), then lists again, so newly written files are
+discoverable within that window. The composer's `@` popover debounces its
+query by 150 ms, aborts the superseded request, and asks for at most 30
+results.
 
 "Edit from here" on a user message stages a revert at that message
 (`POST /api/session/:sessionID/revert/stage`) and loads the message into the
