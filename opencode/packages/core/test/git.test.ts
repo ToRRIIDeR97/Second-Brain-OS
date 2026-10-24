@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { File } from "@opencode-ai/core/file"
 import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { branch, commit, gitRemote } from "./fixture/git"
@@ -159,6 +160,98 @@ describe("Git trees", () => {
       expect(yield* read(path.join(root.path, "scope", "tracked.txt"))).toBe("one\n")
       expect(yield* read(path.join(root.path, "scope", "added.txt"))).toBe("added\n")
       expect(yield* read(path.join(root.path, "outside.txt"))).toBe("changed outside\n")
+    }),
+  )
+
+  it.live("diffs many files in one pass with the same result as per-file git diffs", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const write = (file: string, content: string | Uint8Array) => fs.writeFile(path.join(root.path, file), content)
+      const tree = async () => {
+        await $`git add -A`.cwd(root.path).quiet()
+        await $`git commit -m state`.cwd(root.path).quiet()
+        return Git.TreeID.make((await $`git rev-parse HEAD^{tree}`.cwd(root.path).text()).trim())
+      }
+      const [before, after] = yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await Promise.all([
+          ...Array.from({ length: 5 }, (_, index) => write(`file-${index}.txt`, `line ${index}\n`)),
+          write("old-name.txt", "renamed content\nkept\n"),
+          write("deleted.txt", "gone\n"),
+          write("image.bin", new Uint8Array([0, 1, 2, 3, 0, 255])),
+          write("with space.txt", "space\n"),
+          write("ünïcode.txt", "accent\n"),
+          write("mode.sh", "echo\n"),
+          write("unchanged.txt", "same\n"),
+          write("link", "was a file\n"),
+        ])
+        const first = await tree()
+        await Promise.all([
+          ...Array.from({ length: 5 }, (_, index) => write(`file-${index}.txt`, `line ${index}\nadded ${index}\n`)),
+          fs.rename(path.join(root.path, "old-name.txt"), path.join(root.path, "new-name.txt")),
+          fs.rm(path.join(root.path, "deleted.txt")),
+          write("image.bin", new Uint8Array([0, 9, 9, 9, 0, 255])),
+          write("added.txt", "fresh\n"),
+          write("with space.txt", "space changed\n"),
+          write("ünïcode.txt", "accent changed\n"),
+          fs.chmod(path.join(root.path, "mode.sh"), 0o755),
+          fs.rm(path.join(root.path, "link")),
+        ])
+        await fs.symlink("unchanged.txt", path.join(root.path, "link"))
+        return [first, await tree()]
+      })
+      const git = yield* Git.Service
+      const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!repository) throw new Error("Repository not found")
+      const files = yield* git.tree.files({ repository, from: before, to: after })
+      const changed = yield* Effect.promise(() =>
+        $`git diff --name-only --no-renames -z ${before} ${after}`.cwd(root.path).text(),
+      )
+      const paths = [...changed.split("\0").filter(Boolean), "unchanged.txt"].map((file) => RelativePath.make(file))
+      const expected = yield* Effect.promise(() =>
+        Promise.all(
+          paths.map(async (file) => {
+            const status = (
+              await $`git diff --name-status --no-renames ${before} ${after} -- ${file}`.cwd(root.path).text()
+            ).trim()
+            const stats = (
+              await $`git diff --numstat --no-renames ${before} ${after} -- ${file}`.cwd(root.path).text()
+            ).split("\t")
+            const binary = stats[0] === "-" || stats[1] === "-"
+            return {
+              path: file,
+              status: status.startsWith("A") ? "added" : status.startsWith("D") ? "deleted" : "modified",
+              additions: binary ? 0 : Number(stats[0] ?? 0),
+              deletions: binary ? 0 : Number(stats[1] ?? 0),
+              patch: binary
+                ? ""
+                : await $`git diff --unified=2 --no-renames ${before} ${after} -- ${file}`.cwd(root.path).text(),
+            } satisfies File.Diff
+          }),
+        ),
+      )
+
+      const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 2, paths })
+      expect(diffs).toEqual(expected)
+      expect(diffs.find((item) => item.path === "new-name.txt")).toMatchObject({ status: "added", additions: 2 })
+      expect(diffs.find((item) => item.path === "old-name.txt")).toMatchObject({ status: "deleted", deletions: 2 })
+      expect(diffs.find((item) => item.path === "image.bin")).toMatchObject({ additions: 0, deletions: 0, patch: "" })
+      expect(diffs.find((item) => item.path === "ünïcode.txt")?.patch).toContain("+accent changed")
+      expect(diffs.find((item) => item.path === "link")?.patch).toContain("new file mode 120000")
+      expect(diffs.find((item) => item.path === "unchanged.txt")).toEqual({
+        path: RelativePath.make("unchanged.txt"),
+        status: "modified",
+        additions: 0,
+        deletions: 0,
+        patch: "",
+      })
+      expect(yield* git.tree.diff({ repository, from: before, to: after, context: 2 })).toEqual(
+        expected.filter((item) => files.includes(item.path)),
+      )
+      expect(yield* git.tree.diff({ repository, from: before, to: after, paths: [] })).toEqual([])
     }),
   )
 })

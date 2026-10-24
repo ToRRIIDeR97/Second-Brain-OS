@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "f734396f-70f9-4a5b-b668-1f1dedfa1af5",
-  "prevIds": ["f14a9b18-8207-487e-a3d3-227e629ba9ad"],
+  "id": "12c72787-ff11-454e-92e3-cb151ab453f3",
+  "prevIds": ["f734396f-70f9-4a5b-b668-1f1dedfa1af5"],
   "ddl": [
     {
       "name": "workspace",
@@ -2043,6 +2043,46 @@
       "where": null,
       "origin": "manual",
       "name": "session_time_updated_id_idx",
+      "entityType": "indexes",
+      "table": "session"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "time_created",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_project_time_created_id_idx",
+      "entityType": "indexes",
+      "table": "session"
+    },
+    {
+      "columns": [
+        {
+          "value": "time_created",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_time_created_id_idx",
       "entityType": "indexes",
       "table": "session"
     }

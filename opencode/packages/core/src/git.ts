@@ -2,7 +2,7 @@ export * as Git from "./git"
 
 import path from "path"
 import { randomUUID } from "crypto"
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Context, Duration, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath, RelativePath } from "./schema"
 import { FSUtil } from "./fs-util"
@@ -247,6 +247,7 @@ const layer = Layer.effect(
       const result = yield* execute(
         directory,
         proc,
+        timeout(operation),
       )(args).pipe(
         Effect.mapError((cause) => new OperationError({ operation, directory, message: cause.message, cause })),
       )
@@ -334,7 +335,7 @@ const layer = Layer.effect(
             env: options?.env,
             extendEnv: true,
           }),
-          { stdin: options?.stdin },
+          { stdin: options?.stdin, timeout: timeout(operationName) },
         )
         .pipe(
           Effect.mapError(
@@ -499,7 +500,7 @@ const layer = Layer.effect(
             cwd: input.repository.worktree,
             extendEnv: true,
           }),
-          { stdin: input.paths.join("\0") + "\0" },
+          { stdin: input.paths.join("\0") + "\0", timeout: timeout("list_files") },
         )
         .pipe(
           Effect.mapError(
@@ -572,48 +573,74 @@ const layer = Layer.effect(
       paths?: readonly RelativePath[]
     }) {
       const paths = input.paths ?? (yield* treeFiles(input))
-      return yield* Effect.forEach(paths, (file) =>
-        Effect.gen(function* () {
-          const statusText = (yield* repositoryOperation("diff", input.repository, [
-            "diff",
-            "--name-status",
-            "--no-renames",
-            input.from,
-            input.to,
-            "--",
-            file,
-          ])).text.trim()
-          const status = statusText.startsWith("A") ? "added" : statusText.startsWith("D") ? "deleted" : "modified"
-          const stats = (yield* repositoryOperation("diff", input.repository, [
-            "diff",
-            "--numstat",
-            "--no-renames",
-            input.from,
-            input.to,
-            "--",
-            file,
-          ])).text.split("\t")
-          const binary = stats[0] === "-" || stats[1] === "-"
-          const patch = binary
-            ? ""
-            : (yield* repositoryOperation("diff", input.repository, [
-                "diff",
-                `--unified=${input.context ?? 3}`,
-                "--no-renames",
-                input.from,
-                input.to,
-                "--",
-                file,
-              ])).text
-          return {
-            path: file,
-            status,
-            additions: binary ? 0 : Number(stats[0] ?? 0),
-            deletions: binary ? 0 : Number(stats[1] ?? 0),
-            patch,
-          } satisfies File.Diff
-        }),
+      const diff = (args: string[], files: readonly RelativePath[]) =>
+        repositoryOperation("diff", input.repository, [
+          "diff",
+          ...args,
+          "--no-renames",
+          input.from,
+          input.to,
+          "--",
+          ...files,
+        ]).pipe(Effect.map((result) => result.text))
+      const status = new Map<string, string>()
+      const stats = new Map<string, string[]>()
+      const patches = new Map<string, string>()
+      const textual = (file: RelativePath) => stats.has(file) && !binary(stats.get(file))
+      // Batch pathspecs so the command line stays under the Windows length limit.
+      yield* Effect.forEach(
+        Array.from({ length: Math.ceil(paths.length / 100) }, (_, index) =>
+          paths.slice(index * 100, index * 100 + 100),
+        ),
+        (batch) =>
+          Effect.gen(function* () {
+            const names = (yield* diff(["--name-status", "-z"], batch)).split("\0")
+            names.forEach((file, index) => {
+              if (index % 2 === 1 && !status.has(file)) status.set(file, names[index - 1])
+            })
+            ;(yield* diff(["--numstat", "-z"], batch))
+              .split("\0")
+              .map((record) => record.split("\t"))
+              .filter((parts) => parts.length >= 3)
+              .forEach((parts) => {
+                const file = parts.slice(2).join("\t")
+                if (!stats.has(file)) stats.set(file, parts)
+              })
+            const files = batch.filter(textual)
+            if (!files.length) return
+            // A file's patch is every section whose header names it; type changes produce two.
+            const headers = new Map(
+              files.map((file) => [`diff --git ${quote(`a/${file}`)} ${quote(`b/${file}`)}`, file]),
+            )
+            const output = yield* diff([`--unified=${input.context ?? 3}`], files)
+            const starts = Array.from(output.matchAll(/^diff --git /gm), (match) => match.index)
+            starts.forEach((start, index) => {
+              const section = output.slice(start, starts[index + 1] ?? output.length)
+              const file = headers.get(section.slice(0, section.indexOf("\n")))
+              if (file) patches.set(file, (patches.get(file) ?? "") + section)
+            })
+          }),
+        { discard: true },
       )
+      // A configured diff prefix or an external diff leaves headers unmatched; diff those files alone.
+      yield* Effect.forEach(
+        paths.filter((file) => textual(file) && !patches.has(file)),
+        (file) =>
+          diff([`--unified=${input.context ?? 3}`], [file]).pipe(Effect.map((patch) => patches.set(file, patch))),
+        { concurrency: 8, discard: true },
+      )
+      return paths.map((file) => {
+        const code = status.get(file) ?? ""
+        const numbers = stats.get(file) ?? []
+        const skip = binary(numbers)
+        return {
+          path: file,
+          status: code.startsWith("A") ? "added" : code.startsWith("D") ? "deleted" : "modified",
+          additions: skip ? 0 : Number(numbers[0] ?? 0),
+          deletions: skip ? 0 : Number(numbers[1] ?? 0),
+          patch: skip ? "" : (patches.get(file) ?? ""),
+        } satisfies File.Diff
+      })
     })
 
     const entry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
@@ -731,6 +758,7 @@ const layer = Layer.effect(
       const tracked = yield* execute(
         input.repository.worktree,
         proc,
+        timeout("refresh"),
       )(["diff", "--binary", "HEAD", "--", scope]).pipe(
         Effect.mapError(
           (cause) => new PatchError({ operation: "capture", directory: input.path, message: cause.message, cause }),
@@ -747,6 +775,7 @@ const layer = Layer.effect(
       const untracked = yield* execute(
         input.repository.worktree,
         proc,
+        timeout("refresh"),
       )(["ls-files", "--others", "--exclude-standard", "-z", "--", scope]).pipe(
         Effect.mapError(
           (cause) => new PatchError({ operation: "capture", directory: input.path, message: cause.message, cause }),
@@ -764,6 +793,7 @@ const layer = Layer.effect(
         execute(
           input.repository.worktree,
           proc,
+          timeout("diff"),
         )(["diff", "--binary", "--no-index", "--", "/dev/null", file]).pipe(
           Effect.mapError(
             (cause) => new PatchError({ operation: "capture", directory: input.path, message: cause.message, cause }),
@@ -798,6 +828,7 @@ const layer = Layer.effect(
             extendEnv: true,
             stdin: Stream.make(new TextEncoder().encode(input.changes)),
           }),
+          { timeout: timeout("diff") },
         )
         .pipe(
           Effect.mapError(
@@ -823,6 +854,7 @@ const layer = Layer.effect(
       const restore = yield* execute(
         input.repository.worktree,
         proc,
+        timeout("checkout"),
       )(input.index === "reset" ? ["checkout", "HEAD", "--", scope] : ["checkout", "--", scope]).pipe(
         Effect.mapError(
           (cause) => new PatchError({ operation: "reset", directory: input.path, message: cause.message, cause }),
@@ -839,6 +871,7 @@ const layer = Layer.effect(
       const clean = yield* execute(
         input.repository.worktree,
         proc,
+        timeout("checkout"),
       )(["clean", "-fd", "--", scope]).pipe(
         Effect.mapError(
           (cause) => new PatchError({ operation: "reset", directory: input.path, message: cause.message, cause }),
@@ -860,7 +893,9 @@ const layer = Layer.effect(
       cwd = repository.worktree,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }))
+        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }), {
+          timeout: timeout(operation === "create" ? "checkout" : "list_files"),
+        })
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
@@ -953,10 +988,14 @@ interface Result {
 
 function run(cwd: string, proc: AppProcess.Interface) {
   return (args: string[]) =>
-    execute(cwd, proc)(args).pipe(Effect.catch(() => Effect.succeed({ exitCode: 1, text: "", stderr: "" })))
+    execute(
+      cwd,
+      proc,
+      timeout("list_files"),
+    )(args).pipe(Effect.catch(() => Effect.succeed({ exitCode: 1, text: "", stderr: "" })))
 }
 
-function execute(cwd: string, proc: AppProcess.Interface) {
+function execute(cwd: string, proc: AppProcess.Interface, limit: Duration.Input | undefined) {
   return (args: string[]) =>
     proc
       .run(
@@ -965,6 +1004,7 @@ function execute(cwd: string, proc: AppProcess.Interface) {
           extendEnv: true,
           stdin: "ignore",
         }),
+        { timeout: limit },
       )
       .pipe(
         Effect.map(
@@ -976,6 +1016,47 @@ function execute(cwd: string, proc: AppProcess.Interface) {
             }) satisfies Result,
         ),
       )
+}
+
+function binary(stats: readonly string[] | undefined) {
+  return stats?.[0] === "-" || stats?.[1] === "-"
+}
+
+// Mirrors git's default core.quotePath header quoting: C escapes, octal for other control and non-ASCII bytes.
+function quote(name: string) {
+  const escapes: Record<number, string> = {
+    7: "a",
+    8: "b",
+    9: "t",
+    10: "n",
+    11: "v",
+    12: "f",
+    13: "r",
+    34: '"',
+    92: "\\",
+  }
+  const bytes = Array.from(new TextEncoder().encode(name))
+  if (bytes.every((byte) => byte >= 0x20 && byte < 0x7f && !escapes[byte])) return name
+  const body = bytes
+    .map((byte) =>
+      escapes[byte]
+        ? `\\${escapes[byte]}`
+        : byte >= 0x20 && byte < 0x7f
+          ? String.fromCharCode(byte)
+          : `\\${byte.toString(8).padStart(3, "0")}`,
+    )
+    .join("")
+  return `"${body}"`
+}
+
+// A hung git (stale lock, credential prompt, network) would otherwise stall every later
+// snapshot step queued behind the per-repository lock. Network operations stay unbounded.
+function timeout(operation: OperationError["operation"]): Duration.Input | undefined {
+  if (operation === "clone" || operation === "fetch") return undefined
+  // These scan or write the whole worktree and can legitimately take minutes on large repositories.
+  if (operation === "checkout" || operation === "reset" || operation === "refresh" || operation === "restore")
+    return "10 minutes"
+  return "30 seconds"
 }
 
 function resolvePath(cwd: string, value: string) {

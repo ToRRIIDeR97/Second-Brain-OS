@@ -8,20 +8,22 @@ import { Api } from "../api"
 
 const subscriberCapacity = 256
 const encodeEvent = Schema.encodeUnknownOption(OpenCodeEvent)
+// The bus hands every subscriber the same event object, so encode it once and share the string.
+const encoded = new WeakMap<object, Option.Option<string>>()
 
 // The bus also carries events outside the served schema (for example TUI events).
 // Encoding them would fail and end the stream for every subscriber, so drop them.
 function eventData(event: { readonly type: string }) {
-  return Option.match(encodeEvent(event), {
+  const data = encoded.get(event) ?? encodeEvent(event).pipe(Option.map((value) => JSON.stringify(value)))
+  encoded.set(event, data)
+  return Option.match(data, {
     onNone: () =>
       Effect.logDebug("skipping event outside the server event schema").pipe(
         Effect.annotateLogs({ type: event.type }),
         Effect.as(Result.failVoid),
       ),
-    onSome: (encoded) =>
-      Effect.succeed(
-        Result.succeed<Sse.Event>({ _tag: "Event", event: "message", id: undefined, data: JSON.stringify(encoded) }),
-      ),
+    onSome: (data) =>
+      Effect.succeed(Result.succeed<Sse.Event>({ _tag: "Event", event: "message", id: undefined, data })),
   })
 }
 

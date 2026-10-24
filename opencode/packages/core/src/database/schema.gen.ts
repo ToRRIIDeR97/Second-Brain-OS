@@ -269,6 +269,10 @@ export default {
         `CREATE INDEX \`session_directory_parent_archived_idx\` ON \`session\` (\`directory\`,\`parent_id\`,\`time_archived\`);`,
       )
       yield* tx.run(`CREATE INDEX \`session_time_updated_id_idx\` ON \`session\` (\`time_updated\`,\`id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`session_project_time_created_id_idx\` ON \`session\` (\`project_id\`,\`time_created\`,\`id\`);`,
+      )
+      yield* tx.run(`CREATE INDEX \`session_time_created_id_idx\` ON \`session\` (\`time_created\`,\`id\`);`)
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">
