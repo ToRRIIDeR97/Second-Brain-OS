@@ -14,6 +14,11 @@ import { localDateKey } from "./calendar-domain"
 import type { PlannerTask, ProjectRecord } from "./client"
 
 export type CalendarTaskFilter = "today" | "upcoming" | "unscheduled" | "completed"
+type TaskErrorKey =
+  | "secondBrain.tasks.error.title"
+  | "secondBrain.tasks.error.schedule"
+  | "secondBrain.tasks.error.scheduledDate"
+  | "secondBrain.tasks.error.time"
 type Draft = {
   id: string
   title: string
@@ -167,7 +172,7 @@ export function CalendarTasks(props: {
     }
   }
 
-  const fail = (field: "title" | "time" | "scheduled", key: Parameters<typeof language.t>[0]) =>
+  const fail = (field: "title" | "time" | "scheduled", key: TaskErrorKey) =>
     setState({ error: language.t(key), errorField: field })
 
   const save = async () => {
