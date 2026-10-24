@@ -78,7 +78,6 @@ export default function NotesPage() {
     search: "",
     error: "",
   })
-  const workspaces = layout.projects.list
   const dirty = createMemo(
     () =>
       state.path !== "" &&
@@ -93,14 +92,12 @@ export default function NotesPage() {
     target: { directory },
   })
 
+  // Follow the sidebar workspace, but hold the open note's workspace until its edits are saved or discarded.
   createEffect(() => {
-    const available = workspaces()
-    if (available.some((project) => project.worktree === state.directory)) return
-    const preferred = layout.home.selection().directory
-    setState(
-      "directory",
-      available.find((project) => project.worktree === preferred)?.worktree ?? available[0]?.worktree ?? "",
-    )
+    const directory = layout.home.workspace() ?? ""
+    if (directory === state.directory) return
+    if (dirty()) return setState("error", language.t("secondBrain.notes.error.unsaved"))
+    setState({ directory, path: "", body: "", baseBody: "", error: "" })
   })
 
   const [notes, noteActions] = createResource(
@@ -443,23 +440,6 @@ export default function NotesPage() {
                   </Show>
                 </Show>
               </nav>
-
-              <Show when={workspaces().length > 1}>
-                <div class="shrink-0 px-3 pb-3">
-                  <SelectV2
-                    aria-label={language.t("secondBrain.workspace")}
-                    class="!h-8 !w-full !bg-transparent !shadow-none hover:!bg-v2-overlay-simple-overlay-hover"
-                    options={workspaces()}
-                    current={workspaces().find((project) => project.worktree === state.directory)}
-                    value={(project) => project.worktree}
-                    label={(project) => project.name ?? project.worktree.split(/[\\/]/).pop() ?? project.worktree}
-                    disabled={dirty()}
-                    onSelect={(project) =>
-                      project && setState({ directory: project.worktree, path: "", body: "", baseBody: "" })
-                    }
-                  />
-                </div>
-              </Show>
             </aside>
 
             <article class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

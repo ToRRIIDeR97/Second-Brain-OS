@@ -8,9 +8,9 @@
 ## Navigation model
 
 The sidebar shows one workspace at a time: an opened folder, chosen from the
-workspace dropdown at the top of the sidebar (the same selection as Home's
-picker). Its notes, Project cards and calendar live in that folder. The
-workspace's Projects are the folders inside its `projects` folder (any letter
+workspace dropdown at the top of the sidebar. Home, Notes, Calendar and
+Projects have no workspace picker of their own and follow this selection. Its
+notes, Project cards and calendar live in that folder. The workspace's Projects are the folders inside its `projects` folder (any letter
 case) plus folders linked from elsewhere on the computer. A Project's threads
 run in its folder. Threads from other workspaces never show. The left sidebar
 is the only navigation. There is no tab strip and no separate workspace page.
