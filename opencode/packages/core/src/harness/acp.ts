@@ -306,7 +306,9 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   const turn = (turnInput: { readonly text: string; readonly model?: string; readonly reasoningEffort?: string }) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        yield* setModel(turnInput.model)
+        // A folded level is sent as its `<base>/<level>` model; otherwise as the agent's level option.
+        const variant = `${turnInput.model}/${turnInput.reasoningEffort}`
+        yield* setModel(selector.variants?.has(variant) ? variant : turnInput.model)
         yield* setEffort(turnInput.reasoningEffort)
         yield* Queue.clear(items)
         const parser = acpState(state.sessionCost)
@@ -874,6 +876,8 @@ export function sessionModels(response: unknown): {
   readonly current?: string
   readonly configId?: string
   readonly effort?: EffortOption
+  /** Ids of models that stand for a base model at one reasoning level, as `<base>/<level>`. */
+  readonly variants?: ReadonlySet<string>
 } {
   const value = isRecord(response) ? response : {}
   const configOptions = Array.isArray(value.configOptions) ? value.configOptions.filter(isRecord) : []
@@ -884,11 +888,8 @@ export function sessionModels(response: unknown): {
   if (isRecord(value.models)) {
     const current = string(value.models.currentModelId)
     const available = Array.isArray(value.models.availableModels) ? value.models.availableModels.filter(isRecord) : []
-    return {
-      current,
-      effort,
-      models: available.flatMap((model) => entry(string(model.modelId), model.name, model.description, current)),
-    }
+    const models = available.flatMap((model) => entry(string(model.modelId), model.name, model.description, current))
+    return { current, effort, ...(effort ? { models } : foldVariants(models, current)) }
   }
   const option = configOptions.find(
     (item) => item.category === "model" && item.type === "select" && typeof item.id === "string",
@@ -924,6 +925,37 @@ function effortOption(configOptions: ReadonlyArray<Record<string, unknown>>): Ef
     return value ? [value] : []
   })
   return { configId: option.id as string, current: string(option.currentValue), values }
+}
+
+// OpenCode before `thought_level` lists each level as its own model, `<base>/<level>` named
+// "<base name> (<level>)". Fold those into the base model's levels so the picker shows one model.
+function foldVariants(models: ReadonlyArray<Harness.Model>, current: string | undefined) {
+  const byId = new Map(models.map((model) => [model.id, model]))
+  const levels = new Map<string, string[]>()
+  const variants = new Set(
+    models.flatMap((model) => {
+      const slash = model.id.lastIndexOf("/")
+      const base = slash > 0 ? byId.get(model.id.slice(0, slash)) : undefined
+      const level = model.id.slice(slash + 1)
+      if (!base || model.name !== `${base.name} (${level})`) return []
+      levels.set(base.id, [...(levels.get(base.id) ?? []), level])
+      return [model.id]
+    }),
+  )
+  if (variants.size === 0) return { models }
+  return {
+    variants,
+    models: models
+      .filter((model) => !variants.has(model.id))
+      .map((model) =>
+        Harness.Model.make({
+          ...model,
+          reasoningEfforts: levels.get(model.id) ?? model.reasoningEfforts,
+          isDefault:
+            model.isDefault || (current !== undefined && variants.has(current) && current.startsWith(`${model.id}/`)),
+        }),
+      ),
+  }
 }
 
 function modelEntry(

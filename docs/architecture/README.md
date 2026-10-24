@@ -300,6 +300,10 @@ The driver switches models with `session/set_model` or
 efforts; before each prompt the driver sends the chosen effort, or the agent's
 `default` level when none is chosen, with `session/set_config_option`, and
 re-reads the levels from each response because a model switch can change them.
+Older OpenCode (before `thought_level`) lists each level as its own model,
+`<base>/<level>` named "<base name> (<level>)". The driver folds those into
+the base model's reasoning efforts and sends a chosen level by switching to the
+matching `<base>/<level>` model.
 
 `AcpHarness.parseAcpNotification` turns `session/update` notifications into
 stream events. A tool call is published at `in_progress` (or when it finishes),
