@@ -206,6 +206,26 @@ describe("second brain errors and recovery HttpApi", () => {
     }),
   )
 
+  it.instance("refuses a calendar from a newer version without moving it aside", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+      const directory = path.join(test.directory, ".second-brain")
+      const newer = JSON.stringify({ version: 3, revision: "r", events: [], tasks: [] })
+      yield* Effect.promise(() => mkdir(directory, { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(directory, "calendar-v1.json"), newer))
+
+      const saved = yield* request("/second-brain/calendar", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ events: [], tasks: [] }),
+      })
+      expect(saved.status).toBe(400)
+      expect(yield* saved.json).toEqual({ name: "SecondBrainInvalidError", data: { message: "unsupported_version" } })
+      expect(yield* Effect.promise(() => readdir(directory))).toEqual(["calendar-v1.json"])
+    }),
+  )
+
   it.instance("keeps a calendar that parses but fails validation instead of moving it aside", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

@@ -21,6 +21,7 @@ import { InstanceHttpApi } from "../api"
 import { SecondBrainConflictError, SecondBrainInvalidError } from "../groups/second-brain"
 
 const CALENDAR_PATH = ".second-brain/calendar-v1.json"
+const CALENDAR_LIMIT = 16 * 1024 * 1024
 
 type ApiFailure =
   | SecondBrainInvalidError
@@ -102,10 +103,11 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       return yield* filesystem(
         Effect.gen(function* () {
           const projects = yield* BrainProject.list()
+          const linked = yield* BrainProject.linkedFolders().pipe(Effect.provideService(Global.Service, Global.make()))
           const resolved = yield* Effect.forEach(
             projects,
             (project) =>
-              BrainProject.threadDirectory(project, known).pipe(Effect.map((thread) => ({ project, thread }))),
+              BrainProject.threadDirectory(project, known, linked).pipe(Effect.map((thread) => ({ project, thread }))),
             { concurrency: 8 },
           )
           const stats = yield* BrainProject.threadStats(resolved.map((item) => item.thread.directory)).pipe(
@@ -218,6 +220,12 @@ const calendarFile = Effect.fn("SecondBrain.calendarFile")(function* () {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path: CALENDAR_PATH, kind: "file" })
+  // Refuse an oversized calendar before reading it; "too_large" is not moved aside by a save.
+  const stat = yield* fs
+    .stat(target.canonical)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+  if (stat && Number(stat.size) > CALENDAR_LIMIT)
+    return yield* new PlannerCalendar.InvalidError({ reason: "too_large" })
   const bytes = yield* fs
     .readFile(target.canonical)
     .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
@@ -278,7 +286,7 @@ const saveCalendar = Effect.fn("SecondBrain.saveCalendar")(function* (input: Pla
         .writeIfUnchanged({ target: file.target, content: next.source, expected: file.bytes })
         .pipe(Effect.catchTag("FileMutation.StaleContentError", () => Effect.fail(conflict("stale"))))
   const snapshot = { version: next.version, revision: next.revision, events: next.events, tasks: next.tasks }
-  yield* BrainProject.syncTimelines(snapshot).pipe(
+  yield* BrainProject.syncTimelines(snapshot, current).pipe(
     Effect.catch((error) =>
       Effect.logWarning("Second Brain project timeline sync failed; project timelines may be stale", {
         error: error._tag,

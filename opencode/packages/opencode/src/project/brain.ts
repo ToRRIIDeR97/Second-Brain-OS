@@ -3,6 +3,7 @@ export * as BrainProject from "./brain"
 import { Database } from "@opencode-ai/core/database/database"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Frontmatter } from "@opencode-ai/core/frontmatter"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
@@ -20,6 +21,8 @@ const directory = ".tenon/projects"
 /** Where earlier builds kept cards; still read so nothing is lost. */
 const legacyDirectory = "projects"
 const limit = 1_000
+/** Cards and the workspace manifest larger than this are refused before reading. */
+const cardLimit = 1024 * 1024
 const idPattern = /^project_[0-9A-Z]+$/i
 const utf8 = new TextDecoder()
 
@@ -349,7 +352,15 @@ export const scan = Effect.fn("BrainProject.scan")(function* () {
   if (!manifest.exists) yield* writeManifest(manifest.value)
   const local = yield* projectFolders(root)
   const present = yield* Effect.forEach(manifest.value.linkedFolders, (folder) => fs.isDir(folder))
-  const linked = manifest.value.linkedFolders.filter((_, index) => present[index])
+  // A hand-edited manifest gets the same checks as `link`, so it cannot claim the workspace itself,
+  // a filesystem root, the home folder or the data folder.
+  const allowed = yield* Effect.forEach(manifest.value.linkedFolders, (folder) =>
+    linkableFolder(root, folder).pipe(Effect.map((reason) => reason === undefined)),
+  )
+  const refused = manifest.value.linkedFolders.filter((_, index) => present[index] && !allowed[index])
+  if (refused.length > 0)
+    yield* Effect.logWarning("Ignoring linked folders the manifest may not claim", { count: refused.length })
+  const linked = manifest.value.linkedFolders.filter((_, index) => present[index] && allowed[index])
   const projects = [...(yield* all())]
   const known = new Set(
     projects.flatMap((project) => (project.location?.path ? [path.resolve(root, project.location.path)] : [])),
@@ -386,13 +397,9 @@ export const scan = Effect.fn("BrainProject.scan")(function* () {
 /** Add a folder from outside the workspace as a Project, then scan. */
 export const link = Effect.fn("BrainProject.link")(function* (input: LinkInput) {
   const location = yield* Location.Service
-  const fs = yield* FSUtil.Service
-  const root = path.resolve(location.directory)
   const folder = path.resolve(input.folder)
-  if (!path.isAbsolute(input.folder) || !(yield* fs.isDir(folder)))
-    return yield* new InvalidError({ reason: "invalid_folder" })
-  // Folders inside the workspace belong in its projects folder; an ancestor would contain the workspace.
-  if (isWithin(root, folder) || isWithin(folder, root)) return yield* new InvalidError({ reason: "overlaps_workspace" })
+  const reason = yield* linkableFolder(location.directory, input.folder)
+  if (reason) return yield* new InvalidError({ reason })
   const manifest = yield* readManifest()
   if (!manifest.value.linkedFolders.some((item) => path.resolve(item) === folder))
     yield* writeManifest({ ...manifest.value, linkedFolders: [...manifest.value.linkedFolders, folder] })
@@ -427,13 +434,24 @@ export type InstructionsInput = typeof InstructionsInput.Type
 
 const instructionsFile = "AGENTS.md"
 const instructionsLimit = 64 * 1024
+const instructionsReadLimit = 256 * 1024
 
 /** The AGENTS.md of the request's folder: a workspace root (its default) or a project folder. */
 export const readInstructions = Effect.fn("BrainProject.readInstructions")(function* () {
   const location = yield* Location.Service
   const fs = yield* FSUtil.Service
   const file = path.join(location.directory, instructionsFile)
-  const content = yield* fs.readFileStringSafe(file)
+  const real = yield* fs.realPath(file).pipe(
+    Effect.map((value): string | undefined => value),
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+  )
+  if (real === undefined) return { path: file, content: null }
+  // A symlinked AGENTS.md must not expose a file from outside the folder.
+  const root = yield* fs.realPath(location.directory)
+  if (!FSUtil.contains(root, real)) return yield* new InvalidError({ reason: "outside_workspace" })
+  const stat = yield* fs.stat(real)
+  if (Number(stat.size) > instructionsReadLimit) return yield* new InvalidError({ reason: "too_large" })
+  const content = yield* fs.readFileStringSafe(real)
   return { path: file, content: content ?? null }
 })
 
@@ -459,9 +477,22 @@ export const removeInstructions = Effect.fn("BrainProject.removeInstructions")(f
 const readManifest = Effect.fn("BrainProject.readManifest")(function* () {
   const location = yield* Location.Service
   const fs = yield* FSUtil.Service
-  const source = yield* fs
-    .readFileStringSafe(path.join(location.directory, WorkspaceInstructions.manifestPath))
-    .pipe(Effect.orElseSucceed(() => undefined))
+  const file = path.join(location.directory, WorkspaceInstructions.manifestPath)
+  // Only a missing manifest is absent. Any other failure (a directory in its place, permissions, IO)
+  // must stop the caller before it writes a fresh manifest over the user's.
+  const unreadable = () => new InvalidError({ reason: "manifest_unreadable" })
+  const stat = yield* fs.stat(file).pipe(
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+    Effect.mapError(unreadable),
+  )
+  if (stat !== undefined && (stat.type !== "File" || Number(stat.size) > cardLimit)) return yield* unreadable()
+  const source =
+    stat === undefined
+      ? undefined
+      : yield* fs.readFileString(file).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+          Effect.mapError(unreadable),
+        )
   if (source === undefined) return { exists: false, value: { version: 1 as const, linkedFolders: [] } }
   const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Manifest))(source)
   // Never overwrite a manifest we cannot read; the user may have edited it by hand.
@@ -506,14 +537,40 @@ const writeLinkIndex = Effect.fn("BrainProject.writeLinkIndex")(function* (
   const current = yield* fs.readJson(file).pipe(Effect.orElseSucceed(() => ({})))
   const workspace = path.resolve(root)
   const kept = Object.entries(typeof current === "object" && current !== null ? current : {}).filter(
-    ([, value]) => typeof value === "string" && path.resolve(value) !== workspace,
+    (entry): entry is [string, string] => typeof entry[1] === "string" && path.resolve(entry[1]) !== workspace,
   )
-  const next = Object.fromEntries([...kept, ...linked.map((folder) => [path.resolve(folder), workspace] as const)])
+  // A folder another workspace already links stays with that workspace; the first link wins.
+  const owned = new Set(kept.map(([folder]) => path.resolve(folder)))
+  const next = Object.fromEntries([
+    ...kept,
+    ...linked
+      .map((folder) => path.resolve(folder))
+      .filter((folder) => !owned.has(folder))
+      .map((folder) => [folder, workspace] as const),
+  ])
   if (JSON.stringify(next) === JSON.stringify(current)) return
   // The index is a rebuildable cache: a failed write only delays AGENTS.md lookup for linked folders.
   yield* fs
     .writeWithDirs(file, JSON.stringify(next, null, 2) + "\n")
     .pipe(Effect.catch((error) => Effect.logWarning("Could not update the linked-folder index", { error: error._tag })))
+})
+
+/**
+ * Why `folder` cannot be a linked Project folder of the workspace at `root`, or undefined when it can.
+ * It must be an existing absolute folder that neither contains nor sits inside the workspace (folders
+ * inside belong in its projects folder), and must not be or contain the home or app data folder: the
+ * workspace's AGENTS.md steers every session under a linked folder.
+ */
+const linkableFolder = Effect.fnUntraced(function* (root: string, folder: string) {
+  const fs = yield* FSUtil.Service
+  const global = yield* Global.Service
+  if (!path.isAbsolute(folder) || !(yield* fs.isDir(folder))) return "invalid_folder"
+  const resolved = path.resolve(folder)
+  const workspace = path.resolve(root)
+  if (isWithin(workspace, resolved) || isWithin(resolved, workspace)) return "overlaps_workspace"
+  if ([global.home, global.data].some((protectedFolder) => isWithin(resolved, path.resolve(protectedFolder))))
+    return "protected_folder"
+  return undefined
 })
 
 function isWithin(parent: string, child: string) {
@@ -529,16 +586,12 @@ function isWithin(parent: string, child: string) {
 export const threadDirectory = Effect.fn("BrainProject.threadDirectory")(function* (
   project: Info,
   workspaces: ReadonlyArray<Workspace> = [],
+  linked: ReadonlyArray<string> = [],
 ) {
   const location = yield* Location.Service
   // A folder Project runs in its own folder, inside the workspace or linked from elsewhere.
-  const folder = project.location?.path
-  if (folder)
-    return {
-      kind: "project" as const,
-      directory: path.resolve(location.directory, folder),
-      workspace: undefined,
-    }
+  const folder = projectFolder(location.directory, project.location?.path, linked)
+  if (folder) return { kind: "project" as const, directory: folder, workspace: undefined }
   const workspace = project.location?.workspaceId
     ? workspaces.find((candidate) => candidate.id === project.location?.workspaceId)
     : undefined
@@ -552,6 +605,29 @@ export const threadDirectory = Effect.fn("BrainProject.threadDirectory")(functio
     yield* files.write({ target, content: "" })
   }
   return { kind: "folder" as const, directory, workspace: undefined }
+})
+
+/**
+ * The folder a card's `location.path` names, or undefined when a hand-edited card points somewhere
+ * it may not: a relative path must stay inside the workspace, an absolute one must be a linked folder.
+ */
+function projectFolder(root: string, folder: string | undefined, linked: ReadonlyArray<string>) {
+  if (!folder) return undefined
+  if (path.isAbsolute(folder))
+    return linked.some((item) => path.resolve(item) === path.resolve(folder)) ? path.resolve(folder) : undefined
+  const resolved = path.resolve(root, folder)
+  return isWithin(path.resolve(root), resolved) && resolved !== path.resolve(root) ? resolved : undefined
+}
+
+/** The manifest's linked folders that pass the `link` checks; empty when the manifest cannot be read. */
+export const linkedFolders = Effect.fn("BrainProject.linkedFolders")(function* () {
+  const location = yield* Location.Service
+  const manifest = yield* readManifest().pipe(Effect.option)
+  if (Option.isNone(manifest)) return []
+  const allowed = yield* Effect.forEach(manifest.value.value.linkedFolders, (folder) =>
+    linkableFolder(location.directory, folder).pipe(Effect.map((reason) => reason === undefined)),
+  )
+  return manifest.value.value.linkedFolders.filter((_, index) => allowed[index])
 })
 
 /** Root (non-archived, non-child) thread counts and last activity keyed by session directory. */
@@ -628,8 +704,20 @@ export function projectTimeline(snapshot: PlannerCalendar.Snapshot, id: string):
  * Only files whose events or tasks changed are rewritten; the calendar revision
  * alone changes on every save, so it does not count as a change.
  */
-export const syncTimelines = Effect.fn("BrainProject.syncTimelines")(function* (snapshot: PlannerCalendar.Snapshot) {
-  const projects = yield* all()
+export const syncTimelines = Effect.fn("BrainProject.syncTimelines")(function* (
+  snapshot: PlannerCalendar.Snapshot,
+  previous?: PlannerCalendar.Snapshot,
+) {
+  // With the previous calendar, only Projects with items before or after the save can change.
+  const touched =
+    previous === undefined
+      ? undefined
+      : new Set(
+          [...previous.events, ...previous.tasks, ...snapshot.events, ...snapshot.tasks].flatMap((item) =>
+            item.projectId ? [item.projectId] : [],
+          ),
+        )
+  const projects = (yield* all()).filter((project) => touched === undefined || touched.has(project.id))
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
   const fs = yield* FSUtil.Service
@@ -654,6 +742,12 @@ const readCard = Effect.fn("BrainProject.readCard")(function* (path: string) {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path, kind: "file" })
+  const stat = yield* fs
+    .stat(target.canonical)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+  if (stat === undefined) return yield* new NotFoundError({ id: pathId(path) ?? path })
+  // Refuse oversized cards before reading them, so one huge file cannot stall a list.
+  if (Number(stat.size) > cardLimit) return yield* new InvalidError({ reason: "too_large" })
   // Only a missing file is "not found"; permission and IO failures must surface.
   const bytes = yield* fs
     .readFile(target.canonical)
@@ -669,8 +763,8 @@ const readCard = Effect.fn("BrainProject.readCard")(function* (path: string) {
 
 /** `path` is where the card was read; a legacy card keeps its legacy folder for notes and timeline. */
 export function decode(source: string, path?: string): Card {
-  // Passing options disables gray-matter's unbounded module-level parse cache.
-  const parsed = matter(source, {})
+  // Untrusted Markdown: never evaluates `---js` front matter and caps its size.
+  const parsed = Frontmatter.parse(source)
   const data = { ...(parsed.data as Record<string, unknown>) }
   const version = typeof data.version === "number" ? data.version : 1
   if (version > 2) throw new InvalidError({ reason: "unsupported_version" })

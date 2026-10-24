@@ -426,6 +426,72 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("retries a rename the target briefly refuses, then gives up and removes the temp file", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "locked.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "before"))
+        let refusals = 2
+        const flaky = overrideFilesystem((real) => ({
+          rename: (from, to) => (refusals-- > 0 ? Effect.fail(busy(to)) : real.rename(from, to)),
+        }))
+        yield* Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: "locked.txt" })
+          yield* (yield* FileMutation.Service).write({ target, content: "after" })
+        }).pipe(provide(directory, flaky))
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("after")
+
+        let attempts = 0
+        const stuck = overrideFilesystem(() => ({
+          rename: (_from, to) => Effect.sync(() => attempts++).pipe(Effect.andThen(Effect.fail(denied(to)))),
+        }))
+        const exit = yield* Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: "locked.txt" })
+          return yield* (yield* FileMutation.Service).write({ target, content: "never" }).pipe(Effect.exit)
+        }).pipe(provide(directory, stuck))
+        expect(exit._tag).toBe("Failure")
+        expect(attempts).toBe(5)
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("after")
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["locked.txt"])
+      }),
+    ),
+  )
+
+  it.live("create leaves no target when staging the content fails part way", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const filesystem = instrumentWrites((write, target) =>
+          Effect.promise(() => fs.writeFile(target, "partial")).pipe(
+            Effect.andThen(Effect.die(new Error("disk full"))),
+            Effect.andThen(write),
+          ),
+        )
+        const exit = yield* Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: "fresh.txt" })
+          return yield* (yield* FileMutation.Service).create({ target, content: "complete" }).pipe(Effect.exit)
+        }).pipe(provide(directory, filesystem))
+        expect(exit._tag).toBe("Failure")
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual([])
+      }),
+    ),
+  )
+
+  it.live("create refuses an existing target and keeps its content", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "taken.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "mine"))
+        const exit = yield* Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: "taken.txt" })
+          return yield* (yield* FileMutation.Service).create({ target, content: "theirs" }).pipe(Effect.flip)
+        }).pipe(provide(directory))
+        expect(exit).toBeInstanceOf(FileMutation.TargetExistsError)
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("mine")
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["taken.txt"])
+      }),
+    ),
+  )
+
   it.live("allows distinct canonical targets to proceed independently", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -486,6 +552,10 @@ function overrideFilesystem(override: (filesystem: FSUtil.Interface) => Partial<
       return FSUtil.Service.of({ ...filesystem, ...override(filesystem) })
     }),
   ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+}
+
+function busy(target: string) {
+  return systemError({ _tag: "Busy", module: "FileSystem", method: "test", pathOrDescriptor: target })
 }
 
 function denied(target: string) {
