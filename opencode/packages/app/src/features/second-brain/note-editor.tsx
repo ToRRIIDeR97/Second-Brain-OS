@@ -1,9 +1,10 @@
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import {
   applyNoteEditorCommand,
   applySlashCommand,
@@ -13,6 +14,7 @@ import {
   type SlashCommandRange,
   type TextEdit,
 } from "./note-editor-commands"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 
 type EditorMode = "write" | "split" | "preview"
@@ -46,6 +48,8 @@ export type NoteEditorProps = {
   loading?: boolean
   commandLabel?: (id: NoteEditorCommand) => string
   labels?: NoteEditorLabels
+  /** Shown in the toolbar while fullscreen, e.g. the saved state and Save, which the page header covers otherwise. */
+  fullscreenActions?: JSX.Element
 }
 
 const defaults: Required<NoteEditorLabels> = {
@@ -95,8 +99,12 @@ const toolbarCommands = noteEditorCommands.filter((command) =>
 )
 const insertCommands = noteEditorCommands.filter((command) => !toolbarCommands.includes(command))
 
+// Formatting shortcuts, registered as commands so they win over global ones (mod+b toggles the sidebar elsewhere).
+const shortcuts: Partial<Record<NoteEditorCommand, string>> = { bold: "mod+b", italic: "mod+i" }
+
 export function NoteEditor(props: NoteEditorProps) {
   const language = useLanguage()
+  const command = useCommand()
   const label = <K extends keyof Required<NoteEditorLabels>>(key: K) => props.labels?.[key] ?? defaults[key]
   const commandLabel = (command: (typeof noteEditorCommands)[number]) =>
     props.commandLabel?.(command.id) ?? command.label
@@ -163,6 +171,29 @@ export function NoteEditor(props: NoteEditorProps) {
     commit(edit)
   }
 
+  command.register("note-editor", () =>
+    toolbarCommands.flatMap((item) => {
+      const keybind = shortcuts[item.id]
+      if (!keybind) return []
+      return [
+        {
+          id: `note-editor.${item.id}`,
+          title: commandLabel(item),
+          keybind,
+          hidden: true,
+          // Only while typing in this editor; elsewhere the key keeps its global meaning.
+          when: (event: KeyboardEvent) => !!editor && event.target === editor,
+          onSelect: () => run(item.id),
+        },
+      ]
+    }),
+  )
+
+  const changeMode = (value: EditorMode) => {
+    setMode(value)
+    if (value !== "preview") queueMicrotask(() => editor?.focus())
+  }
+
   const onInput = (event: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
     const value = event.currentTarget.value
     internalValue = value
@@ -209,6 +240,8 @@ export function NoteEditor(props: NoteEditorProps) {
     }
   }
 
+  const commandKeys = (id: NoteEditorCommand) => command.keybindParts(`note-editor.${id}`)
+
   const resize = (event: PointerEvent) => {
     if (!panes) return
     const rect = panes.getBoundingClientRect()
@@ -253,7 +286,11 @@ export function NoteEditor(props: NoteEditorProps) {
       }}
     >
       <div class="relative flex min-h-12 shrink-0 flex-wrap items-center gap-1 px-2 py-1.5">
-        <SegmentedControlV2 class="!w-auto" value={mode()} onChange={(value) => value && setMode(value as EditorMode)}>
+        <SegmentedControlV2
+          class="!w-auto"
+          value={mode()}
+          onChange={(value) => value && changeMode(value as EditorMode)}
+        >
           <SegmentedControlItemV2 value="write">{label("write")}</SegmentedControlItemV2>
           <SegmentedControlItemV2 value="split">{label("split")}</SegmentedControlItemV2>
           <SegmentedControlItemV2 value="preview">{label("preview")}</SegmentedControlItemV2>
@@ -262,7 +299,16 @@ export function NoteEditor(props: NoteEditorProps) {
           <div class="flex min-w-0 flex-wrap items-center gap-0.5 pl-1" role="toolbar" aria-label={label("toolbar")}>
             <For each={toolbarCommands}>
               {(command) => (
-                <TooltipV2 value={commandLabel(command)}>
+                <TooltipV2
+                  value={
+                    <>
+                      {commandLabel(command)}
+                      <Show when={shortcuts[command.id]}>
+                        <KeybindV2 keys={commandKeys(command.id)} variant="neutral" />
+                      </Show>
+                    </>
+                  }
+                >
                   <IconButtonV2
                     type="button"
                     variant="ghost-muted"
@@ -295,6 +341,7 @@ export function NoteEditor(props: NoteEditorProps) {
           </div>
         </Show>
         <div class="ml-auto flex items-center gap-1">
+          <Show when={fullscreen()}>{props.fullscreenActions}</Show>
           <Show when={props.value.trim()}>
             <span class="hidden px-1 text-[11px] tabular-nums text-v2-text-text-faint sm:inline">
               {label("words")(props.value.trim().split(/\s+/).length)}

@@ -7,7 +7,7 @@ import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTra
 import { produce } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import {
-  loadHomeSessionIndex,
+  homeSessionIndexQueryOptions,
   retainHomeSessions,
   type HomeSessionEvents,
 } from "@/context/global-sync/home-session-index"
@@ -59,27 +59,15 @@ export function createHomeSessionsController(home: HomeController) {
     initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
     enabled: false,
   }))
-  const sessionLoad = useQuery(() => ({
-    queryKey: homeSessions().indexKey,
-    enabled: !!home.server.focusedContext(),
-    queryFn: async ({ signal }) => {
-      const ctx = home.server.focusedContext()
-      if (!ctx) return { sessions: [], eventSequence: 0 }
-      const cache = homeSessions()
-      const eventSequence = cache.eventSequence()
-      const index = await loadHomeSessionIndex(
-        (input, options) => ctx.sdk.client.v2.session.list(input, options),
-        eventSequence,
-        signal,
-      )
-      cache.complete(eventSequence)
-      return index
-    },
-    retry: false,
-    staleTime: 30_000,
-    refetchOnMount: true,
-    refetchOnReconnect: true,
-  }))
+  const sessionLoad = useQuery(() => {
+    const ctx = home.server.focusedContext()
+    return {
+      ...homeSessionIndexQueryOptions(homeSessions(), (input, options) =>
+        ctx ? ctx.sdk.client.v2.session.list(input, options) : Promise.reject(new Error("No server connection")),
+      ),
+      enabled: !!ctx,
+    }
+  })
   const indexedSessions = createMemo(() =>
     retainHomeSessions(
       homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),

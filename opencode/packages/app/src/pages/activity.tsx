@@ -26,12 +26,17 @@ export default function ActivityPage() {
     () => platform.googleCalendar,
     (planner) => planner.status(),
   )
+  // Reading a failed resource throws; a Google status failure just hides its rows.
+  const googleStatus = () => (google.error ? undefined : google())
+  // Threads that wait on the user: a permission request or a question. Plain running threads are in Agent runs.
   const attention = createMemo(() => {
     const data = home.server.focusedSync().session.data
-    return sessions.data.records().filter((record) => {
-      const status = data.session_status[record.session.id]
-      return (status?.type ?? "idle") !== "idle" || (data.permission[record.session.id]?.length ?? 0) > 0
-    })
+    return sessions.data
+      .records()
+      .filter(
+        (record) =>
+          (data.permission[record.session.id]?.length ?? 0) > 0 || (data.question[record.session.id]?.length ?? 0) > 0,
+      )
   })
   const changes = createMemo(() => sessions.data.records().filter((record) => (record.session.summary?.files ?? 0) > 0))
   const runs = createMemo(() => {
@@ -65,17 +70,19 @@ export default function ActivityPage() {
         <Show when={view() === "attention"}>
           <div class="h-full overflow-y-auto px-3 pb-6 pt-2 sm:px-6">
             <ul class="mx-auto flex max-w-[840px] flex-col gap-1">
-              <Show when={(google()?.failedWrites ?? 0) > 0}>
+              <Show when={(googleStatus()?.failedWrites ?? 0) > 0}>
                 <AttentionRow
                   tone="critical"
-                  title={language.t("secondBrain.activity.googleFailed", { count: google()?.failedWrites ?? 0 })}
+                  title={language.t("secondBrain.activity.googleFailed", { count: googleStatus()?.failedWrites ?? 0 })}
                   detail={language.t("secondBrain.activity.googleFailedDetail")}
                   onOpen={() => navigate("/calendar?google=connect")}
                 />
               </Show>
-              <Show when={(google()?.pendingWrites ?? 0) > 0}>
+              <Show when={(googleStatus()?.pendingWrites ?? 0) > 0}>
                 <AttentionRow
-                  title={language.t("secondBrain.activity.googlePending", { count: google()?.pendingWrites ?? 0 })}
+                  title={language.t("secondBrain.activity.googlePending", {
+                    count: googleStatus()?.pendingWrites ?? 0,
+                  })}
                   detail={language.t("secondBrain.activity.googlePendingDetail")}
                   onOpen={() => navigate("/calendar")}
                 />
@@ -95,7 +102,7 @@ export default function ActivityPage() {
                           when={approvals() > 0}
                           fallback={
                             <span class="shrink-0 text-[12px] text-v2-text-text-faint">
-                              {language.t("secondBrain.activity.running")}
+                              {language.t("secondBrain.activity.question")}
                             </span>
                           }
                         >
@@ -110,7 +117,12 @@ export default function ActivityPage() {
               </For>
             </ul>
             <Show
-              when={!google.loading && attention().length === 0 && !(google()?.pendingWrites || google()?.failedWrites)}
+              when={
+                !google.loading &&
+                !sessions.data.loading() &&
+                attention().length === 0 &&
+                !(googleStatus()?.pendingWrites || googleStatus()?.failedWrites)
+              }
             >
               <PageEmpty>{language.t("secondBrain.activity.attentionEmpty")}</PageEmpty>
             </Show>
@@ -120,7 +132,11 @@ export default function ActivityPage() {
           <div class="h-full overflow-y-auto px-3 pb-6 pt-2 sm:px-6">
             <Show
               when={changes().length > 0}
-              fallback={<PageEmpty>{language.t("secondBrain.activity.changesEmpty")}</PageEmpty>}
+              fallback={
+                <Show when={!sessions.data.loading()}>
+                  <PageEmpty>{language.t("secondBrain.activity.changesEmpty")}</PageEmpty>
+                </Show>
+              }
             >
               <ul class="mx-auto flex max-w-[840px] flex-col gap-1">
                 <For each={changes()}>
@@ -152,7 +168,11 @@ export default function ActivityPage() {
           <div class="h-full overflow-y-auto px-3 pb-6 pt-2 sm:px-6">
             <Show
               when={runs().length > 0}
-              fallback={<PageEmpty>{language.t("secondBrain.activity.runsEmpty")}</PageEmpty>}
+              fallback={
+                <Show when={!sessions.data.loading()}>
+                  <PageEmpty>{language.t("secondBrain.activity.runsEmpty")}</PageEmpty>
+                </Show>
+              }
             >
               <ul
                 class="mx-auto flex max-w-[840px] flex-col gap-1"

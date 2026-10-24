@@ -5,6 +5,7 @@ import {
   appendHomeSessionEvent,
   HOME_V2_SESSION_PAGE_LIMIT,
   loadHomeSessionIndex,
+  homeSessionIndexQueryOptions,
   homeSessionIndexSessions,
   homeSessionIndexRefresh,
   parseHomeSessionIndex,
@@ -39,6 +40,25 @@ describe("Home V2 session index", () => {
 
     expect(result.sessions).toHaveLength(1)
     expect(calls).toEqual([{ limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc" }])
+  })
+
+  test("shared query options never go stale and record the event sequence they started at", async () => {
+    const completed: number[] = []
+    const options = homeSessionIndexQueryOptions(
+      {
+        indexKey: ["home", "session-index", "server"],
+        eventSequence: () => 7,
+        complete: (sequence) => completed.push(sequence),
+      },
+      async () => ({ data: { data: [session({ id: "root" })], cursor: {} } }),
+    )
+
+    expect(options.staleTime).toBe(Infinity)
+    expect(options.queryKey).toEqual(["home", "session-index", "server"])
+    const index = await options.queryFn({})
+    expect(index.eventSequence).toBe(7)
+    expect(index.sessions.map((item) => item.id)).toEqual(["root"])
+    expect(completed).toEqual([7])
   })
 
   test("loads subsequent pages until the session index is complete", async () => {
