@@ -608,6 +608,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       ready,
       home: {
         selection: createMemo(() => store.home.selection),
+        /** The open workspace: the selected folder, else the first open one. The sidebar switcher sets it. */
+        workspace: createMemo(() => {
+          const available = list()
+          return (
+            available.find((location) => location.worktree === store.home.selection.directory)?.worktree ??
+            available[0]?.worktree
+          )
+        }),
         setSelection(selection: HomeProjectSelection) {
           setStore("home", "selection", reconcile(selection))
         },

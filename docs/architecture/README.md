@@ -65,7 +65,11 @@ threads outside any Project folder, and groups them with
 folder holding the thread) and General (the rest of the workspace folder).
 Threads outside the selected workspace and its Project folders are left out.
 The active Project is derived from the route's thread or draft directory. The
-header is the workspace dropdown (`layout.home.selection`); the controller
+header is the workspace dropdown (`layout.home.selection`, resolved by
+`layout.home.workspace` to the selected or first open folder). Home, Notes,
+Calendar and Projects read `layout.home.workspace` and have no picker of their
+own; Notes keeps an open note with unsaved edits in its workspace until it is
+saved or discarded. The controller
 scans each workspace once per app session (`POST /second-brain/projects/scan`)
 and on **Scan for projects**. Sidebar actions (archive, unarchive, pin through `PATCH /session/:id`;
 rename; delete through `session.remove`, which also deletes child threads, so

@@ -89,11 +89,7 @@ export function createSidebarController() {
   )
 
   // The selected workspace (also called the Brain): the sidebar shows only its Projects and threads.
-  const brainDirectory = createMemo(() => {
-    const available = layout.projects.list()
-    const preferred = layout.home.selection().directory
-    return available.find((item) => item.worktree === preferred)?.worktree ?? available[0]?.worktree
-  })
+  const brainDirectory = layout.home.workspace
   const client = (directory: string) => ({ server: serverSDK().server, fetch: platform.fetch, target: { directory } })
 
   const projectsQuery = useQuery(() => ({

@@ -37,7 +37,6 @@ import {
 
 const emptyDraft = () => ({ name: "", outcome: "", instructions: "", tags: "", locationId: "" })
 type PageState = {
-  brainDirectory: string
   filter: ProjectStatus
   selectedId: string
   view: ProjectView
@@ -71,7 +70,6 @@ export default function ProjectsPage() {
   const queryClient = useQueryClient()
   const [search] = useSearchParams<{ project?: string }>()
   const [state, setState] = createStore<PageState>({
-    brainDirectory: "",
     filter: "active" as ProjectStatus,
     selectedId: "",
     view: "overview",
@@ -100,26 +98,20 @@ export default function ProjectsPage() {
     target: { directory },
   })
 
-  createEffect(() => {
-    const available = locations()
-    if (available.some((location) => location.worktree === state.brainDirectory)) return
-    const preferred = layout.home.selection().directory
-    setState(
-      "brainDirectory",
-      available.find((location) => location.worktree === preferred)?.worktree ?? available[0]?.worktree ?? "",
-    )
-  })
+  // The sidebar workspace switcher owns this choice; the page only follows it.
+  const brainDirectory = () => layout.home.workspace() ?? ""
+  createEffect(on(brainDirectory, () => setState({ selectedId: "", creating: false, error: "" }), { defer: true }))
 
   const [projects, projectActions] = createResource(
-    () => state.brainDirectory || undefined,
+    () => brainDirectory() || undefined,
     (directory) => listProjects(client(directory)),
   )
   const [calendar] = createResource(
-    () => state.brainDirectory || undefined,
+    () => brainDirectory() || undefined,
     (directory) => readCalendar(client(directory)),
   )
   const [notes] = createResource(
-    () => state.brainDirectory || undefined,
+    () => brainDirectory() || undefined,
     (directory) => listNotes(client(directory)),
   )
   let openedLink: string | undefined
@@ -198,14 +190,14 @@ export default function ProjectsPage() {
   const submitCreate = async () => {
     const name = state.draft.name.trim()
     const outcome = state.draft.outcome.trim()
-    if (!name || !outcome || !state.brainDirectory) {
+    if (!name || !outcome || !brainDirectory()) {
       setState("error", language.t("secondBrain.projects.error.required"))
       return
     }
     const linked = linkableLocations().find((location) => location.id === state.draft.locationId)
     setState({ saving: true, error: "" })
     try {
-      const project = await createProject(client(state.brainDirectory), {
+      const project = await createProject(client(brainDirectory()), {
         name,
         outcome,
         instructions: state.draft.instructions.trim(),
@@ -234,7 +226,7 @@ export default function ProjectsPage() {
     setState({ saving: true, error: "" })
     try {
       replace(
-        await updateProject(client(state.brainDirectory), project.id, {
+        await updateProject(client(brainDirectory()), project.id, {
           expectedUpdatedAt: project.updatedAt,
           outcome: state.outcome.trim(),
           instructions: state.instructions.trim(),
@@ -260,7 +252,7 @@ export default function ProjectsPage() {
     setState({ saving: true, error: "" })
     try {
       replace(
-        await updateProject(client(state.brainDirectory), project.id, {
+        await updateProject(client(brainDirectory()), project.id, {
           expectedUpdatedAt: project.updatedAt,
           status,
         }),
@@ -290,7 +282,7 @@ export default function ProjectsPage() {
   return (
     <PageFrame labelledBy="projects-title">
       <Show
-        when={state.brainDirectory}
+        when={brainDirectory()}
         fallback={
           <>
             <PageHeader id="projects-title" title={language.t("secondBrain.projects.title")} />
@@ -322,24 +314,6 @@ export default function ProjectsPage() {
                           )}
                         </For>
                       </SegmentedControlV2>
-                    </Show>
-                    <Show when={locations().length > 1}>
-                      <TooltipV2 value={language.t("secondBrain.projects.brainLocation")}>
-                        <SelectV2
-                          aria-label={language.t("secondBrain.projects.brainLocation")}
-                          class="!h-8 !w-auto max-w-56"
-                          options={locations()}
-                          current={locations().find((location) => location.worktree === state.brainDirectory)}
-                          value={(location) => location.worktree}
-                          label={(location) =>
-                            location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree
-                          }
-                          disabled={state.saving}
-                          onSelect={(location) =>
-                            location && setState({ brainDirectory: location.worktree, selectedId: "" })
-                          }
-                        />
-                      </TooltipV2>
                     </Show>
                     <Show when={!state.creating}>
                       <ButtonV2

@@ -2,7 +2,6 @@ import { useNavigate } from "@solidjs/router"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createEffect, createMemo, createResource, For, Show, Suspense } from "solid-js"
 import { useQuery } from "@tanstack/solid-query"
@@ -43,42 +42,33 @@ export default function BrainHomePage() {
   const openCodeHome = createHomeController()
   const openCodeSessions = createHomeSessionsController(openCodeHome)
   const [state, setState] = createStore({
-    directory: "",
     prompt: "",
     harnessInstanceID: Harness.OpenCode as Harness.InstanceID,
     harnessModel: undefined as Harness.ModelSelection | undefined,
     starting: false,
   })
-  const locations = layout.projects.list
   const client = (directory: string) => ({
     server: serverSDK().server,
     fetch: platform.fetch,
     target: { directory },
   })
 
-  createEffect(() => {
-    const available = locations()
-    if (available.some((location) => location.worktree === state.directory)) return
-    const preferred = layout.home.selection().directory
-    setState(
-      "directory",
-      available.find((location) => location.worktree === preferred)?.worktree ?? available[0]?.worktree ?? "",
-    )
-  })
+  // The sidebar workspace switcher owns this choice; the page only follows it.
+  const directory = () => layout.home.workspace() ?? ""
 
   const [projects] = createResource(
-    () => state.directory || undefined,
+    () => directory() || undefined,
     (directory) => listProjects(client(directory)),
   )
   const [calendar] = createResource(
-    () => state.directory || undefined,
+    () => directory() || undefined,
     (directory) => readCalendar(client(directory)),
   )
   const harnessQuery = useQuery(() => ({
-    queryKey: ["home", "harnesses", server.key, state.directory],
-    enabled: !!state.directory,
+    queryKey: ["home", "harnesses", server.key, directory()],
+    enabled: !!directory(),
     queryFn: () =>
-      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, state.directory).catch(
+      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory()).catch(
         fallbackHarnesses,
       ),
     staleTime: 30_000,
@@ -161,17 +151,14 @@ export default function BrainHomePage() {
 
   const startSession = async () => {
     const prompt = state.prompt.trim()
-    if (!prompt || !state.directory || state.starting || harnessQuery.isPending) return
+    if (!prompt || !directory() || state.starting || harnessQuery.isPending) return
     setState("starting", true)
     try {
       // The draft page sends the prompt as soon as its composer is ready.
-      await drafts.create(
-        { server: server.key, directory: state.directory },
-        prompt,
-        undefined,
-        state.harnessInstanceID,
-        { send: true, harnessModel: state.harnessModel },
-      )
+      await drafts.create({ server: server.key, directory: directory() }, prompt, undefined, state.harnessInstanceID, {
+        send: true,
+        harnessModel: state.harnessModel,
+      })
     } finally {
       setState("starting", false)
     }
@@ -183,24 +170,6 @@ export default function BrainHomePage() {
         {language.t("secondBrain.home.title")}
       </h1>
       <div class="flex h-14 items-center gap-2 px-4">
-        <Show when={locations().length > 0}>
-          <SelectV2
-            id="brain-home-location"
-            aria-label={language.t("secondBrain.workspace")}
-            class="!h-8 !w-auto max-w-56"
-            appearance="inline"
-            options={locations()}
-            current={locations().find((location) => location.worktree === state.directory)}
-            value={(location) => location.worktree}
-            label={(location) => location.name ?? location.worktree.split(/[\\/]/).pop() ?? location.worktree}
-            onSelect={(location) => {
-              if (!location) return
-              const directory = location.worktree
-              setState("directory", directory)
-              layout.home.setSelection({ server: server.key, directory })
-            }}
-          />
-        </Show>
         <span class="flex-1" />
         <TooltipV2 value={language.t("secondBrain.home.openWorkspace")} placement="bottom">
           <IconButtonV2
@@ -215,7 +184,7 @@ export default function BrainHomePage() {
       </div>
 
       <Show
-        when={state.directory}
+        when={directory()}
         fallback={
           <div class="flex flex-col items-center gap-4 px-6 pt-[15vh] text-center">
             <h2 class="text-[17px] text-v2-text-text-base [font-weight:560]">

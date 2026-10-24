@@ -59,7 +59,6 @@ type CalendarDraft = {
 }
 
 type CalendarState = {
-  directory: string
   cursor: Date
   view: CalendarView
   projectFilter: string
@@ -161,7 +160,6 @@ export default function CalendarPage() {
     task?: string
   }>()
   const [state, setState] = createStore<CalendarState>({
-    directory: "",
     cursor: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 12),
     view: calendarView(search.view),
     projectFilter: search.project ?? "",
@@ -179,29 +177,24 @@ export default function CalendarPage() {
     googleConfirm: "",
     googleWriteKey: "",
   })
-  const projects = layout.projects.list
   const client = (directory: string) => ({
     server: serverSDK().server,
     fetch: platform.fetch,
     target: { directory },
   })
 
-  createEffect(() => {
-    const available = projects()
-    if (available.some((project) => project.worktree === state.directory)) return
-    const preferred = layout.home.selection().directory
-    setState(
-      "directory",
-      available.find((project) => project.worktree === preferred)?.worktree ?? available[0]?.worktree ?? "",
-    )
-  })
+  // The sidebar workspace switcher owns this choice; the page only follows it.
+  const directory = () => layout.home.workspace() ?? ""
+  createEffect(
+    on(directory, () => setState({ editing: false, selectedTask: "", draft: emptyDraft() }), { defer: true }),
+  )
 
   const [events, eventActions] = createResource(
-    () => state.directory || undefined,
+    () => directory() || undefined,
     (directory) => readCalendar(client(directory)),
   )
   const [brainProjects] = createResource(
-    () => state.directory || undefined,
+    () => directory() || undefined,
     (directory) => listProjects(client(directory)),
   )
   const [googleConnection, googleActions] = createResource(async () =>
@@ -411,10 +404,13 @@ export default function CalendarPage() {
 
   const syncGoogle = async () => {
     const google = platform.googleCalendar
-    if (!google || !state.directory) return
+    const target = directory()
+    if (!google || !target) return
     setState({ googleBusy: true, googleError: "" })
     try {
       const result = await google.sync()
+      // A sidebar workspace switch during the call leaves events() pointing at another calendar.
+      if (directory() !== target) return
       const current = events()?.events ?? []
       const projectByProvider = new Map(
         current
@@ -442,7 +438,7 @@ export default function CalendarPage() {
         ),
         ...result.tasks.map((task) => providerTask(task, localByProvider.get(`${task.taskListId}:${task.providerId}`))),
       ]
-      const saved = await writeCalendar(client(state.directory), merged, events()?.revision, mergedTasks)
+      const saved = await writeCalendar(client(target), merged, events()?.revision, mergedTasks)
       eventActions.mutate(saved)
       googleActions.mutate(result.connection)
     } catch (error) {
@@ -454,15 +450,17 @@ export default function CalendarPage() {
 
   const disconnectGoogle = async () => {
     const google = platform.googleCalendar
-    if (!google || !state.directory) return
+    const target = directory()
+    if (!google || !target) return
     setState({ googleBusy: true, googleError: "" })
     try {
       const connection = await google.disconnect()
+      googleActions.mutate(connection)
+      if (directory() !== target) return
       const local = (events()?.events ?? []).filter((event) => event.source === "local")
       const localTasks = (events()?.tasks ?? []).filter((task) => task.source === "local")
-      const saved = await writeCalendar(client(state.directory), local, events()?.revision, localTasks)
+      const saved = await writeCalendar(client(target), local, events()?.revision, localTasks)
       eventActions.mutate(saved)
-      googleActions.mutate(connection)
       setState({ googlePanel: false, editing: false })
     } catch (error) {
       setState("googleError", googleMessage(error))
@@ -472,10 +470,10 @@ export default function CalendarPage() {
   }
 
   const persist = async (next: CalendarEvent[]) => {
-    if (!state.directory) return
+    if (!directory()) return
     setState({ saving: true, error: "" })
     try {
-      const saved = await writeCalendar(client(state.directory), next, events()?.revision, events()?.tasks)
+      const saved = await writeCalendar(client(directory()), next, events()?.revision, events()?.tasks)
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft() })
     } catch (error) {
@@ -491,7 +489,7 @@ export default function CalendarPage() {
   }
 
   const persistTasks = async (tasks: ReadonlyArray<PlannerTask>) => {
-    if (!state.directory) return
+    if (!directory()) return
     const current = events()?.tasks ?? []
     const removed = current.find((task) => task.source === "google" && !tasks.some((next) => next.id === task.id))
     const changed = tasks.find((task) => {
@@ -540,7 +538,7 @@ export default function CalendarPage() {
       }
       await googleActions.refetch()
     }
-    const saved = await writeCalendar(client(state.directory), events()?.events ?? [], events()?.revision, next)
+    const saved = await writeCalendar(client(directory()), events()?.events ?? [], events()?.revision, next)
     eventActions.mutate(saved)
   }
 
@@ -651,7 +649,8 @@ export default function CalendarPage() {
 
   const confirmGoogleWrite = async () => {
     const google = platform.googleCalendar
-    if (!google || !state.directory || !state.googleConfirm) return
+    const target = directory()
+    if (!google || !target || !state.googleConfirm) return
     setState({ saving: true, error: "" })
     try {
       const deleting = state.googleConfirm === "delete"
@@ -663,6 +662,7 @@ export default function CalendarPage() {
         idempotencyKey: state.googleWriteKey,
         event: googleDraft(),
       })
+      if (directory() !== target) return
       const current = events()?.events ?? []
       const next = deleting
         ? result.state === "synced"
@@ -688,7 +688,7 @@ export default function CalendarPage() {
               ? current.map((event) => (event.id === state.draft.id ? savedEvent : event))
               : [...current, savedEvent]
           })()
-      const saved = await writeCalendar(client(state.directory), next, events()?.revision, events()?.tasks)
+      const saved = await writeCalendar(client(target), next, events()?.revision, events()?.tasks)
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft(), googleConfirm: "", googleWriteKey: "" })
       await googleActions.refetch()
@@ -729,7 +729,7 @@ export default function CalendarPage() {
         id="calendar-title"
         title={language.t("secondBrain.calendar.title")}
         actions={
-          <Show when={state.directory}>
+          <Show when={directory()}>
             <Show when={!taskView() && state.view !== "agenda"}>
               <TooltipV2
                 value={language.t(
@@ -807,23 +807,11 @@ export default function CalendarPage() {
         }
       />
 
-      <Show when={state.directory} fallback={<PageEmpty>{language.t("secondBrain.empty.workspace")}</PageEmpty>}>
+      <Show when={directory()} fallback={<PageEmpty>{language.t("secondBrain.empty.workspace")}</PageEmpty>}>
         <div class="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-2">
           <h2 class="min-w-0 flex-1 truncate text-[14px] text-v2-text-text-base [font-weight:530]">
             <Show when={!taskView()}>{viewTitle()}</Show>
           </h2>
-          <SelectV2
-            aria-label={language.t("secondBrain.workspace")}
-            class="!h-8 !w-auto max-w-56"
-            options={projects()}
-            current={projects().find((project) => project.worktree === state.directory)}
-            value={(project) => project.worktree}
-            label={(project) => project.name ?? project.worktree.split(/[\\/]/).pop() ?? project.worktree}
-            onSelect={(project) =>
-              project &&
-              setState({ directory: project.worktree, editing: false, selectedTask: "", draft: emptyDraft() })
-            }
-          />
           <Show when={!taskView()}>
             <SelectV2
               aria-label={language.t("secondBrain.calendar.filterProject")}
