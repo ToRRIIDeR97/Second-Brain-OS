@@ -124,10 +124,22 @@ type Client = {
 }
 
 export class SecondBrainRequestError extends Error {
-  constructor(readonly status: number) {
+  /** `reason` is the server's validation code for a 400, such as `invalid_event`. */
+  constructor(
+    readonly status: number,
+    readonly reason?: string,
+  ) {
     super(`Second Brain request failed with status ${status}`)
     this.name = "SecondBrainRequestError"
   }
+}
+
+/** The validation code a 400 response carries as `{ data: { message } }`. */
+export function requestErrorReason(body: unknown) {
+  if (!body || typeof body !== "object" || !("data" in body)) return undefined
+  const data = body.data
+  if (!data || typeof data !== "object" || !("message" in data) || typeof data.message !== "string") return undefined
+  return /^[a-z0-9_]{1,64}$/.test(data.message) ? data.message : undefined
 }
 
 async function request<T>(client: Client, path: string, init?: RequestInit): Promise<T> {
@@ -148,7 +160,11 @@ async function request<T>(client: Client, path: string, init?: RequestInit): Pro
     ...init,
     headers,
   })
-  if (!response.ok) throw new SecondBrainRequestError(response.status)
+  if (!response.ok) {
+    const reason =
+      response.status === 400 ? requestErrorReason(await response.json().catch(() => undefined)) : undefined
+    throw new SecondBrainRequestError(response.status, reason)
+  }
   return (await response.json()) as T
 }
 
@@ -196,9 +212,6 @@ export const writeCalendar = (
   })
 
 export const listProjects = (client: Client) => request<ProjectRecord[]>(client, "/second-brain/projects")
-
-export const readProject = (client: Client, id: string) =>
-  request<ProjectRecord>(client, `/second-brain/project?id=${encodeURIComponent(id)}`)
 
 export const createProject = (client: Client, input: ProjectCreate) =>
   request<ProjectRecord>(client, "/second-brain/projects", { method: "POST", body: JSON.stringify(input) })

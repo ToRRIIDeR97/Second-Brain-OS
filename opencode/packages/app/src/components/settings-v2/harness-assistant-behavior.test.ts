@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import {
   displayedUserText,
   parseProposal,
+  proposalAction,
   proposalKey,
+  refusedCommand,
   setupInstructions,
   testResultMessage,
   testResultPrefix,
@@ -45,6 +47,32 @@ describe("harness assistant behavior", () => {
     const c = parseProposal(block('{"id":"a","command":"agy","args":["--acp"]}'))!
     expect(proposalKey(a)).toBe(proposalKey(b))
     expect(proposalKey(a)).not.toBe(proposalKey(c))
+  })
+
+  test("a new command waits for the user before it runs", () => {
+    const proposal = parseProposal(block('{"id":"agy","command":"/usr/local/bin/agy","args":["acp"]}'))!
+    expect(proposalAction(proposal, new Set())).toBe("review")
+    expect(proposalAction(proposal, new Set([proposalKey(proposal)]))).toBe("test")
+    // Changed arguments are a new command and need a new approval.
+    expect(proposalAction({ ...proposal, args: ["acp", "--yolo"] }, new Set([proposalKey(proposal)]))).toBe("review")
+  })
+
+  test("shells, interpreters and download tools are refused", () => {
+    for (const command of [
+      "/bin/sh",
+      "bash",
+      "C:\\Windows\\System32\\cmd.exe",
+      "pwsh",
+      "python3.12",
+      "node",
+      "curl",
+      "/usr/bin/env",
+    ]) {
+      expect(refusedCommand(command)).toBe(true)
+      expect(proposalAction({ id: "x", command, args: ["-c", "id"] }, new Set())).toBe("refused")
+    }
+    for (const command of ["/usr/local/bin/agy", "gemini", "npx", "C:\\tools\\codex.exe"])
+      expect(refusedCommand(command)).toBe(false)
   })
 
   test("the first message hides the instructions in the chat", () => {

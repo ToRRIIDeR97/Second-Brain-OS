@@ -14,14 +14,18 @@ import {
   createGoogleAccessTokens,
   googleEventId,
   googleEventPayload,
+  googleHttpError,
   googleScopes,
   googleTaskPayload,
+  nearestEvents,
   normalizeGoogleEvent,
   normalizeGoogleTask,
   outboxFailureState,
   pkceChallenge,
   pruneOutbox,
   requestGoogleToken,
+  sanitizeProviderEvent,
+  sanitizeProviderTask,
   type GoogleEventResponse,
   type GoogleTaskResponse,
 } from "./google-calendar-domain"
@@ -35,6 +39,7 @@ const eventsEndpoint = `${calendarEndpoint}/events`
 const taskListsEndpoint = "https://tasks.googleapis.com/tasks/v1/users/@me/lists"
 const tasksEndpoint = "https://tasks.googleapis.com/tasks/v1/lists"
 const oauthTimeoutMs = 5 * 60 * 1_000
+const taskLimit = 5_000
 
 type Config = {
   clientId: string
@@ -106,6 +111,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
         taskOutbox.filter((operation) => operation.state === "failed" || operation.state === "conflict").length,
       ...(config?.accountLabel ? { accountLabel: config.accountLabel } : {}),
       ...(config?.lastSyncedAt ? { lastSyncedAt: config.lastSyncedAt } : {}),
+      needsReconnect: Boolean(config?.refreshToken) && getStore(storeName).get("needsReconnect") === true,
     }
   }
 
@@ -128,6 +134,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
         access: input.access,
         accountLabel: account.summary ?? account.id,
       })
+      getStore(storeName).delete("needsReconnect")
       return status()
     } finally {
       busy = false
@@ -143,13 +150,47 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
       await accessTokens.get(config)
       await retryOutbox(config)
       await retryTaskOutbox(config)
-      const result = await accessTokens.with(config, async (accessToken) => ({
-        events: await fetchGoogleEvents(accessToken),
-        tasks: await fetchGoogleTasks(accessToken),
-      }))
+      const result = await accessTokens.with(config, async (accessToken) => {
+        const [events, tasks] = await Promise.all([fetchGoogleEvents(accessToken), fetchGoogleTasks(accessToken)])
+        return { events, tasks }
+      })
       // Only the timestamp: `config` may hold a refresh token that was rotated during this sync.
       getStore(storeName).set("lastSyncedAt", new Date().toISOString())
       return { events: result.events, tasks: result.tasks, connection: await status() }
+    } catch (error) {
+      noteReconnect(error)
+      throw error
+    } finally {
+      busy = false
+    }
+  }
+
+  /**
+   * Sign in again with the stored client ID and secret after Google expired or revoked the
+   * grant. The outbox, Project links and every other stored value are kept.
+   */
+  const reconnect: GoogleCalendarPlatform["reconnect"] = async (input) => {
+    if (busy) throw new Error("google_operation_busy")
+    if (!secureStorageAvailable()) throw new Error("google_secure_storage_unavailable")
+    const windowId = input.windowId
+    if (!Number.isSafeInteger(windowId) || windowId! <= 0) throw new Error("google_window_invalid")
+    const credentials = readCredentials()
+    if (!credentials) throw new Error("google_not_connected")
+    busy = true
+    try {
+      const access = input.access ?? credentials.access
+      const tokens = await authorize({ ...credentials, access, windowId: windowId! })
+      if (!tokens.access_token || !tokens.refresh_token) throw new Error("google_refresh_token_missing")
+      const account = await providerJson<{ summary?: string; id?: string }>(calendarEndpoint, tokens.access_token)
+      accessTokens.clear()
+      writeConfig({
+        ...credentials,
+        refreshToken: tokens.refresh_token,
+        access,
+        accountLabel: account.summary ?? account.id,
+      })
+      getStore(storeName).delete("needsReconnect")
+      return status()
     } finally {
       busy = false
     }
@@ -240,11 +281,20 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
     }
   }
 
-  return { status, connect, sync, write, writeTask, disconnect }
+  return { status, connect, reconnect, sync, write, writeTask, disconnect }
+}
+
+/** Remember that Google rejected the grant, so the UI can offer to reconnect. */
+function noteReconnect(error: unknown) {
+  if (error instanceof Error && error.message === "google_reconnect_required") {
+    getStore(storeName).set("needsReconnect", true)
+  }
 }
 
 async function fetchGoogleEvents(accessToken: string) {
   const events: GoogleCalendarProviderEvent[] = []
+  // Times come back as wall-clock times in the device's zone, which is how the planner shows them.
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   let pageToken: string | undefined
   do {
     const url = new URL(eventsEndpoint)
@@ -253,15 +303,17 @@ async function fetchGoogleEvents(accessToken: string) {
     url.searchParams.set("maxResults", "2500")
     url.searchParams.set("timeMin", rangeDate(-365))
     url.searchParams.set("timeMax", rangeDate(730))
+    if (timeZone) url.searchParams.set("timeZone", timeZone)
     if (pageToken) url.searchParams.set("pageToken", pageToken)
     const page = await providerJson<{ items?: GoogleEventResponse[]; nextPageToken?: string }>(url, accessToken)
     for (const item of page.items ?? []) {
-      const event = normalizeGoogleEvent(item)
-      if (event) events.push(event)
+      const event = normalizeGoogleEvent(item, timeZone)
+      if (event) events.push(sanitizeProviderEvent(event))
     }
     pageToken = page.nextPageToken
   } while (pageToken)
-  return events
+  // The planner holds at most 5,000 events; keep the ones nearest to today.
+  return nearestEvents(events, new Date().toISOString().slice(0, 10))
 }
 
 async function fetchGoogleTasks(accessToken: string) {
@@ -279,25 +331,39 @@ async function fetchGoogleTasks(accessToken: string) {
     listPageToken = taskLists.length < 2_000 ? page.nextPageToken : undefined
   } while (listPageToken)
 
-  const tasks: GoogleTaskProviderTask[] = []
-  for (const taskList of taskLists) {
-    let taskPageToken: string | undefined
-    do {
-      const url = new URL(`${tasksEndpoint}/${encodeURIComponent(taskList.id)}/tasks`)
-      url.searchParams.set("maxResults", "100")
-      url.searchParams.set("showCompleted", "true")
-      url.searchParams.set("showHidden", "true")
-      url.searchParams.set("showDeleted", "false")
-      if (taskPageToken) url.searchParams.set("pageToken", taskPageToken)
-      const page = await providerJson<{ items?: GoogleTaskResponse[]; nextPageToken?: string }>(url, accessToken)
-      for (const item of page.items ?? []) {
-        const task = normalizeGoogleTask(item, taskList)
-        if (task) tasks.push(task)
-        if (tasks.length >= 5_000) return tasks
-      }
-      taskPageToken = page.nextPageToken
-    } while (taskPageToken)
+  // Three lists at a time; results are joined in list order before the cap, so the cap is stable.
+  const perList: GoogleTaskProviderTask[][] = []
+  const queue = taskLists.map((taskList, index) => ({ taskList, index }))
+  const worker = async () => {
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      perList[next.index] = await fetchTaskList(accessToken, next.taskList)
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker))
+  return perList.flat().slice(0, taskLimit)
+}
+
+async function fetchTaskList(accessToken: string, taskList: { id: string; title: string }) {
+  const tasks: GoogleTaskProviderTask[] = []
+  const completedSince = rangeDate(-365)
+  let taskPageToken: string | undefined
+  do {
+    const url = new URL(`${tasksEndpoint}/${encodeURIComponent(taskList.id)}/tasks`)
+    url.searchParams.set("maxResults", "100")
+    url.searchParams.set("showCompleted", "true")
+    url.searchParams.set("showHidden", "true")
+    url.searchParams.set("showDeleted", "false")
+    if (taskPageToken) url.searchParams.set("pageToken", taskPageToken)
+    const page = await providerJson<{ items?: GoogleTaskResponse[]; nextPageToken?: string }>(url, accessToken)
+    for (const item of page.items ?? []) {
+      const task = normalizeGoogleTask(item, taskList)
+      // Tasks completed over a year ago would only crowd out current ones under the cap. Filtered
+      // here rather than with `completedMin`, whose effect on open tasks the API leaves unspecified.
+      if (task && (!task.completedAt || task.completedAt >= completedSince)) tasks.push(sanitizeProviderTask(task))
+      if (tasks.length >= taskLimit) return tasks
+    }
+    taskPageToken = page.nextPageToken
+  } while (taskPageToken)
   return tasks
 }
 
@@ -321,9 +387,15 @@ async function authorize(input: {
     const error = url.searchParams.get("error")
     response.setHeader("Content-Type", "text/html; charset=utf-8")
     response.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-    if (error || returnedState !== state || !code) {
+    // Any local process or web page can hit this port. A request without our state is refused
+    // but does not end the sign-in, so it cannot cancel the user's real callback.
+    if (returnedState !== state) {
       response.writeHead(400).end("<p>Google sign-in could not be completed. You can close this window.</p>")
-      callback.reject(new Error(error ? "google_oauth_denied" : "google_oauth_state_mismatch"))
+      return
+    }
+    if (error || !code) {
+      response.writeHead(400).end("<p>Google sign-in could not be completed. You can close this window.</p>")
+      callback.reject(new Error(error ? "google_oauth_denied" : "google_oauth_code_missing"))
       return
     }
     response.writeHead(200).end("<p>Google Calendar is connected. You can close this window.</p>")
@@ -382,8 +454,13 @@ async function providerJson<T>(input: string | URL, accessToken: string, init?: 
     throw new Error("google_reconnect_required")
   }
   if (response.status === 412) throw new Error("google_conflict")
-  if (!response.ok) throw new Error(`google_http_${response.status}`)
+  if (!response.ok) throw await httpFailure(response)
   return (await response.json()) as T
+}
+
+async function httpFailure(response: Response) {
+  const body = await response.json().catch(() => undefined)
+  return new Error(googleHttpError(response.status, body))
 }
 
 async function dispatch(config: Config, operation: StoredOutbox) {
@@ -400,7 +477,7 @@ async function dispatch(config: Config, operation: StoredOutbox) {
         })
         if (response.status === 401) throw new Error("google_reconnect_required")
         if (response.status === 412) throw new Error("google_conflict")
-        if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
+        if (!response.ok && response.status !== 404) throw await httpFailure(response)
         return null
       }
       const id = input.kind === "create" ? googleEventId(input.idempotencyKey) : input.event.providerId
@@ -423,6 +500,7 @@ async function dispatch(config: Config, operation: StoredOutbox) {
     updateOperation(operation.id, { state: "succeeded", result, lastError: undefined })
     return { state: "synced" as const, event: result }
   } catch (error) {
+    noteReconnect(error)
     const message = error instanceof Error ? error.message : "google_write_failed"
     const state = outboxFailureState(message, operation.attempts + 1)
     updateOperation(operation.id, { state, lastError: message })
@@ -454,7 +532,7 @@ async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
         })
         if (response.status === 401) throw new Error("google_reconnect_required")
         if (response.status === 412) throw new Error("google_conflict")
-        if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
+        if (!response.ok && response.status !== 404) throw await httpFailure(response)
         return null
       }
       const endpoint =
@@ -471,6 +549,7 @@ async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
     updateTaskOperation(operation.id, { state: "succeeded", result, lastError: undefined })
     return { state: "synced" as const, task: result }
   } catch (error) {
+    noteReconnect(error)
     const message = error instanceof Error ? error.message : "google_task_write_failed"
     const state = outboxFailureState(message, operation.attempts + 1)
     updateTaskOperation(operation.id, { state, lastError: message })
@@ -541,6 +620,23 @@ function readConfig(): Config | undefined {
       access: store.get("access") === "write" ? "write" : "read",
       ...(stringValue(store.get("accountLabel")) ? { accountLabel: stringValue(store.get("accountLabel")) } : {}),
       ...(stringValue(store.get("lastSyncedAt")) ? { lastSyncedAt: stringValue(store.get("lastSyncedAt")) } : {}),
+    }
+  } catch {
+    return
+  }
+}
+
+/** The stored OAuth client, available even when the refresh token no longer works. */
+function readCredentials() {
+  const store = getStore(storeName)
+  const clientId = stringValue(store.get("clientId"))
+  const encryptedClientSecret = stringValue(store.get("clientSecret"))
+  if (!clientId || !encryptedClientSecret) return
+  try {
+    return {
+      clientId,
+      clientSecret: decrypt(encryptedClientSecret),
+      access: store.get("access") === "write" ? ("write" as const) : ("read" as const),
     }
   } catch {
     return

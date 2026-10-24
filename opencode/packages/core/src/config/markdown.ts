@@ -1,11 +1,13 @@
 export * as ConfigMarkdown from "./markdown"
 
-import matter from "gray-matter"
+import { Frontmatter } from "../frontmatter"
+
 export function parse(content: string) {
   try {
-    return matter(content)
-  } catch {
-    return matter(sanitize(content))
+    return Frontmatter.parse(content)
+  } catch (error) {
+    if (error instanceof Frontmatter.RejectedError) throw error
+    return Frontmatter.parse(sanitize(content))
   }
 }
 

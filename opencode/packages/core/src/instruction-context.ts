@@ -19,6 +19,7 @@ class File extends Schema.Class<File>("InstructionContext.File")({
 
 const Files = Schema.Array(File)
 const key = SystemContext.Key.make("core/instructions")
+const readLimit = 256 * 1024
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -48,30 +49,31 @@ const layer = Layer.effectDiscard(
       const workspace = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? undefined
         : yield* WorkspaceInstructions.resolve(start, global.data).pipe(Effect.provideService(FSUtil.Service, fs))
-      const discovered = new Set(
-        yield* Effect.forEach(
-          workspace ??
-            (Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
-              ? []
-              : yield* fs.up({
-                  targets: ["AGENTS.md"],
-                  start,
-                  stop,
-                })),
-          fs.resolve,
-        ),
+      const found = yield* Effect.forEach(
+        workspace ??
+          (Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
+            ? []
+            : yield* fs.up({
+                targets: ["AGENTS.md"],
+                start,
+                stop,
+              })),
+        fs.resolve,
       )
+      // `fs.resolve` follows symlinks: a project AGENTS.md must really live inside the project.
+      // WorkspaceInstructions applies the same check against the workspace or linked folder.
+      const discovered = new Set(workspace ? found : found.filter((path) => FSUtil.contains(stop, path)))
       const paths = Array.dedupe([yield* fs.resolve(join(global.config, "AGENTS.md")), ...discovered])
       const files = yield* Effect.forEach(
         paths,
         (path) =>
-          fs
-            .readFileStringSafe(path)
-            .pipe(
-              Effect.map((content) =>
-                content === undefined ? undefined : new File({ path: AbsolutePath.make(path), content }),
-              ),
-            ),
+          Effect.gen(function* () {
+            // An oversized file counts as unreadable rather than flooding every session's context.
+            const stat = yield* fs.stat(path).pipe(Effect.orElseSucceed(() => undefined))
+            if (stat && Number(stat.size) > readLimit) return undefined
+            const content = yield* fs.readFileStringSafe(path)
+            return content === undefined ? undefined : new File({ path: AbsolutePath.make(path), content })
+          }),
         { concurrency: "unbounded" },
       )
       if (files.some((file, index) => file === undefined && discovered.has(paths[index])))

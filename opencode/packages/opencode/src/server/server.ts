@@ -7,6 +7,8 @@ import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
 import { MDNS } from "./mdns"
+import { ServerNetworkGuard } from "./network-guard"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
@@ -71,6 +73,7 @@ export async function openapi() {
 export let url: URL | undefined
 
 export async function listen(opts: ListenOptions): Promise<Listener> {
+  ServerNetworkGuard.assertExposureAllowed(opts.hostname, Flag.OPENCODE_SERVER_PASSWORD)
   const listener = await Effect.runPromise(listenEffect(opts))
   return {
     hostname: listener.hostname,

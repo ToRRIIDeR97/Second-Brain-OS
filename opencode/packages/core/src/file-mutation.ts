@@ -1,7 +1,8 @@
 export * as FileMutation from "./file-mutation"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schedule, Schema } from "effect"
+import type { PlatformError } from "effect/PlatformError"
 import { randomUUID } from "crypto"
 import { basename, dirname, join } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
@@ -111,11 +112,44 @@ const layer = Layer.effect(
           return existing !== undefined
         }
         yield* Effect.gen(function* () {
-          yield* Effect.scoped(fs.open(temp, { flag: "r+" }).pipe(Effect.flatMap((file) => file.sync)))
+          yield* syncFile(temp)
           if (existing) yield* fs.chmod(temp, existing.mode & 0o7777)
-          yield* fs.rename(temp, path)
+          // Windows refuses a rename while an indexer, antivirus or editor briefly holds the target.
+          yield* fs
+            .rename(temp, path)
+            .pipe(Effect.retry({ while: isTransientLock, schedule: Schedule.exponential("25 millis"), times: 4 }))
         }).pipe(Effect.onError(removeTemp))
         return existing !== undefined
+      })
+
+    const syncFile = (path: string) =>
+      Effect.scoped(fs.open(path, { flag: "r+" }).pipe(Effect.flatMap((file) => file.sync)))
+
+    // Stage the full content in a synced sibling temp file, then publish it without replacing an
+    // existing target: a hard link fails if the target exists. Where hard links are unsupported, a
+    // rename after an existence check under the target lock is the fallback. Either way a crash or
+    // failed write never leaves a partial target.
+    const publishNew = (path: string, content: string | Uint8Array) =>
+      Effect.gen(function* () {
+        yield* fs.ensureDir(dirname(path))
+        const temp = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`)
+        yield* Effect.gen(function* () {
+          yield* typeof content === "string"
+            ? fs.writeFileString(temp, content, { flag: "wx" })
+            : fs.writeFile(temp, content, { flag: "wx" })
+          yield* syncFile(temp)
+          yield* fs.link(temp, path).pipe(
+            Effect.catchIf(
+              (error) => error.reason._tag !== "AlreadyExists",
+              () =>
+                Effect.gen(function* () {
+                  if (yield* fs.exists(path)) return yield* new TargetExistsError({ path })
+                  yield* fs.rename(temp, path)
+                }),
+            ),
+            Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.fail(new TargetExistsError({ path }))),
+          )
+        }).pipe(Effect.ensuring(fs.remove(temp).pipe(Effect.ignore)))
       })
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
@@ -159,18 +193,7 @@ const layer = Layer.effect(
     const create = Effect.fn("FileMutation.create")((input: WriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const write =
-            typeof input.content === "string"
-              ? fs.writeFileString(input.target.canonical, input.content, { flag: "wx" })
-              : fs.writeFile(input.target.canonical, input.content, { flag: "wx" })
-          yield* write.pipe(
-            Effect.catchReason("PlatformError", "NotFound", () =>
-              fs.ensureDir(dirname(input.target.canonical)).pipe(Effect.andThen(write)),
-            ),
-            Effect.catchReason("PlatformError", "AlreadyExists", () =>
-              Effect.fail(new TargetExistsError({ path: input.target.canonical })),
-            ),
-          )
+          yield* publishNew(input.target.canonical, input.content)
           return writeResult(input.target, false)
         }),
       ),
@@ -204,6 +227,10 @@ const layer = Layer.effect(
     return Service.of({ create, write, writeTextPreservingBom, writeIfUnchanged, remove })
   }),
 )
+
+function isTransientLock(error: PlatformError) {
+  return error.reason._tag === "PermissionDenied" || error.reason._tag === "Busy"
+}
 
 function splitBom(text: string) {
   const stripped = text.replace(/^\uFEFF+/, "")

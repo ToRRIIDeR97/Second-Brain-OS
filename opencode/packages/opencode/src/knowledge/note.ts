@@ -2,9 +2,10 @@ export * as KnowledgeNote from "./note"
 
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Frontmatter } from "@opencode-ai/core/frontmatter"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import matter from "gray-matter"
 import { createHash } from "node:crypto"
 import { basename } from "node:path"
@@ -12,6 +13,8 @@ import { basename } from "node:path"
 const directory = "notes"
 const limit = 500
 const maxBytes = 5 * 1024 * 1024
+const titleLimit = 200
+const tagLimit = 80
 const projectPattern = /^project_[0-9A-Z]+$/i
 // Keep a leading BOM in the text so decode() can detect it and the save path keeps it.
 const utf8 = new TextDecoder("utf-8", { ignoreBOM: true })
@@ -76,19 +79,22 @@ export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
   )
   const query = search.trim().toLowerCase()
   // Read every candidate so search sees all notes; keep only matching summaries in memory.
-  // One unreadable or malformed note is skipped so it cannot hide the rest.
+  // One unreadable, oversized or malformed note is skipped so it cannot hide the rest.
   const notes = yield* Effect.forEach(
     paths.map((path) => path.replaceAll("\\", "/")).filter(isNotePath),
     (path) =>
-      readCard(path).pipe(
-        Effect.map((note) =>
-          !query ||
-          [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
-            value.toLowerCase().includes(query),
+      (query
+        ? readCard(path).pipe(
+            Effect.map((note) =>
+              [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
+                value.toLowerCase().includes(query),
+              )
+                ? note.info
+                : undefined,
+            ),
           )
-            ? note.info
-            : undefined,
-        ),
+        : cachedSummary(path)
+      ).pipe(
         Effect.catch((error) =>
           Effect.logWarning("Skipping unreadable note", { path, error: error._tag }).pipe(Effect.as(undefined)),
         ),
@@ -165,6 +171,8 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
       expected: card.bytes,
     })
     .pipe(Effect.catchTag("FileMutation.StaleContentError", () => Effect.fail(new ConflictError({ reason: "stale" }))))
+  // A save within the same millisecond and size would otherwise keep the old summary.
+  summaries.delete(target.canonical)
   return decode(normalizedPath, source)
 })
 
@@ -172,6 +180,7 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path, kind: "file" })
+  yield* requireReadableSize(target.canonical, path)
   // Only a missing file is "not found"; permission and IO failures must surface, not read as empty.
   const bytes = yield* fs
     .readFile(target.canonical)
@@ -183,6 +192,41 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   })
   // The exact bytes read are the compare-and-swap baseline for a later save.
   return { ...card, bytes }
+})
+
+/** Refuse a note above the size cap before reading it, so one huge file cannot stall a list. */
+const requireReadableSize = Effect.fnUntraced(function* (canonical: string, path: string) {
+  const fs = yield* FSUtil.Service
+  const stat = yield* fs
+    .stat(canonical)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+  if (stat === undefined) return yield* new NotFoundError({ path })
+  if (Number(stat.size) > maxBytes) return yield* new InvalidError({ reason: "too_large" })
+  return stat
+})
+
+/**
+ * Summaries for the unfiltered list, keyed by canonical path (so each workspace
+ * has its own entries) and reused while the file's size and modification time
+ * are unchanged. Bounded: the oldest entry is evicted first.
+ */
+const summaries = new Map<string, { mtime: number; size: number; info: Info }>()
+const summaryLimit = 5_000
+
+const cachedSummary = Effect.fnUntraced(function* (path: string) {
+  const mutation = yield* LocationMutation.Service
+  const target = yield* mutation.resolve({ path, kind: "file" })
+  const stat = yield* requireReadableSize(target.canonical, path)
+  const mtime = Option.match(stat.mtime, { onNone: () => -1, onSome: (date) => date.getTime() })
+  const size = Number(stat.size)
+  const cached = summaries.get(target.canonical)
+  if (cached && mtime >= 0 && cached.mtime === mtime && cached.size === size) return cached.info
+  const card = yield* readCard(path)
+  summaries.delete(target.canonical)
+  summaries.set(target.canonical, { mtime, size, info: card.info })
+  const oldest = summaries.keys().next()
+  if (summaries.size > summaryLimit && !oldest.done) summaries.delete(oldest.value)
+  return card.info
 })
 
 const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {
@@ -200,22 +244,24 @@ function isNotePath(path: string) {
 export function decode(path: string, raw: string): Card {
   const bom = raw.startsWith("\uFEFF")
   const source = bom ? raw.slice(1) : raw
-  // Passing options disables gray-matter's unbounded module-level parse cache.
-  const parsed = matter(source, {})
+  // Untrusted Markdown: never evaluates `---js` front matter and caps its size.
+  const parsed = Frontmatter.parse(source)
   const data = { ...(parsed.data as Record<string, unknown>) }
   const projectIds = Array.isArray(data.project_ids)
     ? data.project_ids.filter((value): value is string => typeof value === "string" && projectPattern.test(value))
     : []
-  const tags = Array.isArray(data.tags) ? data.tags.filter((value): value is string => typeof value === "string") : []
-  const info = validate({
+  // Reading is lenient so a hand-written note is never hidden; saving validates strictly.
+  const info = {
     path,
-    title:
-      (typeof data.title === "string" && data.title.trim()) || titleFromBody(parsed.content) || basename(path, ".md"),
+    title: truncate(
+      scalarText(data.title)?.trim() || titleFromBody(parsed.content) || basename(path, ".md"),
+      titleLimit,
+    ),
     projectIds: normalizeProjects(projectIds),
-    tags: normalizeTags(tags),
+    tags: lenientTags(data.tags),
     links: extractLinks(parsed.content),
     updatedAt: dateString(data.updated_at),
-  })
+  }
   return {
     info,
     body: parsed.content,
@@ -231,7 +277,9 @@ export function encode(info: Info, previous: Record<string, unknown>, body: stri
     ...previous,
     title: info.title,
     project_ids: [...info.projectIds],
-    tags: [...info.tags],
+    // Keep a hand-written `tags` value (a scalar, numbers, odd case) when the tags did not change.
+    tags:
+      previous.tags !== undefined && sameList(lenientTags(previous.tags), info.tags) ? previous.tags : [...info.tags],
     updated_at: info.updatedAt,
   }
   const source = matter.stringify(body, data, {})
@@ -239,7 +287,7 @@ export function encode(info: Info, previous: Record<string, unknown>, body: stri
 }
 
 function validate(info: Info) {
-  if (!info.title || [...info.title].length > 200) throw new InvalidError({ reason: "invalid_title" })
+  if (!info.title || [...info.title].length > titleLimit) throw new InvalidError({ reason: "invalid_title" })
   if (
     info.projectIds.some((id) => !projectPattern.test(id)) ||
     new Set(info.projectIds).size !== info.projectIds.length
@@ -247,7 +295,7 @@ function validate(info: Info) {
     throw new InvalidError({ reason: "invalid_projects" })
   }
   const lowerTags = info.tags.map((tag) => tag.toLowerCase())
-  if (info.tags.some((tag) => !tag || [...tag].length > 80) || new Set(lowerTags).size !== lowerTags.length) {
+  if (info.tags.some((tag) => !tag || [...tag].length > tagLimit) || new Set(lowerTags).size !== lowerTags.length) {
     throw new InvalidError({ reason: "invalid_tags" })
   }
   if (info.links.length > 200 || info.links.some((link) => !link || [...link].length > 300)) {
@@ -262,6 +310,39 @@ function normalizeProjects(projectIds: ReadonlyArray<string>) {
 
 function normalizeTags(tags: ReadonlyArray<string>) {
   return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))]
+}
+
+/**
+ * Tags as a reader sees them: `tags: work, home`, `tags: [2024, q3]` and
+ * `tags: [Work, work]` all decode. Over-long tags are dropped and case-insensitive
+ * duplicates keep their first spelling.
+ */
+export function lenientTags(value: unknown) {
+  const items: unknown[] = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : []
+  const seen = new Set<string>()
+  return items
+    .map((item) => scalarText(item)?.trim() ?? "")
+    .filter((tag) => {
+      if (!tag || [...tag].length > tagLimit || seen.has(tag.toLowerCase())) return false
+      seen.add(tag.toLowerCase())
+      return true
+    })
+}
+
+function scalarText(value: unknown) {
+  if (typeof value === "string") return value
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  if (typeof value === "boolean") return String(value)
+  return undefined
+}
+
+function truncate(value: string, limit: number) {
+  const characters = [...value]
+  return characters.length > limit ? characters.slice(0, limit).join("") : value
+}
+
+function sameList(left: ReadonlyArray<string>, right: ReadonlyArray<string>) {
+  return left.length === right.length && left.every((item, index) => item === right[index])
 }
 
 export function extractLinks(body: string) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -350,6 +350,59 @@ describe("BrainProject workspace threads", () => {
     expect(timeline(alpha.id)).toMatchObject({ revision: "rev_3", events: [{ title: "Renamed kickoff" }] })
     expect(timeline(beta.id).revision).toBe("")
   })
+
+  test("syncTimelines with the previous calendar touches only Projects in either calendar", async () => {
+    await using tmp = await tmpdir()
+    const alpha = await run(tmp.path, BrainProject.create({ name: "Alpha", outcome: "A" }))
+    const beta = await run(tmp.path, BrainProject.create({ name: "Beta", outcome: "B" }))
+    const file = (id: string) => path.join(tmp.path, ".tenon", "projects", id, "timeline", "calendar.json")
+    // A hand-damaged timeline is rewritten by a full sync, so leaving it proves Beta was skipped.
+    writeFileSync(file(beta.id), "damaged")
+    const event = {
+      id: "event_a",
+      title: "Kickoff",
+      date: "2026-08-30",
+      projectId: alpha.id,
+      source: "local" as const,
+      syncState: "local" as const,
+    }
+    const previous = { version: 2 as const, revision: "rev_1", events: [], tasks: [] }
+    const next = { version: 2 as const, revision: "rev_2", events: [event], tasks: [] }
+    await run(tmp.path, BrainProject.syncTimelines(next, previous))
+    expect(PlannerCalendar.decode(readFileSync(file(alpha.id), "utf8")).events).toHaveLength(1)
+    expect(readFileSync(file(beta.id), "utf8")).toBe("damaged")
+    // Moving the event away from Alpha still rewrites Alpha's timeline.
+    await run(tmp.path, BrainProject.syncTimelines({ ...previous, revision: "rev_3" }, next))
+    expect(PlannerCalendar.decode(readFileSync(file(alpha.id), "utf8")).events).toHaveLength(0)
+    // Without a previous calendar every timeline is checked.
+    await run(tmp.path, BrainProject.syncTimelines({ ...previous, revision: "rev_4" }))
+    expect(readFileSync(file(beta.id), "utf8")).not.toBe("damaged")
+  })
+
+  test("threadDirectory ignores a card location that escapes the workspace", async () => {
+    await using tmp = await tmpdir()
+    const project = await run(tmp.path, BrainProject.create({ name: "Escape", outcome: "E" }))
+    for (const folder of ["../outside", "/", path.join(tmp.path, "..")]) {
+      const resolved = await run(
+        tmp.path,
+        BrainProject.threadDirectory({ ...project, location: { displayPath: folder, path: folder } }),
+      )
+      expect(resolved).toMatchObject({ kind: "folder", directory: path.join(tmp.path, project.folder) })
+    }
+    const linked = path.join(path.dirname(tmp.path), "linked")
+    expect(
+      await run(
+        tmp.path,
+        BrainProject.threadDirectory({ ...project, location: { displayPath: linked, path: linked } }, [], [linked]),
+      ),
+    ).toMatchObject({ kind: "project", directory: linked })
+  })
+
+  test("a ---js card is rejected without running it", () => {
+    const scope = globalThis as { __pwn?: number }
+    expect(() => BrainProject.decode("---js\nglobalThis.__pwn=1\n---\n")).toThrow()
+    expect(scope.__pwn).toBeUndefined()
+  })
 })
 
 describe("BrainProject project folders", () => {
@@ -468,5 +521,70 @@ describe("BrainProject project folders", () => {
       "Be brief.",
     )
     expect((await run(tmp.path, data, BrainProject.removeInstructions())).content).toBeNull()
+  })
+
+  test("a hand-edited manifest cannot claim the workspace, a root or the home folder", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    const data = path.join(tmp.path, "data")
+    const home = path.join(tmp.path, "home")
+    mkdirSync(home, { recursive: true })
+    mkdirSync(path.join(root, ".tenon"), { recursive: true })
+    mkdirSync(data, { recursive: true })
+    const index = path.join(data, "workspace-links.json")
+    writeFileSync(index, JSON.stringify({ "/somewhere": "/other" }, null, 2) + "\n")
+    for (const linkedFolders of [["."], ["/"], [home], [tmp.path], [root]]) {
+      writeFileSync(path.join(root, ".tenon", "workspace.json"), JSON.stringify({ version: 1, linkedFolders }))
+      const result = await run(root, data, BrainProject.scan().pipe(Effect.provide(Global.layerWith({ data, home }))))
+      expect(result.created).toBe(0)
+      expect(JSON.parse(readFileSync(index, "utf8"))).toEqual({ "/somewhere": "/other" })
+    }
+    const refused = await runExit(
+      root,
+      data,
+      BrainProject.link({ folder: home }).pipe(Effect.provide(Global.layerWith({ data, home }))),
+    )
+    expect(Exit.isFailure(refused) ? Cause.squash(refused.cause) : undefined).toMatchObject({
+      reason: "protected_folder",
+    })
+  })
+
+  test("a folder another workspace links keeps its index entry", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    const data = path.join(tmp.path, "data")
+    const outside = path.join(tmp.path, "repos", "shared")
+    const other = path.join(tmp.path, "Other")
+    mkdirSync(path.join(root, ".tenon"), { recursive: true })
+    mkdirSync(outside, { recursive: true })
+    mkdirSync(data, { recursive: true })
+    const index = path.join(data, "workspace-links.json")
+    writeFileSync(index, JSON.stringify({ [outside]: other }))
+    writeFileSync(path.join(root, ".tenon", "workspace.json"), JSON.stringify({ version: 1, linkedFolders: [outside] }))
+    await run(root, data, BrainProject.scan())
+    expect(JSON.parse(readFileSync(index, "utf8"))).toEqual({ [outside]: other })
+  })
+
+  test("a manifest path that cannot be read as a file is never replaced", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    mkdirSync(path.join(root, ".tenon", "workspace.json"), { recursive: true })
+    const exit = await runExit(root, path.join(tmp.path, "data"), BrainProject.scan())
+    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+      reason: "manifest_unreadable",
+    })
+    expect(readdirSync(path.join(root, ".tenon", "workspace.json"))).toEqual([])
+  })
+
+  test("an AGENTS.md symlinked outside the folder is not read", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    mkdirSync(root, { recursive: true })
+    writeFileSync(path.join(tmp.path, "secret.txt"), "outside")
+    symlinkSync(path.join(tmp.path, "secret.txt"), path.join(root, "AGENTS.md"))
+    const exit = await runExit(root, path.join(tmp.path, "data"), BrainProject.readInstructions())
+    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+      reason: "outside_workspace",
+    })
   })
 })

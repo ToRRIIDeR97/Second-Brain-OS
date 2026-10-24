@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, open, readFile, stat, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -194,4 +194,66 @@ test("list includes project notes in the .tenon card folder and the legacy one",
     ),
   )
   expect(read.info.title).toBe("Plan")
+})
+
+test("a ---js front matter block is rejected without evaluating it", () => {
+  const scope = globalThis as { __pwn?: number }
+  expect(() => KnowledgeNote.decode("notes/evil.md", "---js\nglobalThis.__pwn=1\n---\n# Evil\n")).toThrow()
+  expect(() =>
+    KnowledgeNote.decode("notes/evil.md", "---javascript\n{ title: (globalThis.__pwn = 1) }\n---\n"),
+  ).toThrow()
+  expect(scope.__pwn).toBeUndefined()
+})
+
+test("front matter above the size cap is rejected before parsing", () => {
+  expect(() => KnowledgeNote.decode("notes/big.md", `---\ntitle: ${"x".repeat(70 * 1024)}\n---\nBody`)).toThrow()
+})
+
+test("hand-written tags decode leniently and round-trip unchanged", () => {
+  const numbers = KnowledgeNote.decode("notes/a.md", "---\ntags: [2024, q3]\n---\n# A\n")
+  expect(numbers.info.tags).toEqual(["2024", "q3"])
+  const scalar = KnowledgeNote.decode("notes/b.md", "---\ntags: work, home\n---\n# B\n")
+  expect(scalar.info.tags).toEqual(["work", "home"])
+  expect(KnowledgeNote.decode("notes/c.md", "---\ntags: [Work, work]\n---\n# C\n").info.tags).toEqual(["Work"])
+  expect(KnowledgeNote.decode("notes/d.md", `---\ntitle: ${"t".repeat(300)}\n---\n`).info.title).toHaveLength(200)
+
+  const savedNumbers = KnowledgeNote.encode(numbers.info, numbers.data, numbers.body)
+  expect(savedNumbers).toContain("- 2024\n")
+  expect(KnowledgeNote.decode("notes/a.md", savedNumbers).info.tags).toEqual(["2024", "q3"])
+  const savedScalar = KnowledgeNote.encode(scalar.info, scalar.data, scalar.body)
+  expect(savedScalar).toContain("tags: work, home")
+  // A changed tag list is written as a list.
+  expect(KnowledgeNote.encode({ ...scalar.info, tags: ["work"] }, scalar.data, scalar.body)).toContain("- work")
+})
+
+test("list skips a note above the size cap", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  await writeFile(path.join(tmp.path, "notes", "small.md"), "# Small\n")
+  // Sparse, so the test does not write 6 MiB.
+  const handle = await open(path.join(tmp.path, "notes", "huge.md"), "w")
+  await handle.truncate(6 * 1024 * 1024)
+  await handle.close()
+  const found = await Effect.runPromise(KnowledgeNote.list().pipe(provideNoteServices(AbsolutePath.make(tmp.path))))
+  expect(found.map((note) => note.path)).toEqual(["notes/small.md"])
+})
+
+test("the unfiltered list re-reads only notes whose size or time changed", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const first = path.join(tmp.path, "notes", "first.md")
+  const second = path.join(tmp.path, "notes", "second.md")
+  await writeFile(first, "# First\n")
+  await writeFile(second, "# Second\n")
+  const run = () => Effect.runPromise(KnowledgeNote.list().pipe(provideNoteServices(AbsolutePath.make(tmp.path))))
+  await run()
+  // Same size and time: the cached summary is reused, so the new title is not read.
+  const firstTime = (await stat(first)).mtime
+  await writeFile(first, "# Fixed\n")
+  await utimes(first, firstTime, firstTime)
+  // A real edit changes the time and is read again.
+  const later = new Date(Date.now() + 5_000)
+  await writeFile(second, "# Changed title\n")
+  await utimes(second, later, later)
+  expect((await run()).map((note) => note.title).toSorted()).toEqual(["Changed title", "First"])
 })

@@ -118,4 +118,16 @@ describe("PlannerCalendar", () => {
 
     expect(PlannerCalendar.decode(saved.source).events[0]?.endDate).toBe("2026-08-26")
   })
+
+  test("refuses a calendar written by a newer version instead of reading it as v1", () => {
+    const failure = (() => {
+      try {
+        PlannerCalendar.decode(JSON.stringify({ version: 3, events: [] }))
+      } catch (error) {
+        return error
+      }
+    })()
+    expect(failure).toBeInstanceOf(PlannerCalendar.InvalidError)
+    expect(failure).toMatchObject({ reason: "unsupported_version" })
+  })
 })

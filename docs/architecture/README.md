@@ -102,13 +102,13 @@ state alive across route changes; it replaced the tab store.
 | Notes                      | `packages/opencode/src/knowledge/note.ts`; workspace Markdown files                                                   |
 | Project records            | `packages/opencode/src/project/brain.ts`; workspace `.tenon/projects/<id>/` Markdown cards (legacy `projects/<id>/`)   |
 | Workspace manifest         | `brain.ts`; workspace `.tenon/workspace.json` (linked project folders)                                                |
-| Linked-folder index        | `brain.ts` writes, `core/src/workspace-instructions.ts` reads; `workspace-links.json` in the data folder; rebuilt by a scan |
-| Project thread directories | Derived, not stored: the card's `location.path` folder, else a linked Workspace worktree, else the card folder; thread counts read from `opencode.db` |
+| Linked-folder index        | `brain.ts` writes, `core/src/workspace-instructions.ts` reads; `workspace-links.json` in the data folder; rebuilt by a scan; the first workspace to link a folder keeps it |
+| Project thread directories | Derived, not stored: the card's `location.path` folder (inside the workspace, or a checked linked folder), else a linked Workspace worktree, else the card folder; thread counts read from `opencode.db` |
 | Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in `$XDG_DATA_HOME/tenon-workbench`            |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
 | Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
-| Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
+| Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials, outbox and `needsReconnect` flag in the desktop profile |
 
 Package paths in this table are relative to `opencode/`. Workspace files are
 the source of truth for notes, project records, and local planning. Do not
@@ -278,7 +278,9 @@ separate from upstream OpenCode Desktop's `ai.opencode.desktop[.dev|.beta]`.
 The ID sets Electron `userData` (electron-store files and `XDG_STATE_HOME`),
 the Windows AppUserModelId and NSIS install GUID, and the Linux executable,
 desktop file and metainfo ID. Package names are `tenon-workbench[-beta|-dev]`
-and the deep-link scheme is `tenon://`. On the dev channel only,
+and the deep-link scheme is `tenon://`. The main process validates each deep
+link (`desktop/src/main/deep-links.ts`) and asks the user to confirm the folder
+before the renderer receives it. On the dev channel only,
 `desktop/src/main/user-data-migration.ts` copies the old
 `ai.opencode.desktop.dev` `userData` once before `app.setPath("userData")`,
 skipping caches, logs and lock files; beta and prod start fresh because their
@@ -476,10 +478,14 @@ Brain system prompt, the task instructions travel in the first user message.
 
 1. The assistant investigates with its own tools and replies with a
    ```` ```harness ```` JSON block.
-2. When the session goes idle, the page parses the block and calls
+2. When the session goes idle, the page parses the block and shows the exact
+   command with a "Test this command" button. Shells, interpreters and
+   download tools are refused. On the click it calls
    `POST /api/harness/verify`. That runs the handshake, `session/new`, and one
    short prompt in the proposed agent, refusing tool permissions.
 3. A failed test is sent back to the chat, up to three times automatically.
+   A new proposal needs a new click; only an already approved command is
+   retested on its own.
 4. A passed test enables Save. The assistant can't save anything itself.
 
 ### Harness skills
