@@ -226,7 +226,7 @@ export default function CalendarPage() {
     ),
   )
   const eventsFor = (date: string) =>
-    (events()?.events ?? [])
+    (events.latest?.events ?? [])
       .filter(
         (event) =>
           event.date <= date &&
@@ -237,7 +237,7 @@ export default function CalendarPage() {
         (left, right) => (left.start ?? "").localeCompare(right.start ?? "") || left.title.localeCompare(right.title),
       )
   const tasksFor = (date: string) =>
-    (events()?.tasks ?? [])
+    (events.latest?.tasks ?? [])
       .filter((task) => !task.completedAt && task.scheduledDate === date)
       .sort(
         (left, right) => (left.start ?? "").localeCompare(right.start ?? "") || left.title.localeCompare(right.title),
@@ -265,7 +265,7 @@ export default function CalendarPage() {
           ? range()
           : { start: "", end: "9999-12-31" }
     const projectMatch = (projectId?: string) => !state.projectFilter || projectId === state.projectFilter
-    const providerEvents = (events()?.events ?? [])
+    const providerEvents = (events.latest?.events ?? [])
       .filter(
         (event) =>
           projectMatch(event.projectId) && event.date <= bounds.end && (event.endDate ?? event.date) >= bounds.start,
@@ -279,7 +279,7 @@ export default function CalendarPage() {
           event,
         }),
       )
-    const tasks = (events()?.tasks ?? [])
+    const tasks = (events.latest?.tasks ?? [])
       .filter((task) => {
         if (task.completedAt || !projectMatch(task.projectId)) return false
         const date = task.scheduledDate ?? task.dueDate
@@ -409,9 +409,9 @@ export default function CalendarPage() {
     setState({ googleBusy: true, googleError: "" })
     try {
       const result = await google.sync()
-      // A sidebar workspace switch during the call leaves events() pointing at another calendar.
+      // A sidebar workspace switch during the call leaves events.latest pointing at another calendar.
       if (directory() !== target) return
-      const current = events()?.events ?? []
+      const current = events.latest?.events ?? []
       const projectByProvider = new Map(
         current
           .filter((event) => event.source === "google" && event.providerId && event.projectId)
@@ -421,7 +421,7 @@ export default function CalendarPage() {
         ...current.filter((event) => event.source === "local"),
         ...result.events.map((event) => providerEvent(event, projectByProvider.get(event.providerId))),
       ]
-      const currentTasks = events()?.tasks ?? []
+      const currentTasks = events.latest?.tasks ?? []
       const localByProvider = new Map(
         currentTasks
           .filter((task) => task.source === "google" && task.providerId && task.taskListId)
@@ -438,7 +438,7 @@ export default function CalendarPage() {
         ),
         ...result.tasks.map((task) => providerTask(task, localByProvider.get(`${task.taskListId}:${task.providerId}`))),
       ]
-      const saved = await writeCalendar(client(target), merged, events()?.revision, mergedTasks)
+      const saved = await writeCalendar(client(target), merged, events.latest?.revision, mergedTasks)
       eventActions.mutate(saved)
       googleActions.mutate(result.connection)
     } catch (error) {
@@ -457,9 +457,9 @@ export default function CalendarPage() {
       const connection = await google.disconnect()
       googleActions.mutate(connection)
       if (directory() !== target) return
-      const local = (events()?.events ?? []).filter((event) => event.source === "local")
-      const localTasks = (events()?.tasks ?? []).filter((task) => task.source === "local")
-      const saved = await writeCalendar(client(target), local, events()?.revision, localTasks)
+      const local = (events.latest?.events ?? []).filter((event) => event.source === "local")
+      const localTasks = (events.latest?.tasks ?? []).filter((task) => task.source === "local")
+      const saved = await writeCalendar(client(target), local, events.latest?.revision, localTasks)
       eventActions.mutate(saved)
       setState({ googlePanel: false, editing: false })
     } catch (error) {
@@ -473,7 +473,7 @@ export default function CalendarPage() {
     if (!directory()) return
     setState({ saving: true, error: "" })
     try {
-      const saved = await writeCalendar(client(directory()), next, events()?.revision, events()?.tasks)
+      const saved = await writeCalendar(client(directory()), next, events.latest?.revision, events.latest?.tasks)
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft() })
     } catch (error) {
@@ -490,7 +490,7 @@ export default function CalendarPage() {
 
   const persistTasks = async (tasks: ReadonlyArray<PlannerTask>) => {
     if (!directory()) return
-    const current = events()?.tasks ?? []
+    const current = events.latest?.tasks ?? []
     const removed = current.find((task) => task.source === "google" && !tasks.some((next) => next.id === task.id))
     const changed = tasks.find((task) => {
       if (task.source !== "google") return false
@@ -503,7 +503,7 @@ export default function CalendarPage() {
     const target = removed ?? changed
     if (target) {
       const google = platform.googleCalendar
-      if (!google || !googleConnection()?.connected || googleConnection()?.access !== "write") {
+      if (!google || !googleConnection.latest?.connected || googleConnection.latest?.access !== "write") {
         throw new Error("google_write_consent_required")
       }
       const kind = removed ? "delete" : target.providerId?.startsWith("pending:") ? "create" : "update"
@@ -538,7 +538,7 @@ export default function CalendarPage() {
       }
       await googleActions.refetch()
     }
-    const saved = await writeCalendar(client(directory()), events()?.events ?? [], events()?.revision, next)
+    const saved = await writeCalendar(client(directory()), events.latest?.events ?? [], events.latest?.revision, next)
     eventActions.mutate(saved)
   }
 
@@ -580,7 +580,7 @@ export default function CalendarPage() {
       source: "local",
       syncState: "local",
     }
-    const current = events()?.events ?? []
+    const current = events.latest?.events ?? []
     if (state.draft.source === "google") {
       const original = current.find((event) => event.id === state.draft.id)
       const providerUnchanged =
@@ -596,7 +596,11 @@ export default function CalendarPage() {
         await persist(current.map((event) => (event.id === original.id ? enriched : event)))
         return
       }
-      if (!platform.googleCalendar || !googleConnection()?.connected || googleConnection()?.access !== "write") {
+      if (
+        !platform.googleCalendar ||
+        !googleConnection.latest?.connected ||
+        googleConnection.latest?.access !== "write"
+      ) {
         setState("error", language.t("secondBrain.calendar.google.error.writeConsent"))
         return
       }
@@ -628,7 +632,7 @@ export default function CalendarPage() {
       })
       return
     }
-    await persist((events()?.events ?? []).filter((event) => event.id !== state.draft.id))
+    await persist((events.latest?.events ?? []).filter((event) => event.id !== state.draft.id))
   }
 
   const googleDraft = (): GoogleCalendarProviderEvent => ({
@@ -663,7 +667,7 @@ export default function CalendarPage() {
         event: googleDraft(),
       })
       if (directory() !== target) return
-      const current = events()?.events ?? []
+      const current = events.latest?.events ?? []
       const next = deleting
         ? result.state === "synced"
           ? current.filter((event) => event.id !== state.draft.id)
@@ -688,7 +692,7 @@ export default function CalendarPage() {
               ? current.map((event) => (event.id === state.draft.id ? savedEvent : event))
               : [...current, savedEvent]
           })()
-      const saved = await writeCalendar(client(target), next, events()?.revision, events()?.tasks)
+      const saved = await writeCalendar(client(target), next, events.latest?.revision, events.latest?.tasks)
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft(), googleConfirm: "", googleWriteKey: "" })
       await googleActions.refetch()
@@ -816,12 +820,12 @@ export default function CalendarPage() {
             <SelectV2
               aria-label={language.t("secondBrain.calendar.filterProject")}
               class="!h-8 !w-auto max-w-44"
-              options={["__all__", ...(brainProjects() ?? []).map((project) => project.id)]}
+              options={["__all__", ...(brainProjects.latest ?? []).map((project) => project.id)]}
               current={state.projectFilter || "__all__"}
               label={(projectID) =>
                 projectID === "__all__"
                   ? language.t("secondBrain.calendar.allProjects")
-                  : (brainProjects()?.find((project) => project.id === projectID)?.name ?? projectID)
+                  : (brainProjects.latest?.find((project) => project.id === projectID)?.name ?? projectID)
               }
               onSelect={(projectID) => setState("projectFilter", projectID === "__all__" ? "" : (projectID ?? ""))}
             />
@@ -837,7 +841,7 @@ export default function CalendarPage() {
             aria-expanded={state.googlePanel}
             onClick={() => setState({ googlePanel: !state.googlePanel, view: "today" })}
           >
-            {googleConnection()?.connected
+            {googleConnection.latest?.connected
               ? language.t("secondBrain.calendar.google.connected")
               : language.t("secondBrain.calendar.google.connect")}
           </ButtonV2>
@@ -851,12 +855,12 @@ export default function CalendarPage() {
         <Show when={taskView()} keyed>
           {(filter) => (
             <CalendarTasks
-              tasks={events()?.tasks ?? []}
-              projects={brainProjects() ?? []}
+              tasks={events.latest?.tasks ?? []}
+              projects={brainProjects.latest ?? []}
               onSave={persistTasks}
               filter={filter}
               selectedId={state.selectedTask}
-              googleCanWrite={googleConnection()?.connected && googleConnection()?.access === "write"}
+              googleCanWrite={googleConnection.latest?.connected && googleConnection.latest?.access === "write"}
               onFilterChange={(next) => setState("view", viewForTaskFilter(next))}
             />
           )}
@@ -890,7 +894,7 @@ export default function CalendarPage() {
                             <ScheduleRow
                               item={item}
                               today={localDateKey(new Date())}
-                              projects={brainProjects() ?? []}
+                              projects={brainProjects.latest ?? []}
                               onOpenEvent={openEvent}
                               onOpenTask={() => openTask(item.kind === "task" ? item.task.id : "")}
                               eventSource={sourceLabel}
@@ -1006,7 +1010,7 @@ export default function CalendarPage() {
                       fallback={<p class="text-[12px] text-v2-text-text-faint">{language.t("common.loading")}</p>}
                     >
                       <Show
-                        when={googleConnection()?.available}
+                        when={googleConnection.latest?.available}
                         fallback={
                           <p role="status" class={noteClass}>
                             {platform.platform === "desktop"
@@ -1016,7 +1020,7 @@ export default function CalendarPage() {
                         }
                       >
                         <Show
-                          when={googleConnection()?.connected}
+                          when={googleConnection.latest?.connected}
                           fallback={
                             <form
                               class="flex flex-col gap-3"
@@ -1080,14 +1084,14 @@ export default function CalendarPage() {
                                 {language.t("secondBrain.calendar.google.account")}
                               </dt>
                               <dd class="truncate text-v2-text-text-base">
-                                {googleConnection()?.accountLabel ??
+                                {googleConnection.latest?.accountLabel ??
                                   language.t("secondBrain.calendar.google.accountFallback")}
                               </dd>
                               <dt class="text-v2-text-text-faint">
                                 {language.t("secondBrain.calendar.google.access")}
                               </dt>
                               <dd class="text-v2-text-text-base">
-                                {googleConnection()?.access === "write"
+                                {googleConnection.latest?.access === "write"
                                   ? language.t("secondBrain.calendar.google.access.write")
                                   : language.t("secondBrain.calendar.google.access.read")}
                               </dd>
@@ -1095,25 +1099,25 @@ export default function CalendarPage() {
                                 {language.t("secondBrain.calendar.google.lastSync")}
                               </dt>
                               <dd class="text-v2-text-text-base">
-                                {googleConnection()?.lastSyncedAt
+                                {googleConnection.latest?.lastSyncedAt
                                   ? new Intl.DateTimeFormat(language.locale(), {
                                       dateStyle: "medium",
                                       timeStyle: "short",
-                                    }).format(new Date(googleConnection()!.lastSyncedAt!))
+                                    }).format(new Date(googleConnection.latest!.lastSyncedAt!))
                                   : language.t("secondBrain.calendar.google.never")}
                               </dd>
                             </dl>
-                            <Show when={(googleConnection()?.pendingWrites ?? 0) > 0}>
+                            <Show when={(googleConnection.latest?.pendingWrites ?? 0) > 0}>
                               <p role="status" class={noteClass}>
                                 {language.t("secondBrain.calendar.google.pendingWrites", {
-                                  count: googleConnection()?.pendingWrites ?? 0,
+                                  count: googleConnection.latest?.pendingWrites ?? 0,
                                 })}
                               </p>
                             </Show>
-                            <Show when={(googleConnection()?.failedWrites ?? 0) > 0}>
+                            <Show when={(googleConnection.latest?.failedWrites ?? 0) > 0}>
                               <p role="alert" class={`${noteClass} !text-v2-text-text-critical`}>
                                 {language.t("secondBrain.calendar.google.failedWrites", {
-                                  count: googleConnection()?.failedWrites ?? 0,
+                                  count: googleConnection.latest?.failedWrites ?? 0,
                                 })}
                               </p>
                             </Show>
@@ -1181,7 +1185,11 @@ export default function CalendarPage() {
                       />
                     </label>
                     <Show
-                      when={!state.draft.id && googleConnection()?.connected && googleConnection()?.access === "write"}
+                      when={
+                        !state.draft.id &&
+                        googleConnection.latest?.connected &&
+                        googleConnection.latest?.access === "write"
+                      }
                     >
                       <label class={fieldClass} for="calendar-event-source">
                         {language.t("secondBrain.calendar.google.destination")}
@@ -1213,12 +1221,12 @@ export default function CalendarPage() {
                         id="calendar-event-project"
                         aria-label={language.t("secondBrain.calendar.project")}
                         class="!h-8 !w-full"
-                        options={["__none__", ...(brainProjects() ?? []).map((project) => project.id)]}
+                        options={["__none__", ...(brainProjects.latest ?? []).map((project) => project.id)]}
                         current={state.draft.projectId || "__none__"}
                         label={(projectID) =>
                           projectID === "__none__"
                             ? language.t("secondBrain.calendar.noProject")
-                            : (brainProjects()?.find((project) => project.id === projectID)?.name ?? projectID)
+                            : (brainProjects.latest?.find((project) => project.id === projectID)?.name ?? projectID)
                         }
                         onSelect={(projectID) =>
                           setState("draft", "projectId", projectID === "__none__" ? "" : (projectID ?? ""))

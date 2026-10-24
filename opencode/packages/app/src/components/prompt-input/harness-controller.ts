@@ -1,10 +1,10 @@
-import { createEffect, createMemo, createResource, createSignal } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
 import { Harness } from "@opencode-ai/schema/harness"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSettings, withVisibleModels } from "@/context/settings"
-import { fallbackHarnesses, listHarnessesForServer, refreshHarnesses } from "@/utils/server"
+import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
 import type { PromptInputHarnessController } from "./harness-controls"
 
 type HarnessSelection = {
@@ -28,6 +28,9 @@ export const defaultModel = (instance: Harness.Instance) => {
     : undefined
 }
 
+// Background checks run at most this often; each can start every harness CLI on the server.
+const REVALIDATE_MS = 60_000
+
 // Bumped by Settings after a harness is added, toggled, or removed, so open prompts refetch the list.
 const [settingsVersion, setSettingsVersion] = createSignal(0)
 export const harnessSettingsChanged = () => setSettingsVersion((value) => value + 1)
@@ -38,28 +41,28 @@ export function createPromptHarnessController(selection: HarnessSelection) {
   const serverSDK = useServerSDK()
   const settings = useSettings()
   const server = () => ({ server: serverSDK().server.http, fetch: platform.fetch })
-  const [loaded, { refetch, mutate }] = createResource(
+  const [loaded, { refetch }] = createResource(
     () => ({ directory: sdk().directory, version: settingsVersion() }),
     ({ directory }) => listHarnessesForServer(server(), directory).catch(fallbackHarnesses),
   )
-  // Models hidden in Settings never reach the picker or the default-model choice.
+  // `latest` keeps the last list during a refetch; reading `loaded()` would suspend the page's
+  // <Suspense> boundary and blank the screen on every refresh. Models hidden in Settings never
+  // reach the picker or the default-model choice.
   const instances = createMemo(() =>
-    loaded()?.map((item) =>
+    loaded.latest?.map((item) =>
       withVisibleModels(item, settings.harnesses.hiddenModels(item.id), settings.harnesses.hiddenProviders(item.id)),
     ),
   )
-  const [refreshing, setRefreshing] = createSignal(false)
-  // The refresh button asks the harness again instead of reading the server's recent check.
-  const refresh = () => {
-    if (refreshing()) return
-    setRefreshing(true)
-    return refreshHarnesses(server(), sdk().directory, selection.current())
-      .then(
-        (next) => mutate(next),
-        () => refetch(),
-      )
-      .finally(() => setRefreshing(false))
+  // Stale-while-revalidate: the list refreshes when the window regains focus or the picker opens,
+  // instead of behind a button. The server reuses recent checks, so most of these are cheap.
+  let checked = Date.now()
+  const revalidate = () => {
+    if (loaded.loading || Date.now() - checked < REVALIDATE_MS) return
+    checked = Date.now()
+    void refetch()
   }
+  window.addEventListener("focus", revalidate)
+  onCleanup(() => window.removeEventListener("focus", revalidate))
   const instance = createMemo(() => instances()?.find((item) => item.id === selection.current()))
 
   createEffect(() => {
@@ -90,14 +93,15 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     instances,
     instance,
     driver: () => instance()?.driver,
-    loading: () => loaded.loading || refreshing(),
+    // Only the first load blocks the picker; a stale list stays usable while it refreshes.
+    loading: () => loaded.loading && !loaded.latest,
     disabled: selection.disabled,
-    refresh,
+    revalidate,
     current: selection.current,
     select(instanceID: Harness.InstanceID) {
       const next = instances()?.find((item) => item.id === instanceID)
+      // No refetch here: listing probes every harness CLI once the server's cache expires.
       selection.set(instanceID, next ? defaultModel(next) : undefined)
-      void refetch()
     },
     model: selection.model,
   } satisfies PromptInputHarnessController & {

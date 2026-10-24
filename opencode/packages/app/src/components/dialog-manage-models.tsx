@@ -97,7 +97,7 @@ export const DialogManageModelsV2: Component = () => {
         <div data-slot="manage-models-scroll" class="relative min-h-0 flex-1">
           <div class="settings-v2-panel settings-v2-models h-full px-4 pt-4 pb-4">
             <Show
-              when={!list.grouped.loading}
+              when={!list.grouped.loading || list.grouped.state === "refreshing"}
               fallback={
                 <div class="settings-v2-models-status">
                   {language.t("common.loading")}

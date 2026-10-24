@@ -2,8 +2,6 @@ import { Show, createMemo } from "solid-js"
 import { Harness } from "@opencode-ai/schema/harness"
 import { PromptInputV2Select } from "@opencode-ai/session-ui/v2/prompt-input"
 import { Icon } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 
@@ -11,7 +9,8 @@ export type PromptInputHarnessController = {
   instances: () => ReadonlyArray<Harness.Instance> | undefined
   loading: () => boolean
   disabled?: () => boolean
-  refresh: () => unknown
+  /** Checks the harnesses again in the background; the shown list stays until the answer arrives. */
+  revalidate?: () => void
   current: () => Harness.InstanceID
   select: (instanceID: Harness.InstanceID) => void
   model: {
@@ -46,9 +45,11 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
   const instance = createMemo(() =>
     props.controller.instances()?.find((item) => item.id === props.controller.current()),
   )
+  // Falls back to the model the picker shows when none is saved yet, so effort and tier stay selectable.
   const model = createMemo(() => {
     const selection = props.controller.model.current()
-    return instance()?.models.find((item) => item.id === selection?.id)
+    const models = instance()?.models
+    return selection ? models?.find((item) => item.id === selection.id) : models?.[0]
   })
   const selectModel = (id: string) => {
     const selected = instance()?.models.find((item) => item.id === id)
@@ -79,18 +80,19 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
         currentIcon={<Icon name="status" />}
         class={SELECT_CLASS}
         disabled={props.controller.loading() || props.controller.disabled?.() || !props.controller.instances()}
+        onOpenChange={(open) => open && props.controller.revalidate?.()}
         onSelect={(id) => props.controller.select(Harness.InstanceID.make(id))}
       />
-      <Show when={instance()?.driver !== Harness.OpenCodeDriver && instance()} keyed>
+      <Show when={instance()?.driver !== Harness.OpenCodeDriver && instance()}>
         {(item) => (
           <Show
-            when={item.models.length > 0}
+            when={item().models.length > 0}
             fallback={<span class="px-2 text-[12px] text-v2-text-text-faint">{language.t("harness.models.none")}</span>}
           >
             <PromptInputV2Select
               title={language.t("harness.model")}
-              options={item.models.map((option) => ({ id: option.id, label: option.name }))}
-              current={props.controller.model.current()?.id ?? item.models[0]?.id ?? ""}
+              options={item().models.map((option) => ({ id: option.id, label: option.name }))}
+              current={props.controller.model.current()?.id ?? item().models[0]?.id ?? ""}
               control="harness-model"
               currentIcon={<Icon name="monitor" />}
               class={SELECT_CLASS}
@@ -101,15 +103,15 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
           </Show>
         )}
       </Show>
-      <Show when={model()} keyed>
+      <Show when={model()}>
         {(selected) => (
           <>
-            <Show when={selected.reasoningEfforts.length > 0}>
+            <Show when={selected().reasoningEfforts.length > 0}>
               <PromptInputV2Select
                 title={language.t("harness.effort")}
                 options={[
                   { id: "", label: language.t("harness.default") },
-                  ...selected.reasoningEfforts.map((effort) => ({ id: effort, label: effort })),
+                  ...selected().reasoningEfforts.map((effort) => ({ id: effort, label: effort })),
                 ]}
                 current={props.controller.model.current()?.reasoningEffort ?? ""}
                 control="harness-effort"
@@ -118,18 +120,17 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
                 capitalize={false}
                 disabled={props.controller.disabled?.()}
                 onSelect={(reasoningEffort) => {
-                  const current = props.controller.model.current()
-                  if (!current) return
+                  const current = props.controller.model.current() ?? { id: selected().id }
                   props.controller.model.set({ ...current, reasoningEffort: reasoningEffort || undefined })
                 }}
               />
             </Show>
-            <Show when={selected.serviceTiers.length > 0}>
+            <Show when={selected().serviceTiers.length > 0}>
               <PromptInputV2Select
                 title={language.t("harness.serviceTier")}
                 options={[
                   { id: "", label: language.t("harness.default") },
-                  ...selected.serviceTiers.map((tier) => ({ id: tier.id, label: tier.name })),
+                  ...selected().serviceTiers.map((tier) => ({ id: tier.id, label: tier.name })),
                 ]}
                 current={props.controller.model.current()?.serviceTier ?? ""}
                 control="harness-service-tier"
@@ -138,8 +139,7 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
                 capitalize={false}
                 disabled={props.controller.disabled?.()}
                 onSelect={(serviceTier) => {
-                  const current = props.controller.model.current()
-                  if (!current) return
+                  const current = props.controller.model.current() ?? { id: selected().id }
                   props.controller.model.set({ ...current, serviceTier: serviceTier || undefined })
                 }}
               />
@@ -147,20 +147,6 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
           </>
         )}
       </Show>
-      <TooltipV2
-        placement="top"
-        value={`${language.t("harness.refreshModels")}${instance()?.version ? ` (${instance()!.version})` : ""}`}
-      >
-        <IconButtonV2
-          data-action="harness-refresh"
-          variant="ghost-muted"
-          size="normal"
-          icon={<Icon name="reset" />}
-          aria-label={language.t("harness.refreshModels")}
-          disabled={props.controller.loading() || props.controller.disabled?.()}
-          onClick={() => void props.controller.refresh()}
-        />
-      </TooltipV2>
     </>
   )
 }
