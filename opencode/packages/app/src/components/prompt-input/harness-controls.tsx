@@ -46,9 +46,11 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
   const instance = createMemo(() =>
     props.controller.instances()?.find((item) => item.id === props.controller.current()),
   )
+  // Falls back to the model the picker shows when none is saved yet, so effort and tier stay selectable.
   const model = createMemo(() => {
     const selection = props.controller.model.current()
-    return instance()?.models.find((item) => item.id === selection?.id)
+    const models = instance()?.models
+    return selection ? models?.find((item) => item.id === selection.id) : models?.[0]
   })
   const selectModel = (id: string) => {
     const selected = instance()?.models.find((item) => item.id === id)
@@ -81,16 +83,16 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
         disabled={props.controller.loading() || props.controller.disabled?.() || !props.controller.instances()}
         onSelect={(id) => props.controller.select(Harness.InstanceID.make(id))}
       />
-      <Show when={instance()?.driver !== Harness.OpenCodeDriver && instance()} keyed>
+      <Show when={instance()?.driver !== Harness.OpenCodeDriver && instance()}>
         {(item) => (
           <Show
-            when={item.models.length > 0}
+            when={item().models.length > 0}
             fallback={<span class="px-2 text-[12px] text-v2-text-text-faint">{language.t("harness.models.none")}</span>}
           >
             <PromptInputV2Select
               title={language.t("harness.model")}
-              options={item.models.map((option) => ({ id: option.id, label: option.name }))}
-              current={props.controller.model.current()?.id ?? item.models[0]?.id ?? ""}
+              options={item().models.map((option) => ({ id: option.id, label: option.name }))}
+              current={props.controller.model.current()?.id ?? item().models[0]?.id ?? ""}
               control="harness-model"
               currentIcon={<Icon name="monitor" />}
               class={SELECT_CLASS}
@@ -101,15 +103,15 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
           </Show>
         )}
       </Show>
-      <Show when={model()} keyed>
+      <Show when={model()}>
         {(selected) => (
           <>
-            <Show when={selected.reasoningEfforts.length > 0}>
+            <Show when={selected().reasoningEfforts.length > 0}>
               <PromptInputV2Select
                 title={language.t("harness.effort")}
                 options={[
                   { id: "", label: language.t("harness.default") },
-                  ...selected.reasoningEfforts.map((effort) => ({ id: effort, label: effort })),
+                  ...selected().reasoningEfforts.map((effort) => ({ id: effort, label: effort })),
                 ]}
                 current={props.controller.model.current()?.reasoningEffort ?? ""}
                 control="harness-effort"
@@ -118,18 +120,17 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
                 capitalize={false}
                 disabled={props.controller.disabled?.()}
                 onSelect={(reasoningEffort) => {
-                  const current = props.controller.model.current()
-                  if (!current) return
+                  const current = props.controller.model.current() ?? { id: selected().id }
                   props.controller.model.set({ ...current, reasoningEffort: reasoningEffort || undefined })
                 }}
               />
             </Show>
-            <Show when={selected.serviceTiers.length > 0}>
+            <Show when={selected().serviceTiers.length > 0}>
               <PromptInputV2Select
                 title={language.t("harness.serviceTier")}
                 options={[
                   { id: "", label: language.t("harness.default") },
-                  ...selected.serviceTiers.map((tier) => ({ id: tier.id, label: tier.name })),
+                  ...selected().serviceTiers.map((tier) => ({ id: tier.id, label: tier.name })),
                 ]}
                 current={props.controller.model.current()?.serviceTier ?? ""}
                 control="harness-service-tier"
@@ -138,8 +139,7 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
                 capitalize={false}
                 disabled={props.controller.disabled?.()}
                 onSelect={(serviceTier) => {
-                  const current = props.controller.model.current()
-                  if (!current) return
+                  const current = props.controller.model.current() ?? { id: selected().id }
                   props.controller.model.set({ ...current, serviceTier: serviceTier || undefined })
                 }}
               />

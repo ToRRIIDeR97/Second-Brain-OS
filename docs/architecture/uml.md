@@ -166,6 +166,10 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 `turn/interrupt`) instead of ACP. Its approvals come from
 `item/*/requestApproval` requests.
 
+Before `session/prompt` (not drawn in the diagram), the ACP driver switches the
+model and then the reasoning effort (`thought_level` option) when they differ
+from the session's, through `session/set_model` or `session/set_config_option`.
+
 Handoff text in the first prompt of a runtime (not drawn in the diagram):
 
 1. Read `harnessContinuations[instanceID]`. If there is no entry, open a new

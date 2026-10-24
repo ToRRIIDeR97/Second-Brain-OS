@@ -131,21 +131,21 @@ export default function NotesPage() {
     ([directory, path]) => readNote(client(directory), path),
   )
   const visibleNotes = createMemo(() => {
-    return (query() ? (matches() ?? []) : (notes() ?? [])).filter(
+    return (query() ? (matches.latest ?? []) : (notes.latest ?? [])).filter(
       (note) => !state.filterProjectId || note.projectIds.includes(state.filterProjectId),
     )
   })
   const currentKeys = createMemo(() => noteKeys({ path: state.path, title: state.title }))
   const backlinks = createMemo(() =>
-    (notes() ?? []).filter(
+    (notes.latest ?? []).filter(
       (note) => note.path !== state.path && note.links.some((link) => currentKeys().has(normalizeWikiTarget(link))),
     ),
   )
   const outgoing = createMemo(() => {
     const targets = new Set(
-      (notes() ?? []).find((note) => note.path === state.path)?.links.map(normalizeWikiTarget) ?? [],
+      (notes.latest ?? []).find((note) => note.path === state.path)?.links.map(normalizeWikiTarget) ?? [],
     )
-    return (notes() ?? []).filter(
+    return (notes.latest ?? []).filter(
       (note) => note.path !== state.path && [...noteKeys(note)].some((key) => targets.has(key)),
     )
   })
@@ -356,16 +356,16 @@ export default function NotesPage() {
                     onInput={(event) => setState("search", event.currentTarget.value)}
                   />
                 </label>
-                <Show when={(projects()?.length ?? 0) > 0}>
+                <Show when={(projects.latest?.length ?? 0) > 0}>
                   <SelectV2
                     class="!h-8 !w-full !bg-transparent !shadow-none hover:!bg-v2-overlay-simple-overlay-hover"
                     aria-label={language.t("secondBrain.notes.filterProject")}
-                    options={["__all__", ...(projects() ?? []).map((project) => project.id)]}
+                    options={["__all__", ...(projects.latest ?? []).map((project) => project.id)]}
                     current={state.filterProjectId || "__all__"}
                     label={(projectID) =>
                       projectID === "__all__"
                         ? language.t("secondBrain.notes.allProjects")
-                        : (projects()?.find((project) => project.id === projectID)?.name ?? projectID)
+                        : (projects.latest?.find((project) => project.id === projectID)?.name ?? projectID)
                     }
                     onSelect={(projectID) =>
                       setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))
@@ -469,7 +469,7 @@ export default function NotesPage() {
                   <span
                     class="hidden shrink-0 items-center gap-1.5 px-1 text-[11px] text-v2-text-text-faint sm:flex"
                     title={(() => {
-                      const updatedAt = (notes() ?? []).find((note) => note.path === state.path)?.updatedAt
+                      const updatedAt = (notes.latest ?? []).find((note) => note.path === state.path)?.updatedAt
                       return updatedAt ? new Date(updatedAt).toLocaleString() : undefined
                     })()}
                   >
@@ -496,13 +496,13 @@ export default function NotesPage() {
                 <div class="min-h-0 flex-1 overflow-y-auto">
                   <div class="mx-auto flex min-h-full w-full max-w-[860px] flex-col gap-3 px-4 pb-6 pt-1 sm:px-6">
                     <div class="flex min-w-0 flex-wrap items-center gap-1.5 text-[12px]">
-                      <Show when={(projects()?.length ?? 0) > 0}>
+                      <Show when={(projects.latest?.length ?? 0) > 0}>
                         <div
                           class="flex min-w-0 flex-wrap items-center gap-1"
                           role="group"
                           aria-label={language.t("secondBrain.notes.projects")}
                         >
-                          <For each={projects()}>
+                          <For each={projects.latest}>
                             {(project) => (
                               <label class="flex cursor-pointer items-center rounded-full px-2.5 py-1 text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover has-[:checked]:bg-v2-background-bg-accent-container has-[:checked]:text-v2-text-text-on-accent-container has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-v2-border-border-focus motion-reduce:transition-none">
                                 <input
@@ -572,7 +572,7 @@ export default function NotesPage() {
                             `/notes?note=${encodeURIComponent(path)}&project=${encodeURIComponent(state.filterProjectId)}`,
                           )
                         }
-                        previewText={previewNoteLinks(state.body, notes() ?? [])}
+                        previewText={previewNoteLinks(state.body, notes.latest ?? [])}
                         loading={loadedNote.loading}
                         onChange={(value) => setState("body", value)}
                         onSave={save}

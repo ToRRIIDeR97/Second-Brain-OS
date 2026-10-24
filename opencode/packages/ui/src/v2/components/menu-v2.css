@@ -31,6 +31,14 @@
   }
 }
 
+/* Opt-in for long data-driven lists (harness models): scroll inside the menu instead of running
+   off-screen. Menus that scroll an inner element, like the model selector, leave it off. */
+[data-component="menu-v2-content"][data-scrollable] {
+  max-height: min(24rem, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 [data-component="menu-v2-item"] {
   --menu-v2-fg: var(--v2-text-text-base);
   --menu-v2-fg-muted: var(--v2-text-text-faint);

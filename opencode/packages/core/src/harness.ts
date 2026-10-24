@@ -425,7 +425,7 @@ const layer = Layer.effect(
             runtime.handoff = "none"
             return onTurnSuccess(
               runtime.session
-                .turn({ text, model: input.model?.id })
+                .turn({ text, model: input.model?.id, reasoningEffort: input.model?.reasoningEffort })
                 .pipe(
                   Stream.catch((error) =>
                     Stream.unwrap(discardAcpRuntime(instance, input, runtime).pipe(Effect.as(Stream.fail(error)))),

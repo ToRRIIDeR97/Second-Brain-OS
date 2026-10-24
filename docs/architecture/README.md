@@ -295,7 +295,11 @@ the agent uses its own tools and asks permission through
 receive no Second Brain system prompt. An agent reports its models either in
 the legacy `models` field or as a `configOptions` select of category `model`.
 The driver switches models with `session/set_model` or
-`session/set_config_option` to match.
+`session/set_config_option` to match. A `configOptions` select of category
+`thought_level` (OpenCode's `effort`) becomes the active model's reasoning
+efforts; before each prompt the driver sends the chosen effort, or the agent's
+`default` level when none is chosen, with `session/set_config_option`, and
+re-reads the levels from each response because a model switch can change them.
 
 `AcpHarness.parseAcpNotification` turns `session/update` notifications into
 stream events. A tool call is published at `in_progress` (or when it finishes),

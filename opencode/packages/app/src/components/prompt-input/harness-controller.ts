@@ -42,9 +42,11 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     () => ({ directory: sdk().directory, version: settingsVersion() }),
     ({ directory }) => listHarnessesForServer(server(), directory).catch(fallbackHarnesses),
   )
-  // Models hidden in Settings never reach the picker or the default-model choice.
+  // `latest` keeps the last list during a refetch; reading `loaded()` would suspend the page's
+  // <Suspense> boundary and blank the screen on every refresh. Models hidden in Settings never
+  // reach the picker or the default-model choice.
   const instances = createMemo(() =>
-    loaded()?.map((item) =>
+    loaded.latest?.map((item) =>
       withVisibleModels(item, settings.harnesses.hiddenModels(item.id), settings.harnesses.hiddenProviders(item.id)),
     ),
   )
@@ -90,14 +92,15 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     instances,
     instance,
     driver: () => instance()?.driver,
-    loading: () => loaded.loading || refreshing(),
+    // Only the first load blocks the picker; a stale list stays usable while it refreshes.
+    loading: () => (loaded.loading && !loaded.latest) || refreshing(),
     disabled: selection.disabled,
     refresh,
     current: selection.current,
     select(instanceID: Harness.InstanceID) {
       const next = instances()?.find((item) => item.id === instanceID)
+      // No refetch here: listing probes every harness CLI once the server's cache expires.
       selection.set(instanceID, next ? defaultModel(next) : undefined)
-      void refetch()
     },
     model: selection.model,
   } satisfies PromptInputHarnessController & {

@@ -52,7 +52,11 @@ export interface Session {
   readonly resumed: boolean
   readonly agent: { readonly name?: string; readonly version?: string }
   readonly models: ReadonlyArray<Harness.Model>
-  readonly turn: (input: { readonly text: string; readonly model?: string }) => Stream.Stream<LLMEvent, LLMError>
+  readonly turn: (input: {
+    readonly text: string
+    readonly model?: string
+    readonly reasoningEffort?: string
+  }) => Stream.Stream<LLMEvent, LLMError>
 }
 
 type Process = Pick<AppProcess.Interface, "spawn">
@@ -249,7 +253,15 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   yield* Queue.clear(items)
   const session = loaded ?? (yield* createSession(client, params))
   const selector = sessionModels(session.response)
-  const state: { currentModel: string | undefined; sessionCost?: number } = { currentModel: selector.current }
+  const state: { currentModel: string | undefined; effort?: EffortOption; sessionCost?: number } = {
+    currentModel: selector.current,
+    effort: selector.effort,
+  }
+  // set_config_option answers with every option, and a model switch can change or drop the levels.
+  const readEffort = (response: unknown) =>
+    Effect.sync(() => {
+      if (isRecord(response) && Array.isArray(response.configOptions)) state.effort = sessionModels(response).effort
+    })
 
   const setModel = (model: string | undefined) =>
     !model || model === state.currentModel
@@ -262,18 +274,37 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
             })
           : client.request("session/set_model", { sessionId: session.sessionId, modelId: model })
         ).pipe(
-          Effect.tap(() =>
+          Effect.tap((response) =>
             Effect.sync(() => {
               state.currentModel = model
-            }),
+            }).pipe(Effect.andThen(readEffort(response))),
           ),
           Effect.ignore,
         )
 
-  const turn = (turnInput: { readonly text: string; readonly model?: string }) =>
+  // No effort chosen means the agent's own default, when it offers one.
+  const setEffort = (effort: string | undefined) =>
+    Effect.suspend(() => {
+      const option = state.effort
+      const value = effort ?? (option?.values.includes(EFFORT_DEFAULT) ? EFFORT_DEFAULT : undefined)
+      if (!option || !value || value === option.current || !option.values.includes(value)) return Effect.void
+      return client
+        .request("session/set_config_option", { sessionId: session.sessionId, configId: option.configId, value })
+        .pipe(
+          Effect.tap((response) =>
+            Effect.sync(() => {
+              state.effort = { ...option, current: value }
+            }).pipe(Effect.andThen(readEffort(response))),
+          ),
+          Effect.ignore,
+        )
+    })
+
+  const turn = (turnInput: { readonly text: string; readonly model?: string; readonly reasoningEffort?: string }) =>
     Stream.unwrap(
       Effect.gen(function* () {
         yield* setModel(turnInput.model)
+        yield* setEffort(turnInput.reasoningEffort)
         yield* Queue.clear(items)
         const parser = acpState(state.sessionCost)
         yield* client
@@ -839,37 +870,73 @@ export function sessionModels(response: unknown): {
   readonly models: ReadonlyArray<Harness.Model>
   readonly current?: string
   readonly configId?: string
+  readonly effort?: EffortOption
 } {
   const value = isRecord(response) ? response : {}
+  const configOptions = Array.isArray(value.configOptions) ? value.configOptions.filter(isRecord) : []
+  const effort = effortOption(configOptions)
+  // Agents report levels only for the active model, so only that model offers them.
+  const entry = (id: string | undefined, name: unknown, description: unknown, current: string | undefined) =>
+    modelEntry(id, name, description, current, id === current ? (effort?.values ?? []) : [])
   if (isRecord(value.models)) {
     const current = string(value.models.currentModelId)
     const available = Array.isArray(value.models.availableModels) ? value.models.availableModels.filter(isRecord) : []
     return {
       current,
-      models: available.flatMap((model) => modelEntry(string(model.modelId), model.name, model.description, current)),
+      effort,
+      models: available.flatMap((model) => entry(string(model.modelId), model.name, model.description, current)),
     }
   }
-  const option = (Array.isArray(value.configOptions) ? value.configOptions.filter(isRecord) : []).find(
+  const option = configOptions.find(
     (item) => item.category === "model" && item.type === "select" && typeof item.id === "string",
   )
-  if (!option) return { models: [] }
+  if (!option) return { models: [], effort }
   const current = string(option.currentValue)
   const options = Array.isArray(option.options) ? option.options.filter(isRecord) : []
   return {
     current,
     configId: string(option.id),
-    models: options.flatMap((item) => modelEntry(string(item.value), item.name, item.description, current)),
+    effort,
+    models: options.flatMap((item) => entry(string(item.value), item.name, item.description, current)),
   }
 }
 
-function modelEntry(id: string | undefined, name: unknown, description: unknown, current: string | undefined) {
+/** The agent's reasoning-level select (ACP category `thought_level`), if it reports one. */
+export type EffortOption = {
+  readonly configId: string
+  readonly current?: string
+  readonly values: ReadonlyArray<string>
+}
+
+// The level OpenCode and other agents use for "no override"; the app shows its own Default entry instead.
+const EFFORT_DEFAULT = "default"
+
+function effortOption(configOptions: ReadonlyArray<Record<string, unknown>>): EffortOption | undefined {
+  const option = configOptions.find(
+    (item) => item.category === "thought_level" && item.type === "select" && typeof item.id === "string",
+  )
+  if (!option) return
+  const values = (Array.isArray(option.options) ? option.options.filter(isRecord) : []).flatMap((item) => {
+    const value = string(item.value)
+    return value ? [value] : []
+  })
+  return { configId: option.id as string, current: string(option.currentValue), values }
+}
+
+function modelEntry(
+  id: string | undefined,
+  name: unknown,
+  description: unknown,
+  current: string | undefined,
+  efforts: ReadonlyArray<string>,
+) {
   if (!id) return []
   return [
     Harness.Model.make({
       id,
       name: string(name) ?? id,
       description: string(description),
-      reasoningEfforts: [],
+      reasoningEfforts: efforts.filter((effort) => effort !== EFFORT_DEFAULT),
       serviceTiers: [],
       isDefault: id === current,
     }),

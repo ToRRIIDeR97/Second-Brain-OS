@@ -623,7 +623,7 @@ export function PromptInputV2Select(props: {
           </span>
         </MenuV2.Trigger>
         <MenuV2.Portal>
-          <MenuV2.Content>
+          <MenuV2.Content data-scrollable>
             <For each={sections()}>
               {(section, index) => (
                 <>

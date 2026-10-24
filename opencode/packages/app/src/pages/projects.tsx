@@ -129,13 +129,13 @@ export default function ProjectsPage() {
     ),
   )
 
-  const selected = createMemo(() => (projects() ?? []).find((project) => project.id === state.selectedId))
+  const selected = createMemo(() => (projects.latest ?? []).find((project) => project.id === state.selectedId))
   const selectedLocation = createMemo(() => {
     const workspaceId = selected()?.location?.workspaceId
     if (!workspaceId) return
     return linkableLocations().find((location) => location.id === workspaceId)
   })
-  const filtered = createMemo(() => (projects() ?? []).filter((project) => project.status === state.filter))
+  const filtered = createMemo(() => (projects.latest ?? []).filter((project) => project.status === state.filter))
   const overviewDirty = createMemo(() => {
     const project = selected()
     if (!project) return false
@@ -181,7 +181,7 @@ export default function ProjectsPage() {
   const replace = (project: ProjectRecord) => {
     void invalidateProjectThreads(queryClient, server.key)
     projectActions.mutate(
-      [...(projects() ?? []).filter((item) => item.id !== project.id), project].sort((left, right) =>
+      [...(projects.latest ?? []).filter((item) => item.id !== project.id), project].sort((left, right) =>
         right.updatedAt.localeCompare(left.updatedAt),
       ),
     )
@@ -432,7 +432,7 @@ export default function ProjectsPage() {
                 <Show when={state.view === "plan"}>
                   <ProjectPlan
                     project={project}
-                    calendar={calendar()}
+                    calendar={calendar.latest}
                     loading={calendar.loading}
                     openCalendar={openCalendar}
                     language={language}
@@ -465,7 +465,7 @@ export default function ProjectsPage() {
                 <Show when={state.view === "map"}>
                   <ProjectMap
                     project={project}
-                    notes={notes() ?? []}
+                    notes={notes.latest ?? []}
                     loading={notes.loading}
                     openNotes={openNotes}
                     language={language}
