@@ -246,6 +246,7 @@ export function SessionSidePanel(props: {
     return active !== "review" && active !== "context" && active !== "empty" && !agentTabPartID(active)
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
+  const reviewToggleKeybind = createMemo(() => command.keybindParts("review.toggle"))
   const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
@@ -366,6 +367,31 @@ export function SessionSidePanel(props: {
     </div>
   )
 
+  const hideButton = () => (
+    <TooltipV2
+      value={
+        <>
+          {language.t("secondBrain.sidePanel.hide")}
+          <Show when={reviewToggleKeybind().length > 0}>
+            <KeybindV2 keys={reviewToggleKeybind()} variant="neutral" />
+          </Show>
+        </>
+      }
+      placement="bottom"
+      class="flex shrink-0 items-center"
+    >
+      <IconButtonV2
+        icon={<Icon name="chevron-right" />}
+        variant="ghost-muted"
+        size="large"
+        onClick={() => view().reviewPanel.close()}
+        aria-label={language.t("secondBrain.sidePanel.hide")}
+        aria-controls="review-panel"
+        aria-expanded={true}
+      />
+    </TooltipV2>
+  )
+
   const selectToOpen = () => (
     <Show when={activeTab() === "empty"}>
       <TabsV2.Content value="empty" class="flex min-h-0 flex-col !overflow-hidden contain-strict">
@@ -483,6 +509,7 @@ export function SessionSidePanel(props: {
                                 })
                               })}
                             </TabsV2.List>
+                            {hideButton()}
                           </div>
 
                           {reviewContent()}
@@ -593,6 +620,7 @@ export function SessionSidePanel(props: {
                           >
                             <OpenInAppV2 directory={projectDirectory} />
                           </div>
+                          {hideButton()}
                         </div>
 
                         {reviewContent()}

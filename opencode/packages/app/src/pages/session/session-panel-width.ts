@@ -1,19 +1,24 @@
-// The review pane has no width of its own: it takes whatever the chat panel
-// leaves behind. Instead of capping the chat panel at a fraction of the window
-// (which forces the review pane to grow with the monitor), reserve a fixed
-// minimum for the review pane and let the chat panel take everything else.
+// The side panel (Review, Session, files, terminal) owns its width and the chat
+// panel takes everything else, so a large monitor widens the chat instead of the
+// panel. Dragging the panel's edge below the collapse threshold hides it.
 export const SESSION_PANEL_WIDTH_MIN = 450
-export const REVIEW_PANE_WIDTH_MIN = 480
-export const REVIEW_PANE_WIDTH_MIN_SPLIT = 800
+export const SIDE_PANEL_WIDTH_MIN = 320
+export const SIDE_PANEL_COLLAPSE_THRESHOLD = 240
+// Split diffs need this much room; a narrower panel renders unified diffs.
+export const SIDE_PANEL_WIDTH_SPLIT = 800
 
-export function sessionPanelWidthMax(input: { available: number; split: boolean }) {
-  const pane = input.split ? REVIEW_PANE_WIDTH_MIN_SPLIT : REVIEW_PANE_WIDTH_MIN
-  return Math.max(SESSION_PANEL_WIDTH_MIN, input.available - pane)
+export function sidePanelWidthMax(available: number) {
+  return Math.max(SIDE_PANEL_WIDTH_MIN, available - SESSION_PANEL_WIDTH_MIN)
 }
 
-// `available` is undefined until the layout row is first measured; render the
-// stored width untouched until then to avoid a first-frame snap.
-export function clampSessionPanelWidth(input: { width: number; available: number | undefined; split: boolean }) {
-  if (input.available === undefined) return input.width
-  return Math.min(input.width, sessionPanelWidthMax({ available: input.available, split: input.split }))
+// `available` is undefined until the layout row is first measured; skip the
+// upper bound until then to avoid a first-frame snap.
+export function clampSidePanelWidth(input: { width: number; available: number | undefined }) {
+  const width = Math.max(SIDE_PANEL_WIDTH_MIN, input.width)
+  if (input.available === undefined) return width
+  return Math.min(width, sidePanelWidthMax(input.available))
+}
+
+export function reviewDiffStyle(input: { preferred: "unified" | "split"; width: number }) {
+  return input.preferred === "split" && input.width >= SIDE_PANEL_WIDTH_SPLIT ? "split" : "unified"
 }
