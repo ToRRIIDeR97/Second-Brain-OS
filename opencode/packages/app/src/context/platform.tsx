@@ -30,6 +30,8 @@ export type GoogleCalendarConnection = {
   errorCode?: string
   pendingWrites: number
   failedWrites: number
+  /** Google expired or revoked the grant; `reconnect` signs in again keeping queued writes and links. */
+  needsReconnect?: boolean
 }
 
 export type GoogleCalendarProviderEvent = {
@@ -88,6 +90,12 @@ export type GoogleCalendarPlatform = {
     clientId: string
     clientSecret: string
     access: "read" | "write"
+    /** Electron main process supplies this; renderer values are ignored. */
+    windowId?: number
+  }): Promise<GoogleCalendarConnection>
+  /** Sign in again with the stored client ID and secret. */
+  reconnect(input: {
+    access?: "read" | "write"
     /** Electron main process supplies this; renderer values are ignored. */
     windowId?: number
   }): Promise<GoogleCalendarConnection>
