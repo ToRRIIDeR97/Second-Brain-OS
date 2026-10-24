@@ -63,6 +63,17 @@ const getBase = (appId: string): Configuration => ({
     desktopName: `${appId}.desktop`,
   },
   files: ["out/**/*", "!out/**/*.map", "resources/**/*", "!resources/opencode-cli*"],
+  // Packaged builds cannot be turned into a general Node runtime or debugger by environment
+  // variables or flags, and only load the integrity-checked app.asar. The sidecar runs through
+  // utilityProcess and nothing spawns the app binary with ELECTRON_RUN_AS_NODE, so runAsNode is off.
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+    grantFileProtocolExtraPrivileges: false,
+  },
   extraResources: [
     ...(channel === "dev"
       ? [

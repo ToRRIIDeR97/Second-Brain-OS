@@ -4,6 +4,7 @@ import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
+import { stat } from "node:fs/promises"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -16,6 +17,7 @@ import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
 import { redactURL, resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { localFileAction } from "./local-file-policy"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -31,6 +33,23 @@ const oc2Background = {
 }
 const documentPolicyHeader = "Document-Policy"
 const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
+// Packaged renderer only (the dev server keeps Vite's inline HMR). Scripts come from the app
+// bundle; the terminal needs WebAssembly. Images, audio and fonts load only from the bundle or
+// data/blob URLs, so Markdown from a note, a model or a provider cannot beacon to a remote host.
+// connect-src stays open: the renderer talks to the local server and to configured remote servers.
+const rendererContentSecurityPolicy = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "worker-src 'self' blob:",
+  "connect-src 'self' http: https: ws: wss: data: blob:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join("; ")
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -240,9 +259,23 @@ export function openLocalFileURL(value: string) {
     writeLog("window", "blocked local file target", { url: redactURL(value) }, "warn")
     return
   }
-  void shell.openPath(path).then((error) => {
-    if (error) writeLog("window", "failed to open local file", { path, error }, "error")
-  })
+  // A file:// link in terminal output or Markdown must not launch a program: executables
+  // (and anything we cannot stat) are revealed in the file manager instead of opened.
+  void stat(path)
+    .then((info) => localFileAction(path, { isDirectory: info.isDirectory(), mode: info.mode }))
+    .catch(() => "reveal" as const)
+    .then((action) => {
+      if (action === "reveal") return shell.showItemInFolder(path)
+      return shell.openPath(path).then((error) => {
+        if (error) writeLog("window", "failed to open local file", { path, error }, "error")
+      })
+    })
+}
+
+/** Packaged builds always load the bundled renderer; only development honours the Vite dev server. */
+function devRendererURL() {
+  if (app.isPackaged) return undefined
+  return process.env.ELECTRON_RENDERER_URL
 }
 
 function wireNavigationPolicy(win: BrowserWindow) {
@@ -324,7 +357,7 @@ export function registerRendererProtocol() {
 }
 
 function loadWindow(win: BrowserWindow, html: string) {
-  const devUrl = process.env.ELECTRON_RENDERER_URL
+  const devUrl = devRendererURL()
   if (devUrl) {
     const url = new URL(html, devUrl)
     win.loadURL(url.toString()).catch((error) => writeLog("window", "failed to load renderer", { error }, "error"))
@@ -464,6 +497,7 @@ function addDocumentPolicy(response: Response, file: string) {
   if (!file.toLowerCase().endsWith(".html")) return response
   const headers = new Headers(response.headers)
   headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
+  headers.set("Content-Security-Policy", rendererContentSecurityPolicy)
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
@@ -520,7 +554,7 @@ function isRendererUrl(value?: string, html = false) {
   const url = new URL(value)
   if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
-  const devUrl = process.env.ELECTRON_RENDERER_URL
+  const devUrl = devRendererURL()
   if (!devUrl || !URL.canParse(devUrl)) return false
   return url.origin === new URL(devUrl).origin
 }

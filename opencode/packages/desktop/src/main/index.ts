@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto"
-import { mkdirSync, rmSync } from "node:fs"
+import { mkdirSync, rmSync, statSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event, WebContents } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -14,7 +14,8 @@ import contextMenu from "electron-context-menu"
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL, DEEP_LINK_SCHEME } from "./constants"
-import { createDeepLinkQueue } from "./deep-links"
+import { createDeepLinkQueue, parseDeepLink, type DeepLink } from "./deep-links"
+import { redactURL } from "./external-url"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { createGoogleCalendarService } from "./google-calendar"
@@ -51,7 +52,7 @@ import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrateUserData } from "./user-data-migration"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
-import { setNativeTranslations } from "./native-translations"
+import { nativeT, setNativeTranslations } from "./native-translations"
 
 const APP_NAMES: Record<string, string> = {
   dev: "Tenon Workbench Dev",
@@ -90,6 +91,54 @@ function useEnvProxy() {
 function emitDeepLinks(urls: string[]) {
   const win = getLastFocusedWindow()
   deepLinks.emit(urls, win ? { id: win.webContents.id, send: (next) => sendDeepLinks(win, next) } : undefined)
+}
+
+// Any app or web page can open a tenon:// link, so each one is validated here and confirmed
+// by the user with the exact folder before the renderer sees it. Links are confirmed one at a time.
+let deepLinkConfirmations = Promise.resolve()
+function receiveDeepLinks(urls: string[], source: string) {
+  for (const value of urls) {
+    const link = parseDeepLink(value, (directory) => {
+      try {
+        return statSync(directory).isDirectory()
+      } catch {
+        return false
+      }
+    })
+    logger.log("deep link received", { source, url: redactURL(value), accepted: Boolean(link) })
+    if (!link) continue
+    deepLinkConfirmations = deepLinkConfirmations
+      .then(() => confirmDeepLink(link))
+      .then((confirmed) => {
+        if (confirmed) emitDeepLinks([link.url])
+      })
+      .catch((error) => logger.warn("deep link confirmation failed", error))
+  }
+}
+
+async function confirmDeepLink(link: DeepLink) {
+  // macOS can deliver open-url before the app is ready, when dialogs cannot open yet.
+  await app.whenReady()
+  const options = {
+    type: "question" as const,
+    buttons: [nativeT("secondBrain.desktop.deepLink.open"), nativeT("secondBrain.desktop.deepLink.cancel")],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    message:
+      link.kind === "open-project"
+        ? nativeT("secondBrain.desktop.deepLink.openProject")
+        : nativeT("secondBrain.desktop.deepLink.newSession"),
+    detail: nativeT(
+      link.kind === "open-project"
+        ? "secondBrain.desktop.deepLink.openProject.detail"
+        : "secondBrain.desktop.deepLink.newSession.detail",
+      { path: link.directory },
+    ),
+  }
+  const win = getLastFocusedWindow()
+  const result = await (win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options))
+  return result.response === 0
 }
 
 function consumeInitialDeepLinks(sender: WebContents) {
@@ -176,10 +225,7 @@ const main = Effect.gen(function* () {
   const userDataMigration = (() => {
     if (onboardingTestRoot) return
     try {
-      return migrateUserData(
-        channel === "dev" ? join(app.getPath("appData"), LEGACY_DEV_APP_ID) : undefined,
-        userData,
-      )
+      return migrateUserData(channel === "dev" ? join(app.getPath("appData"), LEGACY_DEV_APP_ID) : undefined, userData)
     } catch (error) {
       // No marker is written, so the copy is retried on the next start.
       return error instanceof Error ? error : new Error(String(error))
@@ -243,10 +289,7 @@ const main = Effect.gen(function* () {
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith(`${DEEP_LINK_SCHEME}://`))
-    if (urls.length) {
-      logger.log("deep link received via second-instance", { urls })
-      emitDeepLinks(urls)
-    }
+    if (urls.length) receiveDeepLinks(urls, "second-instance")
     const win = getLastFocusedWindow()
     if (win) {
       win.show()
@@ -256,8 +299,7 @@ const main = Effect.gen(function* () {
 
   app.on("open-url", (event: Event, url: string) => {
     event.preventDefault()
-    logger.log("deep link received via open-url", { url })
-    emitDeepLinks([url])
+    receiveDeepLinks([url], "open-url")
   })
 
   // The first quit waits (bounded) for the sidecar to stop, then quits again.
