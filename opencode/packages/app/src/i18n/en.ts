@@ -603,6 +603,8 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Review",
   "secondBrain.sessionTab.title": "Session",
+  "secondBrain.sidePanel.showReview": "Show review",
+  "secondBrain.sidePanel.hide": "Hide panel",
   "secondBrain.sessionTab.notReported": "Not reported",
   "secondBrain.sessionTab.none": "None",
   "secondBrain.sessionTab.messages.one": "{{count}} message",

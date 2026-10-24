@@ -75,11 +75,15 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { restorePromptModel, syncPromptModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import {
-  clampSessionPanelWidth,
-  SESSION_PANEL_WIDTH_MIN,
-  sessionPanelWidthMax,
+  clampSidePanelWidth,
+  reviewDiffStyle,
+  SIDE_PANEL_COLLAPSE_THRESHOLD,
+  SIDE_PANEL_WIDTH_MIN,
+  SIDE_PANEL_WIDTH_SPLIT,
+  sidePanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { SESSION_SIDE_RAIL_SPACE, SessionSideRail } from "@/pages/session/session-side-rail"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
@@ -432,32 +436,38 @@ export default function Page() {
     () => panelRow,
     ({ width }) => setPanelRowWidth(width),
   )
-  const splitReview = createMemo(() => desktopV2ReviewOpen() && layout.review.diffStyle() === "split")
-  // The observer reports the row width; only the flex gap between the panels
-  // remains to subtract.
+  // A closed review panel leaves a slim rail at the right edge to reopen it.
+  const desktopRailOpen = createMemo(() => isDesktop() && !!params.id && !desktopV2ReviewOpen())
+  const railSpace = createMemo(() => (desktopRailOpen() ? SESSION_SIDE_RAIL_SPACE : 0))
+  // The observer reports the row width; subtract the flex gap between the
+  // panels and the rail.
   const sessionPanelAvailable = createMemo(() => {
     const width = panelRowWidth()
     if (width === undefined) return undefined
-    return width - 8
+    return width - 8 - railSpace()
   })
-  const sessionPanelMax = createMemo(() => {
+  const sidePanelMax = createMemo(() => {
     const available = sessionPanelAvailable()
     if (available === undefined) return 1000
-    return sessionPanelWidthMax({ available, split: splitReview() })
+    return sidePanelWidthMax(available)
   })
-  // Clamp at render time so window or sidebar resizes squeeze the chat panel
-  // instead of the review pane, without overwriting the persisted width.
-  const sessionPanelResizedWidth = createMemo(() =>
-    clampSessionPanelWidth({
-      width: layout.session.width(),
+  // Clamp at render time so window or sidebar resizes squeeze the side panel
+  // only once the chat panel is at its minimum, without overwriting the
+  // persisted width.
+  const sidePanelWidth = createMemo(() =>
+    clampSidePanelWidth({
+      width: layout.sidePanel.width(),
       available: sessionPanelAvailable(),
-      split: splitReview(),
     }),
   )
   const sessionPanelWidth = createMemo(() => {
-    if (!desktopSidePanelOpen()) return "100%"
-    if (desktopSessionResizeOpen()) return `${sessionPanelResizedWidth()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
+    if (!desktopSidePanelOpen()) return railSpace() ? `calc(100% - ${railSpace()}px)` : "100%"
+    if (desktopSessionResizeOpen()) {
+      const available = sessionPanelAvailable()
+      if (available === undefined) return `calc(100% - ${sidePanelWidth() + 8 + railSpace()}px)`
+      return `${available - sidePanelWidth()}px`
+    }
+    return `calc(100% - ${layout.fileTree.width() + railSpace()}px)`
   })
   const centered = createMemo(() => isDesktop())
   const desktopV2PanelLayout = createMemo(() =>
@@ -1315,9 +1325,14 @@ export default function Page() {
     },
     onSelectFile: focusReviewDiff,
     get diffStyle() {
-      return layout.review.diffStyle()
+      return reviewDiffStyle({ preferred: layout.review.diffStyle(), width: sidePanelWidth() })
     },
-    onDiffStyleChange: layout.review.setDiffStyle,
+    onDiffStyleChange: (style: DiffStyle) => {
+      layout.review.setDiffStyle(style)
+      // Split diffs need a wider panel; widen it so the choice takes effect.
+      if (style === "split" && layout.sidePanel.width() < SIDE_PANEL_WIDTH_SPLIT)
+        layout.sidePanel.resize(SIDE_PANEL_WIDTH_SPLIT)
+    },
     state: reviewV2State,
     onLineComment: (comment: SessionReviewLineComment) => addCommentToContext({ ...comment, origin: "review" }),
     onLineCommentUpdate: updateCommentInContext,
@@ -2112,26 +2127,31 @@ export default function Page() {
               </SessionPanelFrame>
             )}
           </Show>
-
-          <Show when={desktopSessionResizeOpen()}>
-            <div onPointerDown={() => size.start()}>
-              <ResizeHandle
-                class="-end-1"
-                direction="horizontal"
-                size={sessionPanelResizedWidth()}
-                min={SESSION_PANEL_WIDTH_MIN}
-                max={sessionPanelMax()}
-                onResize={(width) => {
-                  size.touch()
-                  layout.session.resize(width)
-                }}
-              />
-            </div>
-          </Show>
         </div>
 
         <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
-          <div class="min-w-0 h-full flex flex-1 flex-col">
+          <div class="relative min-w-0 h-full flex flex-1 flex-col">
+            <Show when={desktopSessionResizeOpen()}>
+              <div onPointerDown={() => size.start()}>
+                <ResizeHandle
+                  class="!-start-1"
+                  direction="horizontal"
+                  edge="start"
+                  size={sidePanelWidth()}
+                  min={SIDE_PANEL_WIDTH_MIN}
+                  max={sidePanelMax()}
+                  collapseThreshold={SIDE_PANEL_COLLAPSE_THRESHOLD}
+                  onResize={(width) => {
+                    size.touch()
+                    layout.sidePanel.resize(width)
+                  }}
+                  onCollapse={() => {
+                    if (desktopV2ReviewOpen()) view().reviewPanel.close()
+                    else view().terminal.close()
+                  }}
+                />
+              </div>
+            </Show>
             <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
               <div class="min-h-0 flex-1">
                 <Suspense>
@@ -2190,6 +2210,9 @@ export default function Page() {
               </div>
             </Show>
           </div>
+        </Show>
+        <Show when={desktopRailOpen()}>
+          <SessionSideRail reviewCount={reviewCount()} hasReview={hasReview()} />
         </Show>
       </div>
     </SessionRouteFrame>
