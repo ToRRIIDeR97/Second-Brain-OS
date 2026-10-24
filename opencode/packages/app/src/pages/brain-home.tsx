@@ -2,6 +2,7 @@ import { useNavigate } from "@solidjs/router"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createEffect, createMemo, createResource, For, Show, Suspense } from "solid-js"
 import { useQuery } from "@tanstack/solid-query"
@@ -15,7 +16,8 @@ import { useDrafts } from "@/context/drafts"
 import { useCommand } from "@/context/command"
 import { PageFrame, PageSection, pageRowClass } from "@/components/page"
 import { localDateKey } from "@/features/second-brain/calendar-domain"
-import { listProjects, readCalendar, type CalendarEvent, type PlannerTask } from "@/features/second-brain/client"
+import { readCalendar, type CalendarEvent, type PlannerTask } from "@/features/second-brain/client"
+import { useBrainProjects } from "@/components/sidebar/sidebar-controller"
 import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeSessionsController } from "@/pages/home/home-sessions-controller"
 import { Harness } from "@opencode-ai/schema/harness"
@@ -56,11 +58,8 @@ export default function BrainHomePage() {
   // The sidebar workspace switcher owns this choice; the page only follows it.
   const directory = () => layout.home.workspace() ?? ""
 
-  const [projects] = createResource(
-    () => directory() || undefined,
-    (directory) => listProjects(client(directory)),
-  )
-  const [calendar] = createResource(
+  const projects = useBrainProjects()
+  const [calendar, calendarActions] = createResource(
     () => directory() || undefined,
     (directory) => readCalendar(client(directory)),
   )
@@ -114,16 +113,15 @@ export default function BrainHomePage() {
   }
   const today = localDateKey(new Date())
   const activeProjects = createMemo(() =>
-    (projects.loading ? [] : (projects() ?? []))
+    (projects.list() ?? [])
       .filter((project) => project.status === "active")
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, 5),
   )
-  const projectNames = createMemo(
-    () => new Map((projects.loading ? [] : (projects() ?? [])).map((project) => [project.id, project.name])),
-  )
+  const projectNames = createMemo(() => new Map((projects.list() ?? []).map((project) => [project.id, project.name])))
   const todayItems = createMemo<TodayItem[]>(() => {
-    if (calendar.loading) return []
+    // Reading a failed resource throws; the failure shows inline below instead.
+    if (calendar.loading || calendar.error) return []
     const events = (calendar()?.events ?? [])
       .filter((event) => event.date === today)
       .map((value): TodayItem => ({ kind: "event", value }))
@@ -172,7 +170,15 @@ export default function BrainHomePage() {
       </h1>
       <div class="flex h-14 items-center gap-2 px-4">
         <span class="flex-1" />
-        <TooltipV2 value={language.t("secondBrain.home.openWorkspace")} placement="bottom">
+        <TooltipV2
+          value={
+            <>
+              {language.t("secondBrain.home.openWorkspace")}
+              <KeybindV2 keys={command.keybindParts("project.open")} variant="neutral" />
+            </>
+          }
+          placement="bottom"
+        >
           <IconButtonV2
             variant="ghost"
             size="large"
@@ -246,13 +252,31 @@ export default function BrainHomePage() {
             </div>
           </form>
 
-          <Show when={!projects.loading && (projects()?.length ?? 0) === 0}>
+          <Show when={projects.failed() || calendar.error}>
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <p role="alert" class="text-[13px] text-v2-text-text-critical">
+                {language.t("secondBrain.error.request")}
+              </p>
+              <ButtonV2
+                size="small"
+                variant="outline"
+                onClick={() => {
+                  if (projects.failed()) projects.retry()
+                  if (calendar.error) void calendarActions.refetch()
+                }}
+              >
+                {language.t("secondBrain.error.retry")}
+              </ButtonV2>
+            </div>
+          </Show>
+
+          <Show when={projects.list()?.length === 0}>
             <section class="flex flex-col items-center gap-3 text-center" aria-labelledby="brain-home-first-run">
               <h2 id="brain-home-first-run" class="text-[15px] text-v2-text-text-base [font-weight:560]">
                 {language.t("secondBrain.home.firstRun.title")}
               </h2>
               <div class="flex flex-wrap justify-center gap-2">
-                <ButtonV2 variant="contrast" onClick={() => navigate("/projects")}>
+                <ButtonV2 variant="contrast" onClick={() => navigate("/projects?new=1")}>
                   {language.t("secondBrain.home.firstRun.project")}
                 </ButtonV2>
                 <ButtonV2 variant="outline" onClick={() => command.trigger("project.open")}>

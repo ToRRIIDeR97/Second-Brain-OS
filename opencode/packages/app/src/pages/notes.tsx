@@ -2,20 +2,21 @@ import { useBeforeLeave, useNavigate, useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { debounce } from "@solid-primitives/scheduled"
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { noteKeys, previewNoteLinks, wikiTargetKey } from "@/features/second-brain/note-links"
+import { noteKeys, noteLinkLookup, previewNoteLinks, wikiTargetKey } from "@/features/second-brain/note-links"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import {
   listNotes,
-  listProjects,
   readNote,
   SecondBrainRequestError,
   writeNote,
@@ -25,6 +26,7 @@ import {
 import { NoteEditor } from "@/features/second-brain/note-editor"
 import { noteSlug } from "@/features/second-brain/note-slug"
 import { PageEmpty, pageRowClass, pagePanelClass } from "@/components/page"
+import { useBrainProjects } from "@/components/sidebar/sidebar-controller"
 
 type State = {
   directory: string
@@ -54,6 +56,7 @@ export default function NotesPage() {
   const layout = useLayout()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
+  const command = useCommand()
   const [search] = useSearchParams<{ project?: string; note?: string }>()
   const [state, setState] = createStore<State>({
     directory: "",
@@ -101,10 +104,9 @@ export default function NotesPage() {
     () => state.directory || undefined,
     (directory) => listNotes(client(directory)),
   )
-  const [projects] = createResource(
-    () => state.directory || undefined,
-    (directory) => listProjects(client(directory)),
-  )
+  const brainProjects = useBrainProjects()
+  // The shared Project list follows the sidebar workspace; hide it while an unsaved note holds the previous one.
+  const projectList = () => ((layout.home.workspace() ?? "") === state.directory ? brainProjects.list() : undefined)
   // The input stays bound to state.search; the server search keys on a debounced copy so typing does not
   // re-read the note files on every keystroke. Clearing the search applies immediately.
   const [query, setQuery] = createSignal("")
@@ -127,24 +129,31 @@ export default function NotesPage() {
     () => (state.directory && state.path ? ([state.directory, state.path] as const) : undefined),
     ([directory, path]) => readNote(client(directory), path),
   )
-  const visibleNotes = createMemo(() => {
-    return (query() ? (matches.latest ?? []) : (notes.latest ?? [])).filter(
+  // Reading an errored resource throws, so read through these and show the failure inline instead.
+  const noteList = () => (notes.error ? [] : (notes.latest ?? []))
+  const listFailed = () => !!(query() ? matches.error : notes.error)
+  // The first search shows "Loading" instead of "No matching notes" until it answers.
+  const listLoading = () => (query() ? matches.state === "pending" : notes.loading)
+  const visibleNotes = createMemo(() =>
+    (query() ? (matches.error || matches.state === "pending" ? [] : (matches.latest ?? [])) : noteList()).filter(
       (note) => !state.filterProjectId || note.projectIds.includes(state.filterProjectId),
-    )
-  })
+    ),
+  )
+  const linkLookup = createMemo(() => noteLinkLookup(noteList()))
+  const previewText = createMemo(() => previewNoteLinks(state.body, linkLookup()))
   const currentKeys = createMemo(() => noteKeys({ path: state.path, title: state.title }))
   const backlinks = createMemo(() =>
-    (notes.latest ?? []).filter(
+    noteList().filter(
       (note) => note.path !== state.path && note.links.some((link) => currentKeys().has(wikiTargetKey(link))),
     ),
   )
   const outgoing = createMemo(() => {
     const targets = new Set(
-      (notes.latest ?? []).find((note) => note.path === state.path)?.links.map(wikiTargetKey) ?? [],
+      noteList()
+        .find((note) => note.path === state.path)
+        ?.links.map(wikiTargetKey) ?? [],
     )
-    return (notes.latest ?? []).filter(
-      (note) => note.path !== state.path && [...noteKeys(note)].some((key) => targets.has(key)),
-    )
+    return noteList().filter((note) => note.path !== state.path && [...noteKeys(note)].some((key) => targets.has(key)))
   })
   const relatedNotes = createMemo(() => [
     ...new Map([...outgoing(), ...backlinks()].map((note) => [note.path, note] as const)).values(),
@@ -169,10 +178,13 @@ export default function NotesPage() {
   }
 
   createEffect(
-    on(loadedNote, (document) => {
-      if (!document) return
-      applyDocument(document)
-    }),
+    on(
+      () => (loadedNote.error ? undefined : loadedNote()),
+      (document) => {
+        if (!document) return
+        applyDocument(document)
+      },
+    ),
   )
 
   const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -230,7 +242,7 @@ export default function NotesPage() {
   let openedLink: string | undefined
   createEffect(
     on(
-      () => [search.note, notes()] as const,
+      () => [search.note, notes.error ? undefined : notes()] as const,
       ([path, items]) => {
         if (!path) openedLink = undefined
         const note = items?.find((item) => item.path === path)
@@ -319,6 +331,33 @@ export default function NotesPage() {
     }
   }
 
+  // Save from anywhere on the page: the preview, the toolbar or fullscreen, not only the textarea.
+  command.register("notes", () => [
+    {
+      id: "notes.save",
+      title: language.t("secondBrain.notes.saveCommand"),
+      category: language.t("command.category.file"),
+      keybind: "mod+s",
+      disabled: !dirty() || state.saving,
+      onSelect: () => void save(),
+    },
+  ])
+
+  const saveButton = () => (
+    <TooltipV2
+      value={
+        <>
+          {language.t("common.save")}
+          <KeybindV2 keys={command.keybindParts("notes.save")} variant="neutral" />
+        </>
+      }
+    >
+      <ButtonV2 size="small" variant="contrast" disabled={!dirty() || state.saving} onClick={() => void save()}>
+        {state.saving ? language.t("secondBrain.saving") : language.t("common.save")}
+      </ButtonV2>
+    </TooltipV2>
+  )
+
   const discard = () => {
     // After a conflict the base copy is stale too, so discarding reloads the note from disk.
     if (state.conflict) return reload()
@@ -334,7 +373,20 @@ export default function NotesPage() {
   return (
     <section class="flex size-full min-h-0 flex-col p-2 pl-0" aria-label={language.t("secondBrain.notes.title")}>
       <div class={`flex min-h-0 flex-1 flex-col overflow-hidden ${pagePanelClass}`}>
-        <Show when={state.directory} fallback={<PageEmpty>{language.t("secondBrain.empty.workspace")}</PageEmpty>}>
+        <Show
+          when={state.directory}
+          fallback={
+            <PageEmpty
+              action={
+                <ButtonV2 variant="contrast" onClick={() => command.trigger("project.open")}>
+                  {language.t("secondBrain.home.openWorkspace")}
+                </ButtonV2>
+              }
+            >
+              {language.t("secondBrain.empty.workspace")}
+            </PageEmpty>
+          }
+        >
           <div class="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
             <aside class="flex max-h-[240px] w-full shrink-0 flex-col overflow-hidden md:max-h-none md:w-[248px]">
               <div class="flex h-14 shrink-0 items-center gap-2 pl-5 pr-3 pt-1">
@@ -367,16 +419,16 @@ export default function NotesPage() {
                     onInput={(event) => setState("search", event.currentTarget.value)}
                   />
                 </label>
-                <Show when={(projects.latest?.length ?? 0) > 0}>
+                <Show when={(projectList()?.length ?? 0) > 0}>
                   <SelectV2
                     class="!h-8 !w-full !bg-transparent !shadow-none hover:!bg-v2-overlay-simple-overlay-hover"
                     aria-label={language.t("secondBrain.notes.filterProject")}
-                    options={["__all__", ...(projects.latest ?? []).map((project) => project.id)]}
+                    options={["__all__", ...(projectList() ?? []).map((project) => project.id)]}
                     current={state.filterProjectId || "__all__"}
                     label={(projectID) =>
                       projectID === "__all__"
                         ? language.t("secondBrain.notes.allProjects")
-                        : (projects.latest?.find((project) => project.id === projectID)?.name ?? projectID)
+                        : (projectList()?.find((project) => project.id === projectID)?.name ?? projectID)
                     }
                     onSelect={(projectID) =>
                       setState("filterProjectId", projectID === "__all__" ? "" : (projectID ?? ""))
@@ -392,6 +444,11 @@ export default function NotesPage() {
                     event.preventDefault()
                     void createNote()
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") return
+                    event.preventDefault()
+                    setState({ creating: false, error: "" })
+                  }}
                 >
                   <label class="text-[12px] text-v2-text-text-muted" for="new-note-title">
                     {language.t("secondBrain.notes.name")}
@@ -400,17 +457,25 @@ export default function NotesPage() {
                     id="new-note-title"
                     class="!w-full min-w-0"
                     appearance="large"
-                    autofocus
+                    // Solid's `autofocus` does not focus a field inserted after the page loaded.
+                    ref={(element) => queueMicrotask(() => element.focus())}
+                    invalid={!!state.error}
+                    aria-describedby={state.error ? "new-note-error" : undefined}
                     value={state.newTitle}
                     onInput={(event) => setState("newTitle", event.currentTarget.value)}
                   />
                   <Show when={state.error}>
-                    <p role="alert" class="text-[12px] text-v2-text-text-critical">
+                    <p id="new-note-error" role="alert" class="text-[12px] text-v2-text-text-critical">
                       {state.error}
                     </p>
                   </Show>
                   <div class="flex justify-end gap-1.5">
-                    <ButtonV2 type="button" size="small" variant="ghost" onClick={() => setState("creating", false)}>
+                    <ButtonV2
+                      type="button"
+                      size="small"
+                      variant="ghost"
+                      onClick={() => setState({ creating: false, error: "" })}
+                    >
                       {language.t("common.cancel")}
                     </ButtonV2>
                     <ButtonV2 type="submit" size="small" variant="contrast" disabled={state.saving}>
@@ -425,29 +490,49 @@ export default function NotesPage() {
                 aria-label={language.t("secondBrain.notes.list")}
               >
                 <Show
-                  when={!notes.loading}
+                  when={!listLoading()}
                   fallback={<p class="px-3 py-2 text-[12px] text-v2-text-text-faint">{language.t("common.loading")}</p>}
                 >
                   <Show
-                    when={visibleNotes().length > 0}
+                    when={!listFailed()}
                     fallback={
-                      <PageEmpty class="!px-3">
-                        {language.t(state.search.trim() ? "secondBrain.notes.noMatches" : "secondBrain.notes.empty")}
+                      <PageEmpty
+                        class="!px-3"
+                        action={
+                          <ButtonV2
+                            size="small"
+                            variant="outline"
+                            onClick={() => void (query() ? matchActions.refetch() : noteActions.refetch())}
+                          >
+                            {language.t("secondBrain.error.retry")}
+                          </ButtonV2>
+                        }
+                      >
+                        {language.t("secondBrain.error.request")}
                       </PageEmpty>
                     }
                   >
-                    <For each={visibleNotes()}>
-                      {(note) => (
-                        <button
-                          type="button"
-                          data-selected={state.path === note.path ? "" : undefined}
-                          class={`${pageRowClass} !py-2 text-[13px] text-v2-text-text-base data-[selected]:bg-v2-background-bg-accent-container data-[selected]:text-v2-text-text-on-accent-container`}
-                          onClick={() => chooseNote(note)}
-                        >
-                          <span class="min-w-0 flex-1 truncate">{note.title}</span>
-                        </button>
-                      )}
-                    </For>
+                    <Show
+                      when={visibleNotes().length > 0}
+                      fallback={
+                        <PageEmpty class="!px-3">
+                          {language.t(state.search.trim() ? "secondBrain.notes.noMatches" : "secondBrain.notes.empty")}
+                        </PageEmpty>
+                      }
+                    >
+                      <For each={visibleNotes()}>
+                        {(note) => (
+                          <button
+                            type="button"
+                            data-selected={state.path === note.path ? "" : undefined}
+                            class={`${pageRowClass} !py-2 text-[13px] text-v2-text-text-base data-[selected]:bg-v2-background-bg-accent-container data-[selected]:text-v2-text-text-on-accent-container`}
+                            onClick={() => chooseNote(note)}
+                          >
+                            <span class="min-w-0 flex-1 truncate">{note.title}</span>
+                          </button>
+                        )}
+                      </For>
+                    </Show>
                   </Show>
                 </Show>
               </nav>
@@ -480,7 +565,7 @@ export default function NotesPage() {
                   <span
                     class="hidden shrink-0 items-center gap-1.5 px-1 text-[11px] text-v2-text-text-faint sm:flex"
                     title={(() => {
-                      const updatedAt = (notes.latest ?? []).find((note) => note.path === state.path)?.updatedAt
+                      const updatedAt = noteList().find((note) => note.path === state.path)?.updatedAt
                       return updatedAt ? new Date(updatedAt).toLocaleString() : undefined
                     })()}
                   >
@@ -494,26 +579,19 @@ export default function NotesPage() {
                       {language.t("secondBrain.notes.discard")}
                     </ButtonV2>
                   </Show>
-                  <ButtonV2
-                    size="small"
-                    variant="contrast"
-                    disabled={!dirty() || state.saving}
-                    onClick={() => void save()}
-                  >
-                    {state.saving ? language.t("secondBrain.saving") : language.t("common.save")}
-                  </ButtonV2>
+                  {saveButton()}
                 </header>
 
                 <div class="min-h-0 flex-1 overflow-y-auto">
                   <div class="mx-auto flex min-h-full w-full max-w-[860px] flex-col gap-3 px-4 pb-6 pt-1 sm:px-6">
                     <div class="flex min-w-0 flex-wrap items-center gap-1.5 text-[12px]">
-                      <Show when={(projects.latest?.length ?? 0) > 0}>
+                      <Show when={(projectList()?.length ?? 0) > 0}>
                         <div
                           class="flex min-w-0 flex-wrap items-center gap-1"
                           role="group"
                           aria-label={language.t("secondBrain.notes.projects")}
                         >
-                          <For each={projects.latest}>
+                          <For each={projectList()}>
                             {(project) => (
                               <label class="flex cursor-pointer items-center rounded-full px-2.5 py-1 text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover has-[:checked]:bg-v2-background-bg-accent-container has-[:checked]:text-v2-text-text-on-accent-container has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-v2-border-border-focus motion-reduce:transition-none">
                                 <input
@@ -569,6 +647,17 @@ export default function NotesPage() {
                       </nav>
                     </Show>
 
+                    <Show when={loadedNote.error}>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <p role="alert" class="text-[12px] text-v2-text-text-critical">
+                          {language.t("secondBrain.error.request")}
+                        </p>
+                        <ButtonV2 size="small" variant="outline" onClick={reload}>
+                          {language.t("secondBrain.error.retry")}
+                        </ButtonV2>
+                      </div>
+                    </Show>
+
                     <Show when={state.error}>
                       <div class="flex flex-wrap items-center gap-2">
                         <p role="alert" class="text-[12px] text-v2-text-text-critical">
@@ -590,11 +679,24 @@ export default function NotesPage() {
                             `/notes?note=${encodeURIComponent(path)}&project=${encodeURIComponent(state.filterProjectId)}`,
                           )
                         }
-                        previewText={previewNoteLinks(state.body, notes.latest ?? [])}
+                        previewText={previewText()}
                         loading={loadedNote.loading}
                         onChange={(value) => setState("body", value)}
                         onSave={save}
                         commandLabel={(id) => language.t(`secondBrain.notes.command.${id}`)}
+                        fullscreenActions={
+                          <>
+                            <span class="flex items-center gap-1.5 px-1 text-[11px] text-v2-text-text-faint">
+                              <Show when={dirty()}>
+                                <span class="size-1.5 rounded-full bg-v2-icon-icon-accent" aria-hidden="true" />
+                              </Show>
+                              {dirty()
+                                ? language.t("secondBrain.notes.unsaved")
+                                : language.t("secondBrain.notes.saved")}
+                            </span>
+                            {saveButton()}
+                          </>
+                        }
                         labels={{
                           words: (count) => language.t("secondBrain.notes.words", { count }),
                           previewRegion: language.t("secondBrain.notes.previewRegion"),
