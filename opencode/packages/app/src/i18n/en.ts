@@ -1050,6 +1050,7 @@ export const dict = {
   "secondBrain.notes.format.code": "Inline code",
   "secondBrain.notes.format.link": "Link",
   "secondBrain.notes.error.conflict": "This note changed on disk. Discard or copy your changes before reopening it.",
+  "secondBrain.notes.reload": "Reload from disk",
   "secondBrain.notes.error.unsaved": "Save or discard your changes before leaving this note",
   "secondBrain.notes.error.title": "Enter a note name",
   "secondBrain.projects.title": "Projects",

@@ -8,7 +8,7 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { debounce } from "@solid-primitives/scheduled"
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { noteKeys, normalizeWikiTarget, previewNoteLinks } from "@/features/second-brain/note-links"
+import { noteKeys, previewNoteLinks, wikiTargetKey } from "@/features/second-brain/note-links"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -23,14 +23,8 @@ import {
   type NoteSummary,
 } from "@/features/second-brain/client"
 import { NoteEditor } from "@/features/second-brain/note-editor"
+import { noteSlug } from "@/features/second-brain/note-slug"
 import { PageEmpty, pageRowClass, pagePanelClass } from "@/components/page"
-
-const slugify = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
 
 type State = {
   directory: string
@@ -50,6 +44,8 @@ type State = {
   filterProjectId: string
   search: string
   error: string
+  /** The last save hit a newer revision on disk; offer to reload it. */
+  conflict: boolean
 }
 
 export default function NotesPage() {
@@ -77,6 +73,7 @@ export default function NotesPage() {
     filterProjectId: search.project ?? "",
     search: "",
     error: "",
+    conflict: false,
   })
   const dirty = createMemo(
     () =>
@@ -126,7 +123,7 @@ export default function NotesPage() {
     () => (state.directory && query() ? ([state.directory, query()] as const) : undefined),
     ([directory, query]) => listNotes(client(directory), query),
   )
-  const [loadedNote] = createResource(
+  const [loadedNote, loadedNoteActions] = createResource(
     () => (state.directory && state.path ? ([state.directory, state.path] as const) : undefined),
     ([directory, path]) => readNote(client(directory), path),
   )
@@ -138,12 +135,12 @@ export default function NotesPage() {
   const currentKeys = createMemo(() => noteKeys({ path: state.path, title: state.title }))
   const backlinks = createMemo(() =>
     (notes.latest ?? []).filter(
-      (note) => note.path !== state.path && note.links.some((link) => currentKeys().has(normalizeWikiTarget(link))),
+      (note) => note.path !== state.path && note.links.some((link) => currentKeys().has(wikiTargetKey(link))),
     ),
   )
   const outgoing = createMemo(() => {
     const targets = new Set(
-      (notes.latest ?? []).find((note) => note.path === state.path)?.links.map(normalizeWikiTarget) ?? [],
+      (notes.latest ?? []).find((note) => note.path === state.path)?.links.map(wikiTargetKey) ?? [],
     )
     return (notes.latest ?? []).filter(
       (note) => note.path !== state.path && [...noteKeys(note)].some((key) => targets.has(key)),
@@ -167,6 +164,7 @@ export default function NotesPage() {
       baseTags: tags,
       revision: document.revision,
       error: "",
+      conflict: false,
     })
   }
 
@@ -191,15 +189,24 @@ export default function NotesPage() {
   onCleanup(() => window.removeEventListener("beforeunload", beforeUnload))
 
   const report = (error: unknown) => {
-    setState(
-      "error",
-      error instanceof SecondBrainRequestError && error.status === 409
+    const conflict = error instanceof SecondBrainRequestError && error.status === 409
+    setState({
+      error: conflict
         ? language.t(state.creating ? "secondBrain.notes.error.exists" : "secondBrain.notes.error.conflict")
         : language.t("secondBrain.error.request"),
-    )
+      conflict: conflict && !state.creating,
+    })
+  }
+
+  // Re-read the open note; the `loadedNote` effect then replaces the body and revision.
+  const reload = () => {
+    setState({ error: "", conflict: false })
+    void loadedNoteActions.refetch()
   }
 
   const chooseNote = (note: NoteSummary) => {
+    // Re-selecting the open note would clear its body without a refetch (the resource key is unchanged).
+    if (note.path === state.path) return
     if (dirty()) {
       setState("error", language.t("secondBrain.notes.error.unsaved"))
       return
@@ -216,6 +223,7 @@ export default function NotesPage() {
       baseTags: note.tags.join(", "),
       revision: "",
       error: "",
+      conflict: false,
     })
   }
 
@@ -248,11 +256,11 @@ export default function NotesPage() {
 
   const createNote = async () => {
     const title = state.newTitle.trim()
-    const slug = slugify(title)
-    if (!title || !slug || !state.directory) {
+    if (!title || !state.directory) {
       setState("error", language.t("secondBrain.notes.error.title"))
       return
     }
+    const slug = noteSlug(title)
     const path = state.filterProjectId
       ? `.tenon/projects/${state.filterProjectId}/notes/${slug}.md`
       : `notes/${slug}.md`
@@ -311,7 +319,9 @@ export default function NotesPage() {
     }
   }
 
-  const discard = () =>
+  const discard = () => {
+    // After a conflict the base copy is stale too, so discarding reloads the note from disk.
+    if (state.conflict) return reload()
     setState({
       body: state.baseBody,
       title: state.baseTitle,
@@ -319,6 +329,7 @@ export default function NotesPage() {
       tags: state.baseTags,
       error: "",
     })
+  }
 
   return (
     <section class="flex size-full min-h-0 flex-col p-2 pl-0" aria-label={language.t("secondBrain.notes.title")}>
@@ -559,9 +570,16 @@ export default function NotesPage() {
                     </Show>
 
                     <Show when={state.error}>
-                      <p role="alert" class="text-[12px] text-v2-text-text-critical">
-                        {state.error}
-                      </p>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <p role="alert" class="text-[12px] text-v2-text-text-critical">
+                          {state.error}
+                        </p>
+                        <Show when={state.conflict}>
+                          <ButtonV2 size="small" variant="outline" disabled={loadedNote.loading} onClick={reload}>
+                            {language.t("secondBrain.notes.reload")}
+                          </ButtonV2>
+                        </Show>
+                      </div>
                     </Show>
 
                     <div class="flex min-h-[360px] flex-1">

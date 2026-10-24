@@ -1,5 +1,5 @@
 import type { NoteSummary, ProjectRecord } from "./client"
-import { normalizeWikiTarget } from "./note-links"
+import { wikiTargetKey } from "./note-links"
 
 type ProjectGraphNode = { id: string; label: string; x: number; y: number; project: boolean }
 
@@ -43,10 +43,5 @@ export function projectGraph(project: ProjectRecord, notes: ReadonlyArray<NoteSu
 }
 
 function normalizeGraphKey(value: string) {
-  return normalizeWikiTarget(
-    value
-      .split("#", 1)[0]!
-      .trim()
-      .replace(/^notes\//i, ""),
-  )
+  return wikiTargetKey(value.trim().replace(/^notes\//i, ""))
 }

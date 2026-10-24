@@ -4,6 +4,11 @@ export function normalizeWikiTarget(value: string) {
   return value.trim().replaceAll("\\", "/").replace(/\.md$/i, "").replace(/\s+/g, "-").toLowerCase()
 }
 
+/** Lookup key for a wiki reference: only the note part, without a `#heading` or `#^block` suffix. */
+export function wikiTargetKey(reference: string) {
+  return normalizeWikiTarget(reference.replace(/[#^][\s\S]*$/, ""))
+}
+
 export function noteKeys(note: Pick<NoteSummary, "path" | "title">) {
   const path = normalizeWikiTarget(note.path)
   return new Set([normalizeWikiTarget(note.title), path, path.split("/").pop() ?? path])
@@ -18,7 +23,7 @@ export function previewNoteLinks(body: string, notes: ReadonlyArray<Pick<NoteSum
     (source, code, reference: string) => {
       if (code) return source
       const [target, alias] = reference.split("|", 2)
-      const path = lookup.get(normalizeWikiTarget(target))
+      const path = lookup.get(wikiTargetKey(target))
       if (!path) return source
       const label = (alias || target).replace(/[\\\[\]<>]/g, "\\$&")
       return `[${label}](/notes?note=${encodeURIComponent(path)})`
