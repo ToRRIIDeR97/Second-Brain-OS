@@ -114,6 +114,8 @@ interface AcpRuntime {
 const probeTTL = 30_000
 // A failed check is retried sooner, so a slow cold start doesn't hide a harness for long.
 const failedProbeTTL = 5_000
+// Model lists change rarely (new releases, sign-in); checks ask the harness again after this long.
+const catalogTTL = 10 * 60_000
 
 const layer = Layer.effect(
   Service,
@@ -140,9 +142,9 @@ const layer = Layer.effect(
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
     const probes = new Map<string, { readonly expires: number; readonly instance: Harness.Instance }>()
-    // Models each harness reported, kept until the app restarts or the user refreshes. A failed check
+    // Models each harness reported. After catalogTTL a check asks for them again; a failed check
     // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
-    const catalogs = new Map<string, ReadonlyArray<Harness.Model>>()
+    const catalogs = new Map<string, { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }>()
     // Commands each ACP harness last reported; the skills catalog lists them for harnesses without skill folders.
     const commands = new Map<Harness.InstanceID, ReadonlyArray<AcpHarness.AcpCommand>>()
     const instanceKey = (instance: InstanceConfig) =>
@@ -151,15 +153,20 @@ const layer = Layer.effect(
       instance: InstanceConfig,
       probe: (
         known: ReadonlyArray<Harness.Model> | undefined,
+        rediscover: boolean,
       ) => Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }>,
     ) => {
       const key = instanceKey(instance)
       return Effect.suspend(() => {
         const cached = probes.get(key)
         if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
-        return probe(catalogs.get(key)).pipe(
+        const catalog = catalogs.get(key)
+        const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
+        return probe(catalog?.models, rediscover).pipe(
           Effect.map((result) => {
-            if (result.discovered) catalogs.set(key, result.discovered)
+            // A failed rediscovery still counts as checked, so it isn't retried on every probe.
+            if (result.discovered || rediscover)
+              catalogs.set(key, { models: result.discovered ?? catalog!.models, checked: Date.now() })
             const ttl = result.instance.status === "available" ? probeTTL : failedProbeTTL
             probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
             return result.instance
@@ -382,7 +389,7 @@ const layer = Layer.effect(
       }
       // Each opened session reports the agent's current models; the picker shows them on its next check.
       if (session.models.length > 0) {
-        catalogs.set(instanceKey(instance), session.models)
+        catalogs.set(instanceKey(instance), { models: session.models, checked: Date.now() })
         probes.delete(instanceKey(instance))
       }
       return {
@@ -504,7 +511,9 @@ const layer = Layer.effect(
           instanceID: instance.id,
           kind: instance.driver,
           snapshot: instance.enabled
-            ? cachedProbe(instance, (known) => AcpHarness.probe(process, instance, settings, location.directory, known))
+            ? cachedProbe(instance, (known, rediscover) =>
+                AcpHarness.probe(process, instance, settings, location.directory, known, rediscover),
+              )
             : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
           stream: (input) =>
             instance.enabled

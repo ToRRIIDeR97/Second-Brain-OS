@@ -2,8 +2,6 @@ import { Show, createMemo } from "solid-js"
 import { Harness } from "@opencode-ai/schema/harness"
 import { PromptInputV2Select } from "@opencode-ai/session-ui/v2/prompt-input"
 import { Icon } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 
@@ -11,7 +9,8 @@ export type PromptInputHarnessController = {
   instances: () => ReadonlyArray<Harness.Instance> | undefined
   loading: () => boolean
   disabled?: () => boolean
-  refresh: () => unknown
+  /** Checks the harnesses again in the background; the shown list stays until the answer arrives. */
+  revalidate?: () => void
   current: () => Harness.InstanceID
   select: (instanceID: Harness.InstanceID) => void
   model: {
@@ -81,6 +80,7 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
         currentIcon={<Icon name="status" />}
         class={SELECT_CLASS}
         disabled={props.controller.loading() || props.controller.disabled?.() || !props.controller.instances()}
+        onOpenChange={(open) => open && props.controller.revalidate?.()}
         onSelect={(id) => props.controller.select(Harness.InstanceID.make(id))}
       />
       <Show when={instance()?.driver !== Harness.OpenCodeDriver && instance()}>
@@ -147,20 +147,6 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
           </>
         )}
       </Show>
-      <TooltipV2
-        placement="top"
-        value={`${language.t("harness.refreshModels")}${instance()?.version ? ` (${instance()!.version})` : ""}`}
-      >
-        <IconButtonV2
-          data-action="harness-refresh"
-          variant="ghost-muted"
-          size="normal"
-          icon={<Icon name="reset" />}
-          aria-label={language.t("harness.refreshModels")}
-          disabled={props.controller.loading() || props.controller.disabled?.()}
-          onClick={() => void props.controller.refresh()}
-        />
-      </TooltipV2>
     </>
   )
 }

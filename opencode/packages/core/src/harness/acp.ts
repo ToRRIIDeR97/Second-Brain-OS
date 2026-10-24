@@ -186,6 +186,7 @@ export function probe(
   settings: Settings,
   directory: string,
   known?: ReadonlyArray<Harness.Model>,
+  rediscover = false,
 ): Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }> {
   const base = { id: instance.id, driver: instance.driver, name: instance.name }
   const available = (version: string | undefined, models: ReadonlyArray<Harness.Model>) =>
@@ -193,13 +194,15 @@ export function probe(
   const handshakeOnly = handshake(process, settings, directory).pipe(
     Effect.map((agent) => ({ instance: available(agent.version, known ?? []) })),
   )
-  const check = known
-    ? handshakeOnly
-    : discover(process, settings, directory).pipe(
-        // An empty list is still recorded, so later checks don't open a session each time.
-        Effect.map((agent) => ({ instance: available(agent.version, agent.models), discovered: agent.models })),
-        Effect.catch(() => handshakeOnly),
-      )
+  // With `rediscover`, a stale list is asked for again; a failed session falls back to the known list.
+  const check =
+    known && !rediscover
+      ? handshakeOnly
+      : discover(process, settings, directory).pipe(
+          // An empty list is still recorded, so later checks don't open a session each time.
+          Effect.map((agent) => ({ instance: available(agent.version, agent.models), discovered: agent.models })),
+          Effect.catch(() => handshakeOnly),
+        )
   return check.pipe(
     Effect.catch((error) =>
       Effect.succeed({
