@@ -1,2 +1,4 @@
 packages/core/migration/**/snapshot.json linguist-generated
 packages/core/src/database/migration.gen.ts linguist-generated
+# Compared byte-for-byte with generator output, so keep LF even where core.autocrlf is set.
+packages/httpapi-codegen/test/generated/** text eol=lf
