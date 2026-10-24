@@ -78,7 +78,9 @@ export function groupSidebarThreads<P extends SidebarProject, S extends SidebarS
     if (session.time.archived) continue
     const project = projectForDirectory(input.projects, session.directory)
     if (project) {
-      byProject.set(project.id, [...(byProject.get(project.id) ?? []), session])
+      const list = byProject.get(project.id)
+      if (list) list.push(session)
+      else byProject.set(project.id, [session])
       continue
     }
     if (input.workspaceDirectory && isWithinDirectory(input.workspaceDirectory, session.directory))

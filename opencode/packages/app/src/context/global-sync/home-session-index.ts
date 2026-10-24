@@ -22,15 +22,12 @@ export const homeSessionIndexKey = (server: string) => ["home", "session-index",
 export const homeSessionEventsKey = (server: string) => ["home", "session-events", server] as const
 
 type HomeSessionPage = { data?: V2SessionListResponse }
+type HomeSessionList = (
+  input: { limit: number; order: "desc"; cursor?: string },
+  options: { signal?: AbortSignal },
+) => Promise<HomeSessionPage>
 
-export async function loadHomeSessionIndex(
-  list: (
-    input: { limit: number; order: "desc"; cursor?: string },
-    options: { signal?: AbortSignal },
-  ) => Promise<HomeSessionPage>,
-  eventSequence = 0,
-  signal?: AbortSignal,
-) {
+export async function loadHomeSessionIndex(list: HomeSessionList, eventSequence = 0, signal?: AbortSignal) {
   const data: SessionV2Info[] = []
   let cursor: string | undefined
 
@@ -80,6 +77,30 @@ export function homeSessionIndexRefresh(event: Event["type"], connected: boolean
     refetch: event === "global.disposed" || event === "session.next.moved",
   }
 }
+
+/**
+ * Query options for the Home session index, shared by Home, Activity and the sidebar. Live session
+ * events keep the cached index current (`apply`), and `refresh` refetches after a reconnect or a
+ * global dispose, so a revisit never needs to re-read the full session table.
+ */
+export function homeSessionIndexQueryOptions(
+  cache: Pick<HomeSessionIndexCache, "indexKey" | "eventSequence" | "complete">,
+  list: HomeSessionList,
+) {
+  return {
+    queryKey: cache.indexKey,
+    queryFn: async ({ signal }: { signal?: AbortSignal }) => {
+      const sequence = cache.eventSequence()
+      const index = await loadHomeSessionIndex(list, sequence, signal)
+      cache.complete(sequence)
+      return index
+    },
+    retry: false,
+    staleTime: Infinity,
+  }
+}
+
+export type HomeSessionIndexCache = ReturnType<typeof createHomeSessionIndexCache>
 
 export function createHomeSessionIndexCache(queryClient: QueryClient, server: string) {
   const indexKey = homeSessionIndexKey(server)

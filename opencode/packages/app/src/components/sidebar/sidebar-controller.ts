@@ -8,7 +8,7 @@ import { useDirectoryPicker } from "@/components/directory-picker"
 import { outsideEditable, useCommand } from "@/context/command"
 import { useDrafts } from "@/context/drafts"
 import {
-  loadHomeSessionIndex,
+  homeSessionIndexQueryOptions,
   retainHomeSessions,
   type HomeSessionEvents,
 } from "@/context/global-sync/home-session-index"
@@ -70,6 +70,46 @@ export const projectThreadsQueryKey = (server: string, brain: string | undefined
 export const invalidateProjectThreads = (queryClient: QueryClient, server: string) =>
   queryClient.invalidateQueries({ queryKey: ["second-brain", "project-threads", server] })
 
+/**
+ * The selected workspace's Projects with their thread folders. The sidebar, Home, Notes and the
+ * Projects page share this one cached query; Project mutations call `invalidateProjectThreads`.
+ */
+export function useProjectThreads() {
+  const layout = useLayout()
+  const server = useServer()
+  const serverSDK = useServerSDK()
+  const platform = usePlatform()
+  return useQuery(() => {
+    const directory = layout.home.workspace()
+    return {
+      queryKey: projectThreadsQueryKey(server.key, directory),
+      enabled: !!directory,
+      queryFn: () =>
+        listProjectThreads({
+          server: serverSDK().server,
+          fetch: platform.fetch,
+          target: { directory: directory ?? "" },
+        }),
+      staleTime: 30_000,
+      retry: false,
+    }
+  })
+}
+
+/** Every Project card of the selected workspace, any status; undefined while loading or after a failure. */
+export function useBrainProjects() {
+  const query = useProjectThreads()
+  // Reading `data` while the query is pending suspends, so check the status first.
+  const entries = () => (query.isPending || query.isError ? undefined : query.data)
+  return {
+    entries,
+    list: () => entries()?.map((entry) => entry.project),
+    loading: () => query.isLoading,
+    failed: () => query.isError,
+    retry: () => void query.refetch(),
+  }
+}
+
 export function createSidebarController() {
   const layout = useLayout()
   const server = useServer()
@@ -93,13 +133,7 @@ export function createSidebarController() {
   const brainDirectory = layout.home.workspace
   const client = (directory: string) => ({ server: serverSDK().server, fetch: platform.fetch, target: { directory } })
 
-  const projectsQuery = useQuery(() => ({
-    queryKey: projectThreadsQueryKey(server.key, brainDirectory()),
-    enabled: !!brainDirectory(),
-    queryFn: () => listProjectThreads(client(brainDirectory()!)),
-    staleTime: 30_000,
-    retry: false,
-  }))
+  const projectsQuery = useProjectThreads()
   const projects = createMemo<SidebarProjectItem[]>(() =>
     (Array.isArray(projectsQuery.data) ? projectsQuery.data : [])
       .filter((entry) => entry.project.status === "active")
@@ -125,9 +159,16 @@ export function createSidebarController() {
     })
   createEffect(() => {
     const directory = brainDirectory()
-    if (!directory || scanned.has(`${server.key}:${directory}`)) return
-    scanned.add(`${server.key}:${directory}`)
-    void scan(directory).catch(() => undefined)
+    const key = `${server.key}:${directory}`
+    if (!directory || scanned.has(key)) return
+    scanned.add(key)
+    // Reload the Project list only when the scan added cards; a failed scan is retried on the next visit.
+    void scanProjects(client(directory))
+      .then((result) => (result.created > 0 ? refreshProjects() : undefined))
+      .catch((cause: unknown) => {
+        scanned.delete(key)
+        requestFailed(cause)
+      })
   })
 
   /** "Scan for projects": rescan the selected workspace and report what changed. */
@@ -169,12 +210,24 @@ export function createSidebarController() {
   const isLinked = (project: SidebarProjectItem) =>
     /^([a-zA-Z]:)?[\\/]/.test(project.entry.project.location?.path ?? "")
 
+  /** Unlinking also archives the card; undo links the folder again (the scan reuses the card) and restores its status. */
   const unlinkProject = (project: SidebarProjectItem) => {
     const directory = brainDirectory()
     const folder = project.entry.project.location?.path
     if (!directory || !folder) return
+    const previous = project.entry.project.status
     void unlinkProjectFolder(client(directory), folder)
-      .then(() => refreshProjects())
+      .then(async () => {
+        await refreshProjects()
+        undo.push({
+          title: language.t("secondBrain.sidebar.projectUnlinked"),
+          description: project.name,
+          undo: () =>
+            linkProjectFolder(client(directory), folder)
+              .then(() => updateProject(client(directory), project.id, { status: previous }))
+              .then(refreshProjects),
+        })
+      })
       .catch(requestFailed)
   }
 
@@ -204,24 +257,11 @@ export function createSidebarController() {
     initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
     enabled: false,
   }))
-  const sessionIndex = useQuery(() => ({
-    queryKey: homeSessions().indexKey,
-    queryFn: async ({ signal }) => {
-      const cache = homeSessions()
-      const sequence = cache.eventSequence()
-      const index = await loadHomeSessionIndex(
-        (input, options) => serverSDK().client.v2.session.list(input, options),
-        sequence,
-        signal,
-      )
-      cache.complete(sequence)
-      return index
-    },
-    retry: false,
-    staleTime: 30_000,
-    refetchOnMount: true,
-    refetchOnReconnect: true,
-  }))
+  const sessionIndex = useQuery(() =>
+    homeSessionIndexQueryOptions(homeSessions(), (input, options) =>
+      serverSDK().client.v2.session.list(input, options),
+    ),
+  )
   // Reconciled so a refetch that returns the same threads (e.g. after a reconnect) keeps
   // their identity and does not re-render every row.
   const [indexStore, setIndexStore] = createStore({ sessions: [] as Session[] })
@@ -259,6 +299,10 @@ export function createSidebarController() {
       }),
     )
   })
+  /** Each Project's root threads by Project ID, so a row looks its threads up instead of scanning every group. */
+  const projectThreads = createMemo(
+    () => new Map(groups().projects.map((group) => [group.project.id, group.threads] as const)),
+  )
 
   const route = layout.route
   const activeSessionID = createMemo(() => {
@@ -335,7 +379,9 @@ export function createSidebarController() {
       return
     }
     const brain = brainDirectory()
-    if (brain) void drafts.create({ server: server.key, directory: brain })
+    if (brain) return void drafts.create({ server: server.key, directory: brain })
+    // No workspace yet: a thread needs a folder, so ask for one.
+    if (server.current) chooseFolder()
   }
 
   const newBrainThread = () => {
@@ -612,6 +658,19 @@ export function createSidebarController() {
   }
 
   command.register("sidebar", () => [
+    ...(
+      [
+        ["home", "/", "secondBrain.sidebar.goHome"],
+        ["notes", "/notes", "secondBrain.sidebar.goNotes"],
+        ["calendar", "/calendar", "secondBrain.sidebar.goCalendar"],
+        ["activity", "/activity", "secondBrain.sidebar.goActivity"],
+      ] as const
+    ).map(([id, href, title]) => ({
+      id: `navigate.${id}`,
+      title: language.t(title),
+      category: language.t("command.category.view"),
+      onSelect: () => navigate(href),
+    })),
     {
       id: "sidebar.undo",
       title: language.t("secondBrain.command.undo"),
@@ -707,7 +766,10 @@ export function createSidebarController() {
     unlinkProject,
     projects,
     groups,
+    projectThreads,
     loading: () => projectsQuery.isLoading,
+    failed: () => projectsQuery.isError,
+    retryProjects: () => void projectsQuery.refetch(),
     activeSessionID,
     activeDraftID: () => activeDraft()?.draftID,
     activeProjectID,
