@@ -73,8 +73,8 @@ export const SettingsHarnessesV2: Component<{
     confirming: undefined as string | undefined,
   })
 
-  const builtIn = createMemo(() => (entries() ?? []).filter((entry) => entry.source !== "registry"))
-  const registered = createMemo(() => (entries() ?? []).filter((entry) => entry.source === "registry"))
+  const builtIn = createMemo(() => (entries.latest ?? []).filter((entry) => entry.source !== "registry"))
+  const registered = createMemo(() => (entries.latest ?? []).filter((entry) => entry.source === "registry"))
 
   const changed = () => {
     void refetch()
@@ -143,8 +143,8 @@ export const SettingsHarnessesV2: Component<{
   const entryList = createMemo(() => [...builtIn(), ...registered()])
   // The first harness stays selected until the user picks another, or the selected one is removed.
   const selected = createMemo(() => entryList().find((entry) => entry.id === state.selected) ?? entryList()[0])
-  const instance = (id: string) => instances()?.find((item) => item.id === id)
-  const update = (id: string) => updates()?.find((item) => item.id === id)
+  const instance = (id: string) => instances.latest?.find((item) => item.id === id)
+  const update = (id: string) => updates.latest?.find((item) => item.id === id)
 
   return (
     <>

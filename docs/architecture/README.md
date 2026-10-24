@@ -295,7 +295,11 @@ the agent uses its own tools and asks permission through
 receive no Second Brain system prompt. An agent reports its models either in
 the legacy `models` field or as a `configOptions` select of category `model`.
 The driver switches models with `session/set_model` or
-`session/set_config_option` to match.
+`session/set_config_option` to match. A `configOptions` select of category
+`thought_level` (OpenCode's `effort`) becomes the active model's reasoning
+efforts; before each prompt the driver sends the chosen effort, or the agent's
+`default` level when none is chosen, with `session/set_config_option`, and
+re-reads the levels from each response because a model switch can change them.
 
 `AcpHarness.parseAcpNotification` turns `session/update` notifications into
 stream events. A tool call is published at `in_progress` (or when it finishes),
@@ -399,12 +403,14 @@ harness was added. `HarnessRuntime` in `core/src/harness.ts` keeps two
 in-memory caches per instance configuration:
 
 - An availability check, reused for 30 seconds, or 5 seconds after a failure.
-- The last model list the harness reported, kept until the server stops, so
-  every app launch reads it again.
+- The last model list the harness reported. After 10 minutes the next check
+  asks the harness again; if that fails, the old list stays and counts as
+  checked. The list is dropped when the server stops, so every app launch
+  reads it again.
 
 On the first check for an ACP harness, `AcpHarness.probe` runs the handshake
 and `session/new` and reads the agent's models. Later checks run only the
-handshake. If `session/new` fails (for example before sign-in), the probe falls
+handshake, until the list is 10 minutes old. If `session/new` fails (for example before sign-in), the probe falls
 back to the handshake. Codex checks call `model/list` each time, with a
 15-second timeout for a cold start. A failed check keeps the last model list.
 Each ACP session that opens for a Run also updates the list. Saved model IDs in
@@ -412,8 +418,10 @@ Each ACP session that opens for a Run also updates the list. Saved model IDs in
 longer saves them when adding a harness.
 
 `POST /api/harness/refresh` (`{ id? }`) clears both caches for one harness or
-all, then lists again. The composer's refresh button and Settings → Harnesses
-→ Refresh models call it. Settings → Harnesses shows a harness list beside
+all, then lists again. Settings → Harnesses → Refresh models calls it. The
+composer has no refresh button: its harness list revalidates in the background
+when the window regains focus or the harness picker opens, at most once a
+minute, and keeps showing the last list until the answer arrives. Settings → Harnesses shows a harness list beside
 the selected harness's details. Models are grouped by their provider prefix
 (the part of the ID before `/`, such as `openrouter` in OpenCode's
 `openrouter/anthropic/...`), with one switch per provider and one per model.

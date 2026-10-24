@@ -83,7 +83,7 @@ export const SettingsModelsV2: Component = () => {
 
       <div class="settings-v2-tab-body settings-v2-models">
         <Show
-          when={!list.grouped.loading}
+          when={!list.grouped.loading || list.grouped.state === "refreshing"}
           fallback={
             <div class="settings-v2-models-status">
               {language.t("common.loading")}

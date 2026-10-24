@@ -927,7 +927,6 @@ export const dict = {
   "harness.effort": "Effort",
   "harness.serviceTier": "Service tier",
   "harness.default": "Default",
-  "harness.refreshModels": "Refresh Harness models",
   "harness.switching": "Wait for the Harness switch to finish.",
   "secondBrain.skills.title": "Skills",
   "secondBrain.skills.refresh": "Refresh",

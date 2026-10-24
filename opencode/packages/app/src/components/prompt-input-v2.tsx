@@ -61,10 +61,13 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
-  const openCode = () =>
-    !props.harness ||
-    props.harness.instances()?.find((instance) => instance.id === props.harness?.current())?.driver ===
-      Harness.OpenCodeDriver
+  // The built-in loop is known by id, so its model and variant controls don't wait on the harness list.
+  const openCode = () => {
+    if (!props.harness) return true
+    const id = props.harness.current()
+    const instance = props.harness.instances()?.find((item) => item.id === id)
+    return instance ? instance.driver === Harness.OpenCodeDriver : id === Harness.OpenCode
+  }
 
   return (
     <div class="flex flex-col gap-3">

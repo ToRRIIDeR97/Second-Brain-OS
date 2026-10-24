@@ -1145,7 +1145,6 @@ export const dict = {
   "harness.effort": "Esfuerzo",
   "harness.serviceTier": "Nivel de servicio",
   "harness.default": "Predeterminado",
-  "harness.refreshModels": "Actualizar modelos del motor",
   "harness.switching": "Espera a que termine el cambio de motor.",
   "secondBrain.sidebar.title": "Second Brain",
   "secondBrain.sidebar.overview": "Inicio",

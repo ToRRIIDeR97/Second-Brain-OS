@@ -103,7 +103,8 @@ export default function BrainHomePage() {
     instances: harnesses,
     // Only the first load blocks the picker; a stale list stays usable while it refreshes.
     loading: () => harnessQuery.isPending,
-    refresh: () => harnessQuery.refetch(),
+    // Window focus already refetches through the query; opening the picker does too once stale.
+    revalidate: () => void (harnessQuery.isStale && harnessQuery.refetch()),
     current: () => state.harnessInstanceID,
     select: selectHarness,
     model: {

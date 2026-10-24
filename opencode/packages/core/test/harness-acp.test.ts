@@ -265,6 +265,35 @@ describe("ACP harness", () => {
     expect(state.tools.get("sub")?.usage).toEqual({ used: 900, size: 1000 })
   })
 
+  test("offers the agent's reasoning levels on its active model only", () => {
+    const parsed = AcpHarness.sessionModels({
+      configOptions: [
+        {
+          id: "model",
+          category: "model",
+          type: "select",
+          currentValue: "anthropic/claude",
+          options: [{ value: "anthropic/claude", name: "Claude" }, { value: "openai/gpt" }],
+        },
+        {
+          id: "effort",
+          category: "thought_level",
+          type: "select",
+          currentValue: "default",
+          options: [{ value: "low" }, { value: "high" }, { value: "default" }],
+        },
+      ],
+    })
+    expect(parsed.effort).toEqual({ configId: "effort", current: "default", values: ["low", "high", "default"] })
+    expect(parsed.models.map((model) => [model.id, model.reasoningEfforts])).toEqual([
+      ["anthropic/claude", ["low", "high"]],
+      ["openai/gpt", []],
+    ])
+    expect(
+      AcpHarness.sessionModels({ models: { currentModelId: "a", availableModels: [{ modelId: "a" }] } }).effort,
+    ).toBeUndefined()
+  })
+
   test("maps tool kinds to permission actions", () => {
     expect(["execute", "edit", "move", "search", "fetch", "think", undefined].map(AcpHarness.permissionAction)).toEqual(
       ["bash", "edit", "edit", "read", "webfetch", "acp_tool", "acp_tool"],

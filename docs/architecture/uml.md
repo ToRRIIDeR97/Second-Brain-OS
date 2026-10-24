@@ -166,6 +166,10 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 `turn/interrupt`) instead of ACP. Its approvals come from
 `item/*/requestApproval` requests.
 
+Before `session/prompt` (not drawn in the diagram), the ACP driver switches the
+model and then the reasoning effort (`thought_level` option) when they differ
+from the session's, through `session/set_model` or `session/set_config_option`.
+
 Handoff text in the first prompt of a runtime (not drawn in the diagram):
 
 1. Read `harnessContinuations[instanceID]`. If there is no entry, open a new
@@ -216,7 +220,7 @@ The first prompt of a runtime also starts with the chat display guidance in
 | Desktop startup and dev-channel `userData` migration | Critical workflow | Sequence: startup; Deployment | `desktop/src/main/index.ts`, `desktop/src/main/user-data-migration.ts` |
 | Session timeline (folded turn steps) and side-panel Session tab (session usage) | Subsystem | Text only ([README](README.md#session-compatibility-and-review)) | `app/src/pages/session/timeline/rows.ts`, `timeline/row-reconciliation.ts` (`foldTimelineRows`), `timeline/message-timeline.tsx`, `app/src/components/session/turn-steps-summary.tsx`, `app/src/components/session/session-usage.ts`, `app/src/components/session/session-context-tab.tsx`, `session-ui/src/components/step-kind.ts` |
 | Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
-| Harness model lists (live discovery, refresh, hidden models) | Critical workflow | Text in [README](README.md#harness-model-lists) | `core/src/harness.ts` (`cachedProbe`, `refresh`), `core/src/harness/acp.ts` (`probe`), `app/src/components/prompt-input/harness-controller.ts`, `app/src/context/settings.tsx` (`harnesses.hiddenModels`, `harnesses.hiddenProviders`), `app/src/components/settings-v2/harnesses.tsx` |
+| Harness model lists (live discovery, background revalidation, refresh, hidden models) | Critical workflow | Text in [README](README.md#harness-model-lists) | `core/src/harness.ts` (`cachedProbe`, `refresh`), `core/src/harness/acp.ts` (`probe`), `app/src/components/prompt-input/harness-controller.ts` (`revalidate`), `app/src/context/settings.tsx` (`harnesses.hiddenModels`, `harnesses.hiddenProviders`), `app/src/components/settings-v2/harnesses.tsx` |
 | Harness CLI updates (check, notify, update) | Critical workflow | Deployment, trust boundaries; text in [README](README.md#harness-cli-updates) | `core/src/harness/update.ts`, `core/src/harness.ts` (`updates`, `upgrade`), `server/src/handlers/harness.ts`, `app/src/components/harness-update-notifier.tsx`, `app/src/components/settings-v2/harnesses.tsx` |
 | npm registry, Homebrew | External integration | Deployment, trust boundaries | `core/src/harness/update.ts` |
 | Renderer event stream reconnect and resync (backoff, directory list reload, busy status reconcile) | Critical workflow | Text in [README](README.md#product-entry-points-and-persistence) | `app/src/context/server-sdk.tsx` (`reconnectDelay`), `app/src/context/server-sync.tsx` (`createResyncTracker`, `reconcileActiveSessionStatuses`), `app/src/context/global-sync/event-names.ts` |
