@@ -53,7 +53,14 @@ describe("ACP harness", () => {
     const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "List dir" } }
     const events = [
       update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "Spawning." } }),
-      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "sub",
+        name: "subagent",
+        kind: "think",
+        status: "pending",
+        rawInput: {},
+      }),
       update({
         sessionUpdate: "tool_call_update",
         toolCallId: "sub",
@@ -61,7 +68,15 @@ describe("ACP harness", () => {
         status: "in_progress",
         rawInput: { agent: "explore", description: "List dir", prompt: "Run ls" },
       }),
-      update({ sessionUpdate: "tool_call", toolCallId: "c1:t1", kind: "execute", title: "List dir: shell", status: "pending", rawInput: {}, _meta: child }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "c1:t1",
+        kind: "execute",
+        title: "List dir: shell",
+        status: "pending",
+        rawInput: {},
+        _meta: child,
+      }),
       update({
         sessionUpdate: "tool_call_update",
         toolCallId: "c1:t1",
@@ -71,14 +86,25 @@ describe("ACP harness", () => {
         rawInput: { command: "ls -la" },
         _meta: child,
       }),
-      update({ sessionUpdate: "agent_message_chunk", messageId: "m2", content: { type: "text", text: "a.txt" }, _meta: child }),
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m2",
+        content: { type: "text", text: "a.txt" },
+        _meta: child,
+      }),
       update({
         sessionUpdate: "tool_call_update",
         toolCallId: "sub",
         status: "completed",
         content: [{ type: "content", content: { type: "text", text: "report" } }],
       }),
-      update({ sessionUpdate: "tool_call", toolCallId: "t2", kind: "read", status: "pending", rawInput: { cwd: "/w" } }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "t2",
+        kind: "read",
+        status: "pending",
+        rawInput: { cwd: "/w" },
+      }),
       update({
         sessionUpdate: "tool_call_update",
         toolCallId: "t2",
@@ -119,7 +145,14 @@ describe("ACP harness", () => {
       "opencode/child-session": { id, parentID: "s1", depth: 1, title },
     })
     const spawn = (id: string, description: string) => [
-      update({ sessionUpdate: "tool_call", toolCallId: id, name: "subagent", kind: "think", status: "pending", rawInput: {} }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: id,
+        name: "subagent",
+        kind: "think",
+        status: "pending",
+        rawInput: {},
+      }),
       update({
         sessionUpdate: "tool_call_update",
         toolCallId: id,
@@ -131,17 +164,38 @@ describe("ACP harness", () => {
     const events = [
       ...spawn("a", "Alpha"),
       ...spawn("b", "Beta"),
-      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "from a" }, _meta: childOf("ca", "Alpha") }),
-      update({ sessionUpdate: "agent_message_chunk", messageId: "m2", content: { type: "text", text: "from b" }, _meta: childOf("cb", "Beta") }),
-      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: " again" }, _meta: childOf("ca", "Alpha") }),
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m1",
+        content: { type: "text", text: "from a" },
+        _meta: childOf("ca", "Alpha"),
+      }),
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m2",
+        content: { type: "text", text: "from b" },
+        _meta: childOf("cb", "Beta"),
+      }),
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m1",
+        content: { type: "text", text: " again" },
+        _meta: childOf("ca", "Alpha"),
+      }),
       done("a"),
       done("b"),
     ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
 
     const results = events.filter((event) => event.type === "tool-result")
     expect(results).toHaveLength(2)
-    expect(results[0]).toMatchObject({ id: "a", providerMetadata: { acp: { transcript: [{ type: "text", text: "from a again" }] } } })
-    expect(results[1]).toMatchObject({ id: "b", providerMetadata: { acp: { transcript: [{ type: "text", text: "from b" }] } } })
+    expect(results[0]).toMatchObject({
+      id: "a",
+      providerMetadata: { acp: { transcript: [{ type: "text", text: "from a again" }] } },
+    })
+    expect(results[1]).toMatchObject({
+      id: "b",
+      providerMetadata: { acp: { transcript: [{ type: "text", text: "from b" }] } },
+    })
     expect(events.some((event) => event.type === "text-delta")).toBe(false)
   })
 
@@ -151,8 +205,20 @@ describe("ACP harness", () => {
     const chunk = (sessionUpdate: string, messageId: string, text: string) =>
       update({ sessionUpdate, messageId, content: { type: "text", text }, _meta: child })
     const events = [
-      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
-      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Look" } }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "sub",
+        name: "subagent",
+        kind: "think",
+        status: "pending",
+        rawInput: {},
+      }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "sub",
+        status: "in_progress",
+        rawInput: { description: "Look" },
+      }),
       chunk("agent_thought_chunk", "m1", "think "),
       chunk("agent_thought_chunk", "m1", "more"),
       chunk("agent_message_chunk", "m2", "answer "),
@@ -163,7 +229,14 @@ describe("ACP harness", () => {
     const progress = events.filter((event) => event.type === "tool-progress")
     expect(progress).toHaveLength(2)
     expect(progress[0]).toMatchObject({
-      structured: { acp: { transcript: [{ type: "reasoning", text: "think more" }, { type: "text", text: "answer " }] } },
+      structured: {
+        acp: {
+          transcript: [
+            { type: "reasoning", text: "think more" },
+            { type: "text", text: "answer " },
+          ],
+        },
+      },
     })
     expect(progress[1]).toMatchObject({
       structured: {
@@ -182,11 +255,38 @@ describe("ACP harness", () => {
     const state = AcpHarness.acpState()
     const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
     const events = [
-      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
-      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Read" } }),
-      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "a".repeat(60_000) }, _meta: child }),
-      update({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "b".repeat(60_000) }, _meta: child }),
-      update({ sessionUpdate: "agent_message_chunk", messageId: "m2", content: { type: "text", text: "dropped" }, _meta: child }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "sub",
+        name: "subagent",
+        kind: "think",
+        status: "pending",
+        rawInput: {},
+      }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "sub",
+        status: "in_progress",
+        rawInput: { description: "Read" },
+      }),
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m1",
+        content: { type: "text", text: "a".repeat(60_000) },
+        _meta: child,
+      }),
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m1",
+        content: { type: "text", text: "b".repeat(60_000) },
+        _meta: child,
+      }),
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m2",
+        content: { type: "text", text: "dropped" },
+        _meta: child,
+      }),
       update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "completed" }),
     ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
 
@@ -202,7 +302,15 @@ describe("ACP harness", () => {
     const state = AcpHarness.acpState()
     const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
     const tools = Array.from({ length: 40 }, (_, index) => [
-      update({ sessionUpdate: "tool_call", toolCallId: `c1:t${index}`, kind: "read", title: "Read: read", status: "pending", rawInput: {}, _meta: child }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: `c1:t${index}`,
+        kind: "read",
+        title: "Read: read",
+        status: "pending",
+        rawInput: {},
+        _meta: child,
+      }),
       update({
         sessionUpdate: "tool_call_update",
         toolCallId: `c1:t${index}`,
@@ -214,8 +322,20 @@ describe("ACP harness", () => {
       }),
     ]).flat()
     const events = [
-      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
-      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Read" } }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "sub",
+        name: "subagent",
+        kind: "think",
+        status: "pending",
+        rawInput: {},
+      }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "sub",
+        status: "in_progress",
+        rawInput: { description: "Read" },
+      }),
       ...tools,
       update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "completed" }),
     ].flatMap((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
@@ -224,7 +344,8 @@ describe("ACP harness", () => {
     const result = events.find((event) => event.type === "tool-result") as unknown as {
       providerMetadata: { acp: { transcript: Entry[]; truncated?: boolean } }
     }
-    const size = (entries: Entry[]) => entries.reduce((total, item) => total + (item.text ?? item.output ?? "").length, 0)
+    const size = (entries: Entry[]) =>
+      entries.reduce((total, item) => total + (item.text ?? item.output ?? "").length, 0)
     expect(result.providerMetadata.acp.truncated).toBe(true)
     expect(size(result.providerMetadata.acp.transcript)).toBeLessThanOrEqual(AcpHarness.TRANSCRIPT_LIMIT)
     // Every tool still shows that it ran, even after outputs stop being kept.
@@ -255,8 +376,20 @@ describe("ACP harness", () => {
     const state = AcpHarness.acpState()
     const child = { "opencode/child-session": { id: "c1", parentID: "s1", depth: 1, title: "Read" } }
     ;[
-      update({ sessionUpdate: "tool_call", toolCallId: "sub", name: "subagent", kind: "think", status: "pending", rawInput: {} }),
-      update({ sessionUpdate: "tool_call_update", toolCallId: "sub", status: "in_progress", rawInput: { description: "Read" } }),
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "sub",
+        name: "subagent",
+        kind: "think",
+        status: "pending",
+        rawInput: {},
+      }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "sub",
+        status: "in_progress",
+        rawInput: { description: "Read" },
+      }),
       update({ sessionUpdate: "usage_update", used: 900, size: 1000, _meta: child }),
       update({ sessionUpdate: "usage_update", used: 50, size: 1000, cost: { amount: 0.5, currency: "USD" } }),
     ].forEach((notification) => AcpHarness.parseAcpNotification(notification, "s1", state))
@@ -292,6 +425,27 @@ describe("ACP harness", () => {
     expect(
       AcpHarness.sessionModels({ models: { currentModelId: "a", availableModels: [{ modelId: "a" }] } }).effort,
     ).toBeUndefined()
+  })
+
+  test("folds older OpenCode's per-level models into their base model", () => {
+    const parsed = AcpHarness.sessionModels({
+      models: {
+        currentModelId: "opencode/gpt/high",
+        availableModels: [
+          { modelId: "opencode/gpt", name: "OpenCode/GPT" },
+          { modelId: "opencode/gpt/low", name: "OpenCode/GPT (low)" },
+          { modelId: "opencode/gpt/high", name: "OpenCode/GPT (high)" },
+          { modelId: "opencode/pickle", name: "OpenCode/Pickle" },
+          { modelId: "opencode/pickle/mini", name: "OpenCode/Pickle Mini" },
+        ],
+      },
+    })
+    expect(parsed.models.map((model) => [model.id, model.reasoningEfforts, model.isDefault])).toEqual([
+      ["opencode/gpt", ["low", "high"], true],
+      ["opencode/pickle", [], false],
+      ["opencode/pickle/mini", [], false],
+    ])
+    expect([...(parsed.variants ?? [])]).toEqual(["opencode/gpt/low", "opencode/gpt/high"])
   })
 
   test("maps tool kinds to permission actions", () => {

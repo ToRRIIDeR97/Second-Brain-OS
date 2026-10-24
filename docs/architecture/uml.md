@@ -169,6 +169,8 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 Before `session/prompt` (not drawn in the diagram), the ACP driver switches the
 model and then the reasoning effort (`thought_level` option) when they differ
 from the session's, through `session/set_model` or `session/set_config_option`.
+For older OpenCode, which lists levels as `<base>/<level>` models, the chosen
+level is sent as a switch to that model instead.
 
 Handoff text in the first prompt of a runtime (not drawn in the diagram):
 
