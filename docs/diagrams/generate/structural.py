@@ -64,12 +64,12 @@ def trust():
             "files, harness child processes and external services, with the control at each crossing and known gaps in red.")
     s.heading("Trust boundaries and sensitive data", "dashed = trust zone · orange = sensitive data · red = known gap (see threat model)")
     s.zone(20, 70, 230, 230, "Renderer sandbox (untrusted input)")
-    s.box(40, 100, 190, 86, "Solid renderer", ["contextIsolation, sandbox,", "no nodeIntegration",
+    s.box(40, 100, 190, 86, "Solid renderer", ["contextIsolation, sandbox,", "no nodeIntegration, CSP",
           "svg blocks: sandboxed iframe"], cls="sub")
     s.box(40, 198, 190, 90, "Untrusted inputs", ["note bodies, URLs, IPC args,", "provider + agent output,", "workspace content"], cls="sub")
     s.zone(20, 330, 230, 290, "Electron main (privileged)")
-    s.box(40, 360, 190, 84, "IPC handlers", ["allowlisted channels", "session export: basename,", "≤32 MiB, native dialog"], cls="sub")
-    s.box(40, 456, 190, 66, "Google service", ["PKCE loopback OAuth", "safeStorage-encrypted secrets"], cls="sub")
+    s.box(40, 360, 190, 84, "IPC handlers", ["allowlisted channels", "export ≤32 MiB, dialog", "deep links: confirmed"], cls="sub")
+    s.box(40, 456, 190, 66, "Google service", ["PKCE loopback OAuth", "state-checked, safeStorage"], cls="sub")
     s.box(40, 534, 190, 70, "Profile data", ["drafts.sqlite (plaintext)", "electron-store files"], cls="store")
     s.zone(300, 70, 330, 380, "Loopback server process")
     s.box(320, 100, 290, 74, "Authorization", ["Basic auth opencode:<uuid>", "header or auth_token query"], cls="sub")

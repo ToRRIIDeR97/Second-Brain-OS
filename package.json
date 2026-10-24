@@ -10,6 +10,7 @@
     "desktop:build": "bun run build && bun run --cwd opencode/packages/desktop package:win --publish never",
     "typecheck": "bun run --cwd opencode typecheck",
     "lint": "bun run --cwd opencode lint",
+    "format:check": "bun run --cwd opencode format:check",
     "check:generated": "bun run --cwd opencode/packages/client check:generated",
     "check": "bun run typecheck && bun run lint && bun run check:generated && bun run test && bun run build",
     "test": "bun run --cwd opencode turbo run test --continue --filter='!opencode' --filter='!@opencode-ai/core' --filter='!@opencode-ai/client' --filter='!@opencode-ai/schema' && bun run test:second-brain",
