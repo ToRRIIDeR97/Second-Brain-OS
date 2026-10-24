@@ -32,7 +32,8 @@ export function setupInstructions(request: string) {
       '{"id": "short-id", "name": "Display name", "command": "/absolute/path/to/cli", "args": ["acp"]}',
       "```",
       'Add "model" only if the agent needs a specific model ID to answer.',
-      "4. Second Brain then tests it automatically (ACP handshake, model list, one short prompt) and sends you the result. If the test fails, use the result to fix the proposal and send a new block.",
+      "4. I review the command, then Second Brain tests it (ACP handshake, model list, one short prompt) and sends you the result. If the test fails, use the result to fix the proposal and send a new block.",
+      "Never propose a shell, script interpreter, `env` or a download tool as the command; propose the agent CLI itself.",
       "Keep replies short.",
     ].join("\n") + `${requestMarker}${request}`
   )
@@ -75,9 +76,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+// A proposal comes from a model that may have read untrusted text, so these launchers, which
+// would run whatever their arguments say, are never tested or saved as a harness.
+const refusedLaunchers = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "dash",
+  "ksh",
+  "csh",
+  "tcsh",
+  "cmd",
+  "powershell",
+  "pwsh",
+  "wsl",
+  "node",
+  "deno",
+  "perl",
+  "ruby",
+  "php",
+  "osascript",
+  "curl",
+  "wget",
+  "env",
+  "sudo",
+  "xargs",
+])
+
+/** Whether a proposed command is a shell, interpreter or download tool rather than an agent CLI. */
+export function refusedCommand(command: string) {
+  const name = (command.split(/[\\/]/).at(-1) ?? command).toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, "")
+  return refusedLaunchers.has(name) || /^python[\d.]*$/.test(name)
+}
+
 /** Identity of a proposal's runnable part; a changed name alone doesn't need a new test. */
 export const proposalKey = (proposal: HarnessProposal) =>
   JSON.stringify([proposal.command, proposal.args, proposal.model ?? ""])
+
+/**
+ * What to do with a new proposal. Testing starts the command on this computer, so it runs on its
+ * own only when the user already approved this exact command; otherwise the user reviews it first.
+ */
+export function proposalAction(proposal: HarnessProposal, approved: ReadonlySet<string>) {
+  if (refusedCommand(proposal.command)) return "refused" as const
+  return approved.has(proposalKey(proposal)) ? ("test" as const) : ("review" as const)
+}
 
 /** Message sent back to the assistant after a test, so it can fix a failing proposal. */
 export function testResultMessage(result: { verification?: Harness.Verification; error?: string }) {

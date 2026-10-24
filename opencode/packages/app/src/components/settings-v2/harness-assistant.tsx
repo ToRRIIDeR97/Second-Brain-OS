@@ -23,6 +23,7 @@ import {
   type HarnessProposal,
   displayedUserText,
   parseProposal,
+  proposalAction,
   proposalKey,
   setupInstructions,
   testResultMessage,
@@ -34,6 +35,8 @@ import "./settings-v2.css"
 const autoRetryLimit = 3
 
 type TestState =
+  | { status: "proposed"; proposal: HarnessProposal }
+  | { status: "refused"; proposal: HarnessProposal }
   | { status: "running"; proposal: HarnessProposal }
   | { status: "passed"; proposal: HarnessProposal; verification: Harness.Verification }
   | { status: "failed"; proposal: HarnessProposal; message: string }
@@ -76,6 +79,8 @@ const HarnessAssistant: Component<{
   const sessionID = () => state.sessionID
   const test = () => state.test
   const tested = { key: "", retries: 0, assistantMessage: "" }
+  // Commands the user chose to test; only these may run without another click.
+  const approved = new Set<string>()
 
   const harness = createPromptHarnessController({
     current: () => selection.harness,
@@ -185,7 +190,8 @@ const HarnessAssistant: Component<{
     void send(message)
   }
 
-  // Test each new proposal once the assistant has finished its reply.
+  // Show each new proposal once the assistant has finished its reply. Testing runs the command on
+  // this computer, so a command the user has not approved waits for "Test this command".
   createEffect(
     on([busy, lastAssistant], ([isBusy, message]) => {
       if (isBusy || !message || message.id === tested.assistantMessage) return
@@ -193,9 +199,18 @@ const HarnessAssistant: Component<{
       const proposal = parseProposal(message.text)
       if (!proposal || proposalKey(proposal) === tested.key) return
       tested.key = proposalKey(proposal)
-      runTest(proposal)
+      const action = proposalAction(proposal, approved)
+      if (action === "test") return runTest(proposal)
+      setState("test", { status: action === "refused" ? "refused" : "proposed", proposal })
     }),
   )
+
+  const approveTest = () => {
+    const current = state.test
+    if (current?.status !== "proposed") return
+    approved.add(proposalKey(current.proposal))
+    runTest(current.proposal)
+  }
 
   const save = () => {
     const passed = state.test
@@ -317,6 +332,22 @@ const HarnessAssistant: Component<{
                   <Show when={state().proposal.model}>{(model) => ` · ${model()}`}</Show>
                 </span>
               </div>
+              <Show when={state().status === "proposed"}>
+                <div class="settings-v2-harness-detail">{language.t("harness.assistant.review")}</div>
+                <code class="settings-v2-harness-detail block break-all" data-slot="harness-command">
+                  {[state().proposal.command, ...state().proposal.args].join(" ")}
+                </code>
+                <div>
+                  <ButtonV2 variant="contrast" size="small" onClick={approveTest}>
+                    {language.t("harness.assistant.testCommand")}
+                  </ButtonV2>
+                </div>
+              </Show>
+              <Show when={state().status === "refused"}>
+                <div role="alert" class="settings-v2-server-dialog-error">
+                  {language.t("harness.assistant.refused")}
+                </div>
+              </Show>
               <Show when={state().status === "running"}>
                 <div class="settings-v2-harness-detail">{language.t("harness.assistant.testing")}</div>
               </Show>
