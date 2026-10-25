@@ -11,6 +11,7 @@ import type {
 import { net, safeStorage, shell } from "electron"
 import { getStore } from "./store"
 import {
+  builtInGoogleClient,
   createGoogleAccessTokens,
   googleEventId,
   googleEventPayload,
@@ -22,6 +23,7 @@ import {
   pkceChallenge,
   pruneOutbox,
   requestGoogleToken,
+  resolveGoogleClient,
   type GoogleEventResponse,
   type GoogleTaskResponse,
 } from "./google-calendar-domain"
@@ -35,6 +37,11 @@ const eventsEndpoint = `${calendarEndpoint}/events`
 const taskListsEndpoint = "https://tasks.googleapis.com/tasks/v1/users/@me/lists"
 const tasksEndpoint = "https://tasks.googleapis.com/tasks/v1/lists"
 const oauthTimeoutMs = 5 * 60 * 1_000
+// Set at build time from desktop/.env.local; Google treats a desktop client secret as non-confidential.
+const builtInClient = builtInGoogleClient({
+  clientId: import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID,
+  clientSecret: import.meta.env.MAIN_VITE_GOOGLE_CLIENT_SECRET,
+})
 
 type Config = {
   clientId: string
@@ -84,6 +91,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
       return {
         available: false,
         configured: false,
+        builtInClient: false,
         connected: false,
         access: "read",
         pendingWrites: 0,
@@ -96,6 +104,7 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
     return {
       available: true,
       configured: Boolean(config?.clientId && config.clientSecret),
+      builtInClient: Boolean(builtInClient),
       connected: Boolean(config?.refreshToken),
       access: config?.access ?? "read",
       pendingWrites:
@@ -114,16 +123,15 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
     if (!secureStorageAvailable()) throw new Error("google_secure_storage_unavailable")
     const windowId = input.windowId
     if (!Number.isSafeInteger(windowId) || windowId! <= 0) throw new Error("google_window_invalid")
-    validateCredentials(input.clientId, input.clientSecret)
+    const client = resolveGoogleClient(input, builtInClient)
     busy = true
     try {
-      const tokens = await authorize({ ...input, windowId: windowId! })
+      const tokens = await authorize({ ...client, access: input.access, windowId: windowId! })
       if (!tokens.access_token || !tokens.refresh_token) throw new Error("google_refresh_token_missing")
       const account = await providerJson<{ summary?: string; id?: string }>(calendarEndpoint, tokens.access_token)
       accessTokens.clear()
       writeConfig({
-        clientId: input.clientId.trim(),
-        clientSecret: input.clientSecret.trim(),
+        ...client,
         refreshToken: tokens.refresh_token,
         access: input.access,
         accountLabel: account.summary ?? account.id,
@@ -340,7 +348,7 @@ async function authorize(input: {
   }
   const redirectUri = `http://127.0.0.1:${address.port}/oauth2/callback`
   const url = new URL(authorizeEndpoint)
-  url.searchParams.set("client_id", input.clientId.trim())
+  url.searchParams.set("client_id", input.clientId)
   url.searchParams.set("redirect_uri", redirectUri)
   url.searchParams.set("response_type", "code")
   url.searchParams.set("access_type", "offline")
@@ -356,8 +364,8 @@ async function authorize(input: {
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("google_oauth_timeout")), oauthTimeoutMs)),
     ])
     return requestGoogleToken(netFetch, tokenEndpoint, {
-      client_id: input.clientId.trim(),
-      client_secret: input.clientSecret.trim(),
+      client_id: input.clientId,
+      client_secret: input.clientSecret,
       code,
       code_verifier: verifier,
       grant_type: "authorization_code",
@@ -491,13 +499,6 @@ function pendingEvent(input: GoogleCalendarWrite) {
     ...input.event,
     providerId: input.kind === "create" ? googleEventId(input.idempotencyKey) : input.event.providerId,
   }
-}
-
-function validateCredentials(clientId: string, clientSecret: string) {
-  const id = clientId.trim()
-  const secret = clientSecret.trim()
-  if (!id.endsWith(".apps.googleusercontent.com") || id.length > 512) throw new Error("google_client_id_invalid")
-  if (!secret || secret.length > 512 || /\s/.test(secret)) throw new Error("google_client_secret_invalid")
 }
 
 function validateWrite(input: GoogleCalendarWrite) {

@@ -34,6 +34,37 @@ export function googleScopes(access: "read" | "write") {
   return scopes
 }
 
+export type GoogleClient = { clientId: string; clientSecret: string }
+
+/** Validates and trims a Desktop OAuth client, throwing the error code the Calendar page maps. */
+export function validateGoogleClient(clientId: string, clientSecret: string): GoogleClient {
+  const id = clientId.trim()
+  const secret = clientSecret.trim()
+  if (!id.endsWith(".apps.googleusercontent.com") || id.length > 512) throw new Error("google_client_id_invalid")
+  if (!secret || secret.length > 512 || /\s/.test(secret)) throw new Error("google_client_secret_invalid")
+  return { clientId: id, clientSecret: secret }
+}
+
+/** The client compiled into this build, or undefined when the build has none or an invalid one. */
+export function builtInGoogleClient(env: { clientId?: string; clientSecret?: string }) {
+  try {
+    return validateGoogleClient(env.clientId ?? "", env.clientSecret ?? "")
+  } catch {
+    return undefined
+  }
+}
+
+/** Typed credentials win over the built-in client; a partly typed pair is validated, never replaced. */
+export function resolveGoogleClient(
+  input: { clientId?: string; clientSecret?: string },
+  builtIn: GoogleClient | undefined,
+): GoogleClient {
+  const typed = Boolean(input.clientId?.trim() || input.clientSecret?.trim())
+  if (typed) return validateGoogleClient(input.clientId ?? "", input.clientSecret ?? "")
+  if (builtIn) return builtIn
+  throw new Error("google_client_missing")
+}
+
 export function pkceChallenge(verifier: string) {
   return createHash("sha256").update(verifier).digest("base64url")
 }

@@ -241,6 +241,13 @@ by this Windows candidate workflow. A successful build does not establish
 clean-machine installation, platform signing, or Google OAuth readiness.
 
 Never bundle workspace data, local databases, credentials, `.env` files, logs,
-or recovery archives. Preserve canonical files and existing application data
-when upgrading. Donor Tauri databases have no automatic import path; see
+or recovery archives. The one exception is the Google Desktop OAuth client: when
+`opencode/packages/desktop/.env.local` sets `MAIN_VITE_GOOGLE_CLIENT_ID` and
+`MAIN_VITE_GOOGLE_CLIENT_SECRET` (see `.env.example`), the build compiles both
+values into the main process so the Calendar page offers one-click Google
+sign-in. Without them the page asks for the user's own client. Build from
+`opencode/packages/desktop` (as the scripts do): electron-vite reads the env
+file from the working directory.
+
+Preserve canonical files and existing application data when upgrading. Donor Tauri databases have no automatic import path; see
 [the donor record](archive/tauri/README.md).

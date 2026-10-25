@@ -167,7 +167,10 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   the new thread and sends the message in one step.
 - **Projects** lists Project cards by status and opens a card with Overview,
   Plan, Work, Files, Activity and Map views.
-- **Calendar** shows events and tasks; account setup lives in Settings.
+- **Calendar** shows events and tasks. Its Google Calendar & Tasks panel
+  connects a Google account: one **Sign in with Google** button when the build
+  ships its own OAuth client, else (or under **Use your own OAuth client**) the
+  client ID and secret fields.
 - **Notes** holds global notes and Project notes.
 - **Activity** lists threads needing attention, agent runs, changes and
   history. Agent runs shows recent threads with active runs first and a

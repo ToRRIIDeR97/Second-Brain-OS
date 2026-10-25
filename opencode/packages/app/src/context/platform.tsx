@@ -23,6 +23,8 @@ type DesktopOS = "macos" | "windows" | "linux"
 export type GoogleCalendarConnection = {
   available: boolean
   configured: boolean
+  /** The build ships its own OAuth client, so sign-in needs no typed credentials. */
+  builtInClient?: boolean
   connected: boolean
   access: "read" | "write"
   accountLabel?: string
@@ -85,8 +87,9 @@ export type GoogleTaskWriteResult = {
 export type GoogleCalendarPlatform = {
   status(): Promise<GoogleCalendarConnection>
   connect(input: {
-    clientId: string
-    clientSecret: string
+    /** Omit both to use the build's own client. */
+    clientId?: string
+    clientSecret?: string
     access: "read" | "write"
     /** Electron main process supplies this; renderer values are ignored. */
     windowId?: number

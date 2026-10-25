@@ -69,6 +69,7 @@ type CalendarState = {
   error: string
   googlePanel: boolean
   googleClientId: string
+  googleOwnClient: boolean
   googleClientSecret: string
   googleAccess: "read" | "write"
   googleBusy: boolean
@@ -170,6 +171,7 @@ export default function CalendarPage() {
     error: "",
     googlePanel: search.google === "connect",
     googleClientId: "",
+    googleOwnClient: false,
     googleClientSecret: "",
     googleAccess: "read",
     googleBusy: false,
@@ -373,24 +375,34 @@ export default function CalendarPage() {
     if (message.includes("write_consent")) return language.t("secondBrain.calendar.google.error.writeConsent")
     if (message.includes("conflict")) return language.t("secondBrain.calendar.google.error.conflict")
     if (message.includes("oauth_denied")) return language.t("secondBrain.calendar.google.error.denied")
+    if (
+      message.includes("client_missing") ||
+      message.includes("client_id_invalid") ||
+      message.includes("client_secret_invalid")
+    )
+      return language.t("secondBrain.calendar.google.error.credentials")
     return language.t("secondBrain.calendar.google.error.request")
   }
+
+  // Typed credentials are needed unless the build ships its own client and the user hasn't opted out of it.
+  const googleTypedClient = () => !googleConnection.latest?.builtInClient || state.googleOwnClient
 
   const connectGoogle = async () => {
     const google = platform.googleCalendar
     if (!google) return
-    if (!state.googleClientId.trim() || !state.googleClientSecret.trim()) {
+    const typed = googleTypedClient()
+    if (typed && (!state.googleClientId.trim() || !state.googleClientSecret.trim())) {
       setState("googleError", language.t("secondBrain.calendar.google.error.credentials"))
       return
     }
     setState({ googleBusy: true, googleError: "" })
     let connected = false
     try {
-      const connection = await google.connect({
-        clientId: state.googleClientId,
-        clientSecret: state.googleClientSecret,
-        access: state.googleAccess,
-      })
+      const connection = await google.connect(
+        typed
+          ? { clientId: state.googleClientId, clientSecret: state.googleClientSecret, access: state.googleAccess }
+          : { access: state.googleAccess },
+      )
       googleActions.mutate(connection)
       setState({ googleClientSecret: "", googlePanel: false })
       connected = true
@@ -1029,25 +1041,27 @@ export default function CalendarPage() {
                                 void connectGoogle()
                               }}
                             >
-                              <label class={fieldClass} for="google-client-id">
-                                {language.t("secondBrain.calendar.google.clientId")}
-                                <TextInputV2
-                                  id="google-client-id"
-                                  value={state.googleClientId}
-                                  autocomplete="off"
-                                  onInput={(event) => setState("googleClientId", event.currentTarget.value)}
-                                />
-                              </label>
-                              <label class={fieldClass} for="google-client-secret">
-                                {language.t("secondBrain.calendar.google.clientSecret")}
-                                <TextInputV2
-                                  id="google-client-secret"
-                                  type="password"
-                                  value={state.googleClientSecret}
-                                  autocomplete="off"
-                                  onInput={(event) => setState("googleClientSecret", event.currentTarget.value)}
-                                />
-                              </label>
+                              <Show when={googleTypedClient()}>
+                                <label class={fieldClass} for="google-client-id">
+                                  {language.t("secondBrain.calendar.google.clientId")}
+                                  <TextInputV2
+                                    id="google-client-id"
+                                    value={state.googleClientId}
+                                    autocomplete="off"
+                                    onInput={(event) => setState("googleClientId", event.currentTarget.value)}
+                                  />
+                                </label>
+                                <label class={fieldClass} for="google-client-secret">
+                                  {language.t("secondBrain.calendar.google.clientSecret")}
+                                  <TextInputV2
+                                    id="google-client-secret"
+                                    type="password"
+                                    value={state.googleClientSecret}
+                                    autocomplete="off"
+                                    onInput={(event) => setState("googleClientSecret", event.currentTarget.value)}
+                                  />
+                                </label>
+                              </Show>
                               <label class={fieldClass} for="google-access">
                                 {language.t("secondBrain.calendar.google.access")}
                                 <SelectV2
@@ -1063,7 +1077,9 @@ export default function CalendarPage() {
                                 />
                               </label>
                               <p class="text-[11px] leading-4 text-v2-text-text-faint">
-                                {language.t("secondBrain.calendar.google.credentialNote")}
+                                {googleTypedClient()
+                                  ? language.t("secondBrain.calendar.google.credentialNote")
+                                  : language.t("secondBrain.calendar.google.signInNote")}
                               </p>
                               <Show when={state.googleError}>
                                 <p role="alert" class="text-[12px] text-v2-text-text-critical">
@@ -1073,8 +1089,23 @@ export default function CalendarPage() {
                               <ButtonV2 type="submit" variant="contrast" disabled={state.googleBusy}>
                                 {state.googleBusy
                                   ? language.t("secondBrain.calendar.google.waiting")
-                                  : language.t("secondBrain.calendar.google.openBrowser")}
+                                  : googleTypedClient()
+                                    ? language.t("secondBrain.calendar.google.openBrowser")
+                                    : language.t("secondBrain.calendar.google.signIn")}
                               </ButtonV2>
+                              <Show when={googleConnection.latest?.builtInClient}>
+                                <ButtonV2
+                                  type="button"
+                                  variant="ghost"
+                                  size="small"
+                                  aria-expanded={state.googleOwnClient}
+                                  onClick={() => setState({ googleOwnClient: !state.googleOwnClient, googleError: "" })}
+                                >
+                                  {state.googleOwnClient
+                                    ? language.t("secondBrain.calendar.google.builtInClient")
+                                    : language.t("secondBrain.calendar.google.ownClient")}
+                                </ButtonV2>
+                              </Show>
                             </form>
                           }
                         >
