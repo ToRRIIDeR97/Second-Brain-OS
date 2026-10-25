@@ -126,6 +126,14 @@ named by a legacy `location.workspaceId`; otherwise the card folder. Sessions
 keep their exact `directory`, so `GET /api/session?directory=<threadDirectory>`
 returns only that Project's threads.
 
+Creating a Project with no linked folder (`POST /second-brain/projects`, the
+app's New Project form) also creates a visible `projects/<name>` folder and sets
+`location.path` to it, so the Project's threads run there and a later scan finds
+the folder already claimed. `BrainProject.folderName` turns the name into one
+safe path segment. A name whose folder another Project uses gets a ` (2)`
+suffix, and an existing unclaimed folder of that name is adopted. Projects
+created before this change keep their card folder as their thread directory.
+
 Entry points (legacy instance routes, scoped to the workspace directory through
 workspace routing):
 
@@ -735,8 +743,10 @@ that still has its default title and exactly one user message. This covers
 harness sessions too. It runs in the background, with a 30-second timeout, and
 never delays the turn. It uses the hidden `title` agent's prompt through the
 host LLM client. The model is the title agent's model, else the small model
-of the session's provider, else the session's model (in-process sessions only),
-else the catalog default. The reply is cleaned by `SessionTitle.clean`
+of the provider behind a base model, else that base model. The base model is the
+session's model for in-process sessions, otherwise the catalog default. Without a
+configured default, the catalog falls back to the newest available model that
+its provider hasn't marked deprecated. The reply is cleaned by `SessionTitle.clean`
 (`core/src/session/title.ts`). The rename is published as
 `SessionV1.Event.Updated` after re-reading the row, so a rename made meanwhile
 wins. If no model resolves or the call fails, the session keeps its default
