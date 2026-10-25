@@ -232,6 +232,39 @@ the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.
 
+### Cross-harness delegation
+
+Agents can start work in another harness through the delegation endpoint
+([ADR-011](../adr/ADR-011-cross-harness-delegation.md),
+`opencode/packages/core/src/harness/delegation.ts`). Controls:
+
+- The endpoint listens on `127.0.0.1` only, on its own port. Every request
+  needs a bearer token (32 random bytes, compared in constant time). Each
+  Codex or ACP runtime gets its own token, bound to the Run that owns the
+  runtime, and the token is revoked when the runtime closes. A token can
+  only act as that Run: list harnesses, and start, read or stop that Run's
+  own child tasks.
+- Requests that carry an `Origin` header get 403, so a web page can't drive
+  the endpoint through the user's browser. Bodies are capped at 1 MB, and
+  only `POST /mcp` is served.
+- ACP agents get the token in the `session/new` request over their stdio.
+  Codex gets it in the `TENON_DELEGATION_TOKEN` environment variable, so it
+  stays out of the process arguments. A harness process can read its own
+  token, as with any credential in its environment.
+- A delegated task runs as a normal child Run on the target harness with that
+  harness's usual approval flow. Delegation grants no permission the target
+  wouldn't ask for anyway. Its approvals reach the delegating Run's composer.
+- The built-in loop asks permission `delegate` before starting or stopping a
+  task. Codex and ACP agents apply their own MCP tool policy to the call.
+- A delegated agent may delegate once more (depth 2), and a Run may have at
+  most four delegated tasks running, which bounds runaway fan-out and cost.
+- The delegated agent receives only the task text the caller wrote, framed as
+  a delegated task. The reply returns to the caller as tool output: it is
+  untrusted model output and may carry text from workspace files.
+
+Known gaps: interrupting a Run doesn't stop the tasks it delegated. An ACP
+agent without HTTP MCP support gets no delegation tools.
+
 ### Harness skill catalog
 
 `GET /api/skill/catalog` reads `SKILL.md` frontmatter from fixed folders under
