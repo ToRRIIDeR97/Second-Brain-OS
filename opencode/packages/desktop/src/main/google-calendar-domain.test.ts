@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  classifyGoogleError,
   createGoogleAccessTokens,
   GOOGLE_OUTBOX_MAX_ATTEMPTS,
   googleEventId,
@@ -202,5 +203,45 @@ describe("Google outbox", () => {
     expect(outboxFailureState("google_token_exchange_failed", 1)).toBe("offline")
     expect(outboxFailureState("google_token_exchange_failed", GOOGLE_OUTBOX_MAX_ATTEMPTS)).toBe("failed")
     expect(outboxFailureState("google_reconnect_required", GOOGLE_OUTBOX_MAX_ATTEMPTS + 1)).toBe("offline")
+  })
+})
+
+describe("Google API errors", () => {
+  const calendar = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+  const tasks = "https://tasks.googleapis.com/tasks/v1/users/@me/lists"
+
+  test("names the disabled API so the user knows which one to enable", () => {
+    const body = JSON.stringify({
+      error: {
+        status: "PERMISSION_DENIED",
+        errors: [{ reason: "accessNotConfigured" }],
+        details: [{ reason: "SERVICE_DISABLED" }],
+      },
+    })
+    expect(classifyGoogleError(403, tasks, body)).toEqual({
+      code: "google_api_disabled_tasks",
+      api: "tasks",
+      reason: "SERVICE_DISABLED",
+    })
+    expect(classifyGoogleError(403, calendar, body).code).toBe("google_api_disabled_calendar")
+  })
+
+  test("recognizes missing scopes and rate limits", () => {
+    const scope = JSON.stringify({ error: { details: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }] } })
+    expect(classifyGoogleError(403, calendar, scope).code).toBe("google_scope_missing")
+    expect(classifyGoogleError(429, calendar, "").code).toBe("google_rate_limited")
+    const quota = JSON.stringify({ error: { errors: [{ reason: "userRateLimitExceeded" }] } })
+    expect(classifyGoogleError(403, calendar, quota).code).toBe("google_rate_limited")
+  })
+
+  test("keeps the status code otherwise and never returns free text as the reason", () => {
+    expect(classifyGoogleError(409, calendar, "{}")).toEqual({
+      code: "google_http_409",
+      api: "calendar",
+      reason: undefined,
+    })
+    expect(classifyGoogleError(500, tasks, "<html>oops</html>").code).toBe("google_http_500")
+    const text = JSON.stringify({ error: { status: "Event 'Dentist' is invalid" } })
+    expect(classifyGoogleError(400, calendar, text).reason).toBeUndefined()
   })
 })

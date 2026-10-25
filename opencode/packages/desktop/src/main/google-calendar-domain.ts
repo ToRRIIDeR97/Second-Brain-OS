@@ -252,6 +252,45 @@ export function pruneOutbox<T extends { state: OutboxState }>(entries: T[], limi
   return entries.filter((entry) => !drop.has(entry))
 }
 
+type GoogleErrorBody = {
+  error?: {
+    status?: string
+    errors?: { reason?: string }[]
+    details?: { reason?: string }[]
+  }
+}
+
+/**
+ * Turns a failed Google API response into an error code the Calendar page can explain.
+ * `reason` is Google's machine-readable reason (never message text), safe to log.
+ */
+export function classifyGoogleError(status: number, url: string, body: string) {
+  const api = new URL(url).hostname === "tasks.googleapis.com" ? "tasks" : "calendar"
+  const parsed = (() => {
+    try {
+      return JSON.parse(body) as GoogleErrorBody
+    } catch {
+      return undefined
+    }
+  })()
+  const reasons = [
+    ...(parsed?.error?.details ?? []).map((item) => item.reason),
+    ...(parsed?.error?.errors ?? []).map((item) => item.reason),
+    parsed?.error?.status,
+  ].filter((item): item is string => typeof item === "string" && /^[A-Za-z_]{1,64}$/.test(item))
+  const reason = reasons[0]
+  const has = (...names: string[]) => reasons.some((item) => names.includes(item))
+  const code = (() => {
+    if (has("SERVICE_DISABLED", "accessNotConfigured")) return `google_api_disabled_${api}`
+    if (has("ACCESS_TOKEN_SCOPE_INSUFFICIENT", "insufficientPermissions")) return "google_scope_missing"
+    if (status === 429 || has("RATE_LIMIT_EXCEEDED", "rateLimitExceeded", "userRateLimitExceeded")) {
+      return "google_rate_limited"
+    }
+    return `google_http_${status}`
+  })()
+  return { code, api, reason }
+}
+
 /** `attempts` counts the attempt that just failed. */
 export function outboxFailureState(message: string, attempts: number): "conflict" | "failed" | "offline" {
   if (message === "google_conflict") return "conflict"

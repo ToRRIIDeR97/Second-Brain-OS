@@ -9,9 +9,11 @@ import type {
   GoogleTaskWrite,
 } from "@opencode-ai/app"
 import { net, safeStorage, shell } from "electron"
+import { write as writeLog } from "./logging"
 import { getStore } from "./store"
 import {
   builtInGoogleClient,
+  classifyGoogleError,
   createGoogleAccessTokens,
   googleEventId,
   googleEventPayload,
@@ -390,8 +392,16 @@ async function providerJson<T>(input: string | URL, accessToken: string, init?: 
     throw new Error("google_reconnect_required")
   }
   if (response.status === 412) throw new Error("google_conflict")
-  if (!response.ok) throw new Error(`google_http_${response.status}`)
+  if (!response.ok) throw await providerError(response, input.toString())
   return (await response.json()) as T
+}
+
+// Logs only the API, status and Google's reason code; the body can echo event or task content.
+async function providerError(response: Response, url: string) {
+  const body = await response.text().catch(() => "")
+  const { code, api, reason } = classifyGoogleError(response.status, url, body.slice(0, 64_000))
+  writeLog("google", "google request failed", { api, status: response.status, reason, code }, "warn")
+  return new Error(code)
 }
 
 async function dispatch(config: Config, operation: StoredOutbox) {
@@ -401,14 +411,15 @@ async function dispatch(config: Config, operation: StoredOutbox) {
     const result = await accessTokens.with(config, async (accessToken): Promise<GoogleCalendarProviderEvent | null> => {
       if (input.kind === "delete") {
         const headers = input.event.etag ? { "If-Match": input.event.etag } : undefined
-        const response = await net.fetch(`${eventsEndpoint}/${encodeURIComponent(input.event.providerId)}`, {
+        const url = `${eventsEndpoint}/${encodeURIComponent(input.event.providerId)}`
+        const response = await net.fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${accessToken}`, ...headers },
           signal: AbortSignal.timeout(30_000),
         })
         if (response.status === 401) throw new Error("google_reconnect_required")
         if (response.status === 412) throw new Error("google_conflict")
-        if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
+        if (!response.ok && response.status !== 404) throw await providerError(response, url)
         return null
       }
       const id = input.kind === "create" ? googleEventId(input.idempotencyKey) : input.event.providerId
@@ -452,7 +463,8 @@ async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
     const collection = `${tasksEndpoint}/${encodeURIComponent(input.task.taskListId)}/tasks`
     const result = await accessTokens.with(config, async (accessToken): Promise<GoogleTaskProviderTask | null> => {
       if (input.kind === "delete") {
-        const response = await net.fetch(`${collection}/${encodeURIComponent(input.task.providerId)}`, {
+        const url = `${collection}/${encodeURIComponent(input.task.providerId)}`
+        const response = await net.fetch(url, {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -462,7 +474,7 @@ async function dispatchTask(config: Config, operation: StoredTaskOutbox) {
         })
         if (response.status === 401) throw new Error("google_reconnect_required")
         if (response.status === 412) throw new Error("google_conflict")
-        if (!response.ok && response.status !== 404) throw new Error(`google_http_${response.status}`)
+        if (!response.ok && response.status !== 404) throw await providerError(response, url)
         return null
       }
       const endpoint =
