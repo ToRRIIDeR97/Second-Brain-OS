@@ -13,6 +13,7 @@ export { useWslServers } from "./wsl/context"
 export {
   type DisplayBackend,
   type FatalRendererErrorLog,
+  type GoogleAccount,
   type GoogleCalendarConnection,
   type GoogleCalendarPlatform,
   type GoogleCalendarProviderEvent,

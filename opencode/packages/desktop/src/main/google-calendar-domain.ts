@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto"
-import type { GoogleCalendarProviderEvent, GoogleTaskProviderTask } from "@opencode-ai/app"
+import type {
+  GoogleAccount,
+  GoogleCalendarConnection,
+  GoogleCalendarProviderEvent,
+  GoogleTaskProviderTask,
+} from "@opencode-ai/app"
 
 export type GoogleEventResponse = {
   id?: string
@@ -73,7 +78,10 @@ export function googleEventId(idempotencyKey: string) {
   return createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 32)
 }
 
-export function normalizeGoogleEvent(input: GoogleEventResponse): GoogleCalendarProviderEvent | undefined {
+export function normalizeGoogleEvent(
+  input: GoogleEventResponse,
+  accountId: string,
+): GoogleCalendarProviderEvent | undefined {
   if (!input.id || input.status === "cancelled" || !input.start || !input.end) return
   const allDay = typeof input.start.date === "string"
   const start = input.start.dateTime
@@ -82,6 +90,7 @@ export function normalizeGoogleEvent(input: GoogleEventResponse): GoogleCalendar
   if (!date) return
   const endDate = allDay && input.end.date ? previousDate(input.end.date) : end?.slice(0, 10)
   return {
+    accountId,
     providerId: input.id,
     calendarId: "primary",
     title: input.summary?.trim() || "Untitled event",
@@ -120,9 +129,11 @@ export function googleEventPayload(event: GoogleCalendarProviderEvent) {
 export function normalizeGoogleTask(
   input: GoogleTaskResponse,
   taskList: { id: string; title: string },
+  accountId: string,
 ): GoogleTaskProviderTask | undefined {
   if (!input.id || input.deleted || !input.updated) return
   return {
+    accountId,
     providerId: input.id,
     taskListId: taskList.id,
     taskListTitle: taskList.title.trim() || "Google Tasks",
@@ -191,19 +202,26 @@ export async function requestGoogleToken(fetch: Fetch, endpoint: string, input: 
   return value
 }
 
-/** Caches the access token until shortly before `expires_in`, so queued writes share one exchange. */
+/**
+ * Caches each account's access token until shortly before `expires_in`, so queued writes share one
+ * exchange. Keyed by account: two accounts signed in through the same client never share a token.
+ */
 export function createGoogleAccessTokens(input: {
   fetch: Fetch
   endpoint: string
-  onRotate: (refreshToken: string) => void
+  onRotate: (accountId: string, refreshToken: string) => void
   now?: () => number
 }) {
   const now = input.now ?? Date.now
-  let cached: { clientId: string; token: string; expiresAt: number } | undefined
-  const fresh = (config: Credentials) => cached?.clientId === config.clientId && cached.expiresAt > now()
+  const cached = new Map<string, { clientId: string; token: string; expiresAt: number }>()
+  const fresh = (config: Credentials) => {
+    const entry = cached.get(config.accountId)
+    return Boolean(entry && entry.clientId === config.clientId && entry.expiresAt > now())
+  }
   const get = async (config: Credentials) => {
-    if (cached && fresh(config)) return cached.token
-    cached = undefined
+    const entry = cached.get(config.accountId)
+    if (entry && fresh(config)) return entry.token
+    cached.delete(config.accountId)
     const tokens = await requestGoogleToken(input.fetch, input.endpoint, {
       client_id: config.clientId,
       client_secret: config.clientSecret,
@@ -211,10 +229,16 @@ export function createGoogleAccessTokens(input: {
       grant_type: "refresh_token",
     })
     if (!tokens.access_token) throw new Error("google_reconnect_required")
-    if (tokens.refresh_token) input.onRotate(tokens.refresh_token)
+    if (tokens.refresh_token) input.onRotate(config.accountId, tokens.refresh_token)
     // Renew a minute early so a token never expires during a request.
     const lifetime = (tokens.expires_in ?? 0) * 1_000 - 60_000
-    if (lifetime > 0) cached = { clientId: config.clientId, token: tokens.access_token, expiresAt: now() + lifetime }
+    if (lifetime > 0) {
+      cached.set(config.accountId, {
+        clientId: config.clientId,
+        token: tokens.access_token,
+        expiresAt: now() + lifetime,
+      })
+    }
     return tokens.access_token
   }
   return {
@@ -227,17 +251,86 @@ export function createGoogleAccessTokens(input: {
       const reused = fresh(config)
       return request(await get(config)).catch(async (error) => {
         if (!reused || !(error instanceof Error) || error.message !== "google_reconnect_required") throw error
-        cached = undefined
+        cached.delete(config.accountId)
         return request(await get(config))
       })
     },
-    clear() {
-      cached = undefined
+    /** Drops one account's token, or every token when no account is named. */
+    clear(accountId?: string) {
+      if (accountId) return void cached.delete(accountId)
+      cached.clear()
     },
   }
 }
 
-type Credentials = { clientId: string; clientSecret: string; refreshToken: string }
+type Credentials = { accountId: string; clientId: string; clientSecret: string; refreshToken: string }
+
+/** The pre-multi-account store kept one connection in flat top-level keys. */
+export const GOOGLE_LEGACY_KEYS = ["clientId", "clientSecret", "refreshToken", "access", "accountLabel", "lastSyncedAt"]
+
+/**
+ * Turns the flat single-account keys into one account entry, still encrypted, and tags the
+ * untagged outbox entries with its ID. Returns undefined when there is nothing to migrate.
+ */
+export function migrateLegacyGoogleStore<O extends { accountId?: string }, T extends { accountId?: string }>(input: {
+  read: (key: string) => unknown
+  id: string
+  outbox: O[]
+  taskOutbox: T[]
+}) {
+  const text = (key: string) => {
+    const value = input.read(key)
+    return typeof value === "string" && value ? value : undefined
+  }
+  const clientId = text("clientId")
+  const clientSecret = text("clientSecret")
+  const refreshToken = text("refreshToken")
+  if (!clientId || !clientSecret || !refreshToken) return
+  const tag = <E extends { accountId?: string }>(entry: E) =>
+    entry.accountId ? entry : { ...entry, accountId: input.id }
+  const label = text("accountLabel")
+  const lastSyncedAt = text("lastSyncedAt")
+  return {
+    account: {
+      id: input.id,
+      // The label was the primary calendar's summary or ID, which is the account's email address.
+      ...(label?.includes("@") ? { email: label } : {}),
+      label: label ?? "Google",
+      clientId,
+      clientSecret,
+      refreshToken,
+      access: input.read("access") === "write" ? ("write" as const) : ("read" as const),
+      ...(lastSyncedAt ? { lastSyncedAt } : {}),
+    },
+    outbox: input.outbox.map(tag),
+    taskOutbox: input.taskOutbox.map(tag),
+  }
+}
+
+/** The page reads the aggregate fields; `accounts` carries the per-account detail. */
+export function googleConnection(input: {
+  configured: boolean
+  builtInClient: boolean
+  accounts: GoogleAccount[]
+}): GoogleCalendarConnection {
+  const first = input.accounts[0]
+  const lastSyncedAt = input.accounts
+    .flatMap((account) => (account.lastSyncedAt ? [account.lastSyncedAt] : []))
+    .sort()
+    .at(-1)
+  return {
+    available: true,
+    configured: input.configured,
+    builtInClient: input.builtInClient,
+    connected: input.accounts.length > 0,
+    access: input.accounts.some((account) => account.access === "write") ? "write" : "read",
+    pendingWrites: input.accounts.reduce((sum, account) => sum + account.pendingWrites, 0),
+    failedWrites: input.accounts.reduce((sum, account) => sum + account.failedWrites, 0),
+    accounts: input.accounts,
+    ...(first ? { accountLabel: first.label } : {}),
+    ...(lastSyncedAt ? { lastSyncedAt } : {}),
+  }
+}
 
 /** Drops succeeded entries first, then old failures. Queued (pending or offline) writes are never dropped. */
 export function pruneOutbox<T extends { state: OutboxState }>(entries: T[], limit = GOOGLE_OUTBOX_LIMIT) {

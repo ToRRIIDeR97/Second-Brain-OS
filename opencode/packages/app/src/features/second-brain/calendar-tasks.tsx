@@ -28,6 +28,7 @@ type Draft = {
   createdAt: string
   source: PlannerTask["source"]
   syncState: PlannerTask["syncState"]
+  accountId: string
   providerId: string
   taskListId: string
   taskListTitle: string
@@ -49,6 +50,7 @@ const emptyDraft = (): Draft => ({
   createdAt: "",
   source: "local",
   syncState: "local",
+  accountId: "",
   providerId: "",
   taskListId: "",
   taskListTitle: "",
@@ -66,7 +68,8 @@ export function CalendarTasks(props: {
   filter?: CalendarTaskFilter
   selectedId?: string
   onFilterChange?: (filter: CalendarTaskFilter) => void
-  googleCanWrite?: boolean
+  /** Google accounts with write access; a new task can be saved to any of them. */
+  googleAccounts?: ReadonlyArray<{ id: string; label: string }>
 }) {
   const language = useLanguage()
   const [state, setState] = createStore({
@@ -130,6 +133,7 @@ export function CalendarTasks(props: {
         createdAt: task.createdAt,
         source: task.source,
         syncState: task.syncState,
+        accountId: task.accountId ?? "",
         providerId: task.providerId ?? "",
         taskListId: task.taskListId ?? "",
         taskListTitle: task.taskListTitle ?? "",
@@ -193,6 +197,7 @@ export function CalendarTasks(props: {
       ...(state.draft.completedAt ? { completedAt: state.draft.completedAt } : {}),
       ...(state.draft.source === "google"
         ? {
+            ...(state.draft.accountId ? { accountId: state.draft.accountId } : {}),
             providerId: state.draft.providerId || `pending:${id}`,
             taskListId: state.draft.taskListId || "@default",
             taskListTitle: state.draft.taskListTitle || language.t("secondBrain.tasks.google.defaultList"),
@@ -383,7 +388,7 @@ export function CalendarTasks(props: {
               />
             </label>
             <Show
-              when={!state.draft.id && props.googleCanWrite}
+              when={!state.draft.id && (props.googleAccounts?.length ?? 0) > 0}
               fallback={
                 <Show when={state.draft.source === "google"}>
                   <p class="text-[11px] text-v2-text-text-faint">
@@ -399,19 +404,22 @@ export function CalendarTasks(props: {
                   id="task-source"
                   aria-label={language.t("secondBrain.tasks.google.destination")}
                   class="!h-8 !w-full"
-                  options={["local", "google"] as const}
-                  current={state.draft.source === "google" ? "google" : "local"}
-                  label={(source) =>
-                    source === "google"
-                      ? language.t("secondBrain.tasks.google.defaultList")
-                      : language.t("secondBrain.calendar.sync.local")
-                  }
+                  options={["local", ...(props.googleAccounts ?? []).map((account) => account.id)]}
+                  current={state.draft.source === "google" ? state.draft.accountId : "local"}
+                  label={(source) => {
+                    if (source === "local") return language.t("secondBrain.calendar.sync.local")
+                    const account = props.googleAccounts?.find((item) => item.id === source)
+                    return language.t("secondBrain.tasks.google.destinationAccount", {
+                      account: account?.label ?? language.t("secondBrain.calendar.google.accountFallback"),
+                    })
+                  }}
                   onSelect={(source) =>
                     source &&
                     setState("draft", {
                       ...state.draft,
-                      source: source === "google" ? "google" : "local",
-                      syncState: source === "google" ? "pending" : "local",
+                      source: source === "local" ? "local" : "google",
+                      accountId: source === "local" ? "" : source,
+                      syncState: source === "local" ? "local" : "pending",
                     })
                   }
                 />
