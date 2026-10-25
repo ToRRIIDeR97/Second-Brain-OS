@@ -274,14 +274,14 @@ describe("session runner titles", () => {
     }),
   )
 
-  it.effect("titles a harness session with a host model", () =>
+  it.effect("titles a harness session with the small model of the default model's provider", () =>
     Effect.gen(function* () {
       yield* setup({ harness: true })
       yield* ask("Explore the harness code")
       yield* settle
 
       expect(titleRequests).toHaveLength(1)
-      expect(titleRequests[0]?.model.id as string | undefined).toBe("default-model")
+      expect(titleRequests[0]?.model.id as string | undefined).toBe("small-model")
       expect(yield* storedTitle).toBe("Fix login redirect")
     }),
   )

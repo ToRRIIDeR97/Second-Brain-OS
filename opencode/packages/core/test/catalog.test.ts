@@ -257,6 +257,25 @@ describe("CatalogV2", () => {
     }),
   )
 
+  it.effect("skips deprecated models when falling back to the newest", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("test")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, () => {})
+        catalog.model.update(providerID, ModelV2.ID.make("current"), (model) => {
+          model.time.released = 1000
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("retired"), (model) => {
+          model.time.released = 2000
+          model.status = "deprecated"
+        })
+      })
+
+      expect((yield* catalog.model.default())?.id).toMatch("current")
+    }),
+  )
+
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

@@ -182,10 +182,12 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   the current step with a spinner and timer, the two steps before it, and
   "Show all" to open the full list. The
   side panel has **Review** and **Session** tabs, plus open files. Session
-  replaced the Context tab. It shows the session's totals per harness: input, output, cache
-  hit, cost, context window, subagents and tool counts. It also keeps the
-  context breakdown and raw messages. A value the harness doesn't report reads
-  "Not reported". The side panel keeps its own width (420px by default) and
+  replaced the Context tab and follows the Thread board's design: four tiles
+  (tokens, context used, messages, harness), a context breakdown bar (system,
+  messages, tools), then a details list of the session's totals per harness
+  (model, provider, context window, input, output, cache hit, cost, times).
+  Values the harness doesn't report are left out. Subagents and tool counts
+  show only when there are any, and raw messages open from a button. The side panel keeps its own width (420px by default) and
   the chat takes the rest. Hide it with the arrow in its tab row, the
   titlebar button, `mod+shift+r`, or by dragging its edge past the minimum.
   While hidden, a slim rail at the right edge shows the changed-file count

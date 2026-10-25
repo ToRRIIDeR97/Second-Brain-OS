@@ -162,8 +162,8 @@ const layer = Layer.effect(
       }
     })
 
-    // Title model order: the title agent's model, the small model of the session's provider, the
-    // session's own model (host sessions only), then the catalog default.
+    // Title model order: the title agent's model, then the small model of the provider behind the
+    // session's own model (host sessions only) or else the catalog default, then that model itself.
     const titleModel = Effect.fn("SessionRunner.titleModel")(function* (
       session: SessionSchema.Info,
       agent: AgentV2.Info,
@@ -172,13 +172,13 @@ const layer = Layer.effect(
         models.resolve({ ...session, model }).pipe(Effect.option, Effect.map(Option.getOrUndefined))
       const configured = agent.model ? yield* resolve(agent.model) : undefined
       if (configured) return configured
-      const sessionModel =
-        harnesses.driver(session.harnessInstanceID) === Harness.OpenCodeDriver
+      const base =
+        (harnesses.driver(session.harnessInstanceID) === Harness.OpenCodeDriver
           ? yield* resolve(session.model)
-          : undefined
-      const small = sessionModel ? yield* catalog.model.small(ProviderV2.ID.make(sessionModel.provider)) : undefined
+          : undefined) ?? (yield* resolve(undefined))
+      const small = base ? yield* catalog.model.small(ProviderV2.ID.make(base.provider)) : undefined
       const smallModel = small ? yield* resolve({ id: small.id, providerID: small.providerID }) : undefined
-      return smallModel ?? sessionModel ?? (yield* resolve(undefined))
+      return smallModel ?? base
     })
 
     const generateTitle = Effect.fn("SessionRunner.generateTitle")(function* (sessionID: SessionSchema.ID) {

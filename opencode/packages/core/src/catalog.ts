@@ -230,9 +230,11 @@ const layer = Layer.effect(
             if (model) return model
           }
 
+          // Without a configured default, never fall back to a model its provider has retired.
           return Option.getOrUndefined(
             pipe(
               yield* result.model.available(),
+              Array.filter((item) => item.status !== "deprecated"),
               Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
               Array.head,
             ),
