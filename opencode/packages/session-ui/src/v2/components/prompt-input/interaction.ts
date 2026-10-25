@@ -1,4 +1,4 @@
-import { createEffect, on, type Accessor } from "solid-js"
+import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } from "./attachments"
@@ -64,7 +64,11 @@ export function createPromptInputV2Controller(input: {
   history?: PromptInputV2History
   commands: Accessor<PromptInputV2Suggestion[]>
   context: Accessor<PromptInputV2Suggestion[]>
-  searchContextFiles: (query: string) => PromptInputV2Suggestion[] | Promise<PromptInputV2Suggestion[]>
+  /** Called after typing pauses; `signal` aborts when a newer query supersedes this one. */
+  searchContextFiles: (
+    query: string,
+    signal: AbortSignal,
+  ) => PromptInputV2Suggestion[] | Promise<PromptInputV2Suggestion[]>
   openAttachment?: (attachment: PromptInputV2Attachment) => void
   openContext?: (key: string) => void
   onContextRemove?: (item: PromptInputV2Comment) => void
@@ -110,13 +114,23 @@ export function createPromptInputV2Controller(input: {
     }
     attachments.pick(() => fileInput?.click())
   }
+  // One file search in flight: each keystroke aborts the previous one, and the list keeps
+  // showing the last results until the debounced search resolves.
+  let fileSearch: AbortController | undefined
+  onCleanup(() => fileSearch?.abort())
   const contextList = useFilteredList<PromptInputV2Suggestion>({
     items: async (query) => {
+      fileSearch?.abort()
+      fileSearch = undefined
       const fixed = input.context().filter((item) => item.kind !== "file")
       const recent = input.context().filter((item) => item.kind === "file" && item.recent)
       if (!query.trim()) return [...fixed, ...recent]
+      const controller = new AbortController()
+      fileSearch = controller
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      if (controller.signal.aborted) return [...fixed, ...recent]
       const seen = new Set(recent.map((item) => item.id))
-      const files = (await input.searchContextFiles(query)).filter((item) => !seen.has(item.id))
+      const files = (await input.searchContextFiles(query, controller.signal)).filter((item) => !seen.has(item.id))
       return [...fixed, ...recent, ...files]
     },
     key: (item) => item.id,

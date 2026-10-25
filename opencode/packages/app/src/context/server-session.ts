@@ -18,7 +18,7 @@ import { message as cleanMessage } from "@/utils/diffs"
 import { sessionNotFoundError } from "@/utils/server-errors"
 import { rootSession } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
-import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/session-message"
+import { compareMessages, isTurnStart, messageKey, normalizeSessionMessages } from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { isSessionMovedEvent, isSessionRevertEvent, sessionMovedData } from "./global-sync/event-names"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
@@ -911,6 +911,9 @@ export function createServerSession(
     if (reduction.touched.length === 0) return
 
     const touched = new Set(reduction.touched)
+    // Only turns from the first touched message on can change, so normalize from that turn's start.
+    let from = reduction.messages.findIndex((message) => touched.has(message.id))
+    while (from > 0 && !isTurnStart(reduction.messages[from]!)) from--
     let parentID: string | undefined
     for (const message of reduction.messages) {
       if (message.type === "user" || (message.type === "synthetic" && message.description?.trim()))
@@ -923,7 +926,7 @@ export function createServerSession(
       if (message.type === "compaction" && touched.has(message.id) && parentID) touched.add(parentID)
     }
 
-    const normalized = normalizeSessionMessages(reduction.sessionID, reduction.messages)
+    const normalized = normalizeSessionMessages(reduction.sessionID, reduction.messages, Math.max(from, 0))
     batch(() => {
       for (const message of normalized.messages) {
         if (!touched.has(message.id)) continue
@@ -1100,6 +1103,12 @@ export function createServerSession(
           setData("message", info.sessionID, [info])
           return
         }
+        const result = Binary.search(messages, messageKey(info), messageKey)
+        // Streaming re-sends the same message many times; with its sort key unchanged, update it in place.
+        if (result.found && messages[result.index]?.id === info.id) {
+          setData("message", info.sessionID, result.index, reconcile(info))
+          return
+        }
         const existing = messages.findIndex((message) => message.id === info.id)
         if (existing !== -1) {
           const next = messages.slice()
@@ -1107,7 +1116,6 @@ export function createServerSession(
           setData("message", info.sessionID, reconcile(next.sort(compareMessages), { key: "id" }))
           return
         }
-        const result = Binary.search(messages, messageKey(info), messageKey)
         setData("message", info.sessionID, (value = []) => {
           const next = value.slice()
           next.splice(result.index, 0, info)

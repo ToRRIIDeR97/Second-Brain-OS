@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search"
 
 import { makeLocationNode } from "../effect/app-node"
 import path from "path"
-import { Context, Effect, Layer } from "effect"
+import { Context, Duration, Effect, Layer } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
@@ -20,12 +20,31 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem/Search") {}
 
+/** How long `find` reuses one `rg --files` listing; short enough that new and removed files show up quickly. */
+export const LISTING_TTL = Duration.seconds(3)
+
 export const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
+    // Scan at query time, but share one scan across the burst of per-keystroke queries.
+    const listing = yield* Effect.cachedWithTTL(
+      ripgrep.find({ cwd: location.directory, pattern: "*", limit: 100_000 }).pipe(
+        Effect.orDie,
+        Effect.map((entries) => {
+          const files = entries.map((entry) => entry.path)
+          const directories = new Set<string>()
+          for (const file of files) {
+            const parts = file.replaceAll("\\", "/").split("/")
+            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+          }
+          return { files, directories: [...directories] }
+        }),
+      ),
+      LISTING_TTL,
+    )
     return Service.of({
       glob: (input) =>
         Effect.gen(function* () {
@@ -80,17 +99,7 @@ export const ripgrepLayer = Layer.effect(
         }),
       find: (input) =>
         Effect.gen(function* () {
-          // Scan at query time so newly created and removed files never leave a stale index.
-          const entries = yield* ripgrep
-            .find({ cwd: location.directory, pattern: "*", limit: 100_000 })
-            .pipe(Effect.orDie)
-          const files = entries.map((entry) => entry.path)
-          const directories = new Set<string>()
-          for (const file of files) {
-            const parts = file.replaceAll("\\", "/").split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
-          }
-          const state = { files, directories: [...directories] }
+          const state = yield* listing
           const items =
             input.type === "file"
               ? state.files

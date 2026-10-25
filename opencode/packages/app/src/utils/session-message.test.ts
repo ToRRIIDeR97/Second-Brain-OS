@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import { normalizeSessionMessages } from "./session-message"
+import { isTurnStart, normalizeSessionMessages } from "./session-message"
 
 describe("normalizeSessionMessages", () => {
   test("projects current turns into stable legacy rendering records", () => {
@@ -268,5 +268,34 @@ describe("normalizeSessionMessages", () => {
     expect(metadata("done")?.acpSteps).toEqual([])
     expect(metadata("live")?.acpSubagent).toEqual({ transcript: transcript.slice(0, 1) })
     expect(metadata("plain")?.acpSubagent).toBeUndefined()
+  })
+  test("normalizing from a turn start matches the full projection for that turn on", () => {
+    const assistant = (id: string, created: number, agent: string, model: string, text: string) => ({
+      id,
+      type: "assistant",
+      agent,
+      model: { id: model, providerID: "anthropic" },
+      content: [{ type: "text", text }],
+      time: { created, completed: created + 1 },
+    })
+    const source = [
+      { id: "m1", type: "agent-switched", agent: "build", time: { created: 1 } },
+      { id: "m2", type: "user", text: "first", time: { created: 2 } },
+      assistant("m3", 3, "plan", "opus", "one"),
+      { id: "m4", type: "model-switched", model: { id: "sonnet", providerID: "anthropic" }, time: { created: 5 } },
+      { id: "m5", type: "user", text: "second", time: { created: 6 } },
+      { id: "m6", type: "compaction", reason: "auto", time: { created: 7 } },
+      assistant("m7", 8, "build", "sonnet", "two"),
+      { id: "m8", type: "user", text: "third", time: { created: 9 } },
+    ] as unknown as SessionMessageInfo[]
+    const full = normalizeSessionMessages("ses_1", source)
+    source.forEach((entry, from) => {
+      if (!isTurnStart(entry)) return
+      const sliced = normalizeSessionMessages("ses_1", source, from)
+      const ids = new Set(sliced.messages.map((message) => message.id))
+      expect(sliced.messages).toEqual(full.messages.filter((message) => ids.has(message.id)))
+      expect(ids.size).toBe(full.messages.filter((message) => message.time.created >= entry.time.created).length)
+      for (const id of ids) expect(sliced.parts.get(id)).toEqual(full.parts.get(id))
+    })
   })
 })

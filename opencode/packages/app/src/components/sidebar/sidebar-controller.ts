@@ -27,6 +27,7 @@ import {
   type ProjectThreads,
 } from "@/features/second-brain/client"
 import {
+  createThreadNodeCache,
   flattenThreads,
   groupSidebarThreads,
   isWithinDirectory,
@@ -247,12 +248,16 @@ export function createSidebarController() {
       !!id && depth < 64 && (local.hidden[id] || hidden(parents.get(id), depth + 1))
     return all.filter((session) => !hidden(session.id))
   })
+  // Unchanged threads keep their node objects, so their sidebar rows are not remounted.
+  const stableNodes = createThreadNodeCache<Session>()
   const groups = createMemo(() => {
-    return groupSidebarThreads({
-      projects: projects(),
-      workspaceDirectory: brainDirectory(),
-      sessions: sessions(),
-    })
+    return stableNodes(
+      groupSidebarThreads({
+        projects: projects(),
+        workspaceDirectory: brainDirectory(),
+        sessions: sessions(),
+      }),
+    )
   })
 
   const route = layout.route

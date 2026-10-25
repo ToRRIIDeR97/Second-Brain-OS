@@ -67,6 +67,9 @@ export const SessionTable = sqliteTable(
     index("session_directory_parent_archived_idx").on(table.directory, table.parent_id, table.time_archived),
     // Global lists page by (time_updated, id).
     index("session_time_updated_id_idx").on(table.time_updated, table.id),
+    // V2 session lists order and cursor by (time_created, id), globally or within a project.
+    index("session_project_time_created_id_idx").on(table.project_id, table.time_created, table.id),
+    index("session_time_created_id_idx").on(table.time_created, table.id),
   ],
 )
 

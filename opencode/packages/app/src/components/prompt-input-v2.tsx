@@ -370,8 +370,8 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
     commands,
     context,
-    searchContextFiles: async (query) =>
-      (await files.searchFilesAndDirectories(query)).map((path) => ({
+    searchContextFiles: async (query, signal) =>
+      (await files.searchFilesAndDirectories(query, { limit: 30, signal })).map((path) => ({
         id: `file:${path}`,
         kind: "file",
         label: path,

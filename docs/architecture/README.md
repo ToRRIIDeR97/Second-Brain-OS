@@ -300,6 +300,10 @@ The driver switches models with `session/set_model` or
 efforts; before each prompt the driver sends the chosen effort, or the agent's
 `default` level when none is chosen, with `session/set_config_option`, and
 re-reads the levels from each response because a model switch can change them.
+Older OpenCode (before `thought_level`) lists each level as its own model,
+`<base>/<level>` named "<base name> (<level>)". The driver folds those into
+the base model's reasoning efforts and sends a chosen level by switching to the
+matching `<base>/<level>` model.
 
 `AcpHarness.parseAcpNotification` turns `session/update` notifications into
 stream events. A tool call is published at `in_progress` (or when it finishes),
@@ -592,8 +596,12 @@ harness and model.
 snapshots after the selected user prompt, stopping at the next user prompt.
 Snapshot capture discovers Git initialized after a workspace is already open.
 Renderer Last turn review uses this endpoint; working-tree and branch review
-use the managed server's legacy Git routes. File search refreshes the
-ripgrep fallback on each query so newly written files are discoverable.
+use the managed server's legacy Git routes. File search reuses the ripgrep
+fallback's file listing for 3 seconds (`LISTING_TTL` in
+`core/src/filesystem/search.ts`), then lists again, so newly written files are
+discoverable within that window. The composer's `@` popover debounces its
+query by 150 ms, aborts the superseded request, and asks for at most 30
+results.
 
 "Edit from here" on a user message stages a revert at that message
 (`POST /api/session/:sessionID/revert/stage`) and loads the message into the

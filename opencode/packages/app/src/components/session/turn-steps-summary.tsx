@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import type { Part, ToolPart } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
@@ -116,8 +116,12 @@ export function TurnStepsSummary(props: {
   const lanes = createMemo(() => (live() ? subagentLanes(props.parts) : []))
   // One clock drives the turn and step timers; it only ticks while the turn works.
   const [now, setNow] = createSignal(Date.now())
-  const timer = setInterval(() => props.working && setNow(Date.now()), 1000)
-  onCleanup(() => clearInterval(timer))
+  createEffect(() => {
+    if (!props.working) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
   const elapsed = (start: number | undefined) =>
     start === undefined ? undefined : formatTurnDuration(language, Math.max(0, now() - start))
   const title = () => {
