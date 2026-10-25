@@ -37,6 +37,8 @@ export interface OpenInput {
   readonly settings: Settings
   readonly directory: string
   readonly continuation?: string
+  /** HTTP MCP servers offered to the agent; dropped when it does not advertise `mcpCapabilities.http`. */
+  readonly mcpServers?: ReadonlyArray<McpServer>
   readonly approve: (request: PermissionRequest) => Effect.Effect<boolean>
   /** Called with the slash commands the agent reports, whenever it reports them. */
   readonly onCommands?: (commands: ReadonlyArray<AcpCommand>) => Effect.Effect<void>
@@ -244,7 +246,8 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
     }),
   )
   const capabilities = isRecord(initialize.agentCapabilities) ? initialize.agentCapabilities : {}
-  const params = { cwd: input.directory, mcpServers: [] }
+  const http = isRecord(capabilities.mcpCapabilities) && capabilities.mcpCapabilities.http === true
+  const params = { cwd: input.directory, mcpServers: http ? (input.mcpServers ?? []) : [] }
   const loaded =
     input.continuation && capabilities.loadSession === true
       ? yield* client.request("session/load", { ...params, sessionId: input.continuation }, SESSION_SETUP_TIMEOUT).pipe(
@@ -354,7 +357,17 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
 // session/load replays history before it answers, so allow more than the initialize handshake.
 const SESSION_SETUP_TIMEOUT = "60 seconds"
 
-function createSession(client: Client, params: { readonly cwd: string; readonly mcpServers: ReadonlyArray<never> }) {
+export interface McpServer {
+  readonly type: "http"
+  readonly name: string
+  readonly url: string
+  readonly headers: ReadonlyArray<{ readonly name: string; readonly value: string }>
+}
+
+function createSession(
+  client: Client,
+  params: { readonly cwd: string; readonly mcpServers: ReadonlyArray<McpServer> },
+) {
   return client.request("session/new", params, SESSION_SETUP_TIMEOUT).pipe(
     Effect.flatMap((response) => {
       const sessionId = isRecord(response) ? string(response.sessionId) : undefined

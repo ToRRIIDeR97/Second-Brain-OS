@@ -33,6 +33,7 @@ import {
   type Client as CodexClient,
   type ServerRequest,
 } from "./harness/codex-app-server"
+import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
 import { HarnessUpdate } from "./harness/update"
 import { harnessEnvironment } from "./harness/env"
@@ -263,8 +264,13 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const close = Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)
       const runtime = yield* Effect.gen(function* () {
-        const opened = yield* openCodex(process, settings, input.directory, (request) =>
-          handleCodexRequest(request, input.sessionID, input.directory, permissions, questions),
+        const delegation = yield* HarnessDelegation.endpoint(input.sessionID)
+        const opened = yield* openCodex(
+          process,
+          settings,
+          input.directory,
+          (request) => handleCodexRequest(request, input.sessionID, input.directory, permissions, questions),
+          delegation,
         )
         const revision = input.revision ?? 0
         const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
@@ -359,10 +365,14 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const revision = input.revision ?? 0
       const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
+      const delegation = yield* HarnessDelegation.endpoint(input.sessionID).pipe(
+        Effect.provideService(Scope.Scope, runtimeScope),
+      )
       const session = yield* AcpHarness.open(process, {
         settings,
         directory: input.directory,
         continuation: continuation?.nativeID,
+        mcpServers: delegation ? [HarnessDelegation.acpServer(delegation)] : [],
         onCommands: (reported) =>
           Effect.sync(() => {
             commands.set(instance.id, reported)
@@ -756,14 +766,17 @@ function openCodex(
   settings: CodexSettings,
   directory: string,
   handleRequest?: (request: ServerRequest) => Effect.Effect<unknown, ProtocolError>,
+  delegation?: HarnessDelegation.Endpoint,
 ) {
   return Effect.gen(function* () {
+    const args = [...(delegation ? HarnessDelegation.codexArgs(delegation) : []), "app-server"]
     const handle = yield* process.spawn(
-      ChildProcess.make(settings.binaryPath?.trim() || "codex", ["app-server", ...(settings.launchArgs ?? [])], {
+      ChildProcess.make(settings.binaryPath?.trim() || "codex", [...args, ...(settings.launchArgs ?? [])], {
         cwd: directory,
         env: harnessEnvironment({
           CODEX_HOME: settings.homePath ? expandHome(settings.homePath) : undefined,
           ...settings.env,
+          ...(delegation ? { [HarnessDelegation.TOKEN_ENV]: delegation.token } : {}),
         }),
         extendEnv: false,
         forceKillAfter: "2 seconds",
