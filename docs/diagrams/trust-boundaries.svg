@@ -81,7 +81,7 @@
 <text x="50" y="426" text-anchor="start" class="s">≤32 MiB, native dialog</text>
 <rect class="sub" x="40" y="456" width="190" height="66" rx="6"/>
 <text x="50" y="474" text-anchor="start" class="t">Google service</text>
-<text x="50" y="490" text-anchor="start" class="s">PKCE loopback OAuth</text>
+<text x="50" y="490" text-anchor="start" class="s">PKCE loopback OAuth, N accounts</text>
 <text x="50" y="506" text-anchor="start" class="s">safeStorage-encrypted secrets</text>
 <rect class="store" x="40" y="534" width="190" height="70" rx="6"/>
 <text x="50" y="552" text-anchor="start" class="t">Profile data</text>

@@ -63,7 +63,7 @@ def classes():
     klass(s, 800, 470, 240, "KnowledgeNote", ["path notes/**.md or", "projects/<id>/notes/**.md", "title, tags[], links[]",
                                              "projectIds[]", "revision = sha256(raw)"])
     klass(s, 280, 690, 230, "Task", ["id, title, dueDate?, scheduledDate?", "completedAt? (open if unset)", "projectId?, source, syncState"])
-    klass(s, 540, 690, 230, "CalendarEvent", ["id, title, date, start?/end?", "projectId?", "source: local | google, syncState"])
+    klass(s, 540, 690, 230, "CalendarEvent", ["id, title, date, start?/end?", "projectId?, accountId? (Google)", "source: local | google, syncState"])
     klass(s, 800, 690, 240, "CalendarSnapshot", ["version 2, revision (ULID)", ".second-brain/calendar-v1.json", "events ≤ 5000, tasks ≤ 5000"])
     # agent runtime
     assoc(s, [(135, 179), (135, 240)], "1", "*", comp=True)

@@ -16,7 +16,7 @@ Detailed permission and request flows are in
 | Renderer to native process | The main window uses `contextIsolation`, `sandbox`, and disabled `nodeIntegration`. `opencode/packages/desktop/src/preload/index.ts` exposes specific IPC methods implemented in `opencode/packages/desktop/src/main/ipc.ts`.                                                                                                                                          |
 | Renderer to managed server | Electron starts the OpenCode server on `127.0.0.1` with a generated password. Server authorization checks credentials for protected routes. See `opencode/packages/desktop/src/main/index.ts` and `opencode/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts`.                                                                         |
 | Server to workspace files  | Second Brain handlers run in an instance location context. Note and project code resolves targets through `LocationMutation` before reading or writing files. See `opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `opencode/packages/opencode/src/knowledge/note.ts`, and `opencode/packages/opencode/src/project/brain.ts`. |
-| Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service encrypts its client secret and refresh token with Electron `safeStorage` and disables connection when secure storage is unavailable. See `opencode/packages/desktop/src/main/google-calendar.ts`.                                                                                  |
+| Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service keeps any number of accounts, encrypts each account's client secret and refresh token with Electron `safeStorage`, and disables connection when secure storage is unavailable. Access tokens are cached per account, and writes are routed to the account named by the item. See `opencode/packages/desktop/src/main/google-calendar.ts`. |
 
 `POST /second-brain/projects/workspace` takes only an OpenCode project id. The
 server looks the id up in its own project table and rejects `global` and the
@@ -65,7 +65,12 @@ log credentials or full private content.
 ## Credentials, extensions, and recovery
 
 Google token encryption is specific to the desktop integration. It does not
-establish encryption for every provider credential store. A build may compile
+establish encryption for every provider credential store. Each connected Google
+account is one entry in the main-owned `second-brain.google` store; the renderer
+sees only account IDs, labels, addresses, access levels and write counts, never
+tokens. Disconnecting an account revokes its refresh token and deletes its entry
+and queued writes. An account ID from the renderer selects an existing account
+only; an unknown ID is rejected (`google_account_not_found`). A build may compile
 a Google "Desktop app" OAuth client ID and secret into the main process from
 the git-ignored `opencode/packages/desktop/.env.local`
 (`MAIN_VITE_GOOGLE_CLIENT_ID`, `MAIN_VITE_GOOGLE_CLIENT_SECRET`). Google treats
