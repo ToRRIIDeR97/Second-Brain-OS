@@ -614,6 +614,8 @@ export const dict = {
   "secondBrain.sessionTab.cacheHit": "Cache hit",
   "secondBrain.sessionTab.cost": "Cost",
   "secondBrain.sessionTab.contextWindow": "Context window",
+  "secondBrain.sessionTab.tokens": "Tokens",
+  "secondBrain.sessionTab.contextShare": "Context used",
   "secondBrain.sessionTab.contextUsed": "{{used}} of {{limit}} tokens",
   "secondBrain.sessionTab.subagents": "Subagents",
   "secondBrain.sessionTab.tools": "Tools",
