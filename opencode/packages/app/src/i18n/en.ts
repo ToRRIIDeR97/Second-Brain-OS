@@ -1188,6 +1188,14 @@ export const dict = {
   "secondBrain.calendar.google.error.conflict": "Google changed this event. Sync before trying again.",
   "secondBrain.calendar.google.error.denied": "Google sign-in was canceled or denied.",
   "secondBrain.calendar.google.error.request": "Google Calendar or Tasks could not complete the request.",
+  "secondBrain.calendar.google.error.tasksDisabled":
+    "The Google Tasks API is turned off for this app's Google Cloud project. Enable it there, wait a minute, then sync again.",
+  "secondBrain.calendar.google.error.calendarDisabled":
+    "The Google Calendar API is turned off for this app's Google Cloud project. Enable it there, wait a minute, then sync again.",
+  "secondBrain.calendar.google.error.scopeMissing":
+    "Google didn't grant all the access this needs. Disconnect Google, then sign in again and allow every permission.",
+  "secondBrain.calendar.google.error.rateLimited": "Google is limiting requests right now. Try again in a minute.",
+  "secondBrain.calendar.google.error.reconnect": "Google sign-in has expired. Disconnect Google and sign in again.",
   "secondBrain.calendar.google.error.exactTime": "Google events need both a start and an end time, or neither.",
   "secondBrain.calendar.google.error.restricted":
     "Participant and recurring-series changes must be made in Google Calendar.",

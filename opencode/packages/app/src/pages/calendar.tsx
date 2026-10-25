@@ -375,6 +375,12 @@ export default function CalendarPage() {
     if (message.includes("write_consent")) return language.t("secondBrain.calendar.google.error.writeConsent")
     if (message.includes("conflict")) return language.t("secondBrain.calendar.google.error.conflict")
     if (message.includes("oauth_denied")) return language.t("secondBrain.calendar.google.error.denied")
+    if (message.includes("api_disabled_tasks")) return language.t("secondBrain.calendar.google.error.tasksDisabled")
+    if (message.includes("api_disabled_calendar"))
+      return language.t("secondBrain.calendar.google.error.calendarDisabled")
+    if (message.includes("scope_missing")) return language.t("secondBrain.calendar.google.error.scopeMissing")
+    if (message.includes("rate_limited")) return language.t("secondBrain.calendar.google.error.rateLimited")
+    if (message.includes("reconnect_required")) return language.t("secondBrain.calendar.google.error.reconnect")
     if (
       message.includes("client_missing") ||
       message.includes("client_id_invalid") ||
