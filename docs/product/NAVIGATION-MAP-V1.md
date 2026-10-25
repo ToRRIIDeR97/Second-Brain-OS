@@ -185,4 +185,9 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   replaced the Context tab. It shows the session's totals per harness: input, output, cache
   hit, cost, context window, subagents and tool counts. It also keeps the
   context breakdown and raw messages. A value the harness doesn't report reads
-  "Not reported".
+  "Not reported". The side panel keeps its own width (420px by default) and
+  the chat takes the rest. Hide it with the arrow in its tab row, the
+  titlebar button, `mod+shift+r`, or by dragging its edge past the minimum.
+  While hidden, a slim rail at the right edge shows the changed-file count
+  and context use and reopens the panel. Split diffs need an 800px panel;
+  a narrower panel shows unified diffs.
