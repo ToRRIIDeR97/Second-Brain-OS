@@ -167,7 +167,14 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   the new thread and sends the message in one step.
 - **Projects** lists Project cards by status and opens a card with Overview,
   Plan, Work, Files, Activity and Map views.
-- **Calendar** shows events and tasks. Its Google Calendar & Tasks panel
+- **Calendar** shows events and tasks. Today and Week are hour grids
+  (07:00–22:00, widened to fit events) with all-day events and open tasks in a
+  strip above; clicking a day's header opens it in Today. Agenda lists items by
+  day, with the date on the left. Clicking an event or task, in any view and in
+  the Tasks view, opens it read-only in the side panel; **Edit** opens the form
+  (a task's Edit opens it in the Tasks view). Ticking a task completes it at
+  once, Google tasks included, with an **Undo** toast. The page scrolls as one
+  area. Its Google Calendar & Tasks panel
   connects a Google account: one **Sign in with Google** button when the build
   ships its own OAuth client, else (or under **Use your own OAuth client**) the
   client ID and secret fields.

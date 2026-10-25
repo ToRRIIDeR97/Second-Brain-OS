@@ -19,7 +19,10 @@ import {
   type GoogleTaskProviderTask,
 } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
+import { showToast } from "@/utils/toast"
 import { localDateKey, monthGrid, shiftDate, shiftMonth, weekRange } from "@/features/second-brain/calendar-domain"
+import { CalendarGrid, type CalendarGridDay } from "@/features/second-brain/calendar-grid"
+import { CalendarPeek, TaskCheck } from "@/features/second-brain/calendar-peek"
 import { CalendarTasks, type CalendarTaskFilter } from "@/features/second-brain/calendar-tasks"
 import {
   listProjects,
@@ -63,6 +66,8 @@ type CalendarState = {
   view: CalendarView
   projectFilter: string
   editing: boolean
+  /** The event id, or `task:<id>`, shown read-only in the side panel until Edit is chosen. */
+  peek: string
   selectedTask: string
   draft: CalendarDraft
   saving: boolean
@@ -165,6 +170,7 @@ export default function CalendarPage() {
     view: calendarView(search.view),
     projectFilter: search.project ?? "",
     editing: false,
+    peek: "",
     selectedTask: search.task ?? "",
     draft: emptyDraft(),
     saving: false,
@@ -188,7 +194,7 @@ export default function CalendarPage() {
   // The sidebar workspace switcher owns this choice; the page only follows it.
   const directory = () => layout.home.workspace() ?? ""
   createEffect(
-    on(directory, () => setState({ editing: false, selectedTask: "", draft: emptyDraft() }), { defer: true }),
+    on(directory, () => setState({ editing: false, peek: "", selectedTask: "", draft: emptyDraft() }), { defer: true }),
   )
 
   const [events, eventActions] = createResource(
@@ -305,6 +311,24 @@ export default function CalendarPage() {
         left.title.localeCompare(right.title),
     )
   })
+  // `schedule` is sorted by date, so consecutive items share a day.
+  const scheduleDays = createMemo(() => {
+    const today = localDateKey(new Date())
+    const weekday = new Intl.DateTimeFormat(language.locale(), { weekday: "short" })
+    return schedule()
+      .reduce<{ date: string; items: ScheduleItem[] }[]>((days, item) => {
+        const last = days.at(-1)
+        if (last?.date === item.date) last.items.push(item)
+        else days.push({ date: item.date, items: [item] })
+        return days
+      }, [])
+      .map((day) => ({
+        ...day,
+        today: day.date === today,
+        day: Number(day.date.slice(8)),
+        weekday: weekday.format(new Date(`${day.date}T12:00:00`)),
+      }))
+  })
   const taskView = createMemo(() => taskFilter(state.view))
 
   const shiftCursor = (amount: number) => {
@@ -318,14 +342,18 @@ export default function CalendarPage() {
   const openNew = (date = localDateKey(new Date())) =>
     setState({
       editing: true,
+      peek: "",
       draft: emptyDraft(date, state.projectFilter),
       error: "",
       googleConfirm: "",
       googleWriteKey: "",
     })
-  const openEvent = (event: CalendarEvent) =>
+  const peekEvent = (event: CalendarEvent) => setState({ peek: event.id, editing: false, googlePanel: false })
+  const peekTask = (task: PlannerTask) => setState({ peek: `task:${task.id}`, editing: false, googlePanel: false })
+  const editEvent = (event: CalendarEvent) =>
     setState({
       editing: true,
+      peek: "",
       error: "",
       draft: {
         id: event.id,
@@ -361,13 +389,13 @@ export default function CalendarPage() {
         const event = snapshot?.events.find((item) => item.id === id)
         if (event && openedEvent !== id) {
           openedEvent = id
-          openEvent(event)
+          peekEvent(event)
         }
       },
     ),
   )
 
-  const openTask = (id: string) => setState({ view: "tasks", selectedTask: id, editing: false })
+  const openTask = (id: string) => setState({ view: "tasks", selectedTask: id, editing: false, peek: "" })
 
   const googleMessage = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
@@ -560,6 +588,112 @@ export default function CalendarPage() {
     eventActions.mutate(saved)
   }
 
+  const toggleTask = async (task: PlannerTask) => {
+    const now = new Date().toISOString()
+    const completedAt = task.completedAt ? undefined : now
+    try {
+      await persistTasks(
+        (events.latest?.tasks ?? []).map((item) =>
+          item.id === task.id ? { ...item, completedAt, updatedAt: now } : item,
+        ),
+      )
+    } catch (error) {
+      showToast({ variant: "error", description: googleMessage(error) })
+      return
+    }
+    if (!completedAt) return
+    showToast({
+      description: language.t("secondBrain.tasks.completed", { title: task.title }),
+      actions: [
+        {
+          label: language.t("secondBrain.sidebar.undo"),
+          onClick: () => {
+            const current = events.latest?.tasks.find((item) => item.id === task.id)
+            if (current?.completedAt) void toggleTask(current)
+          },
+        },
+      ],
+    })
+  }
+
+  const projectName = (id?: string) =>
+    id ? (brainProjects.latest?.find((project) => project.id === id)?.name ?? id) : undefined
+
+  // Day and Week: the shown days with timed events, all-day events and open tasks.
+  const gridDays = createMemo<CalendarGridDay[]>(() => {
+    const today = localDateKey(new Date())
+    const first = state.view === "week" ? range().start : localDateKey(state.cursor)
+    const weekday = new Intl.DateTimeFormat(language.locale(), { weekday: "short" })
+    return Array.from({ length: state.view === "week" ? 7 : 1 }, (_, index) => {
+      const date = localDateKey(shiftDate(new Date(`${first}T12:00:00`), index))
+      const timed = (event: CalendarEvent) =>
+        Boolean(event.start && event.end && event.date === date && (event.endDate ?? date) === date)
+      return {
+        date,
+        today: date === today,
+        day: Number(date.slice(8)),
+        weekday: weekday.format(new Date(`${date}T12:00:00`)),
+        timed: eventsFor(date).filter(timed),
+        allDay: eventsFor(date).filter((event) => !timed(event)),
+        // Today's column also carries overdue tasks, as the list view did.
+        tasks: (events.latest?.tasks ?? []).filter((task) => {
+          const due = task.scheduledDate ?? task.dueDate
+          if (task.completedAt || !due || (state.projectFilter && task.projectId !== state.projectFilter)) return false
+          return due === date || (date === today && due < today)
+        }),
+      }
+    })
+  })
+
+  const peekView = createMemo(() => {
+    const date = new Intl.DateTimeFormat(language.locale(), { weekday: "short", month: "short", day: "numeric" })
+    const day = (value: string) => date.format(new Date(`${value}T12:00:00`))
+    if (state.peek.startsWith("task:")) {
+      const task = events.latest?.tasks.find((item) => item.id === state.peek.slice(5))
+      if (!task) return
+      const when = task.scheduledDate ?? task.dueDate
+      return {
+        task,
+        title: task.title,
+        tag: `${language.t("secondBrain.home.kind.task")} · ${sourceLabel(task.source)}`,
+        when: when
+          ? `${day(when)}${task.start && task.end ? ` · ${task.start}–${task.end}` : ""}`
+          : language.t("secondBrain.tasks.unscheduled"),
+        project: projectName(task.projectId),
+        notes: task.notes,
+        edit: () => openTask(task.id),
+      }
+    }
+    const event = events.latest?.events.find((item) => item.id === state.peek)
+    if (!event) return
+    return {
+      task: undefined,
+      title: event.title,
+      tag: `${sourceLabel(event.source)} · ${syncLabel(event.syncState)}`,
+      when: `${day(event.date)}${event.endDate && event.endDate !== event.date ? ` – ${day(event.endDate)}` : ""} · ${
+        event.start && event.end ? `${event.start}–${event.end}` : language.t("secondBrain.calendar.allDay")
+      }`,
+      project: projectName(event.projectId),
+      notes: event.details,
+      edit: () => editEvent(event),
+    }
+  })
+
+  const googleStatus = () => {
+    const connection = googleConnection.latest
+    if (!connection?.connected) return language.t("secondBrain.calendar.google.connect")
+    if (!connection.lastSyncedAt) return language.t("secondBrain.calendar.google.connected")
+    const synced = new Date(connection.lastSyncedAt)
+    return language.t("secondBrain.calendar.google.syncedAt", {
+      time: new Intl.DateTimeFormat(
+        language.locale(),
+        localDateKey(synced) === localDateKey(new Date())
+          ? { hour: "numeric", minute: "2-digit" }
+          : { month: "short", day: "numeric" },
+      ).format(synced),
+    })
+  }
+
   const save = async () => {
     const title = state.draft.title.trim()
     if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(state.draft.date)) {
@@ -740,6 +874,7 @@ export default function CalendarPage() {
     setState({
       view,
       editing: false,
+      peek: "",
       googlePanel: false,
       selectedTask: "",
       ...(view === "today" ? { cursor: new Date() } : {}),
@@ -752,68 +887,6 @@ export default function CalendarPage() {
         title={language.t("secondBrain.calendar.title")}
         actions={
           <Show when={directory()}>
-            <Show when={!taskView() && state.view !== "agenda"}>
-              <TooltipV2
-                value={language.t(
-                  state.view === "week"
-                    ? "secondBrain.calendar.previousWeek"
-                    : state.view === "today"
-                      ? "secondBrain.calendar.previousDay"
-                      : "secondBrain.calendar.previous",
-                )}
-              >
-                <IconButtonV2
-                  type="button"
-                  variant="ghost"
-                  icon={<Icon name="chevron-left" />}
-                  aria-label={language.t(
-                    state.view === "week"
-                      ? "secondBrain.calendar.previousWeek"
-                      : state.view === "today"
-                        ? "secondBrain.calendar.previousDay"
-                        : "secondBrain.calendar.previous",
-                  )}
-                  onClick={() => shiftCursor(-1)}
-                />
-              </TooltipV2>
-              <TooltipV2
-                value={language.t(
-                  state.view === "week"
-                    ? "secondBrain.calendar.nextWeek"
-                    : state.view === "today"
-                      ? "secondBrain.calendar.nextDay"
-                      : "secondBrain.calendar.next",
-                )}
-              >
-                <IconButtonV2
-                  type="button"
-                  variant="ghost"
-                  icon={<Icon name="chevron-right" />}
-                  aria-label={language.t(
-                    state.view === "week"
-                      ? "secondBrain.calendar.nextWeek"
-                      : state.view === "today"
-                        ? "secondBrain.calendar.nextDay"
-                        : "secondBrain.calendar.next",
-                  )}
-                  onClick={() => shiftCursor(1)}
-                />
-              </TooltipV2>
-            </Show>
-            <Show when={state.view === "week" || state.view === "month"}>
-              <ButtonV2
-                size="small"
-                variant="outline"
-                onClick={() =>
-                  setState(
-                    "cursor",
-                    new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 12),
-                  )
-                }
-              >
-                {language.t("secondBrain.calendar.today")}
-              </ButtonV2>
-            </Show>
             <nav aria-label={language.t("secondBrain.calendar.views")}>
               <SegmentedControlV2 class="!w-auto" value={taskView() ? "tasks" : state.view}>
                 <For each={calendarNavigation}>
@@ -830,8 +903,66 @@ export default function CalendarPage() {
       />
 
       <Show when={directory()} fallback={<PageEmpty>{language.t("secondBrain.empty.workspace")}</PageEmpty>}>
-        <div class="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-2">
-          <h2 class="min-w-0 flex-1 truncate text-[14px] text-v2-text-text-base [font-weight:530]">
+        <div class="flex shrink-0 flex-wrap items-center gap-1 px-5 pb-3 pt-1">
+          <Show when={!taskView() && state.view !== "agenda"}>
+            <ButtonV2
+              size="small"
+              variant="outline"
+              class="mr-1"
+              onClick={() =>
+                setState("cursor", new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 12))
+              }
+            >
+              {language.t("secondBrain.calendar.today")}
+            </ButtonV2>
+            <TooltipV2
+              value={language.t(
+                state.view === "week"
+                  ? "secondBrain.calendar.previousWeek"
+                  : state.view === "today"
+                    ? "secondBrain.calendar.previousDay"
+                    : "secondBrain.calendar.previous",
+              )}
+            >
+              <IconButtonV2
+                type="button"
+                variant="ghost"
+                icon={<Icon name="chevron-left" />}
+                aria-label={language.t(
+                  state.view === "week"
+                    ? "secondBrain.calendar.previousWeek"
+                    : state.view === "today"
+                      ? "secondBrain.calendar.previousDay"
+                      : "secondBrain.calendar.previous",
+                )}
+                onClick={() => shiftCursor(-1)}
+              />
+            </TooltipV2>
+            <TooltipV2
+              value={language.t(
+                state.view === "week"
+                  ? "secondBrain.calendar.nextWeek"
+                  : state.view === "today"
+                    ? "secondBrain.calendar.nextDay"
+                    : "secondBrain.calendar.next",
+              )}
+            >
+              <IconButtonV2
+                type="button"
+                variant="ghost"
+                icon={<Icon name="chevron-right" />}
+                aria-label={language.t(
+                  state.view === "week"
+                    ? "secondBrain.calendar.nextWeek"
+                    : state.view === "today"
+                      ? "secondBrain.calendar.nextDay"
+                      : "secondBrain.calendar.next",
+                )}
+                onClick={() => shiftCursor(1)}
+              />
+            </TooltipV2>
+          </Show>
+          <h2 class="ml-1 min-w-0 flex-1 truncate text-[15px] text-v2-text-text-base [font-weight:560]">
             <Show when={!taskView()}>{viewTitle()}</Show>
           </h2>
           <Show when={!taskView()}>
@@ -854,14 +985,19 @@ export default function CalendarPage() {
             </span>
           </Show>
           <ButtonV2
-            variant="outline"
+            variant="ghost"
             size="small"
             aria-expanded={state.googlePanel}
-            onClick={() => setState({ googlePanel: !state.googlePanel, view: "today" })}
+            onClick={() =>
+              setState({
+                googlePanel: !state.googlePanel,
+                peek: "",
+                editing: false,
+                ...(taskView() ? { view: "today" as const } : {}),
+              })
+            }
           >
-            {googleConnection.latest?.connected
-              ? language.t("secondBrain.calendar.google.connected")
-              : language.t("secondBrain.calendar.google.connect")}
+            {googleStatus()}
           </ButtonV2>
           <Show when={!taskView()}>
             <ButtonV2 variant="contrast" size="small" icon="plus" onClick={() => openNew()}>
@@ -876,6 +1012,7 @@ export default function CalendarPage() {
               tasks={events.latest?.tasks ?? []}
               projects={brainProjects.latest ?? []}
               onSave={persistTasks}
+              onToggle={toggleTask}
               filter={filter}
               selectedId={state.selectedTask}
               googleCanWrite={googleConnection.latest?.connected && googleConnection.latest?.access === "write"}
@@ -886,8 +1023,8 @@ export default function CalendarPage() {
         <Show when={!taskView()}>
           <div
             classList={{
-              "grid min-h-0 flex-1 gap-3 px-3 pb-3": true,
-              "lg:grid-cols-[minmax(0,1fr)_320px]": state.googlePanel || state.editing,
+              "grid flex-1 items-start gap-3 px-3 pb-3": true,
+              "lg:grid-cols-[minmax(0,1fr)_340px]": state.googlePanel || state.editing || Boolean(peekView()),
             }}
           >
             <div class="flex min-h-[560px] min-w-0 flex-col">
@@ -902,26 +1039,68 @@ export default function CalendarPage() {
                 <Show
                   when={state.view === "month"}
                   fallback={
-                    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                      <Show
-                        when={schedule().length > 0}
-                        fallback={<PageEmpty>{language.t("secondBrain.calendar.empty")}</PageEmpty>}
-                      >
-                        <For each={schedule()}>
-                          {(item) => (
-                            <ScheduleRow
-                              item={item}
-                              today={localDateKey(new Date())}
-                              projects={brainProjects.latest ?? []}
-                              onOpenEvent={openEvent}
-                              onOpenTask={() => openTask(item.kind === "task" ? item.task.id : "")}
-                              eventSource={sourceLabel}
-                              taskLabel={language.t("secondBrain.home.kind.task")}
-                            />
-                          )}
-                        </For>
-                      </Show>
-                    </div>
+                    <Show
+                      when={state.view === "today" || state.view === "week"}
+                      fallback={
+                        <div class="flex flex-col">
+                          <Show
+                            when={schedule().length > 0}
+                            fallback={<PageEmpty>{language.t("secondBrain.calendar.empty")}</PageEmpty>}
+                          >
+                            <For each={scheduleDays()}>
+                              {(day) => (
+                                <section class="flex gap-2 py-2 shadow-[inset_0_0.5px_0_var(--v2-border-border-muted)] first:shadow-none">
+                                  <div class="flex w-16 shrink-0 flex-col items-center pt-1.5">
+                                    <span class="text-[11px] uppercase tracking-[0.04em] text-v2-text-text-muted [font-weight:560]">
+                                      {day.weekday}
+                                    </span>
+                                    <span
+                                      classList={{
+                                        "mt-1 flex size-9 items-center justify-center rounded-full text-[17px]": true,
+                                        "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:600]":
+                                          day.today,
+                                        "text-v2-text-text-base [font-weight:500]": !day.today,
+                                      }}
+                                    >
+                                      {day.day}
+                                    </span>
+                                  </div>
+                                  <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                    <For each={day.items}>
+                                      {(item) => (
+                                        <ScheduleRow
+                                          item={item}
+                                          projects={brainProjects.latest ?? []}
+                                          selected={
+                                            state.peek ===
+                                            (item.kind === "event" ? item.event.id : `task:${item.task.id}`)
+                                          }
+                                          onOpen={() =>
+                                            item.kind === "event" ? peekEvent(item.event) : peekTask(item.task)
+                                          }
+                                          onToggle={toggleTask}
+                                          allDay={language.t("secondBrain.calendar.allDay")}
+                                          eventSource={sourceLabel}
+                                        />
+                                      )}
+                                    </For>
+                                  </div>
+                                </section>
+                              )}
+                            </For>
+                          </Show>
+                        </div>
+                      }
+                    >
+                      <CalendarGrid
+                        days={gridDays()}
+                        selected={state.peek}
+                        onOpenEvent={peekEvent}
+                        onOpenTask={peekTask}
+                        onToggle={toggleTask}
+                        onOpenDay={(date) => setState({ view: "today", cursor: new Date(`${date}T12:00:00`) })}
+                      />
+                    </Show>
                   }
                 >
                   <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
@@ -958,14 +1137,14 @@ export default function CalendarPage() {
                             >
                               {day.day}
                             </button>
-                            <div class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
+                            <div class="flex min-h-0 flex-col gap-0.5 overflow-hidden">
                               <For each={eventsFor(day.date)}>
                                 {(event) => (
                                   <button
                                     type="button"
                                     class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] bg-v2-background-bg-accent-container px-2 text-left text-[11px] text-v2-text-text-on-accent-container transition-[filter,border-radius] duration-300 ease-standard hover:brightness-95 active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                                     title={event.title}
-                                    onClick={() => openEvent(event)}
+                                    onClick={() => peekEvent(event)}
                                   >
                                     <Show when={event.start && event.date === day.date}>
                                       <span class="mr-1 opacity-70">{event.start}</span>
@@ -980,7 +1159,7 @@ export default function CalendarPage() {
                                     type="button"
                                     class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] px-2 text-left text-[11px] text-v2-text-text-muted shadow-[inset_0_0_0_1px_var(--v2-border-border-base)] transition-[background-color,border-radius] duration-300 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                                     title={task.title}
-                                    onClick={() => openTask(task.id)}
+                                    onClick={() => peekTask(task)}
                                   >
                                     <Show when={task.start}>
                                       <span class="mr-1 text-v2-text-text-faint">{task.start}</span>
@@ -999,8 +1178,23 @@ export default function CalendarPage() {
               </Show>
             </div>
 
-            <Show when={state.googlePanel || state.editing}>
-              <aside class="flex min-h-0 flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01">
+            <Show when={state.googlePanel || state.editing || peekView()}>
+              <aside class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3">
+                <Show when={!state.googlePanel && !state.editing && peekView()}>
+                  {(item) => (
+                    <CalendarPeek
+                      tag={item().tag}
+                      title={item().title}
+                      when={item().when}
+                      project={item().project}
+                      notes={item().notes}
+                      task={item().task}
+                      onToggle={toggleTask}
+                      onEdit={() => item().edit()}
+                      onClose={() => setState("peek", "")}
+                    />
+                  )}
+                </Show>
                 <Show when={state.googlePanel}>
                   <div class="flex flex-col gap-3 p-4">
                     <div class="flex items-start gap-2">
@@ -1470,40 +1664,49 @@ function googleTaskFields(task: PlannerTask) {
 
 function ScheduleRow(props: {
   item: ScheduleItem
-  today: string
   projects: ReadonlyArray<ProjectRecord>
-  onOpenEvent: (event: CalendarEvent) => void
-  onOpenTask: (task: PlannerTask) => void
+  selected: boolean
+  onOpen: () => void
+  onToggle: (task: PlannerTask) => Promise<void>
+  allDay: string
   eventSource: (source: CalendarEvent["source"]) => string
-  taskLabel: string
 }) {
   const event = props.item.kind === "event" ? props.item.event : undefined
   const task = props.item.kind === "task" ? props.item.task : undefined
+  const time = () => {
+    if (event) return event.start && event.end ? `${event.start} – ${event.end}` : props.allDay
+    return task?.start && task.end ? `${task.start} – ${task.end}` : ""
+  }
   return (
-    <button
-      type="button"
-      class={`${pageRowClass} min-h-12 cursor-pointer`}
-      onClick={() => (event ? props.onOpenEvent(event) : task ? props.onOpenTask(task) : undefined)}
+    <div
+      classList={{
+        "flex min-h-11 items-center gap-1.5 rounded-[16px] pr-3 transition-colors duration-150 ease-standard motion-reduce:transition-none": true,
+        "bg-v2-background-bg-accent-container": props.selected,
+        "hover:bg-v2-overlay-simple-overlay-hover": !props.selected,
+      }}
     >
-      <span class="flex w-32 shrink-0 items-center gap-1.5 text-[12px] tabular-nums text-v2-text-text-faint">
-        <Show when={props.item.date === props.today}>
-          <span class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent" />
+      <span class="flex w-9 shrink-0 justify-center">
+        <Show when={task} fallback={<span class="h-7 w-1 rounded-full bg-v2-icon-icon-accent" />}>
+          {(task) => <TaskCheck task={task()} onToggle={props.onToggle} />}
         </Show>
-        <span>
-          {props.item.date}
-          <Show when={event?.endDate}>–{event?.endDate}</Show>
-          <Show when={event?.start ?? task?.start}> {event?.start ?? task?.start}</Show>
-        </span>
       </span>
-      <span class="flex min-w-0 flex-1 items-center gap-2">
-        <Show
-          when={event}
-          fallback={<span class="size-3.5 shrink-0 rounded-full border border-v2-border-border-base" />}
-        >
-          <span class="h-3.5 w-1 shrink-0 rounded-full bg-v2-icon-icon-accent" />
-        </Show>
-        <span class="min-w-0">
-          <span class="block truncate text-[13px] text-v2-text-text-base">{props.item.title}</span>
+      <button
+        type="button"
+        class="flex min-w-0 flex-1 cursor-pointer items-center gap-3.5 rounded-[12px] py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
+        aria-pressed={props.selected}
+        onClick={props.onOpen}
+      >
+        <span class="w-28 shrink-0 text-[12px] tabular-nums text-v2-text-text-muted">{time()}</span>
+        <span class="min-w-0 flex-1">
+          <span
+            classList={{
+              "block truncate text-[13.5px]": true,
+              "text-v2-text-on-accent-container [font-weight:560]": props.selected,
+              "text-v2-text-text-base [font-weight:480]": !props.selected,
+            }}
+          >
+            {props.item.title}
+          </span>
           <Show when={props.item.projectId}>
             {(id) => (
               <span class="block truncate text-[11px] text-v2-text-text-faint">
@@ -1512,10 +1715,10 @@ function ScheduleRow(props: {
             )}
           </Show>
         </span>
-      </span>
-      <span class="shrink-0 text-[11px] text-v2-text-text-faint">
-        {event ? props.eventSource(event.source) : `${props.eventSource(task?.source ?? "local")} · ${props.taskLabel}`}
-      </span>
-    </button>
+        <span class="shrink-0 text-[11px] text-v2-text-text-faint">
+          {props.eventSource(event?.source ?? task?.source ?? "local")}
+        </span>
+      </button>
+    </div>
   )
 }
