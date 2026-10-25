@@ -61,8 +61,7 @@
   border-radius: 6px;
   outline: 1px solid transparent;
   outline-offset: 0;
-  background:
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  background: var(--v2-background-bg-button-neutral);
   box-shadow: var(--v2-elevation-button-neutral);
   flex: none;
   align-self: stretch;
@@ -84,13 +83,13 @@
   ) {
   background:
     linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+    var(--v2-background-bg-button-neutral);
 }
 
 [data-component="select-v2"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
   background:
     linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+    var(--v2-background-bg-button-neutral);
   outline-color: transparent;
 }
 
