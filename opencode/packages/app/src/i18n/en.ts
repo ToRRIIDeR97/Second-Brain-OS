@@ -1158,6 +1158,11 @@ export const dict = {
   "secondBrain.calendar.google.credentialNote":
     "Use a Google OAuth client created for a desktop app. Read and write access must be granted separately.",
   "secondBrain.calendar.google.waiting": "Waiting for Google…",
+  "secondBrain.calendar.google.signIn": "Sign in with Google",
+  "secondBrain.calendar.google.signInNote":
+    "Google opens in your browser. Choose Read and write to create and edit events and tasks from here.",
+  "secondBrain.calendar.google.ownClient": "Use your own OAuth client",
+  "secondBrain.calendar.google.builtInClient": "Use the built-in client",
   "secondBrain.calendar.google.openBrowser": "Continue in browser",
   "secondBrain.calendar.google.account": "Account",
   "secondBrain.calendar.google.accountFallback": "Google account",

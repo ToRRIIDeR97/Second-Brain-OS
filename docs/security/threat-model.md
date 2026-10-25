@@ -65,7 +65,14 @@ log credentials or full private content.
 ## Credentials, extensions, and recovery
 
 Google token encryption is specific to the desktop integration. It does not
-establish encryption for every provider credential store. Provider
+establish encryption for every provider credential store. A build may compile
+a Google "Desktop app" OAuth client ID and secret into the main process from
+the git-ignored `opencode/packages/desktop/.env.local`
+(`MAIN_VITE_GOOGLE_CLIENT_ID`, `MAIN_VITE_GOOGLE_CLIENT_SECRET`). Google treats
+an installed app's client secret as non-confidential: anyone with the build can
+read it, and it grants nothing without the user's consent in the browser. The
+renderer only learns whether such a client exists. Keep the values out of git
+and logs. Provider
 credentials (`auth.json`, `mcp-auth.json`) and the session database
 (`opencode.db`) live in the XDG data directory (by default
 `~/.local/share/tenon-workbench/`), outside Electron `userData`. `userData` holds
