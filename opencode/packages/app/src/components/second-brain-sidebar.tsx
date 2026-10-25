@@ -213,6 +213,9 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
               {(directory) => (
                 <>
                   <MenuV2.Separator />
+                  <MenuV2.Item onSelect={() => navigate("/projects?new=1")}>
+                    {language.t("secondBrain.projects.new")}
+                  </MenuV2.Item>
                   <MenuV2.Item onSelect={props.ctrl.scanFolders}>
                     {language.t("secondBrain.sidebar.scanProjects")}
                   </MenuV2.Item>
@@ -235,6 +238,17 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
       </MenuV2>
       <div class="flex-1" />
       <Show when={props.ctrl.brainDirectory()}>
+        <TooltipV2 placement="right" value={language.t("secondBrain.projects.new")}>
+          <IconButtonV2
+            type="button"
+            data-sidebar-item="new-project"
+            variant="ghost-muted"
+            size="large"
+            icon={<Icon name="folder-add-left" size="small" />}
+            aria-label={language.t("secondBrain.projects.new")}
+            onClick={() => navigate("/projects?new=1")}
+          />
+        </TooltipV2>
         <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.scanProjects")}>
           <IconButtonV2
             type="button"
