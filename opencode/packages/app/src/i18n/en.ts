@@ -1110,6 +1110,7 @@ export const dict = {
   "secondBrain.calendar.agenda": "Agenda",
   "secondBrain.calendar.views": "Calendar views",
   "secondBrain.calendar.view.today": "Today",
+  "secondBrain.calendar.allDay": "All day",
   "secondBrain.calendar.view.week": "Week",
   "secondBrain.calendar.view.month": "Month",
   "secondBrain.calendar.view.agenda": "Agenda",
@@ -1143,6 +1144,7 @@ export const dict = {
   "secondBrain.calendar.error.conflict": "The calendar changed on disk. Reopen this view before saving again.",
   "secondBrain.calendar.google.connect": "Connect Google",
   "secondBrain.calendar.google.connected": "Google connected",
+  "secondBrain.calendar.google.syncedAt": "Synced {{time}}",
   "secondBrain.calendar.google.title": "Google Calendar & Tasks",
   "secondBrain.calendar.google.description":
     "Sync Calendar and Tasks through the system browser. Tokens stay encrypted in the operating-system credential store.",
@@ -1207,6 +1209,7 @@ export const dict = {
   "secondBrain.tasks.new": "New task",
   "secondBrain.tasks.empty": "No tasks in this view",
   "secondBrain.tasks.toggle": "Change completion for {{title}}",
+  "secondBrain.tasks.completed": "Marked “{{title}}” done",
   "secondBrain.tasks.unscheduled": "Unscheduled",
   "secondBrain.tasks.noProject": "No project",
   "secondBrain.tasks.overdue": "Overdue",

@@ -11,6 +11,7 @@ import { createStore } from "solid-js/store"
 import { PageEmpty, pageRowClass } from "@/components/page"
 import { useLanguage } from "@/context/language"
 import { localDateKey } from "./calendar-domain"
+import { CalendarPeek, TaskCheck } from "./calendar-peek"
 import type { PlannerTask, ProjectRecord } from "./client"
 
 export type CalendarTaskFilter = "today" | "upcoming" | "unscheduled" | "completed"
@@ -60,6 +61,8 @@ export function CalendarTasks(props: {
   tasks: ReadonlyArray<PlannerTask>
   projects: ReadonlyArray<ProjectRecord>
   onSave: (tasks: ReadonlyArray<PlannerTask>) => Promise<void>
+  /** Completes or reopens a task at once, Google tasks included; no editor or confirm step. */
+  onToggle: (task: PlannerTask) => Promise<void>
   filter?: CalendarTaskFilter
   selectedId?: string
   onFilterChange?: (filter: CalendarTaskFilter) => void
@@ -69,6 +72,8 @@ export function CalendarTasks(props: {
   const [state, setState] = createStore({
     filter: (props.filter ?? "today") as CalendarTaskFilter,
     editing: false,
+    /** A task shown read-only in the side panel until Edit is chosen. */
+    peek: "",
     draft: emptyDraft(),
     saving: false,
     confirmingDelete: false,
@@ -79,6 +84,7 @@ export function CalendarTasks(props: {
     if (props.filter && props.filter !== state.filter) setState("filter", props.filter)
   })
   const today = () => localDateKey(new Date())
+  const peeked = createMemo(() => props.tasks.find((task) => task.id === state.peek))
   const visible = createMemo(() =>
     props.tasks
       .filter((task) => {
@@ -107,6 +113,7 @@ export function CalendarTasks(props: {
   const openTask = (task: PlannerTask) =>
     setState({
       editing: true,
+      peek: "",
       confirmingDelete: false,
       googleConfirm: false,
       error: "",
@@ -216,29 +223,13 @@ export function CalendarTasks(props: {
     )
   }
 
-  const toggleComplete = (task: PlannerTask) => {
-    const now = new Date().toISOString()
-    if (task.source === "google") {
-      openTask({ ...task, completedAt: task.completedAt ? undefined : now, updatedAt: now })
-      setState("googleConfirm", true)
-      return Promise.resolve()
-    }
-    return persist(
-      props.tasks.map((current) =>
-        current.id === task.id
-          ? { ...current, completedAt: current.completedAt ? undefined : now, updatedAt: now }
-          : current,
-      ),
-    )
-  }
-
   const remove = () => persist(props.tasks.filter((task) => task.id !== state.draft.id))
 
   return (
     <div
       classList={{
-        "grid min-h-0 flex-1 gap-3 px-3 pb-3": true,
-        "lg:grid-cols-[minmax(0,1fr)_320px]": state.editing,
+        "grid flex-1 items-start gap-3 px-3 pb-3": true,
+        "lg:grid-cols-[minmax(0,1fr)_340px]": state.editing || Boolean(peeked()),
       }}
     >
       <section class="flex min-h-0 min-w-0 flex-col" aria-label={language.t("secondBrain.tasks.title")}>
@@ -266,35 +257,35 @@ export function CalendarTasks(props: {
             variant="contrast"
             icon="plus"
             onClick={() =>
-              setState({ editing: true, draft: emptyDraft(), error: "", confirmingDelete: false, googleConfirm: false })
+              setState({
+                editing: true,
+                peek: "",
+                draft: emptyDraft(),
+                error: "",
+                confirmingDelete: false,
+                googleConfirm: false,
+              })
             }
           >
             {language.t("secondBrain.tasks.new")}
           </ButtonV2>
         </div>
-        <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+        <div class="flex flex-col gap-0.5">
           <Show when={visible().length > 0} fallback={<PageEmpty>{language.t("secondBrain.tasks.empty")}</PageEmpty>}>
             <For each={visible()}>
               {(task) => (
-                <div class={`${pageRowClass} min-h-12 py-1.5`}>
-                  <span class="relative flex size-5 shrink-0 items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(task.completedAt)}
-                      aria-label={language.t("secondBrain.tasks.toggle", { title: task.title })}
-                      class="peer size-5 cursor-pointer appearance-none rounded-full border-[1.5px] border-v2-border-border-base transition-colors duration-150 ease-standard checked:border-transparent checked:bg-v2-icon-icon-accent hover:border-v2-icon-icon-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                      onChange={() => void toggleComplete(task)}
-                    />
-                    <Icon
-                      name="check"
-                      size="small"
-                      class="pointer-events-none absolute text-v2-icon-icon-contrast opacity-0 peer-checked:opacity-100"
-                    />
-                  </span>
+                <div
+                  classList={{
+                    [`${pageRowClass} min-h-12 py-1.5`]: true,
+                    "bg-v2-background-bg-accent-container": state.peek === task.id,
+                  }}
+                >
+                  <TaskCheck task={task} onToggle={props.onToggle} />
                   <button
                     type="button"
                     class="min-w-0 flex-1 cursor-pointer rounded-[8px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
-                    onClick={() => openTask(task)}
+                    aria-pressed={state.peek === task.id}
+                    onClick={() => setState({ peek: task.id, editing: false })}
                   >
                     <span
                       classList={{
@@ -336,8 +327,30 @@ export function CalendarTasks(props: {
         </div>
       </section>
 
+      <Show when={!state.editing && peeked()}>
+        {(task) => (
+          <aside class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3">
+            <CalendarPeek
+              tag={`${language.t("secondBrain.home.kind.task")} · ${language.t(`secondBrain.calendar.source.${task().source}`)}`}
+              title={task().title}
+              when={[
+                task().scheduledDate ?? task().dueDate ?? language.t("secondBrain.tasks.unscheduled"),
+                task().start && task().end ? `${task().start}–${task().end}` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              project={props.projects.find((project) => project.id === task().projectId)?.name}
+              notes={task().notes}
+              task={task()}
+              onToggle={props.onToggle}
+              onEdit={() => openTask(task())}
+              onClose={() => setState("peek", "")}
+            />
+          </aside>
+        )}
+      </Show>
       <Show when={state.editing}>
-        <aside class="flex min-h-0 flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01">
+        <aside class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3">
           <form
             class="flex flex-col gap-3 p-4"
             onSubmit={(event) => {
