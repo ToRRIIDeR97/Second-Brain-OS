@@ -144,7 +144,28 @@ export const discover = (process: Process, settings: Settings, directory: string
     Effect.gen(function* () {
       const { client, initialize } = yield* connect(process, settings, directory)
       const session = yield* createSession(client, { cwd: directory, mcpServers: [] })
-      return { ...agentInfo(initialize), models: sessionModels(session.response).models }
+      const selector = sessionModels(session.response)
+      const configId = selector.configId
+      const levels = (effort: EffortOption | undefined) =>
+        (effort?.values ?? []).filter((value) => value !== EFFORT_DEFAULT)
+      // Agents report levels for the active model only, so this throwaway session switches to each model once.
+      // A switch can fail without saying anything about levels (Claude Code checks some models with its
+      // server first), so a failed switch keeps the active model's levels rather than none.
+      const models =
+        selector.effort && configId
+          ? yield* Effect.forEach(selector.models, (model) =>
+              model.isDefault
+                ? Effect.succeed(model)
+                : client
+                    .request("session/set_config_option", { sessionId: session.sessionId, configId, value: model.id })
+                    .pipe(
+                      Effect.map((response) => levels(sessionModels(response).effort)),
+                      Effect.catch(() => Effect.succeed(levels(selector.effort))),
+                      Effect.map((reasoningEfforts) => Harness.Model.make({ ...model, reasoningEfforts })),
+                    ),
+            )
+          : selector.models
+      return { ...agentInfo(initialize), models }
     }),
   ).pipe(
     Effect.timeoutOrElse({
@@ -911,10 +932,34 @@ export function sessionModels(response: unknown): {
   const current = string(option.currentValue)
   const options = Array.isArray(option.options) ? option.options.filter(isRecord) : []
   return {
-    current,
     configId: string(option.id),
     effort,
-    models: options.flatMap((item) => entry(string(item.value), item.name, item.description, current)),
+    ...foldDefault(
+      options.flatMap((item) => entry(string(item.value), item.name, item.description, current)),
+      current,
+    ),
+  }
+}
+
+// Claude Code lists its account default as a `default` row described by the model it stands for
+// ("Opus" for "Opus 5.5"). Show that model as the current one instead of a model named Default.
+function foldDefault(models: ReadonlyArray<Harness.Model>, current: string | undefined) {
+  const row = models.find((model) => model.id === MODEL_DEFAULT)
+  const name = row?.description
+  const target = name
+    ? models.find((model) => model !== row && (model.name === name || model.name.startsWith(`${name} `)))
+    : undefined
+  if (!row || !target) return { models, current }
+  const active = current === MODEL_DEFAULT
+  return {
+    current: active ? target.id : current,
+    models: models
+      .filter((model) => model !== row)
+      .map((model) =>
+        model === target && active
+          ? Harness.Model.make({ ...model, reasoningEfforts: row.reasoningEfforts, isDefault: true })
+          : model,
+      ),
   }
 }
 
@@ -927,6 +972,7 @@ export type EffortOption = {
 
 // The level OpenCode and other agents use for "no override"; the app shows its own Default entry instead.
 const EFFORT_DEFAULT = "default"
+const MODEL_DEFAULT = "default"
 
 function effortOption(configOptions: ReadonlyArray<Record<string, unknown>>): EffortOption | undefined {
   const option = configOptions.find(

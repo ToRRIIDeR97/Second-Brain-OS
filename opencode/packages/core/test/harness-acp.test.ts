@@ -427,6 +427,36 @@ describe("ACP harness", () => {
     ).toBeUndefined()
   })
 
+  test("shows Claude Code's default row as the model it stands for", () => {
+    const parsed = AcpHarness.sessionModels({
+      configOptions: [
+        {
+          id: "model",
+          category: "model",
+          type: "select",
+          currentValue: "default",
+          options: [
+            { value: "default", name: "Default (recommended)", description: "Opus" },
+            { value: "opus", name: "Opus 5.5", description: "Opus 5.5 · Best for everyday tasks" },
+            { value: "sonnet", name: "Sonnet 5.5" },
+          ],
+        },
+        {
+          id: "effort",
+          category: "thought_level",
+          type: "select",
+          currentValue: "default",
+          options: [{ value: "default" }, { value: "low" }, { value: "high" }],
+        },
+      ],
+    })
+    expect(parsed.current).toBe("opus")
+    expect(parsed.models.map((model) => [model.id, model.reasoningEfforts, model.isDefault])).toEqual([
+      ["opus", ["low", "high"], true],
+      ["sonnet", [], false],
+    ])
+  })
+
   test("folds older OpenCode's per-level models into their base model", () => {
     const parsed = AcpHarness.sessionModels({
       models: {
