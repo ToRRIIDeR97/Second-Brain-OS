@@ -78,6 +78,10 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
             env: { ...ctx.payload.env, ...shell.env },
           }),
         ),
+      ).pipe(
+        Effect.catchTag("Pty.SpawnError", (error) =>
+          Effect.fail(new ApiError.InvalidRequestError({ message: error.message, field: "command" })),
+        ),
       )
     })
 
