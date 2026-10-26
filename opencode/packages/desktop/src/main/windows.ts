@@ -208,6 +208,9 @@ export function createMainWindow(id: string = randomUUID()) {
   wireSession(win.webContents.session)
   wireWindowRecovery(win, id)
   wireNavigationPolicy(win)
+  // The app doesn't use WebRTC, and a design frame's CSP doesn't cover it: without a proxy this
+  // stops every UDP STUN/ICE request, also from frames nested in a design (design-fence.ts).
+  win.webContents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
 
   state.manage(win)
   registerWindow(win, id)

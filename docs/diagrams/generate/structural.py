@@ -96,7 +96,7 @@ def trust():
     s.edge([(575, 352), (575, 512)], "prompts + context", at=(520, 470), cls="sens", head="as")
     s.edge([(600, 450), (600, 470), (732, 470), (732, 512)], "update: server-chosen\nnpm / brew, user's ID only", at=(690, 456))
     s.edge([(230, 425), (282, 425), (282, 608), (897, 608), (897, 596)], "open-external", at=(560, 612))
-    s.box(20, 636, 960, 72, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted", "per-harness env visible to that harness · html design frames: WebRTC and DNS prefetch not covered by the CSP"], cls="gapz")
+    s.box(20, 636, 960, 72, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted", "per-harness env visible to that harness · html design frames: WebRTC TURN over TCP from nested frames"], cls="gapz")
     s.save(f"{OUT}/trust-boundaries.svg")
 
 

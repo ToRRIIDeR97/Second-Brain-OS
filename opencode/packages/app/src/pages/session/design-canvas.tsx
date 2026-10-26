@@ -89,7 +89,24 @@ function createDesignList(
     scanned.set(part.id, { text: part.text, fences })
     return fences
   }
-  createEffect(on(sessionID, () => scanned.clear(), { defer: true }))
+  // One object per design id, so a streamed token never hands the Canvas tab new designs to re-mount.
+  const known = new Map<string, Design>()
+  const stable = (design: Design) => {
+    const cached = known.get(design.id)
+    if (cached && cached.title === design.title && cached.canvas === design.canvas) return cached
+    known.set(design.id, design)
+    return design
+  }
+  createEffect(
+    on(
+      sessionID,
+      () => {
+        scanned.clear()
+        known.clear()
+      },
+      { defer: true },
+    ),
+  )
   return () => {
     const id = sessionID()
     if (!id) return []
@@ -99,7 +116,7 @@ function createDesignList(
       sync().data.part,
       keep.map((design) => design.id),
       scan,
-    )
+    ).map(stable)
     const ids = new Set(found.map((design) => design.id))
     return [...found, ...keep.filter((design) => !ids.has(design.id))]
   }

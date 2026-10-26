@@ -17,6 +17,7 @@
   [data-component="markdown-code"][data-html-window="window"] pre,
   [data-component="markdown-code"][data-html-window="card"] pre,
   [data-component="markdown-code"][data-html-window="source"] [data-slot="html-window-frame"],
+  [data-component="markdown-code"][data-html-window="source"] [data-slot="html-window-notice"],
   [data-component="markdown-code"][data-html-window="source"] [data-slot="html-window-footer"] {
     display: none;
   }
@@ -43,6 +44,10 @@
 
   [data-slot="html-window-card"] {
     min-height: 48px;
+  }
+
+  [data-html-window="card-source"] [data-slot="html-window-card"] {
+    border-bottom: 1px solid var(--v2-border-border-muted);
   }
 
   [data-slot="html-window-title"] {
@@ -82,8 +87,11 @@
     color: var(--v2-text-text-base);
   }
 
-  [data-slot="html-window-card"] > button {
+  [data-slot="html-window-card"] > button:first-of-type {
     margin-inline-start: auto;
+  }
+
+  [data-slot="html-window-card"] > button[data-action="open"] {
     color: var(--v2-text-text-accent);
   }
 

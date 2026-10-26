@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { runInNewContext } from "node:vm"
 import {
   collectDesigns,
   DESIGN_CSP,
@@ -93,6 +94,37 @@ describe("designDocument", () => {
     )
     expect(doc.indexOf("Content-Security-Policy")).toBeLessThan(doc.indexOf("<title>"))
     expect(doc).not.toContain("postMessage")
+  })
+
+  test("turns off DNS prefetch and WebRTC before any page content", () => {
+    const doc = designDocument("<script>new RTCPeerConnection()</script>", { autosize: true })
+    const prefetch = doc.indexOf('<meta http-equiv="x-dns-prefetch-control" content="off">')
+    const guard = doc.indexOf("<script>")
+    const guardEnd = doc.indexOf("</script>", guard)
+    expect(doc.indexOf("Content-Security-Policy")).toBeLessThan(prefetch)
+    expect(prefetch).toBeLessThan(guard)
+    expect(guardEnd).toBeLessThan(doc.indexOf("parent.postMessage"))
+    expect(guardEnd).toBeLessThan(doc.indexOf("new RTCPeerConnection"))
+    const script = doc.slice(guard + "<script>".length, guardEnd)
+    for (const name of ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel"])
+      expect(script).toContain(`"${name}"`)
+  })
+
+  test("the WebRTC guard removes the constructors for good", () => {
+    const doc = designDocument("")
+    const script = doc.slice(doc.indexOf("<script>") + "<script>".length, doc.indexOf("</script>"))
+    const connect = () => "connected"
+    const frame: Record<string, unknown> = { RTCPeerConnection: connect, RTCDataChannel: connect }
+    runInNewContext(script, { window: frame })
+    expect(frame.RTCPeerConnection).toBeUndefined()
+    expect(frame.webkitRTCPeerConnection).toBeUndefined()
+    expect(frame.RTCDataChannel).toBeUndefined()
+    // Modules are strict, so writing a non-writable property throws.
+    expect(() => {
+      frame.RTCPeerConnection = connect
+    }).toThrow()
+    expect(() => Object.defineProperty(frame, "RTCPeerConnection", { value: connect })).toThrow()
+    expect(frame.RTCPeerConnection).toBeUndefined()
   })
 
   test("adds the height reporter only when asked", () => {

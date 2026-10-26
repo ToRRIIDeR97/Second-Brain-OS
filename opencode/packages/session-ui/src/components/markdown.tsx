@@ -375,9 +375,19 @@ export function Markdown(
     classList?: Record<string, boolean>
     /** Makes inline code that cites a file in the thread folder an interactive chip. */
     fileReferences?: FileReferenceActions
+    /** Renders ```html blocks as live, sandboxed designs; only assistant replies opt in, elsewhere they stay code. */
+    designs?: boolean
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList", "fileReferences"])
+  const [local, others] = splitProps(props, [
+    "text",
+    "cacheKey",
+    "streaming",
+    "class",
+    "classList",
+    "fileReferences",
+    "designs",
+  ])
   const i18n = useI18n()
   const designSpace = useDesignSpace()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -559,6 +569,7 @@ export function Markdown(
         .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
         .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
       mountSvgWindows(block, svgLabels)
+      if (!local.designs) return
       // ```html designs need their fence info string, which only the block's markdown source keeps.
       const raw = block === container ? local.text : content.find((item) => item.key === block.dataset.markdownKey)?.raw
       mountHtmlWindows(block, raw ?? local.text, designLabels, { space: designSpace, live: streamed })
