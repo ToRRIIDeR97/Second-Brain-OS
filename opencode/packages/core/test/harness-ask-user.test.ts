@@ -37,7 +37,7 @@ describe("HarnessAskUser", () => {
   it.live("returns the answer in the native question tool's wording", () =>
     Effect.gen(function* () {
       const questions = yield* QuestionV2.Service
-      const ask = yield* HarnessAskUser.make(questions, sessionID)
+      const ask = (yield* HarnessAskUser.make(questions, sessionID)).ask
       const pending = ask([pick], 5)
       yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)))
       const [request] = yield* questions.list()
@@ -54,7 +54,7 @@ describe("HarnessAskUser", () => {
   it.live("keeps an unanswered question open and reuses it on a repeated call", () =>
     Effect.gen(function* () {
       const questions = yield* QuestionV2.Service
-      const ask = yield* HarnessAskUser.make(questions, sessionID)
+      const ask = (yield* HarnessAskUser.make(questions, sessionID)).ask
       expect(yield* Effect.promise(() => ask([pick], 0))).toEqual({ type: "open" })
       expect(HarnessAskUser.resultText([pick], { type: "open" })).toContain("still open in Tenon")
       const [request] = yield* questions.list()
@@ -72,7 +72,7 @@ describe("HarnessAskUser", () => {
   it.live("reports a dismissed question as declined", () =>
     Effect.gen(function* () {
       const questions = yield* QuestionV2.Service
-      const ask = yield* HarnessAskUser.make(questions, sessionID)
+      const ask = (yield* HarnessAskUser.make(questions, sessionID)).ask
       yield* Effect.promise(() => ask([pick], 0))
       const [request] = yield* questions.list()
       yield* questions.reject(request.id)
@@ -82,12 +82,59 @@ describe("HarnessAskUser", () => {
     }),
   )
 
+  it.live("withdraws the open question when the turn ends, answering a waiting call as declined", () =>
+    Effect.gen(function* () {
+      const questions = yield* QuestionV2.Service
+      const withdrawn = yield* rejected()
+      const asker = yield* HarnessAskUser.make(questions, sessionID)
+      expect(yield* Effect.promise(() => asker.ask([pick], 0))).toEqual({ type: "open" })
+      const [first] = yield* questions.list()
+
+      // The turn ends after a "still open" result: nobody is waiting, so the dock clears.
+      yield* asker.endTurn
+      expect(yield* questions.list()).toEqual([])
+      expect(withdrawn).toEqual([first.id])
+
+      // The turn is stopped while a call waits: the call returns at once.
+      const waiting = asker.ask([pick], 5)
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)))
+      const [second] = yield* questions.list()
+      expect(second.id).not.toBe(first.id)
+      yield* asker.endTurn
+      expect(yield* Effect.promise(() => waiting)).toEqual({ type: "declined" })
+      expect(yield* questions.list()).toEqual([])
+      expect(withdrawn).toEqual([first.id, second.id])
+
+      // Nothing open: ending another turn withdraws nothing.
+      yield* asker.endTurn
+      expect(withdrawn).toEqual([first.id, second.id])
+    }),
+  )
+
+  it.live("drops an answer the agent never collected when the turn ends", () =>
+    Effect.gen(function* () {
+      const questions = yield* QuestionV2.Service
+      const withdrawn = yield* rejected()
+      const asker = yield* HarnessAskUser.make(questions, sessionID)
+      yield* Effect.promise(() => asker.ask([pick], 0))
+      const [request] = yield* questions.list()
+      yield* questions.reply({ requestID: request.id, answers: [["SQLite"]] })
+      yield* asker.endTurn
+      // An answered question isn't withdrawn, but a later turn asking the same questions asks afresh.
+      expect(withdrawn).toEqual([])
+      expect(yield* Effect.promise(() => asker.ask([pick], 0))).toEqual({ type: "open" })
+      const [fresh] = yield* questions.list()
+      expect(fresh.id).not.toBe(request.id)
+      yield* asker.endTurn
+    }),
+  )
+
   it.live("withdraws the open question when asked something else or when the runtime closes", () =>
     Effect.gen(function* () {
       const questions = yield* QuestionV2.Service
       const withdrawn = yield* rejected()
       const scope = yield* Scope.make()
-      const ask = yield* HarnessAskUser.make(questions, sessionID).pipe(Scope.provide(scope))
+      const ask = (yield* HarnessAskUser.make(questions, sessionID).pipe(Scope.provide(scope))).ask
       yield* Effect.promise(() => ask([pick], 0))
       const [first] = yield* questions.list()
       yield* Effect.promise(() => ask([other], 0))

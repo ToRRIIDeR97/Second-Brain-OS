@@ -318,12 +318,12 @@ Run's session. `ask_user` has no permission check of its own (the native
 `question` tool asks permission `question`); the harness's MCP tool policy
 applies instead. Questions and options are model output shown as text in the
 dock. Each runtime has at most one open question; a new question withdraws the
-old one, and closing the runtime withdraws what is still open.
+old one, and the end of the harness turn (finished, failed or stopped) or
+closing the runtime withdraws what is still open. An answer the agent didn't
+collect in that turn is dropped, so it can't answer a later turn's question.
 
-Known gaps: interrupting a Run doesn't stop the tasks it delegated, and a
-question asked through `ask_user` stays in the dock after the user stops the
-turn, until it is dismissed or the runtime closes. An ACP agent without HTTP
-MCP support gets neither delegation nor `ask_user`.
+Known gaps: interrupting a Run doesn't stop the tasks it delegated. An ACP
+agent without HTTP MCP support gets neither delegation nor `ask_user`.
 
 ### Harness skill catalog
 

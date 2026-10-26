@@ -10,8 +10,9 @@ import { QuestionTool } from "../tool/question"
  * QuestionV2 service as the native `question` tool, so the Run's question dock shows them.
  *
  * MCP clients give up on a tool call after a while, so one call waits at most `WAIT_SECONDS`
- * and then reports the question as still open. The question stays pending in the dock; a
- * repeated call with the same questions waits on it again instead of asking twice.
+ * and then reports the question as still open. The question stays pending in the dock for the
+ * rest of the harness turn; a repeated call with the same questions in that turn waits on it
+ * again instead of asking twice. When the turn ends, however it ends, the question is withdrawn.
  */
 
 /** Below Node fetch's default 300 s wait for response headers, which Node-based MCP clients such as Gemini CLI inherit. */
@@ -27,6 +28,16 @@ export type Outcome =
 /** Asks `questions` in the Run's dock and waits up to `waitSeconds` for the user. */
 export type Ask = (questions: ReadonlyArray<QuestionV2.Prompt>, waitSeconds: number) => Promise<Outcome>
 
+export interface Asker {
+  readonly ask: Ask
+  /**
+   * Called when the runtime's harness turn ends, finished, failed or interrupted. Withdraws a
+   * question still open in the dock and forgets an answer the agent never collected, so a later
+   * turn asking the same questions asks afresh.
+   */
+  readonly endTurn: Effect.Effect<void>
+}
+
 interface Open {
   readonly key: string
   readonly id: QuestionV2.ID
@@ -36,8 +47,8 @@ interface Open {
 
 /**
  * One harness runtime's asker. The runtime has at most one open question: asking something
- * different withdraws the previous one, and closing the scope withdraws whatever is still open,
- * so the dock never keeps a question nobody is waiting for.
+ * different withdraws the previous one, and the end of the turn or closing the scope withdraws
+ * whatever is still open, so the dock never keeps a question nobody is waiting for.
  */
 export const make = Effect.fn("HarnessAskUser.make")(function* (
   questions: QuestionV2.Interface,
@@ -81,7 +92,12 @@ export const make = Effect.fn("HarnessAskUser.make")(function* (
     if (outcome.type !== "open" && state.open === open) state.open = undefined
     return outcome
   }
-  return ask
+  const endTurn = Effect.suspend(() => {
+    const open = state.open
+    state.open = undefined
+    return withdraw(open)
+  })
+  return { ask, endTurn } satisfies Asker
 })
 
 /** The tool result the agent reads, in the native `question` tool's wording when answered. */
