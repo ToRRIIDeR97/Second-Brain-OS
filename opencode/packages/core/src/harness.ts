@@ -45,6 +45,7 @@ import { AppProcess } from "./process"
 import { QuestionV2 } from "./question"
 import { SessionTable } from "./session/sql"
 import { TenonContext } from "./tenon-context"
+import { ChatDisplay } from "./chat-display"
 import { Token } from "./util/token"
 
 export { Harness }
@@ -135,6 +136,8 @@ interface CodexRuntime {
   readonly scope: Scope.Closeable
   readonly threadID: string
   readonly workspace?: TenonContext.Workspace
+  /** The `tenon` MCP server, and with it `ask_user`, is attached to this thread. */
+  readonly askUser: boolean
   handoff: Handoff
 }
 
@@ -142,6 +145,8 @@ interface AcpRuntime {
   readonly session: AcpHarness.Session
   readonly scope: Scope.Closeable
   readonly workspace?: TenonContext.Workspace
+  /** The agent accepted the `tenon` MCP server, and with it `ask_user`. */
+  readonly askUser: boolean
   handoff: Handoff
 }
 
@@ -380,6 +385,8 @@ const layer = Layer.effect(
           scope: runtimeScope,
           threadID,
           workspace: yield* workspaceOf(input.directory),
+          // Every endpoint here carries `ask_user`, because the runtime always has the question service.
+          askUser: delegation !== undefined,
           // A failed resume starts a fresh thread, which gets the bounded full history.
           handoff: thread.resumed && continuation ? continuation.handoff : "full",
         } satisfies CodexRuntime
@@ -463,6 +470,7 @@ const layer = Layer.effect(
         session,
         scope: runtimeScope,
         workspace: yield* workspaceOf(input.directory),
+        askUser: delegation !== undefined && session.mcpAttached,
         handoff: session.resumed && continuation ? continuation.handoff : "full",
       } satisfies AcpRuntime
     })
@@ -496,7 +504,7 @@ const layer = Layer.effect(
       Stream.unwrap(
         getAcpRuntime(instance, settings, input).pipe(
           Effect.map((runtime) => {
-            const text = renderHarnessPrompt(input.request, runtime.handoff, runtime.workspace)
+            const text = renderHarnessPrompt(input.request, runtime.handoff, runtime)
             runtime.handoff = "none"
             return onTurnSuccess(
               runtime.session
@@ -533,7 +541,7 @@ const layer = Layer.effect(
           )
           const threadID = responseThreadID(thread)
           if (!threadID) return yield* Effect.fail(new ProtocolError("Codex did not return a thread ID."))
-          const runtime: CodexRuntime = { client: opened.client, scope, threadID, handoff: "none" }
+          const runtime: CodexRuntime = { client: opened.client, scope, threadID, askUser: false, handoff: "none" }
           const request = { ...input.request, system: [], messages: [Message.user(oneShotPrompt(input.request))] }
           return yield* replyText(
             codexStream(Effect.succeed(runtime), {
@@ -1216,7 +1224,7 @@ function codexStream(
     runtime.pipe(
       Effect.flatMap((runtime) =>
         Effect.sync(() => {
-          const prompt = renderHarnessPrompt(input.request, runtime.handoff, runtime.workspace)
+          const prompt = renderHarnessPrompt(input.request, runtime.handoff, runtime)
           runtime.handoff = "none"
           return prompt
         }).pipe(
@@ -1550,27 +1558,39 @@ export function continuationFor(
   return value ? { nativeID: value, handoff: "none" } : undefined
 }
 
-function renderCodexInstructions(request: LLMRequest) {
+/** Codex's developerInstructions: the request's system text, without the native agents' chat abilities. */
+export function renderCodexInstructions(request: LLMRequest) {
+  return harnessSystem(request).join("\n\n")
+}
+
+/**
+ * The system texts a harness may see. The system context's `core/chat-display` entry tells native agents
+ * to ask with the `question` tool, which harnesses don't have; the `<tenon-context>` block gives them
+ * the harness abilities instead, so that entry (one baseline paragraph) is cut out.
+ */
+function harnessSystem(request: LLMRequest) {
+  const native = ChatDisplay.abilities("native")
   return request.system
-    .map((part) => part.text)
+    .map((part) => part.text.replaceAll(`\n\n${native}`, "").replaceAll(native, "").trim())
     .filter(Boolean)
-    .join("\n\n")
 }
 
 export const HANDOFF_TOKEN_BUDGET = 16_000
 
 /**
  * A harness turn's text. A handoff turn (a runtime's first) also carries the `<tenon-context>` block
- * (workspace, AGENTS.md text and Tenon's chat abilities), since harnesses never see the system context.
+ * (workspace, AGENTS.md text and Tenon's chat abilities). ACP agents get no system context at all, and
+ * Codex gets it without the chat abilities (`renderCodexInstructions`). `context.askUser` says whether
+ * the `tenon` MCP server, and with it `ask_user`, is attached; without it the block says to ask in chat.
  */
 export function renderHarnessPrompt(
   request: LLMRequest,
   handoff: Handoff = "none",
-  workspace?: TenonContext.Workspace,
+  context: TenonContext.Context = {},
 ) {
   const prompt = renderCodexPrompt(request, handoff)
   if (handoff === "none") return prompt
-  return `${TenonContext.render(request, workspace)}\n\n${prompt}`
+  return `${TenonContext.render(request, context)}\n\n${prompt}`
 }
 
 export function renderCodexPrompt(request: LLMRequest, handoff: Handoff = "none", budget = HANDOFF_TOKEN_BUDGET) {
@@ -1764,7 +1784,7 @@ function expandHome(input: string) {
 
 /** A one-off prompt for a harness with no system channel: instructions first, then the request. */
 function oneShotPrompt(request: LLMRequest) {
-  return [...request.system.map((part) => part.text), renderCodexPrompt(request)].filter(Boolean).join("\n\n")
+  return [...harnessSystem(request), renderCodexPrompt(request)].filter(Boolean).join("\n\n")
 }
 
 function replyText<E>(stream: Stream.Stream<LLMEvent, E>) {

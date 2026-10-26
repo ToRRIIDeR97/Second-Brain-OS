@@ -30,12 +30,13 @@ export function parseFileReference(text: string): FileReference | undefined {
 
 /**
  * Returns `input` as a normalized path relative to `directory`, or undefined when it can leave it:
- * any `..` segment, a home-relative path, or an absolute path outside the directory.
+ * any `..` segment, a home-relative or Windows drive-relative path (`D:x.ts`, which resolves against
+ * that drive's current folder), or an absolute path outside the directory.
  * Absolute paths inside the directory become relative.
  */
 export function resolveFileReferencePath(input: string, directory: string) {
   if (!input || !directory || /[\u0000-\u001f]/.test(input)) return
-  if (input.startsWith("~")) return
+  if (input.startsWith("~") || /^[A-Za-z]:(?![\\/])/.test(input)) return
   const windows = /^[A-Za-z]:[\\/]/.test(directory) || directory.startsWith("\\\\")
   const value = windows ? input.replaceAll("\\", "/") : input
   const relative = absolute(value) ? inside(value, directory, windows) : value

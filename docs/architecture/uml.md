@@ -187,8 +187,10 @@ Handoff text in the first prompt of a runtime (not drawn in the diagram):
    answered user message as `lastSeenMessageID`.
 
 The first prompt of a runtime also starts with a `<tenon-context>` block:
-workspace and Project folders, the AGENTS.md text in effect and the abilities
-guidance (`renderHarnessPrompt`, `core/src/tenon-context.ts`). Later turns in the same runtime send only the user message. See
+workspace and Project folders, the AGENTS.md text in effect (one
+`<agents-md>` element per file) and the abilities guidance, which names
+`ask_user` only when the `tenon` server is attached (`renderHarnessPrompt`,
+`core/src/tenon-context.ts`). Later turns in the same runtime send only the user message. See
 [Harness handoff](README.md#harness-handoff) for the budget and wrapper.
 
 ### Sequence: cross-harness delegation

@@ -52,6 +52,8 @@ export interface AcpCommand {
 export interface Session {
   readonly sessionId: string
   readonly resumed: boolean
+  /** The offered MCP servers were passed on: there were some and the agent advertises `mcpCapabilities.http`. */
+  readonly mcpAttached: boolean
   readonly agent: { readonly name?: string; readonly version?: string }
   readonly models: ReadonlyArray<Harness.Model>
   readonly turn: (input: {
@@ -369,6 +371,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   return {
     sessionId: session.sessionId,
     resumed: loaded !== undefined,
+    mcpAttached: params.mcpServers.length > 0,
     agent: agentInfo(initialize),
     models: selector.models,
     turn,

@@ -53,6 +53,10 @@ describe("resolveFileReferencePath", () => {
     expect(resolveFileReferencePath("~/.bashrc", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("..\\secret.txt", "C:\\repo")).toBeUndefined()
     expect(resolveFileReferencePath("D:\\repo\\a.ts", "C:\\repo")).toBeUndefined()
+    // Drive-relative paths resolve against that drive's current folder, not the thread folder.
+    expect(resolveFileReferencePath("D:x.ts", "C:\\repo")).toBeUndefined()
+    expect(resolveFileReferencePath("c:core\\a.ts", "C:\\repo")).toBeUndefined()
+    expect(resolveFileReferencePath("D:x.ts", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("a.ts", "")).toBeUndefined()
   })
 })

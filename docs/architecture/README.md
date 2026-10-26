@@ -429,16 +429,23 @@ handoff. Codex and ACP keep their own native thread or session, so
   follows after a `---` separator.
 - The first prompt of each runtime (any handoff other than none) starts
   with one `<tenon-context trust="data">` block (`renderHarnessPrompt`,
-  built by `core/src/tenon-context.ts`), because harness agents don't receive
-  Tenon's system context. It holds the workspace root, the Project folder
+  built by `core/src/tenon-context.ts`). ACP agents get no system context;
+  Codex gets it as `developerInstructions` (`renderCodexInstructions`) with
+  the `core/chat-display` entry cut out, so the block is its only abilities
+  text. It holds the workspace root, the Project folder
   (a linked folder or `projects/<name>`, named by its folder) and the thread
   folder; the `Instructions from:` sections of the request's system context
   (the AGENTS.md files in effect, most specific first, 4,000 estimated
-  tokens, read from the latest instructions update when there is one); and
-  `ChatDisplay.abilities("harness")`. OpenCode's own agent prompt, skill and
-  reference guidance, environment and date are not forwarded. Any
-  `</tenon-context` in the content is escaped before clipping. Later turns
-  send only the user message. See [Chat diagram windows](#chat-diagram-windows).
+  tokens, read from the latest instructions update when there is one), each
+  in its own `<agents-md path="…">` element with the truncated or omitted
+  marker last inside it; and the chat abilities. The abilities name
+  `ask_user` only when the `tenon` MCP server is attached (`abilities("harness")`;
+  an ACP agent without `mcpCapabilities.http` gets `abilities("reply")`,
+  which says to ask in the reply). OpenCode's own agent prompt, skill and
+  reference guidance, environment and date are not forwarded in the block.
+  `<tenon-context`, `<agents-md` and their closing tags (any case) in the
+  content get a backslash after `<` before clipping. Later turns send only
+  the user message. See [Chat diagram windows](#chat-diagram-windows).
 
 `metadata.harnessRevision` still increases on every switch to a different
 instance. It keys the in-memory runtimes, so a harness that is switched back
@@ -750,9 +757,10 @@ Agents learn about this, the design blocks and file references below, and
 how to ask the user from fixed text in `core/src/chat-display.ts`:
 `ChatDisplay.abilities("native")` (names the `question` tool) goes into the
 `core/chat-display` system context entry (v2 runner) and the legacy
-`SystemPrompt.environment`; `abilities("harness")` (names `ask_user` on the
-`tenon` MCP server) goes into the first prompt of each Codex or ACP runtime
-(see [Harness handoff](#harness-handoff)). Sanitizing and sandbox limits are
+`SystemPrompt.environment`, and is cut out of Codex's instructions;
+`abilities("harness")` (names `ask_user` on the `tenon` MCP server), or
+`abilities("reply")` when that server isn't attached, goes into the first
+prompt of each Codex or ACP runtime (see [Harness handoff](#harness-handoff)). Sanitizing and sandbox limits are
 in the [threat model](../security/threat-model.md#agent-authored-svg-in-chat).
 
 ### Design windows and the Canvas tab
@@ -790,8 +798,9 @@ Inline code that names a file relative to the thread folder, optionally with
 text (`session-ui/src/components/markdown-file-reference.ts`, marked and
 wired by `markdown-file-reference-peek.tsx`). The classifier must call it a
 path and its last segment must have a known extension or file name. Paths
-with `..`, `~`, control characters, or an absolute path outside the thread
-folder stay plain code; absolute paths inside it become relative.
+with `..`, `~`, control characters, a Windows drive-relative path (`D:x.ts`),
+or an absolute path outside the thread folder stay plain code; absolute paths
+inside it become relative.
 
 - Hover or focus shows a peek with up to 12 lines, read through the Files
   tab's own APIs (cached `file.get`, else `file.read`; existence checked with

@@ -6,10 +6,12 @@ import {
   codexState,
   continuationFor,
   parseCodexNotification,
+  renderCodexInstructions,
   renderCodexPrompt,
   renderHandoffHistory,
   renderHarnessPrompt,
 } from "@opencode-ai/core/harness"
+import { ChatDisplay } from "@opencode-ai/core/chat-display"
 import { Token } from "@opencode-ai/core/util/token"
 
 describe("Codex harness", () => {
@@ -86,17 +88,37 @@ describe("Codex harness", () => {
     const workspace = { thread: "/brain/projects/Site", root: "/brain", project: "/brain/projects/Site" }
 
     for (const handoff of ["full", { since: "u1" }] as const) {
-      const prompt = renderHarnessPrompt(request, handoff, workspace)
+      const prompt = renderHarnessPrompt(request, handoff, { workspace, askUser: true })
       expect(prompt).toStartWith('<tenon-context trust="data">')
       expect(prompt).toContain("Thread folder: /brain/projects/Site")
-      expect(prompt).toContain("From /brain/AGENTS.md:\nUse tabs.")
+      expect(prompt).toContain('<agents-md path="/brain/AGENTS.md">\nUse tabs.\n</agents-md>')
       expect(prompt).toContain("```svg")
+      expect(prompt).toContain("`ask_user`")
       expect(prompt).toEndWith("Map the codebase")
     }
-    const full = renderHarnessPrompt(request, "full", workspace)
+    const full = renderHarnessPrompt(request, "full", { workspace })
     expect(full.indexOf("</tenon-context>")).toBeLessThan(full.indexOf("<handoff-history>"))
-    expect(renderHarnessPrompt(request, "none", workspace)).toBe("Map the codebase")
-    expect(renderHarnessPrompt(request, "none", workspace)).toBe(renderCodexPrompt(request, "none"))
+    // No `tenon` MCP server (an ACP agent without HTTP MCP support): ask in the reply.
+    expect(full).not.toContain("ask_user")
+    expect(full).toContain(ChatDisplay.askGuidance.reply)
+    expect(renderHarnessPrompt(request, "none", { workspace })).toBe("Map the codebase")
+    expect(renderHarnessPrompt(request, "none", { workspace })).toBe(renderCodexPrompt(request, "none"))
+  })
+
+  test("Codex instructions keep the system text but not the native agents' chat abilities", () => {
+    const native = ChatDisplay.abilities("native")
+    const request = LLM.request({
+      model: Model.make({ id: "gpt-test", provider: "test", route }),
+      system: [
+        { type: "text", text: "You are a coding agent." },
+        { type: "text", text: `Today's date: Tue\n\n${native}\n\nInstructions from: /brain/AGENTS.md\nUse tabs.` },
+        { type: "text", text: native },
+      ],
+      prompt: "Hi",
+    })
+    expect(renderCodexInstructions(request)).toBe(
+      "You are a coding agent.\n\nToday's date: Tue\n\nInstructions from: /brain/AGENTS.md\nUse tabs.",
+    )
   })
 
   test("renders only the latest user turn for a persistent Codex thread", () => {
