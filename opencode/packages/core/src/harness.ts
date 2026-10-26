@@ -320,7 +320,7 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const close = Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)
       const runtime = yield* Effect.gen(function* () {
-        const delegation = yield* HarnessDelegation.endpoint(input.sessionID)
+        const delegation = yield* HarnessDelegation.endpoint(input.sessionID, questions)
         const opened = yield* openCodex(
           process,
           settings,
@@ -422,7 +422,7 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const revision = input.revision ?? 0
       const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
-      const delegation = yield* HarnessDelegation.endpoint(input.sessionID).pipe(
+      const delegation = yield* HarnessDelegation.endpoint(input.sessionID, questions).pipe(
         Effect.provideService(Scope.Scope, runtimeScope),
       )
       const session = yield* AcpHarness.open(process, {
