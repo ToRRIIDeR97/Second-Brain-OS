@@ -311,8 +311,19 @@ Agents can start work in another harness through the delegation endpoint
   a delegated task. The reply returns to the caller as tool output: it is
   untrusted model output and may carry text from workspace files.
 
-Known gaps: interrupting a Run doesn't stop the tasks it delegated. An ACP
-agent without HTTP MCP support gets no delegation tools.
+The endpoint also serves `ask_user` and is now attached to every Codex and
+ACP runtime, not only when delegation is on. With delegation off it lists
+only `ask_user`. The same token rules apply: a token can only ask in its own
+Run's session. `ask_user` has no permission check of its own (the native
+`question` tool asks permission `question`); the harness's MCP tool policy
+applies instead. Questions and options are model output shown as text in the
+dock. Each runtime has at most one open question; a new question withdraws the
+old one, and closing the runtime withdraws what is still open.
+
+Known gaps: interrupting a Run doesn't stop the tasks it delegated, and a
+question asked through `ask_user` stays in the dock after the user stops the
+turn, until it is dismissed or the runtime closes. An ACP agent without HTTP
+MCP support gets neither delegation nor `ask_user`.
 
 ### Harness skill catalog
 
@@ -425,9 +436,26 @@ so it is treated as untrusted data:
   or command output, aren't forwarded.
 - A returning harness gets only the messages since it last took part.
 
-The wrapper is a prompt-level signal, not an enforcement boundary. A model may
-still act on instructions in the history, so the permission checks on its
-tools remain the control.
+The first prompt of a runtime also carries a `<tenon-context trust="data">`
+block (`core/src/tenon-context.ts`). It sends workspace content that
+previously stayed in Tenon's own system context to the external agent:
+
+- The workspace, Project and thread folder paths, and the text of the AGENTS.md
+  files in effect, taken from the request's system context. OpenCode's own
+  agent prompt, skill and reference guidance, environment and date are left
+  out.
+- The block opens with a line saying the quoted folders and files are data:
+  AGENTS.md is the user's project conventions, not commands that override the
+  user's messages.
+- Instructions are bounded to 4,000 estimated tokens, most specific file
+  first; a clipped file is marked truncated and files that don't fit are
+  marked omitted.
+- Any `</tenon-context` (any letter case) in the content is escaped before
+  clipping, so clipping can't produce a closing tag.
+
+The wrappers are a prompt-level signal, not an enforcement boundary. A model may
+still act on instructions in the history or the instructions text, so the
+permission checks on its tools remain the control.
 
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
@@ -451,10 +479,58 @@ include workspace content, so it is untrusted:
 - The renderer reads nothing back from the frame. Download saves the
   sanitized markup as `diagram.svg` through the browser download flow.
 
-The guidance that tells agents about this (`core/src/chat-display.ts`) is
-fixed text with no workspace content. It goes into the native system context
-and, wrapped in `<tenon-display>`, at the start of each harness runtime's
-first prompt.
+The guidance that tells agents about this, the design blocks and file
+references (`core/src/chat-display.ts`) is fixed text with no workspace
+content. It goes into the native system context and, inside
+`<tenon-context>`, at the start of each harness runtime's first prompt.
+
+## Agent-authored HTML designs in chat
+
+Agents can show designs by writing a fenced block tagged `html` (an inline
+window) or `html canvas` (an artboard in the Canvas tab). Unlike SVG, the page
+keeps its scripts so designs can animate and respond, so the frame, not
+sanitizing, is the control (`session-ui/src/components/design-fence.ts`,
+`html-window.ts`, `app/src/pages/session/canvas-tab.tsx`):
+
+- Frames get `sandbox="allow-scripts"` only (`DESIGN_SANDBOX`), set before the
+  document and before the frame joins the page. No `allow-same-origin`, so the
+  frame has an opaque origin and can't reach the renderer, its storage or
+  `window.api`; no top navigation, popups, forms or modals.
+- The `srcdoc` starts with the CSP `default-src 'none'; style-src
+  'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src
+  data:` (`DESIGN_CSP`), ahead of anything from the page, so the frame can't
+  fetch, load remote resources or submit.
+- Designs over 512 KB (UTF-8) show a notice instead of a frame.
+- Inline windows post their content height. The renderer accepts a message
+  only from a design frame's own window, with origin `"null"` and a finite
+  number, clamps it to 48–720 px and sends nothing back. Canvas frames send
+  nothing.
+- The main window keeps `contextIsolation`, `sandbox` and no
+  `nodeIntegrationInSubFrames`, so the preload never runs in frames. Electron
+  main's `will-frame-navigate` handler drops any subframe navigation other than
+  `about:srcdoc` and `about:blank` (`isSubframeDocumentURL` in
+  `desktop/src/main/external-url.ts`), so a frame can't navigate itself to a
+  page outside its CSP. It logs only the redacted URL and never opens it. This
+  also covers the SVG frames.
+- The existing permission handlers deny subframe origins (camera,
+  notifications and so on), because they aren't the trusted renderer URL.
+
+Known gap: the CSP doesn't cover WebRTC (STUN/ICE) or DNS prefetch, so a
+hostile script in a frame could in theory leak what the page contains, which
+is model output that may quote workspace content.
+
+## File references in chat
+
+Inline-code file references in assistant text open files in the right panel
+(`session-ui/src/components/markdown-file-reference.ts`,
+`app/src/pages/session/file-reference.tsx`). The reference is model output, so
+the path is checked twice, when the chip is marked and again in the app
+handler before any read: no `..` segment, no leading `~`, no control
+characters, and an absolute path only when it is inside the thread folder
+(converted to relative; Windows paths compare case-insensitively). Reads go
+through the existing file read, list and search APIs with relative paths, so
+the server's own containment check (`FSUtil.contains`) still applies. Peeks
+show at most 12 lines.
 
 ## Checks
 

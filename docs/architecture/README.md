@@ -428,9 +428,17 @@ handoff. Codex and ACP keep their own native thread or session, so
   only, not a new request, and carries no instructions. The new user message
   follows after a `---` separator.
 - The first prompt of each runtime (any handoff other than none) starts
-  with the chat display guidance inside `<tenon-display>`
-  (`renderHarnessPrompt`), because harness agents don't receive Tenon's
-  system context. See [Chat diagram windows](#chat-diagram-windows).
+  with one `<tenon-context trust="data">` block (`renderHarnessPrompt`,
+  built by `core/src/tenon-context.ts`), because harness agents don't receive
+  Tenon's system context. It holds the workspace root, the Project folder
+  (a linked folder or `projects/<name>`, named by its folder) and the thread
+  folder; the `Instructions from:` sections of the request's system context
+  (the AGENTS.md files in effect, most specific first, 4,000 estimated
+  tokens, read from the latest instructions update when there is one); and
+  `ChatDisplay.abilities("harness")`. OpenCode's own agent prompt, skill and
+  reference guidance, environment and date are not forwarded. Any
+  `</tenon-context` in the content is escaped before clipping. Later turns
+  send only the user message. See [Chat diagram windows](#chat-diagram-windows).
 
 `metadata.harnessRevision` still increases on every switch to a different
 instance. It keys the in-memory runtimes, so a harness that is switched back
@@ -492,6 +500,32 @@ more (depth 2); a Run may have four tasks running at once; only the Run that
 started a task can read or stop it. Child Runs nest under the caller in the
 sidebar, and their approvals reach the caller's composer through the existing
 session request tree.
+
+### Questions from harnesses
+
+The same endpoint serves `ask_user`, so Codex and ACP agents can ask the user
+through the question dock that native agents reach with the `question` tool.
+Each Codex and ACP runtime now gets the `tenon` server whenever it has a
+question service or a delegation handler, which in practice is always. With
+delegation off, `tools/list` shows only `ask_user` and the delegation tools
+answer that delegation is turned off.
+
+- `ask_user` takes `{ questions: [{ question, header, options: [{ label,
+  description }], multiple? }] }`, checked against `QuestionV2.Prompt`.
+- `core/src/harness/ask-user.ts` keeps one open question per runtime. It
+  calls `QuestionV2.ask` with its own ID, which publishes `question.v2.asked`;
+  the dock (`app/src/pages/session/composer/session-question-dock.tsx`)
+  replaces the composer until the user answers or dismisses it.
+- A call waits up to 240 s (below Node fetch's 300 s header timeout). If the
+  user hasn't answered, it returns a "still open" text; calling again with the
+  same questions keeps waiting without asking twice, and an answer given in
+  between is returned at once. A call with different questions withdraws the
+  old one (`QuestionV2.reject(id)`), and so does closing the runtime.
+- The result text matches the native tool's (`QuestionTool.toModelOutput`).
+  A dismissal tells the agent to continue with its best judgement or ask in
+  chat.
+- The dock shows "<harness> is asking" for the built-in harnesses, picks an
+  option with 1–9, confirms with Enter and dismisses with Esc.
 
 ### Harness model lists
 
@@ -712,12 +746,67 @@ The iframe document defines `--tenon-fg`, `--tenon-muted`, `--tenon-accent`,
 app's font and `color-scheme`, so diagrams read in light and dark themes. A
 theme change applies to windows mounted after it.
 
-Agents learn about this from one fixed text, `ChatDisplay.svgGuidance` in
-`core/src/chat-display.ts`. It goes into the `core/chat-display` system
-context entry (v2 runner), the legacy `SystemPrompt.environment`, and the
-first prompt of each Codex or ACP runtime (see
-[Harness handoff](#harness-handoff)). Sanitizing and sandbox limits are in
-the [threat model](../security/threat-model.md#agent-authored-svg-in-chat).
+Agents learn about this, the design blocks and file references below, and
+how to ask the user from fixed text in `core/src/chat-display.ts`:
+`ChatDisplay.abilities("native")` (names the `question` tool) goes into the
+`core/chat-display` system context entry (v2 runner) and the legacy
+`SystemPrompt.environment`; `abilities("harness")` (names `ask_user` on the
+`tenon` MCP server) goes into the first prompt of each Codex or ACP runtime
+(see [Harness handoff](#harness-handoff)). Sanitizing and sandbox limits are
+in the [threat model](../security/threat-model.md#agent-authored-svg-in-chat).
+
+### Design windows and the Canvas tab
+
+A fenced block tagged `html` is a design. `session-ui/src/components/design-fence.ts`
+parses the info string (`html`, `html title="X"`, `html canvas title="X"`),
+builds the frame document and collects a thread's designs;
+`html-window.ts` mounts them from `Markdown` next to the SVG windows, using
+the block's markdown source because only it keeps the info string.
+
+- A plain `html` block becomes an inline window: title, an "html · sandboxed"
+  label, Source/Preview, the page in a sandboxed frame sized from a height
+  message, and "Use this one" and "Open in Canvas".
+- An `html canvas` block becomes a compact card in the thread and an artboard
+  in the right panel's Canvas tab (`app/src/pages/session/canvas-tab.tsx`,
+  tab ID `canvas` in `helpers.ts`). The tab lists the thread's closed canvas
+  blocks from assistant text, in message order, plus inline designs sent there
+  with "Open in Canvas", as scaled previews; clicking one shows it large.
+- While a fence is open the thread shows a placeholder, and the frame is built
+  once, when the fence closes. When a canvas block finishes streaming in the
+  current view, the panel opens on the Canvas tab once per design; loading
+  history never opens it.
+- "Use this one" appends `Use design "<title>"` to the composer prompt
+  (`appendPromptText` in `app/src/utils/prompt.ts`).
+- `session-ui/src/context/design.tsx` (`DesignSpaceProvider`) carries the
+  `use`, `open` and `reveal` callbacks from the app
+  (`app/src/pages/session/design-canvas.tsx`, mounted in `SessionProviders`).
+  Without a provider, or outside a saved desktop session, windows have no
+  action buttons. Canvas state is in memory per session.
+
+### File references in chat
+
+Inline code that names a file relative to the thread folder, optionally with
+`:N`, `:N-M`, `:N:col`, `#LN` or `#LN-LM`, becomes a link chip in assistant
+text (`session-ui/src/components/markdown-file-reference.ts`, marked and
+wired by `markdown-file-reference-peek.tsx`). The classifier must call it a
+path and its last segment must have a known extension or file name. Paths
+with `..`, `~`, control characters, or an absolute path outside the thread
+folder stay plain code; absolute paths inside it become relative.
+
+- Hover or focus shows a peek with up to 12 lines, read through the Files
+  tab's own APIs (cached `file.get`, else `file.read`; existence checked with
+  `file.list` on the parent, because `/file/content` returns empty text for a
+  missing file).
+- Click or "Open in Files" opens the right panel, expands the ancestor
+  folders, opens the file as a preview tab, sets the selected lines (steady
+  tint) and scrolls the start line into view with a short flash
+  (`file-tabs.tsx`, `data-file-reference` in the file viewer).
+- A bare file name is tried at the thread folder, then through
+  `file.searchFiles`; it is used only when exactly one file matches.
+- The app supplies `FileReferenceProvider` (`session-ui/src/context/file-reference.tsx`)
+  from `app/src/pages/session/file-reference.tsx`, and turns it off below
+  768 px, where there is no right panel. The handler checks the path again
+  before any read.
 
 ## Session compatibility and review
 
@@ -773,6 +862,28 @@ unions `GET /api/session/:sessionID/diff` across the selected turn and every
 later turn, and asks for confirmation with that file list before staging.
 Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
 files, so the compatibility layer rejects `files: false` for them.
+
+### Composer context strip
+
+`ComposerContextStrip` (`app/src/components/prompt-input/context-strip.tsx`)
+sits on the top edge of a thread's composer through `PromptInputV2`'s
+`header` prop. It replaces the composer's own context ring. One button shows:
+
+- the Project, from the sidebar's project-threads query and its
+  `projectForDirectory` matching (General inside the workspace, else the
+  workspace or folder name), with a status dot;
+- the git branch (`sync().data.vcs.branch`);
+- the harness and, for the built-in loop, the agent;
+- the changed-file count: the Review panel's count while it is open, else the
+  length of `GET /file/status`, which loads without patches;
+- the context ring and percent from `getSessionContext`.
+
+Hover (400 ms) or click opens a popover with tokens used of the limit, the
+last response's token breakdown and session cost, the Project's status,
+progress, next milestone and blocker, and the instructions file in effect
+(read with `GET /second-brain/instructions` while the popover is open). Items
+without data are hidden; as the composer narrows, files, then branch, then
+harness are hidden. There is no strip in drafts.
 
 ### Composer delivery, background send and stash
 

@@ -26,7 +26,7 @@ def component():
     s.box(360, 340, 290, 80, "Location services", ["core: LocationMutation, FileMutation", "path containment, CAS writes"], cls="sub")
     s.box(360, 440, 290, 170, "Agent runtime", ["core/src/session: SessionV2,", "SessionInput, SessionRunner",
           "core/src/harness.ts: HarnessRuntime", "drivers: opencode, codex, acp", "core/src/permission.ts: PermissionV2",
-          "EventV2 (durable events), Snapshot", "registry.ts, delegation (MCP)"], cls="sub")
+          "EventV2 (durable events), Snapshot", "registry.ts, tenon MCP (ask, delegate)"], cls="sub")
     # stores
     s.box(760, 335, 200, 76, "Workspace files", ["notes/, projects/*, .tenon/", ".second-brain/calendar-v1.json"], cls="store")
     s.box(760, 445, 200, 56, "Profile SQLite", ["sessions, events, permissions"], cls="store")
@@ -52,20 +52,20 @@ def component():
     s.edge([(650, 473), (760, 473)], "durable events", at=(705, 466))
     s.edge([(650, 537), (760, 537)], "capture/diff", at=(705, 530))
     s.edge([(650, 595), (760, 595)], "registry", at=(705, 588))
-    s.edge([(415, 610), (415, 705)], "JSON-RPC stdio\n+ delegation MCP", at=(415, 668))
-    s.edge([(590, 610), (590, 705)], "ACP stdio\n+ delegation MCP", at=(590, 668))
+    s.edge([(415, 610), (415, 705)], "JSON-RPC stdio\n+ tenon MCP", at=(415, 668))
+    s.edge([(590, 610), (590, 705)], "ACP stdio\n+ tenon MCP", at=(590, 668))
     s.edge([(640, 610), (760, 705)], "HTTPS", at=(722, 690))
     s.save(f"{OUT}/component-overview.svg")
 
 
 def trust():
-    s = SVG(1000, 706, "Trust boundaries and sensitive-data flow",
+    s = SVG(1000, 722, "Trust boundaries and sensitive-data flow",
             "Trust zones of the desktop app: sandboxed renderer, privileged Electron main, loopback server, workspace "
             "files, harness child processes and external services, with the control at each crossing and known gaps in red.")
     s.heading("Trust boundaries and sensitive data", "dashed = trust zone · orange = sensitive data · red = known gap (see threat model)")
     s.zone(20, 70, 230, 230, "Renderer sandbox (untrusted input)")
     s.box(40, 100, 190, 86, "Solid renderer", ["contextIsolation, sandbox,", "no nodeIntegration",
-          "svg blocks: sandboxed iframe"], cls="sub")
+          "svg, html: sandboxed iframes"], cls="sub")
     s.box(40, 198, 190, 90, "Untrusted inputs", ["note bodies, URLs, IPC args,", "provider + agent output,", "workspace content"], cls="sub")
     s.zone(20, 330, 230, 290, "Electron main (privileged)")
     s.box(40, 360, 190, 84, "IPC handlers", ["allowlisted channels", "session export: basename,", "≤32 MiB, native dialog"], cls="sub")
@@ -91,12 +91,12 @@ def trust():
     s.edge([(610, 221), (700, 160)], "validated\nrelative paths", at=(655, 182), cls="sens", head="as")
     s.edge([(610, 310), (700, 310)], "spawn + stdio", at=(655, 303))
     s.edge([(700, 330), (630, 330)], "", head="a")
-    s.edge([(700, 400), (630, 400)], "delegation MCP\nper-runtime token", at=(665, 393))
+    s.edge([(700, 400), (630, 400)], "tenon MCP\nper-runtime token", at=(665, 393))
     s.edge([(230, 489), (300, 540), (320, 540)], "tokens", at=(282, 530), cls="sens", head="as")
     s.edge([(575, 352), (575, 512)], "prompts + context", at=(520, 470), cls="sens", head="as")
     s.edge([(600, 450), (600, 470), (732, 470), (732, 512)], "update: server-chosen\nnpm / brew, user's ID only", at=(690, 456))
     s.edge([(230, 425), (282, 425), (282, 608), (897, 608), (897, 596)], "open-external", at=(560, 612))
-    s.box(20, 636, 960, 56, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted · per-harness env visible to that harness"], cls="gapz")
+    s.box(20, 636, 960, 72, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted", "per-harness env visible to that harness · html design frames: WebRTC and DNS prefetch not covered by the CSP"], cls="gapz")
     s.save(f"{OUT}/trust-boundaries.svg")
 
 
