@@ -107,7 +107,7 @@ import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 import { pagePanelClass } from "@/components/page"
-import { SessionContextUsage } from "@/components/session-context-usage"
+import { ComposerContextStrip } from "@/components/prompt-input/context-strip"
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -699,7 +699,8 @@ export default function Page() {
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
-    const enabled = wantsReview() && sync().project?.vcs === "git"
+    // A thread loads it with the panel closed too, for the composer's context strip.
+    const enabled = (wantsReview() || !!params.id) && sync().project?.vcs === "git"
 
     return {
       queryKey: [...vcsKey(), mode] as const,
@@ -726,6 +727,10 @@ export default function Page() {
     return diffs[0]?.file
   }
   const reviewCount = () => reviewDiffs().length
+  // For the composer's context strip. Turn diffs load only with the Review panel open, and reading them
+  // before they arrive would suspend the composer, so the strip shows a turn count only once it is loaded.
+  const loadedReviewCount = () =>
+    vcsMode() || serverSDK().protocolKind() !== "v2" || turnQuery.isSuccess ? reviewCount() : undefined
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
@@ -2095,7 +2100,17 @@ export default function Page() {
                   controller={promptController}
                   harness={sessionHarness}
                   borderUnderlay
-                  trailing={<SessionContextUsage buttonAppearance="v2" />}
+                  header={
+                    <ComposerContextStrip
+                      harness={sessionHarness.instance()?.name}
+                      agent={
+                        sessionHarness.driver() === Harness.OpenCodeDriver
+                          ? inputController().agents.current || undefined
+                          : undefined
+                      }
+                      files={loadedReviewCount()}
+                    />
+                  }
                 />
               }
             />
