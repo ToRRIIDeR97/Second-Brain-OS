@@ -699,8 +699,7 @@ export default function Page() {
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
-    // A thread loads it with the panel closed too, for the composer's context strip.
-    const enabled = (wantsReview() || !!params.id) && sync().project?.vcs === "git"
+    const enabled = wantsReview() && sync().project?.vcs === "git"
 
     return {
       queryKey: [...vcsKey(), mode] as const,
@@ -713,6 +712,15 @@ export default function Page() {
         : skipToken,
     }
   })
+  // The composer's context strip counts changed files with the panel closed: git status, without patches.
+  const statusQuery = createQuery(() => ({
+    queryKey: [...vcsKey(), "status"] as const,
+    enabled: !wantsReview() && !!params.id && vcsMode() === "git" && sync().project?.vcs === "git",
+    queryFn: () =>
+      sdk()
+        .client.file.status()
+        .then((result) => result.data?.length ?? 0),
+  }))
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
     if (reviewMode() === "git" || reviewMode() === "branch")
@@ -729,8 +737,11 @@ export default function Page() {
   const reviewCount = () => reviewDiffs().length
   // For the composer's context strip. Turn diffs load only with the Review panel open, and reading them
   // before they arrive would suspend the composer, so the strip shows a turn count only once it is loaded.
-  const loadedReviewCount = () =>
-    vcsMode() || serverSDK().protocolKind() !== "v2" || turnQuery.isSuccess ? reviewCount() : undefined
+  // With the panel closed it shows the git status count instead.
+  const loadedReviewCount = () => {
+    if (!wantsReview()) return statusQuery.isSuccess ? statusQuery.data : undefined
+    return vcsMode() || serverSDK().protocolKind() !== "v2" || turnQuery.isSuccess ? reviewCount() : undefined
+  }
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
