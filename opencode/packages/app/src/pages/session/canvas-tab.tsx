@@ -15,7 +15,14 @@ export function SessionCanvasTab() {
   const canvas = useDesignCanvas()
   const language = useLanguage()
   const designs = createMemo(() => canvas.designs())
-  const selected = createMemo(() => designs().find((design) => design.id === canvas.selected()))
+  // Equal by id, so the keyed large view and its frame are built once per design, not per streamed token.
+  const selected = createMemo<Design | undefined>(
+    () => designs().find((design) => design.id === canvas.selected()),
+    undefined,
+    {
+      equals: (a, b) => a?.id === b?.id,
+    },
+  )
   const title = (design: Design) => design.title ?? language.t("secondBrain.canvas.untitled")
 
   return (

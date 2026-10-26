@@ -499,7 +499,16 @@ sanitizing, is the control (`session-ui/src/components/design-fence.ts`,
 - The `srcdoc` starts with the CSP `default-src 'none'; style-src
   'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src
   data:` (`DESIGN_CSP`), ahead of anything from the page, so the frame can't
-  fetch, load remote resources or submit.
+  fetch, load remote resources or submit. After it come
+  `x-dns-prefetch-control: off` and a guard script that makes
+  `RTCPeerConnection`, `webkitRTCPeerConnection` and `RTCDataChannel`
+  undefined, non-writable and non-configurable before any page script runs.
+- Electron main sets `disable_non_proxied_udp` as the WebRTC IP handling
+  policy of every app window (`desktop/src/main/windows.ts`); the app doesn't
+  use WebRTC, and without a proxy this stops all UDP STUN/ICE traffic, also
+  from frames nested inside a design.
+- Only assistant text parts render `html` blocks as designs; tool output, user
+  text, reasoning, subagent tabs and the note preview show them as code.
 - Designs over 512 KB (UTF-8) show a notice instead of a frame.
 - Inline windows post their content height. The renderer accepts a message
   only from a design frame's own window, with origin `"null"` and a finite
@@ -515,9 +524,11 @@ sanitizing, is the control (`session-ui/src/components/design-fence.ts`,
 - The existing permission handlers deny subframe origins (camera,
   notifications and so on), because they aren't the trusted renderer URL.
 
-Known gap: the CSP doesn't cover WebRTC (STUN/ICE) or DNS prefetch, so a
-hostile script in a frame could in theory leak what the page contains, which
-is model output that may quote workspace content.
+Known gap: the in-frame WebRTC guard is defence in depth only, because a page
+can reach the constructors again through a nested frame it creates. There the
+UDP policy still blocks STUN, but TURN over TCP (and the DNS lookup of its
+host) could in theory leak what the page contains, which is model output that
+may quote workspace content.
 
 ## File references in chat
 

@@ -761,16 +761,24 @@ A fenced block tagged `html` is a design. `session-ui/src/components/design-fenc
 parses the info string (`html`, `html title="X"`, `html canvas title="X"`),
 builds the frame document and collects a thread's designs;
 `html-window.ts` mounts them from `Markdown` next to the SVG windows, using
-the block's markdown source because only it keeps the info string.
+the block's markdown source because only it keeps the info string. Only
+assistant text parts opt in (the `designs` prop, set by `TextPartDisplay` in
+`message-part.tsx`); tool output, user text, reasoning, subagent tabs and the
+note preview keep `html` blocks as highlighted code.
 
 - A plain `html` block becomes an inline window: title, an "html · sandboxed"
   label, Source/Preview, the page in a sandboxed frame sized from a height
   message, and "Use this one" and "Open in Canvas".
+- Every finished window and card has a Source toggle, also a card without
+  "Open in Canvas" and a design over the size cap, so the code stays reachable.
 - An `html canvas` block becomes a compact card in the thread and an artboard
   in the right panel's Canvas tab (`app/src/pages/session/canvas-tab.tsx`,
   tab ID `canvas` in `helpers.ts`). The tab lists the thread's closed canvas
   blocks from assistant text, in message order, plus inline designs sent there
   with "Open in Canvas", as scaled previews; clicking one shows it large.
+  `createDesignList` in `design-canvas.tsx` keeps one object per design ID and
+  the large view is keyed on the ID, so a streamed token never rebuilds an
+  unchanged artboard's frame.
 - While a fence is open the thread shows a placeholder, and the frame is built
   once, when the fence closes. When a canvas block finishes streaming in the
   current view, the panel opens on the Canvas tab once per design; loading

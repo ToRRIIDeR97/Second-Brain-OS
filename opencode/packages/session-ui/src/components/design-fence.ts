@@ -88,17 +88,29 @@ export function designTooLarge(source: string) {
  * The srcdoc for a design frame. The CSP meta is the first thing in <head>, so no tag in the page
  * can load anything before it applies; the page's own doctype, <html> and <head> tags that follow
  * are ignored or merged by the HTML parser, and its head elements still land in this head.
- * `autosize` adds a script that reports the content height to the parent (a bare number).
+ * DNS prefetch is turned off and the WebRTC guard runs before any page script, because the CSP
+ * covers neither. `autosize` adds a script that reports the content height to the parent (a bare number).
  */
 export function designDocument(source: string, options: { autosize?: boolean } = {}) {
   return [
     "<!doctype html><html><head>",
     `<meta http-equiv="Content-Security-Policy" content="${DESIGN_CSP}">`,
+    '<meta http-equiv="x-dns-prefetch-control" content="off">',
+    webrtcGuardScript,
     '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
     options.autosize ? autosizeScript : "",
     source,
   ].join("")
 }
+
+/**
+ * Removes the WebRTC constructors from the frame's window for good, so the page can't open a peer
+ * connection whose STUN/TURN (ICE) lookups would leak data. Defence in depth only: a page can still
+ * reach them through a nested frame it creates; Electron main also turns off non-proxied WebRTC UDP.
+ */
+const webrtcGuardScript =
+  '<script>["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel"].forEach((name)=>' +
+  "Object.defineProperty(window,name,{value:undefined,writable:false,configurable:false}))</script>"
 
 const autosizeScript =
   "<script>(()=>{let last=0;const send=()=>{const h=Math.ceil(document.documentElement.scrollHeight);" +

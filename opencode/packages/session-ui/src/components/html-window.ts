@@ -101,6 +101,20 @@ function mount(
   const title = design.title ?? labels.title
   const large = !streaming && designTooLarge(design.source)
   wrapper.dataset.htmlWindow = design.canvas ? "card" : "window"
+  // The page source stays one click away, also for cards and oversized pages: ```html is also how
+  // agents show plain markup. `shown` is the wrapper state that reveals the <pre>, `back` the label
+  // while it shows; a label that doesn't change reports its state with aria-pressed instead.
+  const sourceToggle = (hidden: string, shown: string, back = labels.source) => {
+    const pressable = back === labels.source
+    const el = button(labels.source, () => {
+      const showing = wrapper.dataset.htmlWindow === shown
+      wrapper.dataset.htmlWindow = showing ? hidden : shown
+      el.textContent = showing ? labels.source : back
+      if (pressable) el.setAttribute("aria-pressed", String(!showing))
+    })
+    if (pressable) el.setAttribute("aria-pressed", "false")
+    return el
+  }
 
   if (design.canvas) {
     const card = element("div", "html-window-card")
@@ -112,8 +126,12 @@ function mount(
       status.textContent = streaming ? labels.streaming : labels.tooLarge
       card.append(status)
     }
-    if (!streaming && !large && options.space?.open)
-      card.append(button(labels.open, () => options.space?.open?.(design)))
+    if (!streaming) card.append(sourceToggle("card", "card-source"))
+    if (!streaming && !large && options.space?.open) {
+      const open = button(labels.open, () => options.space?.open?.(design))
+      open.dataset.action = "open"
+      card.append(open)
+    }
     wrapper.insertBefore(card, pre)
     return
   }
@@ -130,17 +148,12 @@ function mount(
     const notice = element("div", "html-window-notice")
     notice.textContent = streaming ? labels.streaming : labels.tooLarge
     if (streaming) notice.dataset.streaming = ""
+    else bar.append(sourceToggle("window", "source"))
     wrapper.insertBefore(notice, pre)
     return
   }
 
-  // The page source stays one click away: ```html is also how agents show plain markup.
-  const toggle = button(labels.source, () => {
-    const showing = wrapper.dataset.htmlWindow === "source"
-    wrapper.dataset.htmlWindow = showing ? "window" : "source"
-    toggle.textContent = showing ? labels.source : labels.preview
-  })
-  bar.append(toggle)
+  bar.append(sourceToggle("window", "source", labels.preview))
   wrapper.insertBefore(frame(design.source, title), pre)
   const footer = element("div", "html-window-footer")
   if (options.space?.use) footer.append(button(labels.use, () => options.space?.use?.(design)))

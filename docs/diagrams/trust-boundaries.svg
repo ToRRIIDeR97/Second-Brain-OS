@@ -153,7 +153,7 @@
 <rect class="gapz" x="20" y="636" width="960" height="72" rx="6"/>
 <text x="30" y="654" text-anchor="start" class="t">Known gaps (threat model)</text>
 <text x="30" y="670" text-anchor="start" class="s">auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted</text>
-<text x="30" y="686" text-anchor="start" class="s">per-harness env visible to that harness · html design frames: WebRTC and DNS prefetch not covered by the CSP</text>
+<text x="30" y="686" text-anchor="start" class="s">per-harness env visible to that harness · html design frames: WebRTC TURN over TCP from nested frames</text>
 <rect class="lblbg" x="256.4" y="250.0" width="47.3" height="13" rx="2"/>
 <text class="lbl" x="280" y="260" text-anchor="middle">preload</text>
 <rect class="lblbg" x="268.1" y="263.0" width="23.7" height="13" rx="2"/>

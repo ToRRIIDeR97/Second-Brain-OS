@@ -357,6 +357,7 @@ function PacedMarkdown(props: {
   cacheKey: string
   streaming: boolean
   fileReferences?: FileReferenceActions
+  designs?: boolean
 }) {
   const value = createPacedValue(
     () => props.text,
@@ -370,6 +371,7 @@ function PacedMarkdown(props: {
         cacheKey={props.cacheKey}
         streaming={props.streaming}
         fileReferences={props.fileReferences}
+        designs={props.designs}
       />
     </Show>
   )
@@ -1805,6 +1807,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             cacheKey={part().id}
             streaming={streaming()}
             fileReferences={props.message.role === "assistant" ? fileReferences() : undefined}
+            designs={props.message.role === "assistant"}
           />
         </div>
         <Show when={showCopy()}>
