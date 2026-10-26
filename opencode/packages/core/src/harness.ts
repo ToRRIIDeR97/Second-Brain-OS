@@ -39,11 +39,12 @@ import { HarnessSetup } from "./harness/setup"
 import { HarnessUpdate } from "./harness/update"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
-import { ChatDisplay } from "./chat-display"
+import { FSUtil } from "./fs-util"
 import { PermissionV2 } from "./permission"
 import { AppProcess } from "./process"
 import { QuestionV2 } from "./question"
 import { SessionTable } from "./session/sql"
+import { TenonContext } from "./tenon-context"
 import { Token } from "./util/token"
 
 export { Harness }
@@ -133,12 +134,14 @@ interface CodexRuntime {
   readonly client: CodexClient
   readonly scope: Scope.Closeable
   readonly threadID: string
+  readonly workspace?: TenonContext.Workspace
   handoff: Handoff
 }
 
 interface AcpRuntime {
   readonly session: AcpHarness.Session
   readonly scope: Scope.Closeable
+  readonly workspace?: TenonContext.Workspace
   handoff: Handoff
 }
 
@@ -160,6 +163,7 @@ const layer = Layer.effect(
     const permissions = yield* PermissionV2.Service
     const questions = yield* QuestionV2.Service
     const global = yield* Global.Service
+    const fsUtil = yield* FSUtil.Service
     const entries = yield* config.entries()
     const layerScope = yield* Effect.scope
     // Registry entries and setup API keys can change while the location is open, so instances are re-read per call.
@@ -304,6 +308,10 @@ const layer = Layer.effect(
         })
       })
 
+    // The workspace a runtime's handoff turn describes in its <tenon-context> block.
+    const workspaceOf = (directory: string) =>
+      TenonContext.workspace(directory, global.data).pipe(Effect.provideService(FSUtil.Service, fsUtil))
+
     const makeRuntime = Effect.fn("HarnessRuntime.makeCodexRuntime")(function* (
       instance: InstanceConfig,
       input: StreamInput,
@@ -371,6 +379,7 @@ const layer = Layer.effect(
           client: opened.client,
           scope: runtimeScope,
           threadID,
+          workspace: yield* workspaceOf(input.directory),
           // A failed resume starts a fresh thread, which gets the bounded full history.
           handoff: thread.resumed && continuation ? continuation.handoff : "full",
         } satisfies CodexRuntime
@@ -453,6 +462,7 @@ const layer = Layer.effect(
       return {
         session,
         scope: runtimeScope,
+        workspace: yield* workspaceOf(input.directory),
         handoff: session.resumed && continuation ? continuation.handoff : "full",
       } satisfies AcpRuntime
     })
@@ -486,7 +496,7 @@ const layer = Layer.effect(
       Stream.unwrap(
         getAcpRuntime(instance, settings, input).pipe(
           Effect.map((runtime) => {
-            const text = renderHarnessPrompt(input.request, runtime.handoff)
+            const text = renderHarnessPrompt(input.request, runtime.handoff, runtime.workspace)
             runtime.handoff = "none"
             return onTurnSuccess(
               runtime.session
@@ -918,6 +928,7 @@ export const node = makeLocationNode({
     PermissionV2.node,
     QuestionV2.node,
     Global.node,
+    FSUtil.node,
   ],
 })
 
@@ -1205,7 +1216,7 @@ function codexStream(
     runtime.pipe(
       Effect.flatMap((runtime) =>
         Effect.sync(() => {
-          const prompt = renderHarnessPrompt(input.request, runtime.handoff)
+          const prompt = renderHarnessPrompt(input.request, runtime.handoff, runtime.workspace)
           runtime.handoff = "none"
           return prompt
         }).pipe(
@@ -1548,11 +1559,18 @@ function renderCodexInstructions(request: LLMRequest) {
 
 export const HANDOFF_TOKEN_BUDGET = 16_000
 
-/** A harness turn's text; the first turn of each runtime also carries Tenon's chat display guidance. */
-export function renderHarnessPrompt(request: LLMRequest, handoff: Handoff = "none") {
+/**
+ * A harness turn's text. A handoff turn (a runtime's first) also carries the `<tenon-context>` block
+ * (workspace, AGENTS.md text and Tenon's chat abilities), since harnesses never see the system context.
+ */
+export function renderHarnessPrompt(
+  request: LLMRequest,
+  handoff: Handoff = "none",
+  workspace?: TenonContext.Workspace,
+) {
   const prompt = renderCodexPrompt(request, handoff)
   if (handoff === "none") return prompt
-  return `<tenon-display>\n${ChatDisplay.svgGuidance}\n</tenon-display>\n\n${prompt}`
+  return `${TenonContext.render(request, workspace)}\n\n${prompt}`
 }
 
 export function renderCodexPrompt(request: LLMRequest, handoff: Handoff = "none", budget = HANDOFF_TOKEN_BUDGET) {

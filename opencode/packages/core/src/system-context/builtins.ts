@@ -41,7 +41,7 @@ const builtIns = Layer.effectDiscard(
       SystemContext.make({
         key: SystemContext.Key.make("core/chat-display"),
         codec: Schema.toCodecJson(Schema.String),
-        load: Effect.succeed(ChatDisplay.svgGuidance),
+        load: Effect.succeed(ChatDisplay.abilities("native")),
         baseline: (guidance) => guidance,
         update: (_previous, guidance) => guidance,
       }),
