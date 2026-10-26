@@ -10,6 +10,9 @@ import type { PtyID } from "@opencode-ai/core/pty/schema"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
 
 type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
 
@@ -91,6 +94,39 @@ const waitForOutput = (output: Queue.Queue<string>, text: string) =>
   )
 
 describe("pty", () => {
+  it.live("fails with a spawn error, and starts nothing, when the command isn't on PATH", () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+      const result = yield* pty
+        .create({ command: "tenon-missing-command", cwd: os.tmpdir(), env: { PATH: os.tmpdir() } })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result))
+        expect(Cause.squash(result.cause)).toMatchObject({ _tag: "Pty.SpawnError", command: "tenon-missing-command" })
+      expect(yield* pty.list()).toEqual([])
+    }),
+  )
+
+  // npm installs CLIs on Windows as .cmd shims, which a PTY can't start directly.
+  ;(process.platform === "win32" ? it.live : it.live.skip)("runs a .cmd shim found on PATH", () =>
+    Effect.gen(function* () {
+      const dir = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "pty-shim-")))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(dir, { recursive: true, force: true })))
+      yield* Effect.promise(() => fs.writeFile(path.join(dir, "tenon-shim.cmd"), "@echo shim-ok %1\r\n"))
+      const pty = yield* Pty.Service
+      const info = yield* Effect.acquireRelease(
+        pty.create({ command: "tenon-shim", args: ["login"], cwd: dir, env: { PATH: dir } }),
+        (created) => pty.remove(created.id).pipe(Effect.ignore),
+      )
+      const { output, ended } = yield* attachCollecting(info.id)
+
+      expect(info.command).toBe("tenon-shim")
+      expect(yield* waitForOutput(output, "shim-ok login")).toContain("shim-ok login")
+      expect(yield* Deferred.await(ended)).toEqual({ exitCode: 0 })
+    }),
+  )
+
   it.live("returns typed not found errors for missing sessions", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service

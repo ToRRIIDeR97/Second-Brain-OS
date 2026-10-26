@@ -636,7 +636,11 @@ Sign-in works per harness:
   login command (`claude-agent-acp --cli auth login --claudeai`,
   `opencode auth login`). On servers that still serve the legacy PTY routes,
   the terminal is created through them, because the `Terminal` component
-  connects through them.
+  connects through them. `Pty.create` (`core/src/pty.ts`) resolves every
+  terminal command on `PATH` first and runs Windows `.cmd`/`.bat` shims (how
+  npm installs these CLIs) through `cmd.exe /d /c`. A command that isn't found
+  fails the request with `InvalidRequestError` instead of reaching `node-pty`,
+  which would report it from a worker thread and stop the server.
 - The dialog re-checks every 5 seconds while it is open.
 
 Home opens the dialog once on first run (`settings.harnesses.setupPrompted`),
