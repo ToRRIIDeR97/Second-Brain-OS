@@ -30,7 +30,7 @@ test("Harness picker puts external agents in one group with an add action", asyn
           harness("opencode", "opencode", "Default agent"),
           harness("opencode-acp", "acp", "OpenCode"),
           harness("claude-code", "acp", "Claude Code"),
-          harness("gemini", "acp", "Gemini"),
+          harness("custom-agent", "acp", "Custom Agent"),
         ],
       },
     }),
@@ -47,7 +47,7 @@ test("Harness picker puts external agents in one group with an add action", asyn
     "Codex",
     "OpenCode",
     "Claude Code",
-    "Gemini",
+    "Custom Agent",
   ])
   await expect(list.getByText("External agents", { exact: true })).toBeVisible()
   const add = list.getByRole("menuitem", { name: "Add harness", exact: true })

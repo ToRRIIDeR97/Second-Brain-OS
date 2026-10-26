@@ -3122,6 +3122,139 @@ export type HarnessesUpgradeOutput = {
   }
 }
 
+export type HarnessesSetupInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesSetupOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly name: string
+    readonly packageName: string
+    readonly installed: boolean
+    readonly version?: string
+    readonly available: boolean
+    readonly error?: string
+    readonly signIn: "link" | "terminal"
+    readonly login?: ReadonlyArray<string>
+    readonly auth: "signed-in" | "api-key" | "signed-out" | "unknown"
+    readonly apiKeys: ReadonlyArray<{ readonly id: string; readonly label: string }>
+    readonly apiKey?: string
+  }>
+}
+
+export type HarnessesInstallInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesInstallOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly packageName: string
+    readonly installed: boolean
+    readonly version?: string
+    readonly available: boolean
+    readonly error?: string
+    readonly signIn: "link" | "terminal"
+    readonly login?: ReadonlyArray<string>
+    readonly auth: "signed-in" | "api-key" | "signed-out" | "unknown"
+    readonly apiKeys: ReadonlyArray<{ readonly id: string; readonly label: string }>
+    readonly apiKey?: string
+  }
+}
+
+export type HarnessesSignInInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesSignInOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: { readonly url: string }
+}
+
+export type HarnessesSetKeyInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly option: { readonly option: string; readonly key: string }["option"]
+  readonly key: { readonly option: string; readonly key: string }["key"]
+}
+
+export type HarnessesSetKeyOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly packageName: string
+    readonly installed: boolean
+    readonly version?: string
+    readonly available: boolean
+    readonly error?: string
+    readonly signIn: "link" | "terminal"
+    readonly login?: ReadonlyArray<string>
+    readonly auth: "signed-in" | "api-key" | "signed-out" | "unknown"
+    readonly apiKeys: ReadonlyArray<{ readonly id: string; readonly label: string }>
+    readonly apiKey?: string
+  }
+}
+
+export type HarnessesRemoveKeyInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesRemoveKeyOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly packageName: string
+    readonly installed: boolean
+    readonly version?: string
+    readonly available: boolean
+    readonly error?: string
+    readonly signIn: "link" | "terminal"
+    readonly login?: ReadonlyArray<string>
+    readonly auth: "signed-in" | "api-key" | "signed-out" | "unknown"
+    readonly apiKeys: ReadonlyArray<{ readonly id: string; readonly label: string }>
+    readonly apiKey?: string
+  }
+}
+
 export type IntegrationsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined

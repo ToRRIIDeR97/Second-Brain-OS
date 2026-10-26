@@ -452,6 +452,55 @@ const Endpoint7_10 = (raw: RawClient["server.harness"]) => (input: Endpoint7_10I
     Effect.mapError(mapClientError),
   )
 
+type Endpoint7_11Request = Parameters<RawClient["server.harness"]["harness.setup"]>[0]
+type Endpoint7_11Input = { readonly location?: Endpoint7_11Request["query"]["location"] }
+const Endpoint7_11 = (raw: RawClient["server.harness"]) => (input?: Endpoint7_11Input) =>
+  raw["harness.setup"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint7_12Request = Parameters<RawClient["server.harness"]["harness.install"]>[0]
+type Endpoint7_12Input = {
+  readonly id: Endpoint7_12Request["params"]["id"]
+  readonly location?: Endpoint7_12Request["query"]["location"]
+}
+const Endpoint7_12 = (raw: RawClient["server.harness"]) => (input: Endpoint7_12Input) =>
+  raw["harness.install"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint7_13Request = Parameters<RawClient["server.harness"]["harness.signIn"]>[0]
+type Endpoint7_13Input = {
+  readonly id: Endpoint7_13Request["params"]["id"]
+  readonly location?: Endpoint7_13Request["query"]["location"]
+}
+const Endpoint7_13 = (raw: RawClient["server.harness"]) => (input: Endpoint7_13Input) =>
+  raw["harness.signIn"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint7_14Request = Parameters<RawClient["server.harness"]["harness.setKey"]>[0]
+type Endpoint7_14Input = {
+  readonly id: Endpoint7_14Request["params"]["id"]
+  readonly location?: Endpoint7_14Request["query"]["location"]
+  readonly option: Endpoint7_14Request["payload"]["option"]
+  readonly key: Endpoint7_14Request["payload"]["key"]
+}
+const Endpoint7_14 = (raw: RawClient["server.harness"]) => (input: Endpoint7_14Input) =>
+  raw["harness.setKey"]({
+    params: { id: input["id"] },
+    query: { location: input["location"] },
+    payload: { option: input["option"], key: input["key"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint7_15Request = Parameters<RawClient["server.harness"]["harness.removeKey"]>[0]
+type Endpoint7_15Input = {
+  readonly id: Endpoint7_15Request["params"]["id"]
+  readonly location?: Endpoint7_15Request["query"]["location"]
+}
+const Endpoint7_15 = (raw: RawClient["server.harness"]) => (input: Endpoint7_15Input) =>
+  raw["harness.removeKey"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
 const adaptGroup7 = (raw: RawClient["server.harness"]) => ({
   list: Endpoint7_0(raw),
   settings: Endpoint7_1(raw),
@@ -464,6 +513,11 @@ const adaptGroup7 = (raw: RawClient["server.harness"]) => ({
   refresh: Endpoint7_8(raw),
   updates: Endpoint7_9(raw),
   upgrade: Endpoint7_10(raw),
+  setup: Endpoint7_11(raw),
+  install: Endpoint7_12(raw),
+  signIn: Endpoint7_13(raw),
+  setKey: Endpoint7_14(raw),
+  removeKey: Endpoint7_15(raw),
 })
 
 type Endpoint8_0Request = Parameters<RawClient["server.integration"]["integration.list"]>[0]

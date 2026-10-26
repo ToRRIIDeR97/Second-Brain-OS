@@ -244,19 +244,19 @@ describe("Harness handoff history", () => {
 
   test("reads per-instance continuations and the legacy single slot", () => {
     const codex = Harness.InstanceID.make("codex")
-    const gemini = Harness.InstanceID.make("gemini")
+    const custom = Harness.InstanceID.make("custom-agent")
     const metadata = {
       harnessContinuations: {
         codex: { nativeID: "thread-1", lastSeenMessageID: "u1" },
-        gemini: { nativeID: "session-2" },
+        "custom-agent": { nativeID: "session-2" },
       },
     }
 
     expect(continuationFor(metadata, codex, 3)).toEqual({ nativeID: "thread-1", handoff: { since: "u1" } })
-    expect(continuationFor(metadata, gemini, 3)).toEqual({ nativeID: "session-2", handoff: "full" })
+    expect(continuationFor(metadata, custom, 3)).toEqual({ nativeID: "session-2", handoff: "full" })
     const legacy = { harnessContinuation: { instanceID: "codex", value: "thread-0", revision: 2 } }
     expect(continuationFor(legacy, codex, 2)).toEqual({ nativeID: "thread-0", handoff: "none" })
     expect(continuationFor(legacy, codex, 3)).toBeUndefined()
-    expect(continuationFor(legacy, gemini, 2)).toBeUndefined()
+    expect(continuationFor(legacy, custom, 2)).toBeUndefined()
   })
 })

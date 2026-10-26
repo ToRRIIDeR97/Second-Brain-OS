@@ -97,7 +97,10 @@ describe("HarnessSkills.scan", () => {
 
   test("the in-process agent and drivers without folders have no harness skills", async () => {
     expect(await scan({ id: "opencode", driver: "opencode" }, [{ name: "x" }])).toEqual({ source: "none", skills: [] })
-    expect(await scan({ id: "gem", driver: "acp", command: "gemini" }, [])).toEqual({ source: "none", skills: [] })
+    expect(await scan({ id: "gem", driver: "acp", command: "custom-agent" }, [])).toEqual({
+      source: "none",
+      skills: [],
+    })
   })
 })
 

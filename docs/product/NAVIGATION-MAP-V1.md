@@ -190,7 +190,10 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   both read as idle, so they carry no status. History is the full searchable
   thread list.
 - **Settings** contains General, Shortcuts, Servers, Providers, Models and
-  Harnesses.
+  Harnesses. Harnesses has **Set up built-in agents**. It opens the agent
+  setup dialog, which lists Codex, Claude Code and OpenCode with **Install**,
+  **Sign in** and **Use API key**. On first run Home opens the same dialog
+  once, unless every built-in agent is already installed and signed in.
 - **Thread** shows the timeline and composer. Each finished agent turn folds
   its tool and reasoning steps into one "Worked {duration}" row. The row stays
   open when a step failed. While the turn runs, the row shows a live ticker:

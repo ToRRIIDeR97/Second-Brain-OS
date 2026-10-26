@@ -1,5 +1,6 @@
 import { HarnessRuntime } from "@opencode-ai/core/harness"
 import { HarnessRegistry } from "@opencode-ai/core/harness/registry"
+import { HarnessSetup } from "@opencode-ai/core/harness/setup"
 import { HarnessUpdate } from "@opencode-ai/core/harness/update"
 import {
   HarnessSettingsExistsError,
@@ -40,6 +41,41 @@ export const HarnessHandler = HttpApiBuilder.group(Api, "server.harness", (handl
       Effect.fn(function* (ctx) {
         const harnesses = yield* HarnessRuntime.Service
         return yield* response(harnesses.upgrade(ctx.params.id)).pipe(Effect.mapError(httpError))
+      }),
+    )
+    .handle(
+      "harness.setup",
+      Effect.fn(function* () {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.setup())
+      }),
+    )
+    .handle(
+      "harness.install",
+      Effect.fn(function* (ctx) {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.install(ctx.params.id)).pipe(Effect.mapError(httpError))
+      }),
+    )
+    .handle(
+      "harness.signIn",
+      Effect.fn(function* (ctx) {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.signIn(ctx.params.id)).pipe(Effect.mapError(httpError))
+      }),
+    )
+    .handle(
+      "harness.setKey",
+      Effect.fn(function* (ctx) {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.setApiKey(ctx.params.id, ctx.payload)).pipe(Effect.mapError(httpError))
+      }),
+    )
+    .handle(
+      "harness.removeKey",
+      Effect.fn(function* (ctx) {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.setApiKey(ctx.params.id, undefined)).pipe(Effect.mapError(httpError))
       }),
     )
     .handle(
@@ -97,9 +133,10 @@ export const HarnessHandler = HttpApiBuilder.group(Api, "server.harness", (handl
     ),
 )
 
-function httpError(error: HarnessRegistry.RegisterError | HarnessUpdate.UpdateError) {
+function httpError(error: HarnessRegistry.RegisterError | HarnessUpdate.UpdateError | HarnessSetup.SetupError) {
   const fields = { reason: error.reason, message: error.message }
-  if (error.reason === "update-failed") return new HarnessSettingsWriteError(fields)
+  if (error.reason === "update-failed" || error.reason === "install-failed" || error.reason === "sign-in-failed")
+    return new HarnessSettingsWriteError(fields)
   if (error.reason === "not-found") return new HarnessSettingsNotFoundError(fields)
   if (error.reason === "exists") return new HarnessSettingsExistsError(fields)
   if (error.reason === "write-failed") return new HarnessSettingsWriteError(fields)

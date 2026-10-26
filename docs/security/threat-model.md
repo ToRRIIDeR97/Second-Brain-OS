@@ -188,6 +188,40 @@ same way a manual `npm install -g` or `brew upgrade` would. A harness whose
 command path points into a `node_modules` folder the user doesn't control would
 be updated from that package's registry entry.
 
+## Built-in harness setup
+
+The setup dialog ([ADR-013](../adr/ADR-013-built-in-harness-setup.md),
+`opencode/packages/core/src/harness/setup.ts`) adds these surfaces:
+
+- **Install.** `POST /api/harness/setup/:id/install` takes only a harness ID.
+  - The npm package comes from a fixed recipe for the three built-ins, so no
+    renderer string reaches npm.
+  - npm runs as the user with the app's full environment (proxy and registry
+    settings), from the home directory, with arguments as an array and no
+    shell.
+  - It trusts the user's npm registry, like a manual `npm install -g`.
+- **Sign in.** Codex's browser login runs inside `codex app-server`, which
+  holds the OAuth callback and stores the result in its own home. The app sees
+  only the returned link. Claude Code and OpenCode log in through their own
+  CLI in an app terminal, the same PTY capability the terminal panel already
+  has. The app never reads or stores their tokens; it only checks that their
+  login files exist (`oauthAccount` in `~/.claude.json`, a non-empty OpenCode
+  `auth.json`).
+- **API keys.**
+  - Codex keys go straight to Codex.
+  - Claude Code and OpenCode keys are stored in plain text in
+    `harness-credentials.json` (`0600`, atomic write) in the data folder, like
+    provider keys in `auth.json`.
+  - A key is added only to its own harness's environment, under one fixed
+    variable name. No other harness or child process receives it.
+  - The settings and setup routes never return a key, only which key option is
+    stored.
+  - Keys aren't validated when saved.
+
+Known gap: anyone who can read the user's data folder can read stored harness
+keys. That is the same exposure as `auth.json`; OS-keychain storage would need
+the desktop main process.
+
 ## Harness registration
 
 A registered harness is a command that the app later runs as the user, with
@@ -322,6 +356,8 @@ separate child process running as the user, and it gets the same treatment:
   `PermissionV2`, so the user approves them in Tenon Workbench.
 - Which binary runs depends on `PATH`. A different `opencode` earlier on
   `PATH` would run instead.
+- Setup installs it from npm as `opencode-ai` (see
+  [Built-in harness setup](#built-in-harness-setup)).
 
 The built-in `claude-code` instance runs `claude-agent-acp` from `PATH` under
 the same rules: allowlisted environment only, its own Claude Code login in

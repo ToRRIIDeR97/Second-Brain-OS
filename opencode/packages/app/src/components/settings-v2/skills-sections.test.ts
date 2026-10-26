@@ -4,7 +4,7 @@ import { isBuiltInSkill, skillSections } from "./skills-sections"
 describe("isBuiltInSkill", () => {
   const sections = skillSections({
     tenon: [{ name: "customize-opencode", scope: "global" }],
-    harnesses: [{ id: "gem", name: "Gemini", source: "reported", skills: [{ name: "review", scope: "global" }] }],
+    harnesses: [{ id: "gem", name: "Custom Agent", source: "reported", skills: [{ name: "review", scope: "global" }] }],
   })
 
   test("a Tenon skill without a location is built-in", () => {

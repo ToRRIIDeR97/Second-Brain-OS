@@ -1042,3 +1042,52 @@
   line-height: 16px;
   color: var(--v2-state-fg-danger);
 }
+
+.settings-v2-harness-setup {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.settings-v2-harness-setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: var(--v2-radius-lg);
+}
+
+.settings-v2-harness-setup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-v2-harness-setup-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-v2-harness-setup-key > input,
+.settings-v2-harness-setup-key > [data-component="text-input"] {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.settings-v2-harness-setup-terminal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.settings-v2-harness-setup-terminal-view {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  overflow: hidden;
+  border-radius: var(--v2-radius-md);
+  background: var(--v2-background-bg-base);
+}
