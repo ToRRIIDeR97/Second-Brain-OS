@@ -519,20 +519,34 @@ answer that delegation is turned off.
 
 - `ask_user` takes `{ questions: [{ question, header, options: [{ label,
   description }], multiple? }] }`, checked against `QuestionV2.Prompt`.
-- `core/src/harness/ask-user.ts` keeps one open question per runtime. It
-  calls `QuestionV2.ask` with its own ID, which publishes `question.v2.asked`;
-  the dock (`app/src/pages/session/composer/session-question-dock.tsx`)
-  replaces the composer until the user answers or dismisses it.
+- `core/src/harness/ask-user.ts` keeps one open question per runtime. Each
+  Codex and ACP runtime in `core/src/harness.ts` makes its own asker and hands
+  its `ask` to `HarnessDelegation.endpoint`. The asker calls `QuestionV2.ask`
+  with its own ID, which publishes `question.v2.asked`; the dock
+  (`app/src/pages/session/composer/session-question-dock.tsx`) replaces the
+  composer until the user answers or dismisses it, or the question is withdrawn.
 - A call waits up to 240 s (below Node fetch's 300 s header timeout). If the
   user hasn't answered, it returns a "still open" text; calling again with the
-  same questions keeps waiting without asking twice, and an answer given in
-  between is returned at once. A call with different questions withdraws the
-  old one (`QuestionV2.reject(id)`), and so does closing the runtime.
+  same questions in the same turn keeps waiting without asking twice, and an
+  answer given in between is returned at once. A call with different questions
+  withdraws the old one (`QuestionV2.reject(id)`), and so does closing the
+  runtime.
+- When the harness turn ends, whether it finishes, fails or the user stops it,
+  the turn stream's finalizer (`acpStream`, `codexStream`) runs the asker's
+  `endTurn`. It withdraws a question still open, which also answers a call
+  still waiting as declined, and forgets an answer the agent never collected,
+  so a later turn asking the same questions asks afresh. The composer is
+  therefore not left behind a dock nobody waits on.
+- Closing the MCP HTTP request mid-wait does not withdraw the question: a
+  client timeout closes it too, and the "call again" flow depends on the
+  question surviving between calls. The turn end bounds its lifetime instead.
 - The result text matches the native tool's (`QuestionTool.toModelOutput`).
   A dismissal tells the agent to continue with its best judgement or ask in
   chat.
 - The dock shows "<harness> is asking" for the built-in harnesses, picks an
-  option with 1–9, confirms with Enter and dismisses with Esc.
+  option with 1–9 and dismisses with Esc. In a single-choice question Enter
+  takes the focused option and moves on or submits. In a multi-select question
+  Enter toggles the focused option, and Next/Submit or Ctrl/Cmd+Enter moves on.
 
 ### Harness model lists
 

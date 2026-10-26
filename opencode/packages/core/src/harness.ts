@@ -33,6 +33,7 @@ import {
   type Client as CodexClient,
   type ServerRequest,
 } from "./harness/codex-app-server"
+import { HarnessAskUser } from "./harness/ask-user"
 import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
 import { HarnessSetup } from "./harness/setup"
@@ -138,6 +139,8 @@ interface CodexRuntime {
   readonly workspace?: TenonContext.Workspace
   /** The `tenon` MCP server, and with it `ask_user`, is attached to this thread. */
   readonly askUser: boolean
+  /** Withdraws an `ask_user` question left open when a turn ends. */
+  readonly endTurn?: Effect.Effect<void>
   handoff: Handoff
 }
 
@@ -147,6 +150,8 @@ interface AcpRuntime {
   readonly workspace?: TenonContext.Workspace
   /** The agent accepted the `tenon` MCP server, and with it `ask_user`. */
   readonly askUser: boolean
+  /** Withdraws an `ask_user` question left open when a turn ends. */
+  readonly endTurn: Effect.Effect<void>
   handoff: Handoff
 }
 
@@ -325,7 +330,8 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const close = Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)
       const runtime = yield* Effect.gen(function* () {
-        const delegation = yield* HarnessDelegation.endpoint(input.sessionID, questions)
+        const asker = yield* HarnessAskUser.make(questions, input.sessionID)
+        const delegation = yield* HarnessDelegation.endpoint(input.sessionID, asker.ask)
         const opened = yield* openCodex(
           process,
           settings,
@@ -387,6 +393,7 @@ const layer = Layer.effect(
           workspace: yield* workspaceOf(input.directory),
           // Every endpoint here carries `ask_user`, because the runtime always has the question service.
           askUser: delegation !== undefined,
+          endTurn: asker.endTurn,
           // A failed resume starts a fresh thread, which gets the bounded full history.
           handoff: thread.resumed && continuation ? continuation.handoff : "full",
         } satisfies CodexRuntime
@@ -429,7 +436,10 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const revision = input.revision ?? 0
       const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
-      const delegation = yield* HarnessDelegation.endpoint(input.sessionID, questions).pipe(
+      const asker = yield* HarnessAskUser.make(questions, input.sessionID).pipe(
+        Effect.provideService(Scope.Scope, runtimeScope),
+      )
+      const delegation = yield* HarnessDelegation.endpoint(input.sessionID, asker.ask).pipe(
         Effect.provideService(Scope.Scope, runtimeScope),
       )
       const session = yield* AcpHarness.open(process, {
@@ -471,6 +481,7 @@ const layer = Layer.effect(
         scope: runtimeScope,
         workspace: yield* workspaceOf(input.directory),
         askUser: delegation !== undefined && session.mcpAttached,
+        endTurn: asker.endTurn,
         handoff: session.resumed && continuation ? continuation.handoff : "full",
       } satisfies AcpRuntime
     })
@@ -510,6 +521,8 @@ const layer = Layer.effect(
               runtime.session
                 .turn({ text, model: input.model?.id, reasoningEffort: input.model?.reasoningEffort })
                 .pipe(
+                  // However the turn ends, a question it left open in the dock has nobody waiting.
+                  Stream.ensuring(runtime.endTurn),
                   Stream.catch((error) =>
                     Stream.unwrap(discardAcpRuntime(instance, input, runtime).pipe(Effect.as(Stream.fail(error)))),
                   ),
@@ -1260,6 +1273,8 @@ function codexStream(
                               .pipe(Effect.ignore),
                       ),
                     ),
+                    // However the turn ends, a question it left open in the dock has nobody waiting.
+                    Stream.ensuring(runtime.endTurn ?? Effect.void),
                     Stream.catch((error) => Stream.unwrap(onFailure(runtime).pipe(Effect.as(Stream.fail(error))))),
                   )
                   return onTurnSuccess(turn, onSuccess(runtime))

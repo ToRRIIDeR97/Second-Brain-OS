@@ -173,16 +173,10 @@ describe("harness delegation endpoint", () => {
   })
 
   test("offers ask_user over loopback without a delegation handler", async () => {
-    const questions: QuestionV2.Interface = {
-      ask: () => Effect.never,
-      reply: () => Effect.void,
-      reject: () => Effect.void,
-      list: () => Effect.succeed([]),
-    }
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const value = yield* HarnessDelegation.endpoint(sessionID, questions)
+          const value = yield* HarnessDelegation.endpoint(sessionID, asking({ type: "open" }).ask)
           const response = yield* Effect.promise(() =>
             fetch(value!.url, {
               method: "POST",

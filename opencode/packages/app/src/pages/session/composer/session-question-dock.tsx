@@ -371,8 +371,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
     if (!(target instanceof HTMLElement)) return
 
-    // Enter confirms: a single choice takes the focused option, then the dock moves on or submits.
-    if (event.key === "Enter" && !event.shiftKey) {
+    // Enter confirms a single choice: it takes the focused option, then the dock moves on or submits.
+    // In a multi-select question Enter is left to the focused button, so it toggles that option like
+    // a click; Next/Submit or Ctrl/Cmd+Enter moves on.
+    if (event.key === "Enter" && !event.shiftKey && !multi()) {
       if (event.repeat) return
       event.preventDefault()
       if (store.focus === options().length) {
@@ -380,7 +382,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         else customOpen()
         return
       }
-      if (!multi()) selectOption(store.focus)
+      selectOption(store.focus)
       next()
       return
     }

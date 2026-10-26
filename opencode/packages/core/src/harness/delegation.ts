@@ -3,7 +3,6 @@ export * as HarnessDelegation from "./delegation"
 import { randomBytes, timingSafeEqual } from "node:crypto"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { Effect, Option, Schema } from "effect"
-import { QuestionV2 } from "../question"
 import { SessionSchema } from "../session/schema"
 import { HarnessAskUser } from "./ask-user"
 
@@ -93,28 +92,26 @@ export function install(handler: Handler) {
 }
 
 /**
- * A token for one harness runtime of `sessionID`, revoked when the scope closes; closing it also
- * withdraws a question the runtime left open. With neither `questions` nor an installed delegation
- * handler (tests, the headless CLI) there is nothing to offer, so the harness gets none.
+ * A token for one harness runtime of `sessionID`, revoked when the scope closes. `ask` is the
+ * runtime's own asker (`HarnessAskUser.make`): the runtime keeps it to withdraw questions when a
+ * turn ends. With neither `ask` nor an installed delegation handler (tests, the headless CLI)
+ * there is nothing to offer, so the harness gets none.
  */
-export const endpoint = (sessionID: SessionSchema.ID, questions?: QuestionV2.Interface) =>
-  Effect.gen(function* () {
-    const ask = questions ? yield* HarnessAskUser.make(questions, sessionID) : undefined
-    return yield* Effect.acquireRelease(
-      Effect.promise(async (): Promise<Endpoint | undefined> => {
-        if (!state.handler && !ask) return undefined
-        const listener = await listen().catch(() => undefined)
-        if (!listener) return undefined
-        const token = randomBytes(32).toString("base64url")
-        state.tokens.set(token, { sessionID, ask })
-        return { url: listener.url, token }
+export const endpoint = (sessionID: SessionSchema.ID, ask?: HarnessAskUser.Ask) =>
+  Effect.acquireRelease(
+    Effect.promise(async (): Promise<Endpoint | undefined> => {
+      if (!state.handler && !ask) return undefined
+      const listener = await listen().catch(() => undefined)
+      if (!listener) return undefined
+      const token = randomBytes(32).toString("base64url")
+      state.tokens.set(token, { sessionID, ask })
+      return { url: listener.url, token }
+    }),
+    (value) =>
+      Effect.sync(() => {
+        if (value) state.tokens.delete(value.token)
       }),
-      (value) =>
-        Effect.sync(() => {
-          if (value) state.tokens.delete(value.token)
-        }),
-    )
-  })
+  )
 
 /** Codex `-c` overrides that register the endpoint; the token itself travels in `TOKEN_ENV`. */
 export function codexArgs(value: Endpoint) {
