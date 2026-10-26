@@ -11,12 +11,15 @@ export const svgGuidance = [
 
 /**
  * How an agent asks the user a question. External harnesses reach Tenon through the `ask_user`
- * tool of the `tenon` MCP server; native agents have the built-in `question` tool.
+ * tool of the `tenon` MCP server; native agents have the built-in `question` tool. A harness without
+ * that server (an ACP agent with no HTTP MCP support) asks in its reply.
  */
 export const askGuidance = {
   harness:
     "When you are unsure and the choice matters, ask the user instead of guessing: call the `ask_user` tool on the `tenon` MCP server.",
   native: "When you are unsure and the choice matters, ask the user instead of guessing: use the `question` tool.",
+  reply:
+    "When you are unsure and the choice matters, ask the user instead of guessing: put the question in your reply and wait for the answer.",
 } as const
 
 /** Inline ```html previews and ```html canvas artboards (the right panel's Canvas tab). */

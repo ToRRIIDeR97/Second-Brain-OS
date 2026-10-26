@@ -445,13 +445,27 @@ previously stayed in Tenon's own system context to the external agent:
   agent prompt, skill and reference guidance, environment and date are left
   out.
 - The block opens with a line saying the quoted folders and files are data:
-  AGENTS.md is the user's project conventions, not commands that override the
-  user's messages.
+  each AGENTS.md is the user's project conventions, not commands that override
+  the user's messages or part of the block.
+- Each AGENTS.md sits in its own `<agents-md path="…">` element (a `"` in the
+  path becomes `&quot;`), so headings such as `## Abilities` in a cloned
+  repository's file stay inside that file's element instead of reading as
+  Tenon's sections.
 - Instructions are bounded to 4,000 estimated tokens, most specific file
   first; a clipped file is marked truncated and files that don't fit are
-  marked omitted.
-- Any `</tenon-context` (any letter case) in the content is escaped before
-  clipping, so clipping can't produce a closing tag.
+  marked omitted. The marker is Tenon's, last inside the file's element.
+- `<tenon-context`, `</tenon-context`, `<agents-md` and `</agents-md` (any
+  letter case) in the content get a backslash after `<` before clipping, so
+  the content can't open or close the block or an element, and clipping can't
+  produce a tag.
+- The abilities name `ask_user` only when the `tenon` MCP server is attached.
+  An ACP agent that doesn't advertise `mcpCapabilities.http` gets no server,
+  so it is told to ask in its reply instead.
+
+Codex also receives the request's system context as `developerInstructions`
+(`renderCodexInstructions`), which includes the AGENTS.md text, environment
+and date. The `core/chat-display` entry, written for native agents and their
+`question` tool, is cut out there so Codex gets one way to ask.
 
 The wrappers are a prompt-level signal, not an enforcement boundary. A model may
 still act on instructions in the history or the instructions text, so the
@@ -537,7 +551,8 @@ Inline-code file references in assistant text open files in the right panel
 `app/src/pages/session/file-reference.tsx`). The reference is model output, so
 the path is checked twice, when the chip is marked and again in the app
 handler before any read: no `..` segment, no leading `~`, no control
-characters, and an absolute path only when it is inside the thread folder
+characters, no Windows drive-relative path (`D:x.ts`, which resolves against
+that drive's current folder), and an absolute path only when it is inside the thread folder
 (converted to relative; Windows paths compare case-insensitively). Reads go
 through the existing file read, list and search APIs with relative paths, so
 the server's own containment check (`FSUtil.contains`) still applies. Peeks
