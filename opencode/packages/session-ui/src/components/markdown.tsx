@@ -32,6 +32,8 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { fileReferenceLabels, markFileReferences, setupFileReferences } from "./markdown-file-reference-peek"
+import type { FileReferenceActions } from "../context/file-reference"
 import { mountSvgWindows } from "./svg-window"
 
 type RenderedBlock =
@@ -369,9 +371,11 @@ export function Markdown(
     streaming?: boolean
     class?: string
     classList?: Record<string, boolean>
+    /** Makes inline code that cites a file in the thread folder an interactive chip. */
+    fileReferences?: FileReferenceActions
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList", "fileReferences"])
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
@@ -493,6 +497,8 @@ export function Markdown(
 
   let copyCleanup: (() => void) | undefined
   let appliedLabels: CopyLabels | undefined
+  let referenceCleanup: (() => void) | undefined
+  let referenceDirectory: string | undefined
 
   createEffect(() => {
     const container = root()
@@ -540,6 +546,19 @@ export function Markdown(
         .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
       mountSvgWindows(block, svgLabels)
     })
+    // Morphing strips chip attributes, so changed blocks are re-marked; a new folder re-marks all.
+    const directory = local.fileReferences?.directory
+    if (directory || referenceDirectory)
+      (directory !== referenceDirectory ? [container] : changed).forEach((block) =>
+        markFileReferences(block, directory),
+      )
+    referenceDirectory = directory
+    if (directory && !referenceCleanup)
+      referenceCleanup = setupFileReferences(
+        container,
+        () => local.fileReferences,
+        () => fileReferenceLabels(i18n),
+      )
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
         copy: i18n.t("ui.message.copy"),
@@ -549,6 +568,7 @@ export function Markdown(
 
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
+    referenceCleanup?.()
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
