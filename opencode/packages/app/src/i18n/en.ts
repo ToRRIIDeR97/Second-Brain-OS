@@ -931,6 +931,7 @@ export const dict = {
   "harness.serviceTier": "Service tier",
   "harness.default": "Default",
   "harness.switching": "Wait for the Harness switch to finish.",
+  "harness.question.asking": "{{agent}} is asking",
   "secondBrain.skills.title": "Skills",
   "secondBrain.skills.refresh": "Refresh",
   "secondBrain.skills.readOnly": "Read-only",

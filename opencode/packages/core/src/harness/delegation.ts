@@ -2,14 +2,20 @@ export * as HarnessDelegation from "./delegation"
 
 import { randomBytes, timingSafeEqual } from "node:crypto"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { QuestionV2 } from "../question"
+import { SessionSchema } from "../session/schema"
+import { HarnessAskUser } from "./ask-user"
 
 /**
- * Cross-harness delegation: an agent in one harness (Claude Code over ACP, Codex) hands a task
- * to an agent in another harness. External harnesses reach it as a loopback MCP server; each
+ * The `tenon` MCP server for external harnesses (Claude Code and Gemini over ACP, Codex). Each
  * harness runtime gets its own bearer token, bound to the Run that owns the runtime, so a tool
- * call always knows which Run is delegating. The task work itself is installed by the server
- * (`delegation-tasks.ts`), which owns sessions; this module only holds the endpoint and protocol.
+ * call always knows which Run is calling.
+ *
+ * It serves two things. `ask_user` puts the harness's questions in the Run's question dock; every
+ * runtime with a Run gets it. Cross-harness delegation hands a task to an agent in another
+ * harness; its task work is installed by the server (`delegation-tasks.ts`), which owns sessions,
+ * and without it the delegation tools are not offered. This module only holds the endpoint and protocol.
  *
  * The listener and tokens are process-global on purpose: harness runtimes are built per Location,
  * while the endpoint is one loopback port for the whole server process.
@@ -66,9 +72,15 @@ export interface Endpoint {
   readonly token: string
 }
 
+/** The Run a token belongs to, and its runtime's asker when the runtime can ask the user. */
+export interface Caller {
+  readonly sessionID: string
+  readonly ask?: HarnessAskUser.Ask
+}
+
 const state: {
   handler?: Handler
-  tokens: Map<string, string>
+  tokens: Map<string, Caller>
   listener?: Promise<{ server: Server; url: string }>
 } = { tokens: new Map() }
 
@@ -81,24 +93,28 @@ export function install(handler: Handler) {
 }
 
 /**
- * A token for one harness runtime of `sessionID`, revoked when the scope closes. Without an
- * installed handler (tests, the headless CLI) there is nothing to offer, so the harness gets none.
+ * A token for one harness runtime of `sessionID`, revoked when the scope closes; closing it also
+ * withdraws a question the runtime left open. With neither `questions` nor an installed delegation
+ * handler (tests, the headless CLI) there is nothing to offer, so the harness gets none.
  */
-export const endpoint = (sessionID: string) =>
-  Effect.acquireRelease(
-    Effect.promise(async (): Promise<Endpoint | undefined> => {
-      if (!state.handler) return undefined
-      const listener = await listen().catch(() => undefined)
-      if (!listener) return undefined
-      const token = randomBytes(32).toString("base64url")
-      state.tokens.set(token, sessionID)
-      return { url: listener.url, token }
-    }),
-    (value) =>
-      Effect.sync(() => {
-        if (value) state.tokens.delete(value.token)
+export const endpoint = (sessionID: SessionSchema.ID, questions?: QuestionV2.Interface) =>
+  Effect.gen(function* () {
+    const ask = questions ? yield* HarnessAskUser.make(questions, sessionID) : undefined
+    return yield* Effect.acquireRelease(
+      Effect.promise(async (): Promise<Endpoint | undefined> => {
+        if (!state.handler && !ask) return undefined
+        const listener = await listen().catch(() => undefined)
+        if (!listener) return undefined
+        const token = randomBytes(32).toString("base64url")
+        state.tokens.set(token, { sessionID, ask })
+        return { url: listener.url, token }
       }),
-  )
+      (value) =>
+        Effect.sync(() => {
+          if (value) state.tokens.delete(value.token)
+        }),
+    )
+  })
 
 /** Codex `-c` overrides that register the endpoint; the token itself travels in `TOKEN_ENV`. */
 export function codexArgs(value: Endpoint) {
@@ -122,6 +138,48 @@ export function acpServer(value: Endpoint) {
   }
 }
 
+export const ASK_USER_TOOL = {
+  name: "ask_user",
+  description:
+    'Ask the user one or more questions in Tenon Workbench and wait for the answers. Use it to clarify ambiguous instructions, get preferences or decisions, or offer choices about what direction to take. Each question is shown with its options; the user can also type their own answer, so do not add an "Other" option. If you recommend an option, list it first and add "(Recommended)" to its label. If the user has not answered within a few minutes, the result says the question is still open: call ask_user again with the same questions to keep waiting.',
+  inputSchema: {
+    type: "object",
+    properties: {
+      questions: {
+        type: "array",
+        minItems: 1,
+        description: "Questions to ask",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string", description: "Complete question" },
+            header: { type: "string", description: "Very short label (max 30 chars)" },
+            options: {
+              type: "array",
+              description: "Available choices",
+              items: {
+                type: "object",
+                properties: {
+                  label: { type: "string", description: "Display text (1-5 words, concise)" },
+                  description: { type: "string", description: "Explanation of choice" },
+                },
+                required: ["label", "description"],
+                additionalProperties: false,
+              },
+            },
+            multiple: { type: "boolean", description: "Allow selecting multiple choices" },
+          },
+          required: ["question", "header", "options"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["questions"],
+    additionalProperties: false,
+  },
+} as const
+
+/** The delegation tools, offered only while a delegation handler is installed. */
 export const TOOLS = [
   {
     name: "list_agents",
@@ -179,8 +237,8 @@ export const TOOLS = [
 
 type Message = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown }
 
-/** Answers one MCP JSON-RPC message from the Run `sessionID`; notifications get no answer. */
-export async function handleMessage(message: Message, sessionID: string, handler: Handler) {
+/** Answers one MCP JSON-RPC message from `caller`; notifications get no answer. */
+export async function handleMessage(message: Message, caller: Caller, handler: Handler | undefined) {
   if (typeof message.method !== "string") return error(message.id ?? null, -32600, "Invalid request")
   if (message.id === undefined || message.id === null) return undefined
   const params = isRecord(message.params) ? message.params : {}
@@ -190,16 +248,33 @@ export async function handleMessage(message: Message, sessionID: string, handler
       protocolVersion: requested && PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[0],
       capabilities: { tools: {} },
       serverInfo: { name: "tenon-workbench", version: "0.1.0" },
-      instructions:
-        "Use these tools to delegate a task to an agent in another harness and collect its result. Call list_agents first.",
+      instructions: [
+        ...(caller.ask ? ["Use ask_user to ask the user questions in Tenon Workbench."] : []),
+        ...(handler
+          ? [
+              "Use the task tools to delegate a task to an agent in another harness and collect its result. Call list_agents first.",
+            ]
+          : []),
+      ].join(" "),
     })
   }
   if (message.method === "ping") return reply(message.id, {})
-  if (message.method === "tools/list") return reply(message.id, { tools: TOOLS })
+  if (message.method === "tools/list")
+    return reply(message.id, { tools: [...(caller.ask ? [ASK_USER_TOOL] : []), ...(handler ? TOOLS : [])] })
   if (message.method !== "tools/call") return error(message.id, -32601, "Method not found")
+  const name = String(params.name)
   const args = isRecord(params.arguments) ? params.arguments : {}
-  const result = await callTool(String(params.name), args, sessionID, handler).then(
-    (value) => ({ content: [{ type: "text", text: JSON.stringify(value, null, 2) }], isError: false }),
+  const result = await (
+    name === ASK_USER_TOOL.name
+      ? askUser(args, caller)
+      : handler
+        ? callTool(name, args, caller.sessionID, handler)
+        : Promise.reject(new Error(`${name} is not available: delegation is turned off in this app process.`))
+  ).then(
+    (value) => ({
+      content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }],
+      isError: false,
+    }),
     (cause) => ({
       content: [{ type: "text", text: cause instanceof Error ? cause.message : String(cause) }],
       isError: true,
@@ -212,6 +287,14 @@ export async function handleMessage(message: Message, sessionID: string, handler
 export function invoke(name: string, args: Record<string, unknown>, sessionID: string) {
   if (!state.handler) return Promise.reject(new Error("Delegation is not available in this app process."))
   return callTool(name, args, sessionID, state.handler)
+}
+
+async function askUser(args: Record<string, unknown>, caller: Caller) {
+  if (!caller.ask) throw new Error("ask_user is not available for this agent.")
+  const questions = Option.getOrUndefined(Schema.decodeUnknownOption(HarnessAskUser.Input)(args))?.questions
+  if (!questions?.length)
+    throw new Error("ask_user needs questions: [{ question, header, options: [{ label, description }], multiple? }].")
+  return HarnessAskUser.resultText(questions, await caller.ask(questions, HarnessAskUser.WAIT_SECONDS))
 }
 
 function callTool(name: string, args: Record<string, unknown>, sessionID: string, handler: Handler): Promise<unknown> {
@@ -265,18 +348,18 @@ async function serve(request: IncomingMessage, response: ServerResponse) {
   if (url.pathname !== "/mcp") return void response.writeHead(404).end()
   // A browser page could reach a loopback port; MCP clients send no Origin, so any Origin is refused.
   if (request.headers.origin) return void response.writeHead(403).end()
-  const sessionID = authorize(request.headers.authorization)
-  if (!sessionID) return void response.writeHead(401, { "WWW-Authenticate": "Bearer" }).end()
+  const caller = authorize(request.headers.authorization)
+  if (!caller) return void response.writeHead(401, { "WWW-Authenticate": "Bearer" }).end()
   if (request.method !== "POST") return void response.writeHead(405, { Allow: "POST" }).end()
   const handler = state.handler
-  if (!handler) return void response.writeHead(503).end()
+  if (!handler && !caller.ask) return void response.writeHead(503).end()
   const body = await readBody(request)
   if (body === undefined) return void response.writeHead(413).end()
   const parsed = parse(body)
   if (!parsed) return json(response, error(null, -32700, "Parse error"))
   const messages = Array.isArray(parsed) ? parsed : [parsed]
   const answers = (
-    await Promise.all(messages.map((message) => handleMessage(isRecord(message) ? message : {}, sessionID, handler)))
+    await Promise.all(messages.map((message) => handleMessage(isRecord(message) ? message : {}, caller, handler)))
   ).filter((answer) => answer !== undefined)
   if (answers.length === 0) return void response.writeHead(202).end()
   return json(response, Array.isArray(parsed) ? answers : answers[0])

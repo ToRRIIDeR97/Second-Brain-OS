@@ -43,6 +43,8 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Que
 }) {}
 
 export interface AskInput {
+  /** A caller-chosen ID, so the caller can withdraw the question with `reject` later. */
+  readonly id?: ID
   readonly sessionID: SessionSchema.ID
   readonly questions: ReadonlyArray<Info>
   readonly tool?: Tool
@@ -93,9 +95,9 @@ const layer = Layer.effect(
     const ask = Effect.fn("QuestionV2.ask")((input: AskInput) =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const id = ID.ascending()
+          const id = input.id ?? ID.ascending()
           const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
-          const request: Request = { id, ...input }
+          const request: Request = { ...input, id }
           pending.set(id, { request, deferred })
           return yield* events.publish(Event.Asked, request).pipe(
             Effect.andThen(restore(Deferred.await(deferred))),
