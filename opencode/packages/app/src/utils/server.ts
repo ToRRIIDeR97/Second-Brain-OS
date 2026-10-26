@@ -213,6 +213,21 @@ export async function listHarnessSettings(input: HarnessServer, directory: strin
   return decodeSettingsList(await harnessSettingsRequest(input, directory, "/settings")).data
 }
 
+const decodeTitleAgent = Schema.decodeUnknownSync(
+  Location.response(Schema.Struct({ id: Schema.optional(HarnessSchema.InstanceID) })),
+)
+
+/** The harness that titles new threads; undefined means each thread's own harness. */
+export async function getTitleAgent(input: HarnessServer, directory: string) {
+  return decodeTitleAgent(await harnessSettingsRequest(input, directory, "/title-agent")).data.id
+}
+
+export async function setTitleAgent(input: HarnessServer, directory: string, id: string | undefined) {
+  return decodeTitleAgent(
+    await harnessSettingsRequest(input, directory, "/title-agent", { method: "PUT", body: JSON.stringify({ id }) }),
+  ).data.id
+}
+
 export async function discoverHarness(input: HarnessServer, directory: string, value: HarnessSchema.DiscoverInput) {
   return decodeDiscovery(
     await harnessSettingsRequest(input, directory, "/discover", { method: "POST", body: JSON.stringify(value) }),

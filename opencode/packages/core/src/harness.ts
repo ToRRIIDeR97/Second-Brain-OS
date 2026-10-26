@@ -8,7 +8,7 @@ import {
   TransportReason,
   type ContentPart,
   type LLMRequest,
-  type Message,
+  Message,
 } from "@opencode-ai/llm"
 import { Harness } from "@opencode-ai/schema/harness"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
@@ -53,6 +53,14 @@ export interface Driver {
   readonly kind: Harness.DriverKind
   readonly snapshot: Effect.Effect<Harness.Instance>
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, LLMError>
+  /** One prompt in a fresh, throwaway native session; undefined for the in-process loop. */
+  readonly complete?: (input: CompleteInput) => Effect.Effect<string, LLMError>
+}
+
+export interface CompleteInput {
+  readonly directory: string
+  readonly request: LLMRequest
+  readonly model?: Harness.ModelSelection
 }
 
 export interface StreamInput {
@@ -75,6 +83,16 @@ export interface Interface {
   readonly stream: (
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
   ) => Stream.Stream<LLMEvent, LLMError>
+  /**
+   * Runs one prompt in a fresh native session of the harness and returns the reply text. The session
+   * is not tied to any thread, tool requests are refused, and it closes when the reply ends.
+   */
+  readonly complete: (
+    input: CompleteInput & { readonly instanceID: Harness.InstanceID },
+  ) => Effect.Effect<string, LLMError>
+  /** The harness that titles new threads, when one is set in settings; otherwise each thread's own. */
+  readonly titleAgent: () => Effect.Effect<Harness.InstanceID | undefined>
+  readonly setTitleAgent: (id: Harness.InstanceID | undefined) => Effect.Effect<void, HarnessRegistry.RegisterError>
   readonly settings: () => Effect.Effect<ReadonlyArray<Harness.SettingsEntry>>
   /** Slash commands an ACP harness last reported in this app process, if any. */
   readonly reportedCommands: (id: Harness.InstanceID) => ReadonlyArray<AcpHarness.AcpCommand> | undefined
@@ -485,6 +503,43 @@ const layer = Layer.effect(
         ),
       )
 
+    // An ephemeral, read-only thread with approvals off: nothing is saved and tools can't change files.
+    const codexComplete = (settings: CodexSettings, input: CompleteInput) =>
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        return yield* Effect.gen(function* () {
+          const opened = yield* openCodex(process, settings, input.directory)
+          const thread = yield* opened.client.request(
+            "thread/start",
+            {
+              model: input.model?.id,
+              cwd: input.directory,
+              runtimeWorkspaceRoots: [input.directory],
+              approvalPolicy: "never",
+              sandbox: "read-only",
+              ephemeral: true,
+            },
+            THREAD_SETUP_TIMEOUT,
+          )
+          const threadID = responseThreadID(thread)
+          if (!threadID) return yield* Effect.fail(new ProtocolError("Codex did not return a thread ID."))
+          const runtime: CodexRuntime = { client: opened.client, scope, threadID, handoff: "none" }
+          const request = { ...input.request, system: [], messages: [Message.user(oneShotPrompt(input.request))] }
+          return yield* replyText(
+            codexStream(Effect.succeed(runtime), {
+              sessionID: SessionID.make("ses_title"),
+              directory: input.directory,
+              request,
+              model: input.model,
+            }),
+          )
+        }).pipe(Effect.provideService(Scope.Scope, scope), Effect.ensuring(Scope.close(scope, Exit.void)))
+      }).pipe(
+        Effect.mapError((error) =>
+          error instanceof LLMError ? error : llmError("CodexHarness", "complete", errorMessage(error)),
+        ),
+      )
+
     const unavailable = (instance: InstanceConfig, error: string, models: ReadonlyArray<Harness.Model> = []) =>
       Effect.succeed(
         Harness.Instance.make({
@@ -536,6 +591,7 @@ const layer = Layer.effect(
                   (runtime) => markSeen(instance, input, runtime.threadID),
                 )
               : Stream.fail(llmError("CodexHarness", "stream", `${instance.name} is disabled.`)),
+          complete: (input) => codexComplete(settings, input),
         }
       }
       if (instance.driver === Harness.AcpDriver) {
@@ -559,6 +615,27 @@ const layer = Layer.effect(
             instance.enabled
               ? acpStream(instance, settings, input)
               : Stream.fail(llmError("AcpHarness", "stream", `${instance.name} is disabled.`)),
+          complete: (input) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                const session = yield* AcpHarness.open(process, {
+                  settings,
+                  directory: input.directory,
+                  approve: () => Effect.succeed(false),
+                })
+                return yield* replyText(
+                  session.turn({
+                    text: oneShotPrompt(input.request),
+                    model: input.model?.id,
+                    reasoningEffort: input.model?.reasoningEffort,
+                  }),
+                )
+              }),
+            ).pipe(
+              Effect.mapError((error) =>
+                error instanceof LLMError ? error : llmError("AcpHarness", "complete", errorMessage(error)),
+              ),
+            ),
         }
       }
       return {
@@ -770,6 +847,18 @@ const layer = Layer.effect(
           ),
         )
       },
+      complete: (input) =>
+        instances.pipe(
+          Effect.flatMap((current) => {
+            const instance = current.find((item) => item.id === input.instanceID)
+            const complete = instance?.enabled ? driverFor(instance).complete : undefined
+            return complete
+              ? complete(input)
+              : Effect.fail(llmError("HarnessRuntime", "complete", `${input.instanceID} can't run a one-off prompt.`))
+          }),
+        ),
+      titleAgent: () => HarnessRegistry.titleAgent(global.config),
+      setTitleAgent: (id) => HarnessRegistry.setTitleAgent(global.config, id),
       settings,
       add: (input) =>
         instances.pipe(
@@ -1653,6 +1742,21 @@ function expandHome(input: string) {
   if (value === "~") return os.homedir()
   if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))
   return path.resolve(value)
+}
+
+/** A one-off prompt for a harness with no system channel: instructions first, then the request. */
+function oneShotPrompt(request: LLMRequest) {
+  return [...request.system.map((part) => part.text), renderCodexPrompt(request)].filter(Boolean).join("\n\n")
+}
+
+function replyText<E>(stream: Stream.Stream<LLMEvent, E>) {
+  return Stream.runCollect(stream).pipe(
+    Effect.map((events) =>
+      Array.from(events)
+        .flatMap((event) => (event.type === "text-delta" ? [event.text] : []))
+        .join(""),
+    ),
+  )
 }
 
 function llmError(module: string, method: string, message: string) {

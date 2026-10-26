@@ -151,10 +151,11 @@ export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
     input.protocol.then(async (protocol) => {
       if (protocol === "v1") return v1
       // The managed sidecar exposes session execution through V2 and these operations through legacy routes.
+      // It has no V2 session delete, so `remove` uses the legacy route too.
       if (await input.legacyProjectsAndMcp)
         return {
           ...current,
-          session: { ...current.session, rename: v1.session.rename },
+          session: { ...current.session, rename: v1.session.rename, remove: v1.session.remove },
           project: v1.project,
           mcp: v1.mcp,
           file: v1.file,

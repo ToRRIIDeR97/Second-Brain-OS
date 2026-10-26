@@ -61,6 +61,10 @@ import type {
   HarnessesListOutput,
   HarnessesSettingsInput,
   HarnessesSettingsOutput,
+  HarnessesTitleAgentInput,
+  HarnessesTitleAgentOutput,
+  HarnessesSetTitleAgentInput,
+  HarnessesSetTitleAgentOutput,
   HarnessesDiscoverInput,
   HarnessesDiscoverOutput,
   HarnessesAssistantDirectoryInput,
@@ -687,6 +691,31 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      titleAgent: (input?: HarnessesTitleAgentInput, requestOptions?: RequestOptions) =>
+        request<HarnessesTitleAgentOutput>(
+          {
+            method: "GET",
+            path: `/api/harness/title-agent`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      setTitleAgent: (input?: HarnessesSetTitleAgentInput, requestOptions?: RequestOptions) =>
+        request<HarnessesSetTitleAgentOutput>(
+          {
+            method: "PUT",
+            path: `/api/harness/title-agent`,
+            query: { location: input?.["location"] },
+            body: { id: input?.["id"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
             empty: false,
           },
           requestOptions,

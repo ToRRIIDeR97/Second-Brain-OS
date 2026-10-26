@@ -38,6 +38,8 @@ const errors = [
   HarnessSettingsWriteError,
 ]
 
+const TitleAgent = Schema.Struct({ id: Schema.optional(Harness.InstanceID) })
+
 const annotate = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({ identifier, summary, description })
 
@@ -64,6 +66,36 @@ export const HarnessGroup = HttpApiGroup.make("server.harness")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         annotate("v2.harness.settings", "List harness settings", "List harnesses with their source and editability."),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("harness.titleAgent", "/api/harness/title-agent", {
+      query: LocationQuery,
+      success: Location.response(TitleAgent),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.titleAgent",
+          "Get title agent",
+          "The harness that titles new threads. Without one, each thread is titled by its own harness.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.put("harness.setTitleAgent", "/api/harness/title-agent", {
+      query: LocationQuery,
+      payload: TitleAgent,
+      success: Location.response(TitleAgent),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.setTitleAgent",
+          "Set title agent",
+          "Choose the harness that titles new threads, or omit id to title each thread with its own harness.",
+        ),
       ),
   )
   .add(

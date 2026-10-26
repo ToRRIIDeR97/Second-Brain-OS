@@ -192,7 +192,8 @@ export const locationLayer = Layer.effect(
           ? yield* catalog.model.getAvailable(session.model.providerID, session.model.id)
           : defaultModel && supported(defaultModel)
             ? defaultModel
-            : (yield* catalog.model.available()).find(supported)
+            : // Skip models the provider has retired; they fail every request with HTTP 410.
+              (yield* catalog.model.available()).find((model) => model.status !== "deprecated" && supported(model))
         if (!selected && session.model)
           return yield* new ModelUnavailableError({
             providerID: session.model.providerID,

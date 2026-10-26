@@ -256,6 +256,16 @@ only `harnesses.json` entries under the same lock. A malformed file is
 reported and never overwritten, and built-in or config-file harnesses are
 refused.
 
+Thread titles send the thread's first user message to the title agent: the
+thread's own harness, or the harness chosen in Settings → Harnesses. A chosen
+harness may belong to a different provider than the thread, so that message
+crosses to it; the choice is the user's, stored in `harness-preferences.json`
+(atomic write) and read only from `/api/harness/title-agent`. The one-off
+session gets no delegation endpoint and no thread history. Codex runs it as an
+ephemeral, read-only thread with approvals off; ACP agents have every tool
+request refused. An ACP agent may still keep that session in its own history
+(for example Claude Code's session list).
+
 The registry stores commands, arguments, and model IDs only. Agents can't
 store environment variables or secrets in it, and it can't replace the
 built-in `opencode`, `codex`, `opencode-acp` and `claude-code` instances. ACP agents get no client
