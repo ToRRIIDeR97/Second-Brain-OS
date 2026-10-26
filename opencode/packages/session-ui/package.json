@@ -8,6 +8,7 @@
     "./*": "./src/components/*.tsx",
     "./session-diff": "./src/components/session-diff.ts",
     "./message-file": "./src/components/message-file.ts",
+    "./markdown-file-reference": "./src/components/markdown-file-reference.ts",
     "./message-part-text": "./src/components/message-part-text.ts",
     "./part-group": "./src/components/part-group.ts",
     "./step-kind": "./src/components/step-kind.ts",
