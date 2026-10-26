@@ -1,0 +1,50 @@
+[data-component="context-strip"] {
+  container-name: context-strip;
+  container-type: inline-size;
+}
+
+/* Items give way in priority order as the composer narrows: files, then branch, then the harness. */
+@container context-strip (max-width: 520px) {
+  [data-slot="context-strip-files"] {
+    display: none;
+  }
+}
+
+@container context-strip (max-width: 420px) {
+  [data-slot="context-strip-branch"] {
+    display: none;
+  }
+}
+
+@container context-strip (max-width: 320px) {
+  [data-slot="context-strip-harness"] {
+    display: none;
+  }
+}
+
+/* Above the session composer, which sits at z-index 70. */
+[data-popper-positioner]:has([data-component="context-strip-popover"]) {
+  z-index: 80;
+}
+
+[data-component="context-strip-popover"] {
+  transform-origin: var(--kb-popover-content-transform-origin);
+  animation: context-strip-popover-in var(--v2-duration-short) var(--v2-ease-emphasized-decelerate);
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+@keyframes context-strip-popover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="context-strip-popover"] {
+    animation: none;
+  }
+}
