@@ -13,7 +13,7 @@ import {
 import { Harness } from "@opencode-ai/schema/harness"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { SessionID } from "@opencode-ai/schema/session-id"
-import { Context, DateTime, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Context, DateTime, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { eq } from "drizzle-orm"
 import os from "os"
@@ -191,6 +191,7 @@ const layer = Layer.effect(
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
     const probes = new Map<string, { readonly expires: number; readonly instance: Harness.Instance }>()
+    const inflight = new Map<string, Deferred.Deferred<Harness.Instance>>()
     // Models each harness reported. After catalogTTL a check asks for them again; a failed check
     // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
     const catalogs = new Map<string, { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }>()
@@ -209,10 +210,17 @@ const layer = Layer.effect(
       return Effect.suspend(() => {
         const cached = probes.get(key)
         if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
+        // Home, open threads, and Settings list at once on startup and focus; they share one check.
+        const running = inflight.get(key)
+        if (running) return Deferred.await(running)
+        const done = Deferred.makeUnsafe<Harness.Instance>()
+        inflight.set(key, done)
         const catalog = catalogs.get(key)
         const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
         return probe(catalog?.models, rediscover).pipe(
           Effect.map((result) => {
+            // Background discovery finished first: this result holds the older list, so nothing is cached.
+            if (catalogs.get(key) !== catalog) return result.instance
             // A failed rediscovery still counts as checked, so it isn't retried on every probe.
             if (result.discovered || rediscover)
               catalogs.set(key, { models: result.discovered ?? catalog!.models, checked: Date.now() })
@@ -220,8 +228,32 @@ const layer = Layer.effect(
             probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
             return result.instance
           }),
+          // An interrupted check (the caller went away) still releases everyone waiting on it.
+          Effect.onExit((exit) =>
+            Effect.sync(() => inflight.delete(key)).pipe(Effect.andThen(Deferred.done(done, exit))),
+          ),
         )
       })
+    }
+    // Listing an ACP agent's models opens a session and switches to each model once (about 10s for
+    // Claude Code), so it runs beside the listing; its result reaches the picker on the next list.
+    const discovering = new Set<string>()
+    const discoverAcpModels = (instance: InstanceConfig, settings: AcpHarness.Settings) => {
+      const key = instanceKey(instance)
+      if (discovering.has(key)) return Effect.void
+      discovering.add(key)
+      return AcpHarness.discover(process, settings, location.directory).pipe(
+        Effect.tap((agent) =>
+          Effect.sync(() => {
+            catalogs.set(key, { models: agent.models, checked: Date.now() })
+            probes.delete(key)
+          }),
+        ),
+        Effect.ignore,
+        Effect.ensuring(Effect.sync(() => discovering.delete(key))),
+        Effect.forkIn(layerScope),
+        Effect.asVoid,
+      )
     }
     // Ends the harness processes behind open threads; each reconnects on its next message.
     const closeRuntimes = (id: string) =>
@@ -608,7 +640,9 @@ const layer = Layer.effect(
           kind: instance.driver,
           snapshot: instance.enabled
             ? cachedProbe(instance, (known, rediscover) =>
-                AcpHarness.probe(process, instance, settings, location.directory, known, rediscover),
+                (known && !rediscover ? Effect.void : discoverAcpModels(instance, settings)).pipe(
+                  Effect.andThen(AcpHarness.probe(process, instance, settings, location.directory, known)),
+                ),
               )
             : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
           stream: (input) =>
