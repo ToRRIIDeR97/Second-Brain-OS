@@ -29,6 +29,7 @@ test("Harness picker puts external agents in one group with an add action", asyn
           harness("codex", "codex", "Codex"),
           harness("opencode", "opencode", "Default agent"),
           harness("opencode-acp", "acp", "OpenCode"),
+          harness("claude-code", "acp", "Claude Code"),
           harness("gemini", "acp", "Gemini"),
         ],
       },
@@ -41,7 +42,13 @@ test("Harness picker puts external agents in one group with an add action", asyn
   await selector.click()
 
   const list = page.getByRole("menu")
-  await expect(list.getByRole("menuitemradio")).toHaveText(["Default agent", "Codex", "OpenCode", "Gemini"])
+  await expect(list.getByRole("menuitemradio")).toHaveText([
+    "Default agent",
+    "Codex",
+    "OpenCode",
+    "Claude Code",
+    "Gemini",
+  ])
   await expect(list.getByText("External agents", { exact: true })).toBeVisible()
   const add = list.getByRole("menuitem", { name: "Add harness", exact: true })
   await page.screenshot({ path: testInfo.outputPath("harness-picker-groups.png") })

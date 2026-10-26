@@ -702,6 +702,18 @@ export function configuredInstances(
         config: { command: "opencode", args: ["acp"] },
       },
     ],
+    // Claude Code through Anthropic's ACP adapter (`npm install -g @agentclientprotocol/claude-agent-acp`).
+    // It signs in with the user's own Claude login or ANTHROPIC_API_KEY, kept in its process.
+    [
+      Harness.ClaudeCode,
+      {
+        id: Harness.ClaudeCode,
+        driver: Harness.AcpDriver,
+        name: "Claude Code",
+        enabled: true,
+        config: { command: "claude-agent-acp", args: [] },
+      },
+    ],
   ])
   const decodeID = Schema.decodeUnknownOption(Harness.InstanceID)
   for (const [rawID, value] of Object.entries(registry)) {
@@ -720,7 +732,7 @@ export function configuredInstances(
     for (const [rawID, value] of Object.entries(entry.info.harnesses)) {
       const id = Option.getOrUndefined(decodeID(rawID))
       // Reserved IDs must not be replaced from config files either; only the
-      // built-in definitions own the opencode, opencode-acp and codex instances (issue #40).
+      // built-in definitions own the opencode, opencode-acp, claude-code and codex instances (issue #40).
       if (!id || HarnessRegistry.reserved.has(id)) continue
       instances.set(id, {
         id,

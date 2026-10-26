@@ -92,6 +92,7 @@ export function SubagentTab(props: {
     if (listed) return listed
     if (id === Harness.OpenCode) return language.t("harness.tenonWorkbench")
     if (id === Harness.OpenCodeAcp) return language.t("harness.openCode")
+    if (id === Harness.ClaudeCode) return language.t("harness.claudeCode")
     if (id === Harness.Codex) return language.t("harness.codex")
     return language.t("secondBrain.agentTab.thisHarness")
   }

@@ -60,6 +60,7 @@ describe("listHarnessesForServer", () => {
       expect.objectContaining({ id: Harness.OpenCode, name: "Default agent", status: "available" }),
       expect.objectContaining({ id: Harness.Codex, status: "unavailable" }),
       expect.objectContaining({ id: Harness.OpenCodeAcp, driver: Harness.AcpDriver, status: "unavailable" }),
+      expect.objectContaining({ id: Harness.ClaudeCode, driver: Harness.AcpDriver, status: "unavailable" }),
     ])
   })
 

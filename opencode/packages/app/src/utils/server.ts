@@ -113,6 +113,13 @@ export function fallbackHarnesses(): ReadonlyArray<Harness.Instance> {
       status: "unavailable",
       models: [],
     }),
+    HarnessSchema.Instance.make({
+      id: HarnessSchema.ClaudeCode,
+      driver: HarnessSchema.AcpDriver,
+      name: "Claude Code",
+      status: "unavailable",
+      models: [],
+    }),
   ]
 }
 
