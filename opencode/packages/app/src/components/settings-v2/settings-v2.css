@@ -183,12 +183,15 @@
 }
 
 /* Tonal button: accent container fill on a ghost ButtonV2. */
-.settings-v2-panel [data-component="button-v2"][data-variant="ghost"].settings-v2-tonal {
+.settings-v2-panel [data-component="button-v2"][data-variant="ghost"].settings-v2-tonal,
+.settings-v2-harness-setup-body [data-component="button-v2"][data-variant="ghost"].settings-v2-tonal {
   background-color: var(--v2-background-bg-accent-container);
   color: var(--v2-text-text-on-accent-container);
 }
 
 .settings-v2-panel
+  [data-component="button-v2"][data-variant="ghost"].settings-v2-tonal:is(:hover, :active):not(:disabled),
+.settings-v2-harness-setup-body
   [data-component="button-v2"][data-variant="ghost"].settings-v2-tonal:is(:hover, :active):not(:disabled) {
   background-color: var(--v2-background-bg-accent-container);
   background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
@@ -1043,51 +1046,135 @@
   color: var(--v2-state-fg-danger);
 }
 
-.settings-v2-harness-setup {
-  width: min(640px, calc(100vw - 32px));
+.settings-v2-harness-setup-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 0 20px 20px;
 }
 
-.settings-v2-harness-setup-card {
+.settings-v2-harness-setup-content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--v2-border-border-muted);
-  border-radius: var(--v2-radius-lg);
+  gap: 20px;
+  outline: none;
 }
 
-.settings-v2-harness-setup-head {
+.settings-v2-harness-setup-connect {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.settings-v2-harness-setup-connect-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 530;
+  letter-spacing: -0.13px;
+  color: var(--v2-text-text-base);
+}
+
+.settings-v2-harness-setup-connect-copy {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 20px;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-muted);
+}
+
+.settings-v2-harness-setup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-v2-harness-setup-chip {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 530;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-base);
+  background: var(--v2-background-bg-layer-02);
+  transition:
+    background-color var(--v2-duration-short, 150ms) var(--v2-ease-standard, ease),
+    border-radius var(--v2-duration-short, 150ms) var(--v2-ease-standard, ease);
+}
+
+.settings-v2-harness-setup-chip:hover {
+  background: var(--v2-background-bg-layer-03);
+}
+
+.settings-v2-harness-setup-chip:active {
+  border-radius: 8px;
+}
+
+.settings-v2-harness-setup-chip:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 1px;
+}
+
+.settings-v2-harness-setup-chip[data-selected="true"] {
+  background: var(--v2-background-bg-accent-container);
+  color: var(--v2-text-text-on-accent-container);
+}
+
+.settings-v2-harness-setup-chip[data-size="small"] {
+  height: 28px;
+  padding: 0 12px;
+  font-weight: 440;
 }
 
 .settings-v2-harness-setup-key {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.settings-v2-harness-setup-key > input,
-.settings-v2-harness-setup-key > [data-component="text-input"] {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.settings-v2-harness-setup-terminal {
-  display: flex;
+  width: 100%;
   flex-direction: column;
   align-items: flex-start;
+  gap: 16px;
+}
+
+.settings-v2-harness-setup-label {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 530;
+  line-height: 16px;
+  color: var(--v2-text-text-base);
+}
+
+.settings-v2-harness-setup-actions {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .settings-v2-harness-setup-terminal-view {
   position: relative;
   width: 100%;
-  height: 260px;
+  height: 240px;
   overflow: hidden;
-  border-radius: var(--v2-radius-md);
-  background: var(--v2-background-bg-base);
+  border-radius: var(--v2-radius-lg);
+  background: var(--v2-background-bg-layer-01);
+}
+
+/* The dialog surface is layer-01, so rows sit one level up, as on the Settings panel. */
+.settings-v2-harness-setup-body [data-component="settings-v2-list"] > * {
+  background-color: var(--v2-background-bg-layer-02);
+}
+
+@media (hover: hover) {
+  .settings-v2-harness-setup-body [data-component="settings-v2-list"] > :hover {
+    background-color: var(--v2-background-bg-layer-03);
+  }
 }

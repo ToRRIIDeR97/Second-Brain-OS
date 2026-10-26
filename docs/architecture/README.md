@@ -618,11 +618,21 @@ it through these routes:
     closes the open processes of any harness whose config changed.
 
 The renderer's `DialogHarnessSetup`
-(`app/src/components/settings-v2/harness-setup.tsx`) shows one card per
-harness with Install, Sign in and Use API key.
+(`app/src/components/settings-v2/harness-setup.tsx`) reuses two existing
+patterns.
+
+- **List:** the rows of Settings → Providers, grouped under **Ready** and
+  **Set up**. Each row has the harness's provider icon and one action:
+  **Install**, **Connect**, or **Manage**.
+- **Connect:** a drill-in view laid out like the provider Connect dialog. It
+  has a back arrow, a "Connect {name}" title, and method chips for
+  "Sign in with …" or **Use an API key**, then a labelled key field and
+  **Continue**.
+
+Sign-in works per harness:
 
 - Codex sign-in opens the returned link in the browser.
-- Claude Code and OpenCode sign-in opens an embedded terminal that runs their
+- Claude Code and OpenCode sign-in starts an embedded terminal that runs their
   login command (`claude-agent-acp --cli auth login --claudeai`,
   `opencode auth login`). On servers that still serve the legacy PTY routes,
   the terminal is created through them, because the `Terminal` component

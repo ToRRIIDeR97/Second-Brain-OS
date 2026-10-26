@@ -191,8 +191,10 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   thread list.
 - **Settings** contains General, Shortcuts, Servers, Providers, Models and
   Harnesses. Harnesses has **Set up built-in agents**. It opens the agent
-  setup dialog, which lists Codex, Claude Code and OpenCode with **Install**,
-  **Sign in** and **Use API key**. On first run Home opens the same dialog
+  setup dialog. The dialog lists Codex, Claude Code and OpenCode under
+  **Ready** and **Set up**, in the Providers row style, with **Install**,
+  **Connect** or **Manage**. **Connect** opens that agent's sign-in or API-key
+  view. On first run Home opens the same dialog
   once, unless every built-in agent is already installed and signed in.
 - **Thread** shows the timeline and composer. Each finished agent turn folds
   its tool and reasoning steps into one "Worked {duration}" row. The row stays
