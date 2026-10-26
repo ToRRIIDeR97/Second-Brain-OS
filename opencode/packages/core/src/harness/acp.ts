@@ -168,9 +168,10 @@ export const discover = (process: Process, settings: Settings, directory: string
       return { ...agentInfo(initialize), models }
     }),
   ).pipe(
+    // Claude Code needs about 10s here when warm (one switch per model), more on a busy cold start.
     Effect.timeoutOrElse({
-      duration: "15 seconds",
-      orElse: () => Effect.fail(new ProtocolError("The ACP agent did not start a session within 15 seconds.")),
+      duration: "45 seconds",
+      orElse: () => Effect.fail(new ProtocolError("The ACP agent did not list its models within 45 seconds.")),
     }),
   )
 
@@ -199,9 +200,8 @@ export const verify = (process: Process, settings: Settings, directory: string, 
   )
 
 /**
- * Availability check for the picker. Without a known model list it also opens a session to read the
- * agent's own models, falling back to the handshake alone when the agent can't open one (for example
- * before sign-in). `discovered` is set only when the agent reported its models.
+ * Availability check for the picker: the handshake alone, offering the known models. The agent's own
+ * model list comes from `discover`, which the caller runs separately because it takes much longer.
  */
 export function probe(
   process: Process,
@@ -209,24 +209,17 @@ export function probe(
   settings: Settings,
   directory: string,
   known?: ReadonlyArray<Harness.Model>,
-  rediscover = false,
 ): Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }> {
   const base = { id: instance.id, driver: instance.driver, name: instance.name }
-  const available = (version: string | undefined, models: ReadonlyArray<Harness.Model>) =>
-    Harness.Instance.make({ ...base, status: "available", version, models: withConfigured(models, settings.models) })
-  const handshakeOnly = handshake(process, settings, directory).pipe(
-    Effect.map((agent) => ({ instance: available(agent.version, known ?? []) })),
-  )
-  // With `rediscover`, a stale list is asked for again; a failed session falls back to the known list.
-  const check =
-    known && !rediscover
-      ? handshakeOnly
-      : discover(process, settings, directory).pipe(
-          // An empty list is still recorded, so later checks don't open a session each time.
-          Effect.map((agent) => ({ instance: available(agent.version, agent.models), discovered: agent.models })),
-          Effect.catch(() => handshakeOnly),
-        )
-  return check.pipe(
+  return handshake(process, settings, directory).pipe(
+    Effect.map((agent) => ({
+      instance: Harness.Instance.make({
+        ...base,
+        status: "available",
+        version: agent.version,
+        models: withConfigured(known ?? [], settings.models),
+      }),
+    })),
     Effect.catch((error) =>
       Effect.succeed({
         instance: Harness.Instance.make({

@@ -505,10 +505,16 @@ in-memory caches per instance configuration:
   checked. The list is dropped when the server stops, so every app launch
   reads it again.
 
-On the first check for an ACP harness, `AcpHarness.probe` runs the handshake
-and `session/new` and reads the agent's models. Later checks run only the
-handshake, until the list is 10 minutes old. If `session/new` fails (for example before sign-in), the probe falls
-back to the handshake. Codex checks call `model/list` each time, with a
+An ACP check (`AcpHarness.probe`) runs only the handshake, so a list answers
+in about a second. When no model list is known, or it is 10 minutes old, the
+check also starts `AcpHarness.discover` in the background (`session/new` plus
+one model switch each, about 10 seconds for Claude Code, 45-second timeout).
+When it finishes, it stores the models and drops the cached check, so the next
+list carries them; if it fails (for example before sign-in), the next check
+after the cache expires tries again. Concurrent lists of one harness share a
+single in-flight check. While the selected harness is available but has no
+models yet, the composer and Brain Home ask again every 3 seconds, up to 10
+times. Codex checks call `model/list` each time, with a
 15-second timeout for a cold start. A failed check keeps the last model list.
 Each ACP session that opens for a Run also updates the list. Saved model IDs in
 `harnesses.json` are used only when an agent reports none, and Settings no
