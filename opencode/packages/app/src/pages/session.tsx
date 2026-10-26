@@ -84,6 +84,7 @@ import {
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { SessionFileReferences } from "@/pages/session/file-reference"
+import { DesignCanvasProvider } from "@/pages/session/design-canvas"
 import { SESSION_SIDE_RAIL_SPACE, SessionSideRail } from "@/pages/session/session-side-rail"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
@@ -305,9 +306,11 @@ function SessionProviders(props: ParentProps) {
     <TerminalProvider>
       <FileProvider>
         <PromptProvider>
-          <CommentsProvider>
-            <SessionFileReferences>{props.children}</SessionFileReferences>
-          </CommentsProvider>
+          <DesignCanvasProvider>
+            <CommentsProvider>
+              <SessionFileReferences>{props.children}</SessionFileReferences>
+            </CommentsProvider>
+          </DesignCanvasProvider>
         </PromptProvider>
       </FileProvider>
     </TerminalProvider>

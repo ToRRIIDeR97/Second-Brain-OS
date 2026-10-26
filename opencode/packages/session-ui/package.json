@@ -14,6 +14,7 @@
     "./step-kind": "./src/components/step-kind.ts",
     "./markdown-stream": "./src/components/markdown-stream.ts",
     "./markdown-cache": "./src/components/markdown-cache.tsx",
+    "./design-fence": "./src/components/design-fence.ts",
     "./line-comment-styles": "./src/components/line-comment-styles.ts",
     "./pierre": "./src/pierre/index.ts",
     "./pierre/*": "./src/pierre/*.ts",

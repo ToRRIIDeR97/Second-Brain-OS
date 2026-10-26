@@ -1,7 +1,26 @@
 import { describe, expect, test } from "bun:test"
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
-import { redactURL, resolveExternalURL, resolveLocalFilePath, unparseableURL } from "./external-url"
+import {
+  isSubframeDocumentURL,
+  redactURL,
+  resolveExternalURL,
+  resolveLocalFilePath,
+  unparseableURL,
+} from "./external-url"
+
+describe("subframe documents", () => {
+  test("allows only inline srcdoc and blank documents", () => {
+    expect(isSubframeDocumentURL("about:srcdoc")).toBe(true)
+    expect(isSubframeDocumentURL("about:srcdoc#section")).toBe(true)
+    expect(isSubframeDocumentURL("about:blank")).toBe(true)
+    expect(isSubframeDocumentURL("https://example.com/?leak=1")).toBe(false)
+    expect(isSubframeDocumentURL("oc://renderer/index.html")).toBe(false)
+    expect(isSubframeDocumentURL("data:text/html,<p>x</p>")).toBe(false)
+    expect(isSubframeDocumentURL("javascript:alert(1)")).toBe(false)
+    expect(isSubframeDocumentURL("about:srcdocx")).toBe(false)
+  })
+})
 
 describe("external URLs", () => {
   test("opens web URLs externally", () => {
