@@ -136,9 +136,11 @@ export const RefreshInput = Schema.Struct({
 export interface RefreshInput extends Schema.Schema.Type<typeof RefreshInput> {}
 
 // `opencode` is the stored ID of the in-process loop (shown as "Default agent"), kept so existing sessions keep
-// routing there. Upstream OpenCode runs as an external ACP harness under `opencode-acp`.
+// routing there. Upstream OpenCode runs as an external ACP harness under `opencode-acp`, and Claude Code under
+// `claude-code` through Anthropic's ACP adapter.
 export const OpenCode = InstanceID.make("opencode")
 export const OpenCodeAcp = InstanceID.make("opencode-acp")
+export const ClaudeCode = InstanceID.make("claude-code")
 export const Codex = InstanceID.make("codex")
 export const OpenCodeDriver = DriverKind.make("opencode")
 export const CodexDriver = DriverKind.make("codex")

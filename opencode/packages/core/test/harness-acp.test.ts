@@ -464,6 +464,7 @@ describe("ACP harness", () => {
       "opencode:opencode",
       "codex:codex",
       "opencode-acp:acp",
+      "claude-code:acp",
       "gemini:acp",
     ])
   })
@@ -476,6 +477,7 @@ describe("ACP harness", () => {
         harnesses: {
           opencode: entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
           "opencode-acp": entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
+          "claude-code": entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
           gemini: entry({ driver: "acp", name: "Gemini", config: { command: "gemini" } }),
         },
       },
@@ -485,11 +487,16 @@ describe("ACP harness", () => {
       "opencode:opencode",
       "codex:codex",
       "opencode-acp:acp",
+      "claude-code:acp",
       "gemini:acp",
     ])
     expect(instances.find((instance) => instance.id === "opencode-acp")?.config).toEqual({
       command: "opencode",
       args: ["acp"],
+    })
+    expect(instances.find((instance) => instance.id === "claude-code")?.config).toEqual({
+      command: "claude-agent-acp",
+      args: [],
     })
   })
 

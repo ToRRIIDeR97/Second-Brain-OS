@@ -13,7 +13,12 @@ import { AcpHarness } from "./acp"
 // The app-owned list of harnesses added after setup. It lives beside the global config and holds
 // commands only: agents can't store environment variables here.
 export const fileName = "harnesses.json"
-export const reserved: ReadonlySet<string> = new Set([Harness.OpenCode, Harness.OpenCodeAcp, Harness.Codex])
+export const reserved: ReadonlySet<string> = new Set([
+  Harness.OpenCode,
+  Harness.OpenCodeAcp,
+  Harness.ClaudeCode,
+  Harness.Codex,
+])
 
 const slug = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/
 // Serializes the read-modify-write of harnesses.json so concurrent registrations can't drop an entry.

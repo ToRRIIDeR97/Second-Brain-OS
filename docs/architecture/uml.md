@@ -72,7 +72,8 @@ Notes on the class view:
   `{ nativeID, lastSeenMessageID }`) live in the session's `metadata` JSON.
   They have no separate table.
 - Built-in `HarnessInstance` IDs are `opencode` (driver `opencode`, shown as
-  Tenon Workbench), `codex`, and `opencode-acp` (driver `acp`, shown as OpenCode).
+  Tenon Workbench), `codex`, `opencode-acp` (driver `acp`, shown as OpenCode) and
+  `claude-code` (driver `acp`, shown as Claude Code).
   They are reserved, so `harnesses.json` and config files can't replace them.
 - Permission requests exist only in memory. Saved permission rows are allow
   rules, scoped to a project.
@@ -160,7 +161,8 @@ discussion. The V2 runtime emits no `session.status` busy or idle events, so
 ![Sequence: prompt admission, drain, ACP runtime open with session load or new, streaming updates, permission ask answered in the renderer, completion and interrupt](../diagrams/sequence-acp-turn.svg)
 
 The built-in `opencode-acp` instance (upstream OpenCode started as
-`opencode acp`) follows this sequence unchanged. The Codex driver follows the
+`opencode acp`) and `claude-code` instance (`claude-agent-acp`) follow this
+sequence unchanged. The Codex driver follows the
 same outline. It speaks the `codex app-server`
 JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 `turn/interrupt`) instead of ACP. Its approvals come from
@@ -208,7 +210,7 @@ task handler directly. See [Cross-harness delegation](README.md#cross-harness-de
 | Workspace project scan and AGENTS.md defaults | Critical workflow | Class; text in [README](README.md#projects-and-thread-directories) | `opencode/src/project/brain.ts` (`scan`, `link`, `unlink`, instructions), `core/src/workspace-instructions.ts`, `core/src/instruction-context.ts`, `opencode/src/session/instruction.ts` |
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
-| Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |
+| Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`, `claude-code`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |
 | Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `renderHarnessPrompt`, `continuationFor`), `core/src/session/projector.ts` |
 | Chat diagram windows (agent ```svg blocks in a sandboxed iframe, agent guidance) | Subsystem | Trust boundaries; text in [README](README.md#chat-diagram-windows) | `session-ui/src/components/svg-window.ts`, `session-ui/src/components/markdown.tsx`, `session-ui/src/components/markdown.worker.ts`, `core/src/chat-display.ts`, `core/src/system-context/builtins.ts`, `opencode/src/session/system.ts` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |

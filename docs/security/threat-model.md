@@ -219,7 +219,7 @@ refused.
 
 The registry stores commands, arguments, and model IDs only. Agents can't
 store environment variables or secrets in it, and it can't replace the
-built-in `opencode`, `codex`, and `opencode-acp` instances. ACP agents get no client
+built-in `opencode`, `codex`, `opencode-acp` and `claude-code` instances. ACP agents get no client
 file-system or terminal capability. Their own tool approvals arrive as
 `session/request_permission` and use Second Brain permissions. Treat output
 from an ACP agent as untrusted model output.
@@ -317,6 +317,11 @@ separate child process running as the user, and it gets the same treatment:
   `PermissionV2`, so the user approves them in Tenon Workbench.
 - Which binary runs depends on `PATH`. A different `opencode` earlier on
   `PATH` would run instead.
+
+The built-in `claude-code` instance runs `claude-agent-acp` from `PATH` under
+the same rules: allowlisted environment only, its own Claude Code login in
+`~/.claude`, and tool approvals through `session/request_permission`. A
+different `claude-agent-acp` earlier on `PATH` would run instead.
 
 Resolved: Tenon Workbench's core `Global` paths now use the app name
 `tenon-workbench` (`core/src/global.ts`), so Tenon Workbench and upstream OpenCode

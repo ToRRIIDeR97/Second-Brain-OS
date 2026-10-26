@@ -226,7 +226,7 @@ except that neither the registry nor config files can replace a built-in. The
 registry is re-read on each list and stream call, so new entries appear
 without a restart.
 
-`configuredInstances()` in `harness.ts` defines three built-in instances. The
+`configuredInstances()` in `harness.ts` defines four built-in instances. The
 reserved IDs are listed in `packages/core/src/harness/registry.ts`.
 
 | ID             | Driver     | Shown as     | Runs                                                                 |
@@ -234,6 +234,7 @@ reserved IDs are listed in `packages/core/src/harness/registry.ts`.
 | `opencode`     | `opencode` | Tenon Workbench | Tenon Workbench's own in-process LLM loop                               |
 | `codex`        | `codex`    | Codex        | `codex app-server`                                                   |
 | `opencode-acp` | `acp`      | OpenCode     | Upstream OpenCode from `PATH` as `opencode acp`, via the ACP driver |
+| `claude-code`  | `acp`      | Claude Code  | Anthropic's `claude-agent-acp` adapter from `PATH`, via the ACP driver |
 
 The `opencode` ID is kept for the Tenon Workbench loop so stored sessions keep
 routing to it. `Harness.OpenCodeAcp` in `packages/schema/src/harness.ts` names
@@ -243,10 +244,22 @@ otherwise. The upstream child gets only the harness environment allowlist from
 `core/src/harness/env.ts`, so no `OPENCODE_*` variables or app provider keys
 reach it. It uses its own credentials from `opencode auth login`.
 
+`Harness.ClaudeCode` names the Claude Code instance. It runs
+`claude-agent-acp`, which users install with
+`npm install -g @agentclientprotocol/claude-agent-acp`; until then the picker
+shows it as unavailable ("Could not start claude-agent-acp."). The adapter
+wraps the Claude Agent SDK, so it signs in with the user's own Claude Code
+login under `~/.claude`. `ANTHROPIC_API_KEY` is not in the harness allowlist
+and built-ins take no `env`, so API-key users add a config-file harness under
+another ID with the key in its `env`. Its models
+(`default`, `sonnet`, `opus`, `haiku`, …) come from the adapter's
+`session/new` response, its skills from `~/.claude/skills`, and Settings >
+Harnesses offers npm updates for it like any npm-installed harness CLI.
+
 Both harness pickers (Home in `pages/brain-home.tsx` and the session composer in
 `components/prompt-input/harness-controls.tsx`) list the built-in loop, named
 "Default agent", first, then every other instance under one "External agents" group: Codex,
-OpenCode, and any `harnesses.json` or config-file agents. The group always ends
+OpenCode, Claude Code, and any `harnesses.json` or config-file agents. The group always ends
 with "Add harness", which opens Settings > Harnesses to register a new ACP agent.
 
 Tenon Workbench's core `Global` paths use the app name `tenon-workbench`

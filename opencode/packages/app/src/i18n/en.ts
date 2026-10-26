@@ -920,6 +920,7 @@ export const dict = {
   "harness.tenonWorkbench": "Tenon Workbench",
   "harness.openCode": "OpenCode",
   "harness.codex": "Codex",
+  "harness.claudeCode": "Claude Code",
   "harness.group.external": "External agents",
   "harness.checking": "Checking harnesses…",
   "harness.unavailable": "Unavailable",
