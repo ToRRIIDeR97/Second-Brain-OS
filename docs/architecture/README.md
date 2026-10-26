@@ -875,7 +875,7 @@ sits on the top edge of a thread's composer through `PromptInputV2`'s
 - the git branch (`sync().data.vcs.branch`);
 - the harness and, for the built-in loop, the agent;
 - the changed-file count: the Review panel's count while it is open, else the
-  length of `GET /file/status`, which loads without patches;
+  length of the git status list (`vcs.status`), which loads without patches;
 - the context ring and percent from `getSessionContext`.
 
 Hover (400 ms) or click opens a popover with tokens used of the limit, the

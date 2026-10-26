@@ -724,8 +724,8 @@ export default function Page() {
     enabled: !wantsReview() && !!params.id && vcsMode() === "git" && sync().project?.vcs === "git",
     queryFn: () =>
       sdk()
-        .client.file.status()
-        .then((result) => result.data?.length ?? 0),
+        .api.vcs.status({ location: { directory: sdk().directory } })
+        .then((result) => result.data.length),
   }))
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
