@@ -11,6 +11,9 @@ import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { ChatDisplay } from "@opencode-ai/core/chat-display"
+import { TenonContext } from "@opencode-ai/core/tenon-context"
+import { LLM, Model } from "@opencode-ai/llm"
+import { route } from "@opencode-ai/llm/protocols/openai-chat"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
@@ -74,7 +77,7 @@ describe("SystemContextBuiltIns", () => {
           "",
           `Today's date: ${localDate(timestamp)}`,
           "",
-          ChatDisplay.svgGuidance,
+          ChatDisplay.abilities("native"),
         ].join("\n"),
       )
     }),
@@ -124,11 +127,24 @@ describe("SystemContextBuiltIns", () => {
           "",
           `Today's date: ${localDate(timestamp)}`,
           "",
-          ChatDisplay.svgGuidance,
+          ChatDisplay.abilities("native"),
           "",
           `Instructions from: ${instructionFile}\nBe precise.`,
         ].join("\n"),
       )
+    }),
+  )
+
+  itWithInstructions.effect("harness handoffs read the instructions back from the baseline", () =>
+    Effect.gen(function* () {
+      const context = yield* SystemContextRegistry.Service
+      const baseline = (yield* SystemContext.initialize(yield* context.load())).baseline
+      const request = LLM.request({
+        model: Model.make({ id: "gpt-test", provider: "test", route }),
+        system: [{ type: "text", text: baseline }],
+      })
+
+      expect(TenonContext.instructionFiles(request)).toEqual([{ path: instructionFile, content: "Be precise." }])
     }),
   )
 })

@@ -76,14 +76,27 @@ describe("Codex harness", () => {
     })
   })
 
-  test("adds the chat display guidance only to a runtime's first turn", () => {
+  test("adds the Tenon context block only on handoff turns", () => {
     const model = Model.make({ id: "gpt-test", provider: "test", route })
-    const request = LLM.request({ model, prompt: "Map the codebase" })
+    const request = LLM.request({
+      model,
+      system: "Instructions from: /brain/AGENTS.md\nUse tabs.",
+      messages: [user("u1", "Old"), assistant("a1", "Answer"), user("u2", "Map the codebase")],
+    })
+    const workspace = { thread: "/brain/projects/Site", root: "/brain", project: "/brain/projects/Site" }
 
-    expect(renderHarnessPrompt(request, "full")).toStartWith("<tenon-display>")
-    expect(renderHarnessPrompt(request, "full")).toContain("```svg")
-    expect(renderHarnessPrompt(request, "full")).toEndWith("Map the codebase")
-    expect(renderHarnessPrompt(request, "none")).toBe(renderCodexPrompt(request, "none"))
+    for (const handoff of ["full", { since: "u1" }] as const) {
+      const prompt = renderHarnessPrompt(request, handoff, workspace)
+      expect(prompt).toStartWith('<tenon-context trust="data">')
+      expect(prompt).toContain("Thread folder: /brain/projects/Site")
+      expect(prompt).toContain("From /brain/AGENTS.md:\nUse tabs.")
+      expect(prompt).toContain("```svg")
+      expect(prompt).toEndWith("Map the codebase")
+    }
+    const full = renderHarnessPrompt(request, "full", workspace)
+    expect(full.indexOf("</tenon-context>")).toBeLessThan(full.indexOf("<handoff-history>"))
+    expect(renderHarnessPrompt(request, "none", workspace)).toBe("Map the codebase")
+    expect(renderHarnessPrompt(request, "none", workspace)).toBe(renderCodexPrompt(request, "none"))
   })
 
   test("renders only the latest user turn for a persistent Codex thread", () => {
