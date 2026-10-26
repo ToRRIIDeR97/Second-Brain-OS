@@ -31,6 +31,7 @@ import {
 import { showToast } from "@/utils/toast"
 import { SettingsListV2 } from "./parts/list"
 import { DialogHarnessAssistant } from "./harness-assistant"
+import { DialogHarnessSetup } from "./harness-setup"
 import "./settings-v2.css"
 
 // Splits an arguments field on whitespace; quoted arguments with spaces aren't supported here.
@@ -125,6 +126,20 @@ export const SettingsHarnessesV2: Component<{
     )
   }
 
+  const openSetup = () => {
+    const dir = directory()
+    if (!dir) return
+    void dialog.show(() => (
+      <DialogHarnessSetup
+        directory={dir}
+        onClose={() => {
+          changed()
+          props.onBack()
+        }}
+      />
+    ))
+  }
+
   const refreshModels = (id: string) =>
     run(id, () => refreshHarnesses(server(), directory()!, id).then((next) => setInstances(next)))
 
@@ -187,6 +202,9 @@ export const SettingsHarnessesV2: Component<{
               )}
             </For>
             <div class="settings-v2-harness-nav-actions">
+              <ButtonV2 size="normal" variant="ghost" icon="download" disabled={!directory()} onClick={openSetup}>
+                {language.t("harness.settings.setup")}
+              </ButtonV2>
               <ButtonV2 size="normal" variant="ghost" icon="plus" disabled={!directory()} onClick={openAssistant}>
                 {language.t("harness.settings.assistant")}
               </ButtonV2>

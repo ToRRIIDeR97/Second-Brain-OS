@@ -31,7 +31,7 @@ def component():
     s.box(760, 335, 200, 76, "Workspace files", ["notes/, projects/*, .tenon/", ".second-brain/calendar-v1.json"], cls="store")
     s.box(760, 445, 200, 56, "Profile SQLite", ["sessions, events, permissions"], cls="store")
     s.box(760, 515, 200, 44, "Snapshot git repo", [], cls="store")
-    s.box(760, 573, 200, 44, "harnesses.json (0600)", [], cls="store")
+    s.box(760, 573, 200, 44, "harnesses.json, keys (0600)", [], cls="store")
     s.box(760, 631, 200, 56, "auth.json (XDG data)", ["provider credentials", "data/tenon-workbench"], cls="store")
     # externals
     s.box(20, 705, 200, 60, "Google APIs", ["Calendar v3, Tasks v1"], cls="ext", stereo=None)
@@ -75,7 +75,7 @@ def trust():
     s.box(320, 100, 290, 74, "Authorization", ["Basic auth opencode:<uuid>", "header or auth_token query"], cls="sub")
     s.box(320, 186, 290, 70, "Workspace routing", ["directory → instance", "LocationMutation containment"], cls="sub")
     s.box(320, 268, 290, 84, "PermissionV2", ["rules: allow / ask / deny", "harness add: Settings only, no tool", "plan agent denies edits"], cls="sub")
-    s.box(320, 364, 220, 70, "Secrets at rest", ["auth.json (data/tenon-workbench)", "SQLite profile, harnesses.json"], cls="store")
+    s.box(320, 364, 220, 70, "Secrets at rest", ["auth.json, harness-credentials.json", "SQLite profile, harnesses.json"], cls="store")
     s.zone(680, 70, 300, 150, "Workspace filesystem")
     s.box(700, 100, 260, 100, "Canonical files", ["notes/, projects/*, .tenon/", ".second-brain/calendar-v1.json", "source of truth"], cls="store")
     s.zone(680, 250, 300, 180, "Harness child processes (run as user)")
@@ -84,7 +84,7 @@ def trust():
     s.zone(300, 480, 680, 140, "External network")
     s.box(315, 512, 155, 84, "Google APIs", ["oauth2, Calendar, Tasks", "via net.fetch"], cls="ext")
     s.box(485, 512, 155, 84, "LLM providers", ["prompts include", "workspace content"], cls="ext")
-    s.box(655, 512, 155, 84, "Package registries", ["npm, Homebrew: harness", "CLI version + update"], cls="ext")
+    s.box(655, 512, 155, 84, "Package registries", ["npm, Homebrew: harness", "CLI install + update"], cls="ext")
     s.box(825, 512, 145, 84, "System browser", ["http/https/mailto", "via openExternal"], cls="ext")
     s.edge([(230, 137), (260, 137), (260, 400), (230, 400)], "preload\nIPC", at=(280, 260))
     s.edge([(230, 120), (320, 120)], "HTTP 127.0.0.1", at=(275, 113), cls="sens", head="as")
@@ -119,13 +119,13 @@ def deployment():
           "drafts.sqlite (+wal/shm)", "window-state-<id>.json", "logs/<stamp>/, Crashpad/", "tenon-workbench/ server state",
           "(XDG_STATE_HOME default)", "cli/<ver>/opencode-cli (v2)",
           ".user-data-migrated (dev copy)"], cls="store")
-    s.box(290, 430, 200, 100, "XDG data/tenon-workbench", ["auth.json, mcp-auth.json", "profile SQLite, snapshots", "workspace-links.json", "copied once from opencode/"], cls="store")
+    s.box(290, 430, 200, 100, "XDG data/tenon-workbench", ["auth.json, mcp-auth.json,", "harness-credentials.json", "SQLite, snapshots, links", "copied once from opencode/"], cls="store")
     s.box(290, 545, 200, 64, "Global config dir", ["config/tenon-workbench", "harnesses.json"], cls="store")
     s.box(510, 430, 230, 90, "Workspace directories", ["notes/, projects/* (Projects)", ".tenon/ (cards, manifest)", ".second-brain/"], cls="store")
     s.box(800, 100, 180, 60, "Google APIs", ["oauth2, calendar v3,", "tasks v1"], cls="ext")
     s.box(800, 180, 180, 60, "LLM provider APIs", ["opencode driver, agents"], cls="ext")
     s.box(800, 260, 180, 50, "System browser", [], cls="ext")
-    s.box(800, 480, 180, 60, "Package registries", ["npm, Homebrew:", "harness CLI updates"], cls="ext")
+    s.box(800, 480, 180, 60, "Package registries", ["npm, Homebrew: harness", "CLI installs, updates"], cls="ext")
     s.box(800, 340, 180, 118, "Build host", ["bun run desktop:build", "prebuild: build-node.ts", "electron-builder,", "publish: null →",
           "installer + SHA-256"], cls="sub")
     s.edge([(260, 172), (270, 172)])

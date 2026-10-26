@@ -188,6 +188,79 @@ export const HarnessGroup = HttpApiGroup.make("server.harness")
         ),
       ),
   )
+  .add(
+    HttpApiEndpoint.get("harness.setup", "/api/harness/setup", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(Harness.SetupStatus)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.setup",
+          "List harness setup",
+          "Install and sign-in state of the built-in external harnesses (Codex, Claude Code, OpenCode).",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("harness.install", "/api/harness/setup/:id/install", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      success: Location.response(Harness.SetupStatus),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.install",
+          "Install harness",
+          "Install a built-in harness CLI globally with npm, from the package the server knows for it.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("harness.signIn", "/api/harness/setup/:id/sign-in", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      success: Location.response(Harness.SignIn),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.signIn",
+          "Start harness sign-in",
+          "Start a browser sign-in for a harness that supports one and return the link to open.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.put("harness.setKey", "/api/harness/setup/:id/api-key", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      payload: Harness.ApiKeyInput,
+      success: Location.response(Harness.SetupStatus),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(annotate("v2.harness.setKey", "Set harness API key", "Save the API key a built-in harness uses.")),
+  )
+  .add(
+    HttpApiEndpoint.delete("harness.removeKey", "/api/harness/setup/:id/api-key", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      success: Location.response(Harness.SetupStatus),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.removeKey",
+          "Remove harness API key",
+          "Remove the API key a built-in harness uses, or sign Codex out.",
+        ),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "harnesses",

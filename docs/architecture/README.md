@@ -579,6 +579,71 @@ Brain system prompt, the task instructions travel in the first user message.
 3. A failed test is sent back to the chat, up to three times automatically.
 4. A passed test enables Save. The assistant can't save anything itself.
 
+### Built-in harness setup
+
+New users can install and sign in to the built-in external harnesses (Codex,
+Claude Code and OpenCode) without a terminal. The options considered are in
+[ADR-013](../adr/ADR-013-built-in-harness-setup.md).
+
+`core/src/harness/setup.ts` defines one recipe per built-in: npm package
+(`@openai/codex`, `@agentclientprotocol/claude-agent-acp`, `opencode-ai`),
+command, sign-in kind, login command and key options. `HarnessRuntime` serves
+it through these routes:
+
+- `GET /api/harness/setup` reports, per harness:
+  - whether the command resolves on `PATH`;
+  - its version and availability;
+  - the sign-in state, read from the CLI's own files: Codex `account/read`,
+    `oauthAccount` in `~/.claude.json`, or a non-empty OpenCode `auth.json`;
+  - which key option is stored.
+- `POST /api/harness/setup/:id/install` runs
+  `npm install --global <package>@latest` (10-minute timeout), then restarts
+  that harness's runtimes and clears its probe cache.
+- `POST /api/harness/setup/:id/sign-in` works for Codex only.
+  - It starts `codex app-server`, sends `account/login/start` with
+    `type: "chatgpt"`, and returns the browser link.
+  - The app-server hosts the login callback, so it stays open until
+    `account/login/completed` or 10 minutes have passed. Only one login runs
+    at a time.
+- `PUT`/`DELETE /api/harness/setup/:id/api-key` set or remove a key.
+  - **Codex:** the key goes to the app-server (`account/login/start` with
+    `type: "apiKey"`, or `account/logout`), and Codex stores it in its own
+    home.
+  - **Claude Code and OpenCode:** the key is written to
+    `harness-credentials.json` (`0600`) in the data folder, and
+    `withSetupKeys` in `harness.ts` adds it to that built-in's environment as
+    `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY`.
+  - Each change bumps a process-wide revision, because runtimes are built per
+    Location. Before its next turn, each Location reloads its instances and
+    closes the open processes of any harness whose config changed.
+
+The renderer's `DialogHarnessSetup`
+(`app/src/components/settings-v2/harness-setup.tsx`) reuses two existing
+patterns.
+
+- **List:** the rows of Settings → Providers, grouped under **Ready** and
+  **Set up**. Each row has the harness's provider icon and one action:
+  **Install**, **Connect**, or **Manage**.
+- **Connect:** a drill-in view laid out like the provider Connect dialog. It
+  has a back arrow, a "Connect {name}" title, and method chips for
+  "Sign in with …" or **Use an API key**, then a labelled key field and
+  **Continue**.
+
+Sign-in works per harness:
+
+- Codex sign-in opens the returned link in the browser.
+- Claude Code and OpenCode sign-in starts an embedded terminal that runs their
+  login command (`claude-agent-acp --cli auth login --claudeai`,
+  `opencode auth login`). On servers that still serve the legacy PTY routes,
+  the terminal is created through them, because the `Terminal` component
+  connects through them.
+- The dialog re-checks every 5 seconds while it is open.
+
+Home opens the dialog once on first run (`settings.harnesses.setupPrompted`),
+unless every built-in is already installed and signed in. It runs in the
+harness-assistant folder, so a user with no workspace can use it. Settings →
+Harnesses opens it from "Set up built-in agents".
+
 ### Harness skills
 
 Settings → Skills (`app/src/components/settings-v2/skills.tsx`) lists Tenon's

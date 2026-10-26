@@ -458,14 +458,14 @@ describe("ACP harness", () => {
     const entry = Schema.decodeUnknownSync(ConfigHarness.Instance)
     const instances = configuredInstances([], {
       codex: entry({ driver: "acp", config: { command: "/tmp/other" } }),
-      gemini: entry({ driver: "acp", name: "Gemini", config: { command: "gemini" } }),
+      "custom-agent": entry({ driver: "acp", name: "Custom Agent", config: { command: "custom-agent" } }),
     })
     expect(instances.map((instance) => `${instance.id}:${instance.driver}`)).toEqual([
       "opencode:opencode",
       "codex:codex",
       "opencode-acp:acp",
       "claude-code:acp",
-      "gemini:acp",
+      "custom-agent:acp",
     ])
   })
 
@@ -478,7 +478,7 @@ describe("ACP harness", () => {
           opencode: entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
           "opencode-acp": entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
           "claude-code": entry({ driver: "acp", name: "Hijack", config: { command: "/tmp/evil" } }),
-          gemini: entry({ driver: "acp", name: "Gemini", config: { command: "gemini" } }),
+          "custom-agent": entry({ driver: "acp", name: "Custom Agent", config: { command: "custom-agent" } }),
         },
       },
     } as unknown as Config.Entry
@@ -488,7 +488,7 @@ describe("ACP harness", () => {
       "codex:codex",
       "opencode-acp:acp",
       "claude-code:acp",
-      "gemini:acp",
+      "custom-agent:acp",
     ])
     expect(instances.find((instance) => instance.id === "opencode-acp")?.config).toEqual({
       command: "opencode",
@@ -501,31 +501,31 @@ describe("ACP harness", () => {
   })
 
   test("a returning ACP session gets only the messages since its last turn", () => {
-    const gemini = Harness.InstanceID.make("gemini")
+    const custom = Harness.InstanceID.make("custom-agent")
     const text = (id: string, role: "user" | "assistant", value: string) => ({
       id,
       role,
       content: [{ type: "text" as const, text: value }],
     })
-    // Gemini answered u1, then Codex took u2 and u3, then the user switched back to Gemini.
+    // Custom Agent answered u1, then Codex took u2 and u3, then the user switched back to Custom Agent.
     const metadata = {
       harnessContinuations: {
-        gemini: { nativeID: "acp-session", lastSeenMessageID: "u1" },
+        "custom-agent": { nativeID: "acp-session", lastSeenMessageID: "u1" },
         codex: { nativeID: "thread", lastSeenMessageID: "u3" },
       },
     }
-    const continuation = continuationFor(metadata, gemini, 4)!
+    const continuation = continuationFor(metadata, custom, 4)!
     const prompt = renderCodexPrompt(
       LLM.request({
-        model: Model.make({ id: "gemini-test", provider: "test", route }),
+        model: Model.make({ id: "custom-test", provider: "test", route }),
         messages: [
-          text("u1", "user", "Gemini task"),
-          text("a1", "assistant", "Gemini reply"),
+          text("u1", "user", "Custom Agent task"),
+          text("a1", "assistant", "Custom Agent reply"),
           text("u2", "user", "Codex task"),
           text("a2", "assistant", "Codex reply"),
           text("u3", "user", "Codex follow-up"),
           text("a3", "assistant", "Codex follow-up reply"),
-          text("u4", "user", "Back to Gemini"),
+          text("u4", "user", "Back to Custom Agent"),
         ],
       }),
       continuation.handoff,
@@ -535,9 +535,9 @@ describe("ACP harness", () => {
     expect(prompt).toContain("since you last participated")
     expect(prompt).toContain("USER:\nCodex task")
     expect(prompt).toContain("ASSISTANT:\nCodex follow-up reply")
-    expect(prompt).not.toContain("Gemini task")
-    expect(prompt).not.toContain("Gemini reply")
-    expect(prompt.endsWith("New user message (respond to this):\nBack to Gemini")).toBe(true)
+    expect(prompt).not.toContain("Custom Agent task")
+    expect(prompt).not.toContain("Custom Agent reply")
+    expect(prompt.endsWith("New user message (respond to this):\nBack to Custom Agent")).toBe(true)
   })
 
   test("expands both home-directory separators", () => {

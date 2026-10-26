@@ -35,6 +35,7 @@ import {
 } from "./harness/codex-app-server"
 import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
+import { HarnessSetup } from "./harness/setup"
 import { HarnessUpdate } from "./harness/update"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
@@ -87,6 +88,17 @@ export interface Interface {
   readonly verify: (input: unknown) => Effect.Effect<Harness.Verification, HarnessRegistry.RegisterError>
   /** A non-project folder for setup-assistant sessions, so they stay out of project lists. */
   readonly assistantDirectory: () => Effect.Effect<string>
+  /** Install and sign-in state of the built-in external harnesses. */
+  readonly setup: () => Effect.Effect<ReadonlyArray<Harness.SetupStatus>>
+  /** Installs a built-in harness CLI from its fixed npm package. */
+  readonly install: (id: string) => Effect.Effect<Harness.SetupStatus, HarnessSetup.SetupError>
+  /** Starts a browser sign-in (Codex) and returns the link to open. */
+  readonly signIn: (id: string) => Effect.Effect<Harness.SignIn, HarnessSetup.SetupError>
+  /** Saves (or with `undefined` removes) the API key a built-in harness uses. */
+  readonly setApiKey: (
+    id: string,
+    input: Harness.ApiKeyInput | undefined,
+  ) => Effect.Effect<Harness.SetupStatus, HarnessSetup.SetupError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/HarnessRuntime") {}
@@ -131,14 +143,32 @@ const layer = Layer.effect(
     const questions = yield* QuestionV2.Service
     const global = yield* Global.Service
     const entries = yield* config.entries()
-    // Registry entries can be added while the location is open, so instances are re-read per call.
-    let latest = configuredInstances(entries, yield* HarnessRegistry.read(global.config))
-    const instances = HarnessRegistry.read(global.config).pipe(
-      Effect.map((registry) => {
-        latest = configuredInstances(entries, registry)
-        return latest
-      }),
+    const layerScope = yield* Effect.scope
+    // Registry entries and setup API keys can change while the location is open, so instances are re-read per call.
+    const load = Effect.all([HarnessRegistry.read(global.config), HarnessSetup.readKeys(global.data)]).pipe(
+      Effect.map(([registry, keys]) => withSetupKeys(configuredInstances(entries, registry), keys)),
     )
+    let latest = yield* load
+    let loadedKeys = HarnessSetup.keysVersion()
+    // A harness whose config changed (for example a new API key) restarts its open processes.
+    const instances = Effect.suspend(() => {
+      const revision = HarnessSetup.keysVersion()
+      return load.pipe(
+        Effect.tap((current) => {
+          const previous = latest
+          latest = current
+          loadedKeys = revision
+          return Effect.forEach(
+            current.filter((instance) => {
+              const before = previous.find((item) => item.id === instance.id)
+              return before !== undefined && JSON.stringify(before.config) !== JSON.stringify(instance.config)
+            }),
+            (instance) => closeRuntimes(instance.id),
+            { discard: true },
+          )
+        }),
+      )
+    })
     const runtimes = new Map<string, CodexRuntime>()
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
@@ -551,8 +581,147 @@ const layer = Layer.effect(
         Effect.map((check) => Harness.UpdateStatus.make({ id: instance.id, name: instance.name, ...check })),
       )
 
+    const setupFailure = (reason: HarnessSetup.SetupError["reason"], message: string) =>
+      new HarnessSetup.SetupError({ reason, message })
+    const setupRecipe = (id: string): Effect.Effect<HarnessSetup.Recipe, HarnessSetup.SetupError> => {
+      const item = HarnessSetup.recipe(id)
+      return item ? Effect.succeed(item) : Effect.fail(setupFailure("not-found", `"${id}" has no setup.`))
+    }
+    const setupStatus = (
+      item: HarnessSetup.Recipe,
+      current: ReadonlyArray<Harness.Instance>,
+      keys: HarnessSetup.Keys,
+    ) =>
+      Effect.gen(function* () {
+        const instance = current.find((candidate) => candidate.id === item.id)
+        const stored = keys[item.id]
+        const resolved = yield* HarnessUpdate.resolve(item.command)
+        const auth =
+          item.id === Harness.Codex
+            ? instance?.authenticated
+              ? ("signed-in" as const)
+              : ("signed-out" as const)
+            : stored
+              ? ("api-key" as const)
+              : yield* HarnessSetup.signedIn(item)
+        return Harness.SetupStatus.make({
+          id: item.id,
+          name: instance?.name ?? item.id,
+          packageName: item.packageName,
+          installed: resolved !== undefined,
+          // A cached check can still hold the version of a CLI that was removed since.
+          version: resolved ? instance?.version : undefined,
+          available: instance?.status === "available",
+          error: instance?.status === "available" ? undefined : instance?.error,
+          signIn: item.signIn,
+          login: item.login ? [...item.login] : undefined,
+          auth,
+          apiKeys: item.apiKeys.map((option) => ({ id: option.id, label: option.label })),
+          apiKey: stored?.option,
+        })
+      })
+    const setup = () =>
+      Effect.all([list(), HarnessSetup.readKeys(global.data)]).pipe(
+        Effect.flatMap(([current, keys]) =>
+          Effect.forEach(HarnessSetup.recipes, (item) => setupStatus(item, current, keys), {
+            concurrency: "unbounded",
+          }),
+        ),
+      )
+    // A changed CLI or credential takes effect on the next probe and the next message of each open thread.
+    const setupChanged = (item: HarnessSetup.Recipe) =>
+      closeRuntimes(item.id).pipe(
+        Effect.andThen(Effect.sync(() => forget(item.id))),
+        Effect.andThen(setup()),
+        Effect.map((current) => current.find((status) => status.id === item.id)!),
+      )
+    // Codex keeps its own login: the app-server runs the browser flow and stores the result in CODEX_HOME.
+    const codexAccount = <A>(run: (client: CodexClient) => Effect.Effect<A, ProtocolError>, keep = false) =>
+      Effect.gen(function* () {
+        const instance = latest.find((candidate) => candidate.id === Harness.Codex)
+        if (!instance) return yield* Effect.fail(setupFailure("not-found", "Codex is not configured."))
+        const scope = yield* Scope.make()
+        const close = Scope.close(scope, Exit.void).pipe(Effect.ignore)
+        const result = yield* openCodex(process, decodeCodexSettings(instance.config), os.homedir()).pipe(
+          Effect.flatMap((opened) =>
+            run(opened.client).pipe(Effect.map((value) => ({ value, client: opened.client }))),
+          ),
+          Effect.provideService(Scope.Scope, scope),
+          Effect.mapError((error) => setupFailure("sign-in-failed", `Codex sign-in failed: ${errorMessage(error)}`)),
+          Effect.onExit((exit) => (keep && Exit.isSuccess(exit) ? Effect.void : close)),
+        )
+        return { ...result, close }
+      })
+    // Only one browser login at a time: Codex's callback listens on a fixed local port.
+    let pendingLogin: Effect.Effect<void> | undefined
+
     return Service.of({
       list,
+      setup,
+      install: (id) =>
+        setupRecipe(id).pipe(
+          Effect.tap((item) => HarnessSetup.install(process, item)),
+          Effect.flatMap(setupChanged),
+        ),
+      signIn: (id) =>
+        Effect.gen(function* () {
+          const item = yield* setupRecipe(id)
+          if (item.signIn !== "link")
+            return yield* Effect.fail(setupFailure("invalid-input", `${id} signs in from a terminal.`))
+          if (pendingLogin) yield* pendingLogin
+          const started = yield* codexAccount(
+            (client) => client.request("account/login/start", { type: "chatgpt" }, THREAD_SETUP_TIMEOUT),
+            true,
+          )
+          const url = isRecord(started.value) ? string(started.value.authUrl) : undefined
+          if (!url) {
+            yield* started.close
+            return yield* Effect.fail(setupFailure("sign-in-failed", "Codex did not return a sign-in link."))
+          }
+          const finish = started.close.pipe(Effect.andThen(setupChanged(item)), Effect.ignore)
+          pendingLogin = finish
+          // Keep the app-server, which hosts the login callback, until Codex reports the result or 10 minutes pass.
+          yield* started.client.notifications.pipe(
+            Stream.filter((notification) => notification.method === "account/login/completed"),
+            Stream.take(1),
+            Stream.runDrain,
+            Effect.timeout("10 minutes"),
+            Effect.ignore,
+            Effect.ensuring(
+              Effect.suspend(() => {
+                if (pendingLogin === finish) pendingLogin = undefined
+                return finish
+              }),
+            ),
+            Effect.forkIn(layerScope),
+          )
+          return Harness.SignIn.make({ url })
+        }),
+      setApiKey: (id, input) =>
+        Effect.gen(function* () {
+          const item = yield* setupRecipe(id)
+          if (input && !item.apiKeys.some((option) => option.id === input.option))
+            return yield* Effect.fail(setupFailure("invalid-input", `${id} has no "${input.option}" key option.`))
+          if (item.id === Harness.Codex) {
+            yield* codexAccount((client) =>
+              input
+                ? client.request(
+                    "account/login/start",
+                    { type: "apiKey", apiKey: input.key.trim() },
+                    THREAD_SETUP_TIMEOUT,
+                  )
+                : client.request("account/logout", undefined, THREAD_SETUP_TIMEOUT),
+            )
+            return yield* setupChanged(item)
+          }
+          yield* HarnessSetup.writeKey(
+            global.data,
+            item.id,
+            input ? { option: input.option, key: input.key.trim() } : undefined,
+          )
+          yield* instances
+          return yield* setupChanged(item)
+        }),
       reportedCommands: (id) => commands.get(id),
       updates: () =>
         instances.pipe(
@@ -586,8 +755,9 @@ const layer = Layer.effect(
       refresh: (id) => Effect.sync(() => forget(id)).pipe(Effect.andThen(list())),
       driver: (instanceID) => latest.find((instance) => instance.id === instanceID)?.driver,
       stream(input) {
-        // Known instances stream without touching the registry; only a newly registered ID needs a re-read.
-        const known = latest.find((item) => item.id === input.instanceID)
+        // Known instances stream without touching the registry; a new ID or a changed setup key needs a re-read.
+        const known =
+          loadedKeys === HarnessSetup.keysVersion() ? latest.find((item) => item.id === input.instanceID) : undefined
         if (known) return driverFor(known).stream(input)
         return Stream.unwrap(
           instances.pipe(
@@ -688,6 +858,16 @@ export function settingsEntries(
       args: acp ? [...acp.args] : undefined,
       models: acp ? [...acp.models] : undefined,
     })
+  })
+}
+
+/** Adds each built-in harness's stored setup API key to its process environment. */
+function withSetupKeys(instances: ReadonlyArray<InstanceConfig>, keys: HarnessSetup.Keys) {
+  return instances.map((instance) => {
+    const env = HarnessSetup.keyEnvironment(HarnessSetup.recipe(instance.id), keys[instance.id])
+    if (Object.keys(env).length === 0) return instance
+    const current = isRecord(instance.config.env) ? instance.config.env : {}
+    return { ...instance, config: { ...instance.config, env: { ...current, ...env } } }
   })
 }
 

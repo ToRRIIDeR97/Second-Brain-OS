@@ -51,6 +51,8 @@ export interface Settings {
     hiddenModels?: Record<string, string[]>
     /** Provider prefixes (the part of a model ID before "/") left out of each harness's picker, new models included. */
     hiddenProviders?: Record<string, string[]>
+    /** The first-run agent setup dialog was shown once, so Home doesn't open it again. */
+    setupPrompted?: boolean
   }
 }
 
@@ -356,6 +358,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       harnesses: {
+        setupPrompted: () => store.harnesses?.setupPrompted === true,
+        setSetupPrompted() {
+          setStore("harnesses", (value) => ({ ...value, setupPrompted: true }))
+        },
         hiddenModels: (instanceID: string) => store.harnesses?.hiddenModels?.[instanceID] ?? [],
         setModelHidden(instanceID: string, modelID: string, hidden: boolean) {
           const current = store.harnesses?.hiddenModels?.[instanceID] ?? []

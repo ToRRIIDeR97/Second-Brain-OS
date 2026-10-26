@@ -13,13 +13,15 @@ import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useDrafts } from "@/context/drafts"
 import { useCommand } from "@/context/command"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogHarnessSetup } from "@/components/settings-v2/harness-setup"
 import { PageFrame, PageSection, pageRowClass } from "@/components/page"
 import { localDateKey } from "@/features/second-brain/calendar-domain"
 import { listProjects, readCalendar, type CalendarEvent, type PlannerTask } from "@/features/second-brain/client"
 import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeSessionsController } from "@/pages/home/home-sessions-controller"
 import { Harness } from "@opencode-ai/schema/harness"
-import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
+import { fallbackHarnesses, harnessAssistantDirectory, listHarnessSetup, listHarnessesForServer } from "@/utils/server"
 import {
   PromptInputHarnessControls,
   type PromptInputHarnessController,
@@ -55,6 +57,22 @@ export default function BrainHomePage() {
 
   // The sidebar workspace switcher owns this choice; the page only follows it.
   const directory = () => layout.home.workspace() ?? ""
+
+  // First run: offer the built-in agent setup once, unless every built-in agent is already installed and signed in.
+  // It runs in the server's non-project assistant folder, so a new user needs no workspace for it.
+  const dialog = useDialog()
+  createEffect(() => {
+    if (!settings.ready() || settings.harnesses.setupPrompted()) return
+    settings.harnesses.setSetupPrompted()
+    const harnessServer = { server: serverSDK().server.http, fetch: platform.fetch }
+    void listHarnessSetup(harnessServer, "")
+      .then(async (statuses) => {
+        if (statuses.every((item) => item.installed && item.auth !== "signed-out")) return
+        const target = await harnessAssistantDirectory(harnessServer, "")
+        void dialog.show(() => <DialogHarnessSetup directory={target} />)
+      })
+      .catch(() => undefined)
+  })
 
   const [projects] = createResource(
     () => directory() || undefined,
