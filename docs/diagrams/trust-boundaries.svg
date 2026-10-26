@@ -145,6 +145,7 @@
 <path class="e sens" d="M610,221 L700,160" marker-end="url(#as)"/>
 <path class="e " d="M610,310 L700,310" marker-end="url(#a)"/>
 <path class="e " d="M700,330 L630,330" marker-end="url(#a)"/>
+<path class="e " d="M700,400 L630,400" marker-end="url(#a)"/>
 <path class="e sens" d="M230,489 L300,540 L320,540" marker-end="url(#as)"/>
 <path class="e sens" d="M575,352 L575,512" marker-end="url(#as)"/>
 <path class="e " d="M600,450 L600,470 L732,470 L732,512" marker-end="url(#a)"/>
@@ -164,6 +165,10 @@
 <text class="lbl" x="655" y="195" text-anchor="middle">relative paths</text>
 <rect class="lblbg" x="613.6" y="293.0" width="82.7" height="13" rx="2"/>
 <text class="lbl" x="655" y="303" text-anchor="middle">spawn + stdio</text>
+<rect class="lblbg" x="620.7" y="383.0" width="88.6" height="13" rx="2"/>
+<text class="lbl" x="665" y="393" text-anchor="middle">delegation MCP</text>
+<rect class="lblbg" x="611.9" y="396.0" width="106.3" height="13" rx="2"/>
+<text class="lbl" x="665" y="406" text-anchor="middle">per-runtime token</text>
 <rect class="lblbg" x="261.3" y="520.0" width="41.4" height="13" rx="2"/>
 <text class="lbl" x="282" y="530" text-anchor="middle">tokens</text>
 <rect class="lblbg" x="466.9" y="460.0" width="106.3" height="13" rx="2"/>

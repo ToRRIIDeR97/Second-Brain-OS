@@ -64,6 +64,7 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { HarnessDelegationTasks } from "@opencode-ai/core/harness/delegation-tasks"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { lazy } from "@/util/lazy"
@@ -283,6 +284,7 @@ export function createRoutes(
     serverRoutes,
     docRoute,
     uiRoute,
+    HarnessDelegationTasks.layer,
   ).pipe(
     Layer.provide([
       errorLayer,

@@ -408,6 +408,45 @@ Built-ins and config-file entries are read-only. After each change the runtime
 refreshes its cached instance list, so the next turn and the picker see it.
 Agents have no tool for registering harnesses.
 
+### Cross-harness delegation
+
+An agent in one harness can hand a task to an agent in another, for example
+Claude Code asking Codex to do computer use with a GPT model. This is separate
+from subagents, which a harness runs inside itself. The decision and the
+options considered are in [ADR-011](../adr/ADR-011-cross-harness-delegation.md).
+
+![Sequence: the harness runtime gets a scoped token, the calling agent calls delegate_task over the loopback MCP endpoint, the server creates a child Run on the target harness and returns its final reply](../diagrams/sequence-delegation.svg)
+
+- `core/src/harness/delegation.ts` serves a Streamable HTTP MCP server on
+  `127.0.0.1` (port chosen by the OS, started with the first harness runtime
+  that asks for it). Each Codex or ACP runtime gets its own bearer token,
+  bound to the Run that owns the runtime and revoked when the runtime closes.
+  Requests with an `Origin` header are refused.
+- ACP agents receive the server in `session/new` and `session/load` as
+  `{ type: "http", name: "tenon", url, headers }`, but only when they advertise
+  `mcpCapabilities.http` (Claude Code's `claude-agent-acp` adapter does).
+  Codex receives `-c mcp_servers.tenon.url=…`,
+  `bearer_token_env_var="TENON_DELEGATION_TOKEN"` and `tool_timeout_sec=660`
+  ahead of `app-server`, and the token in that environment variable.
+- The built-in loop gets the same four tools natively (`core/src/tool/delegate.ts`).
+  Starting or stopping a task there asks permission `delegate`.
+- `core/src/harness/delegation-tasks.ts` is mounted by the server next to its
+  routes (`opencode/src/server/routes/instance/httpapi/server.ts`). It runs
+  each task as a child Run: `SessionV2.create({ parentID, harnessInstanceID,
+  harnessModel, location })` in the caller's location, then `prompt` with the
+  task text and `resume`. The task ID is the child's session ID, and the
+  result is the child's last assistant reply (capped at 100,000 characters).
+
+Tools: `list_agents` (harness instances with models and reasoning efforts,
+the caller's own marked `current`), `delegate_task` (`agent`, `task`, optional
+`model`, `reasoning_effort`, `title`, `wait_seconds` up to 600, default 300),
+`task_result` and `cancel_task`. A task still running when `delegate_task`
+returns is collected with `task_result`. A delegated agent may delegate once
+more (depth 2); a Run may have four tasks running at once; only the Run that
+started a task can read or stop it. Child Runs nest under the caller in the
+sidebar, and their approvals reach the caller's composer through the existing
+session request tree.
+
 ### Harness model lists
 
 The picker shows the models each harness reports, not a list saved when the

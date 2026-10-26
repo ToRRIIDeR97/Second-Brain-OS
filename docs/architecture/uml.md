@@ -188,6 +188,13 @@ The first prompt of a runtime also starts with the chat display guidance in
 `<tenon-display>` (`renderHarnessPrompt`). Later turns in the same runtime send only the user message. See
 [Harness handoff](README.md#harness-handoff) for the budget and wrapper.
 
+### Sequence: cross-harness delegation
+
+![Sequence: the harness runtime gets a scoped token for the loopback MCP endpoint, the calling agent invokes delegate_task, the server creates a child Run on the target harness, waits for its drain and returns the child's final reply](../diagrams/sequence-delegation.svg)
+
+The built-in loop skips the MCP hop: its `delegate_task` tool calls the same
+task handler directly. See [Cross-harness delegation](README.md#cross-harness-delegation).
+
 ## Coverage index
 
 | Subject | Kind | Views | Source |
@@ -214,6 +221,7 @@ The first prompt of a runtime also starts with the chat display guidance in
 | Google Calendar and Tasks | External integration | Component, Deployment, State: outbox | `desktop/src/main/google-calendar.ts` |
 | LLM providers | External integration | Component, Deployment | `core/src/harness.ts` (`opencode` driver) |
 | Codex app-server, ACP agents (including upstream OpenCode via `opencode acp`) | External integration | Component, Deployment, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts` |
+| Cross-harness delegation (loopback MCP endpoint, per-runtime tokens, child Runs) | Critical workflow | Component, Trust boundaries, Sequence: delegation | `core/src/harness/delegation.ts`, `core/src/harness/delegation-tasks.ts`, `core/src/tool/delegate.ts`, `core/src/harness.ts` (`openCodex`, `makeAcpRuntime`), `core/src/harness/acp.ts` (`open`) |
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
 | Project thread directories and Workspace migration | Critical workflow | Class | `opencode/src/project/brain.ts` (`ensureForWorkspace`, `threadDirectory`, `migrateWorkspaces`), `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `app/src/features/second-brain/workspace-projects.ts` |
