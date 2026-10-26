@@ -50,6 +50,7 @@ type CalendarDraft = {
   projectId: string
   source: CalendarEvent["source"]
   syncState: CalendarEvent["syncState"]
+  accountId: string
   providerId: string
   calendarId: string
   etag: string
@@ -73,6 +74,8 @@ type CalendarState = {
   saving: boolean
   error: string
   googlePanel: boolean
+  /** Shows the sign-in form while accounts are connected, to add another account. */
+  googleAdding: boolean
   googleClientId: string
   googleOwnClient: boolean
   googleClientSecret: string
@@ -94,6 +97,7 @@ const emptyDraft = (date = localDateKey(new Date()), projectId = ""): CalendarDr
   projectId,
   source: "local" as CalendarEvent["source"],
   syncState: "local" as CalendarEvent["syncState"],
+  accountId: "",
   providerId: "",
   calendarId: "primary",
   etag: "",
@@ -112,10 +116,11 @@ const unavailableGoogle: GoogleCalendarConnection = {
   access: "read",
   pendingWrites: 0,
   failedWrites: 0,
+  accounts: [],
 }
 
 const providerEvent = (event: GoogleCalendarProviderEvent, projectId?: string): CalendarEvent => ({
-  id: `google:${event.calendarId}:${event.providerId}`,
+  id: `google:${event.accountId}:${event.calendarId}:${event.providerId}`,
   title: event.title,
   date: event.date,
   ...(event.endDate ? { endDate: event.endDate } : {}),
@@ -123,6 +128,7 @@ const providerEvent = (event: GoogleCalendarProviderEvent, projectId?: string): 
   ...(event.end ? { end: event.end } : {}),
   ...(event.details ? { details: event.details } : {}),
   ...(projectId ? { projectId } : {}),
+  accountId: event.accountId,
   providerId: event.providerId,
   calendarId: event.calendarId,
   ...(event.etag ? { etag: event.etag } : {}),
@@ -135,7 +141,7 @@ const providerEvent = (event: GoogleCalendarProviderEvent, projectId?: string): 
 })
 
 const providerTask = (task: GoogleTaskProviderTask, local?: PlannerTask): PlannerTask => ({
-  id: `google-task:${task.taskListId}:${task.providerId}`,
+  id: `google-task:${task.accountId}:${task.taskListId}:${task.providerId}`,
   title: task.title,
   ...(task.notes ? { notes: task.notes } : {}),
   ...(local?.projectId ? { projectId: local.projectId } : {}),
@@ -143,6 +149,7 @@ const providerTask = (task: GoogleTaskProviderTask, local?: PlannerTask): Planne
   ...(local?.scheduledDate ? { scheduledDate: local.scheduledDate } : {}),
   ...(local?.start ? { start: local.start, end: local.end } : {}),
   ...(task.completedAt ? { completedAt: task.completedAt } : {}),
+  accountId: task.accountId,
   providerId: task.providerId,
   taskListId: task.taskListId,
   taskListTitle: task.taskListTitle,
@@ -176,6 +183,7 @@ export default function CalendarPage() {
     saving: false,
     error: "",
     googlePanel: search.google === "connect",
+    googleAdding: false,
     googleClientId: "",
     googleOwnClient: false,
     googleClientSecret: "",
@@ -208,6 +216,16 @@ export default function CalendarPage() {
   const [googleConnection, googleActions] = createResource(async () =>
     platform.googleCalendar ? platform.googleCalendar.status() : unavailableGoogle,
   )
+  // Items saved before multiple accounts carry no account. They came from the one account then connected,
+  // which the desktop migration keeps first in the list.
+  const itemAccount = (accountId: string | undefined, connection = googleConnection.latest) =>
+    accountId ?? connection?.accounts[0]?.id
+  const googleWriteAccounts = createMemo(() =>
+    (googleConnection.latest?.accounts ?? []).filter((account) => account.access === "write"),
+  )
+  const googleAccountLabel = (accountId: string) =>
+    googleConnection.latest?.accounts.find((account) => account.id === accountId)?.label ??
+    language.t("secondBrain.calendar.google.accountFallback")
   const days = createMemo(() => monthGrid(state.cursor))
   const monthTitle = createMemo(() =>
     new Intl.DateTimeFormat(language.locale(), { month: "long", year: "numeric" }).format(state.cursor),
@@ -366,6 +384,7 @@ export default function CalendarPage() {
         projectId: event.projectId ?? "",
         source: event.source,
         syncState: event.syncState,
+        accountId: itemAccount(event.accountId) ?? "",
         providerId: event.providerId ?? "",
         calendarId: event.calendarId ?? "primary",
         etag: event.etag ?? "",
@@ -438,7 +457,7 @@ export default function CalendarPage() {
           : { access: state.googleAccess },
       )
       googleActions.mutate(connection)
-      setState({ googleClientSecret: "", googlePanel: false })
+      setState({ googleClientSecret: "", googlePanel: false, googleAdding: false })
       connected = true
     } catch (error) {
       setState("googleError", googleMessage(error))
@@ -457,32 +476,45 @@ export default function CalendarPage() {
       const result = await google.sync()
       // A sidebar workspace switch during the call leaves events.latest pointing at another calendar.
       if (directory() !== target) return
+      const accountOf = (accountId: string | undefined) => itemAccount(accountId, result.connection)
+      const synced = new Set(result.syncedAccounts)
+      const connected = new Set(result.connection.accounts.map((account) => account.id))
+      // A connected account that failed this sync keeps its items; disconnected accounts lose theirs.
+      const kept = (accountId: string | undefined) => {
+        const account = accountOf(accountId)
+        return Boolean(account && connected.has(account) && !synced.has(account))
+      }
       const current = events.latest?.events ?? []
       const projectByProvider = new Map(
         current
           .filter((event) => event.source === "google" && event.providerId && event.projectId)
-          .map((event) => [event.providerId!, event.projectId!]),
+          .map((event) => [`${accountOf(event.accountId)}:${event.providerId}`, event.projectId!]),
       )
       const merged = [
-        ...current.filter((event) => event.source === "local"),
-        ...result.events.map((event) => providerEvent(event, projectByProvider.get(event.providerId))),
+        ...current.filter((event) => event.source === "local" || kept(event.accountId)),
+        ...result.events.map((event) =>
+          providerEvent(event, projectByProvider.get(`${event.accountId}:${event.providerId}`)),
+        ),
       ]
       const currentTasks = events.latest?.tasks ?? []
+      const taskKey = (task: { accountId?: string; taskListId?: string; providerId?: string }) =>
+        `${accountOf(task.accountId)}:${task.taskListId}:${task.providerId}`
       const localByProvider = new Map(
         currentTasks
           .filter((task) => task.source === "google" && task.providerId && task.taskListId)
-          .map((task) => [`${task.taskListId}:${task.providerId}`, task] as const),
+          .map((task) => [taskKey(task), task] as const),
       )
-      const remoteKeys = new Set(result.tasks.map((task) => `${task.taskListId}:${task.providerId}`))
+      const remoteKeys = new Set(result.tasks.map(taskKey))
       const mergedTasks = [
-        ...currentTasks.filter((task) => task.source === "local"),
+        ...currentTasks.filter((task) => task.source === "local" || kept(task.accountId)),
         ...currentTasks.filter(
           (task) =>
             task.source === "google" &&
+            synced.has(accountOf(task.accountId) ?? "") &&
             Boolean(task.outboxKey) &&
-            !remoteKeys.has(`${task.taskListId}:${task.providerId}`),
+            !remoteKeys.has(taskKey(task)),
         ),
-        ...result.tasks.map((task) => providerTask(task, localByProvider.get(`${task.taskListId}:${task.providerId}`))),
+        ...result.tasks.map((task) => providerTask(task, localByProvider.get(taskKey(task)))),
       ]
       const saved = await writeCalendar(client(target), merged, events.latest?.revision, mergedTasks)
       eventActions.mutate(saved)
@@ -494,20 +526,26 @@ export default function CalendarPage() {
     }
   }
 
-  const disconnectGoogle = async () => {
+  const disconnectGoogle = async (accountId: string) => {
     const google = platform.googleCalendar
     const target = directory()
     if (!google || !target) return
     setState({ googleBusy: true, googleError: "" })
     try {
-      const connection = await google.disconnect()
+      const before = googleConnection.latest
+      const connection = await google.disconnect({ accountId })
       googleActions.mutate(connection)
       if (directory() !== target) return
-      const local = (events.latest?.events ?? []).filter((event) => event.source === "local")
-      const localTasks = (events.latest?.tasks ?? []).filter((task) => task.source === "local")
-      const saved = await writeCalendar(client(target), local, events.latest?.revision, localTasks)
+      const keep = (item: { source: CalendarEvent["source"]; accountId?: string }) =>
+        item.source === "local" || itemAccount(item.accountId, before) !== accountId
+      const saved = await writeCalendar(
+        client(target),
+        (events.latest?.events ?? []).filter(keep),
+        events.latest?.revision,
+        (events.latest?.tasks ?? []).filter(keep),
+      )
       eventActions.mutate(saved)
-      setState({ googlePanel: false, editing: false })
+      setState({ editing: false, ...(connection.connected ? {} : { googlePanel: false }) })
     } catch (error) {
       setState("googleError", googleMessage(error))
     } finally {
@@ -549,7 +587,8 @@ export default function CalendarPage() {
     const target = removed ?? changed
     if (target) {
       const google = platform.googleCalendar
-      if (!google || !googleConnection.latest?.connected || googleConnection.latest?.access !== "write") {
+      const accountId = itemAccount(target.accountId)
+      if (!google || !accountId || !googleWriteAccounts().some((account) => account.id === accountId)) {
         throw new Error("google_write_consent_required")
       }
       const kind = removed ? "delete" : target.providerId?.startsWith("pending:") ? "create" : "update"
@@ -558,6 +597,7 @@ export default function CalendarPage() {
         kind,
         idempotencyKey,
         task: {
+          accountId,
           providerId: target.providerId ?? `pending:${target.id}`,
           taskListId: target.taskListId ?? "@default",
           taskListTitle: target.taskListTitle ?? language.t("secondBrain.tasks.google.defaultList"),
@@ -748,11 +788,7 @@ export default function CalendarPage() {
         await persist(current.map((event) => (event.id === original.id ? enriched : event)))
         return
       }
-      if (
-        !platform.googleCalendar ||
-        !googleConnection.latest?.connected ||
-        googleConnection.latest?.access !== "write"
-      ) {
+      if (!platform.googleCalendar || !googleWriteAccounts().some((account) => account.id === state.draft.accountId)) {
         setState("error", language.t("secondBrain.calendar.google.error.writeConsent"))
         return
       }
@@ -788,6 +824,7 @@ export default function CalendarPage() {
   }
 
   const googleDraft = (): GoogleCalendarProviderEvent => ({
+    accountId: state.draft.accountId,
     providerId: state.draft.providerId || "pending",
     calendarId: "primary",
     title: state.draft.title.trim(),
@@ -1015,7 +1052,7 @@ export default function CalendarPage() {
               onToggle={toggleTask}
               filter={filter}
               selectedId={state.selectedTask}
-              googleCanWrite={googleConnection.latest?.connected && googleConnection.latest?.access === "write"}
+              googleAccounts={googleWriteAccounts()}
               onFilterChange={(next) => setState("view", viewForTaskFilter(next))}
             />
           )}
@@ -1232,7 +1269,7 @@ export default function CalendarPage() {
                         }
                       >
                         <Show
-                          when={googleConnection.latest?.connected}
+                          when={googleConnection.latest?.connected && !state.googleAdding}
                           fallback={
                             <form
                               class="flex flex-col gap-3"
@@ -1306,52 +1343,95 @@ export default function CalendarPage() {
                                     : language.t("secondBrain.calendar.google.ownClient")}
                                 </ButtonV2>
                               </Show>
+                              <Show when={googleConnection.latest?.connected}>
+                                <ButtonV2
+                                  type="button"
+                                  variant="ghost"
+                                  disabled={state.googleBusy}
+                                  onClick={() => setState({ googleAdding: false, googleError: "" })}
+                                >
+                                  {language.t("common.cancel")}
+                                </ButtonV2>
+                              </Show>
                             </form>
                           }
                         >
                           <div class="flex flex-col gap-3">
-                            <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12px]">
-                              <dt class="text-v2-text-text-faint">
-                                {language.t("secondBrain.calendar.google.account")}
-                              </dt>
-                              <dd class="truncate text-v2-text-text-base">
-                                {googleConnection.latest?.accountLabel ??
-                                  language.t("secondBrain.calendar.google.accountFallback")}
-                              </dd>
-                              <dt class="text-v2-text-text-faint">
-                                {language.t("secondBrain.calendar.google.access")}
-                              </dt>
-                              <dd class="text-v2-text-text-base">
-                                {googleConnection.latest?.access === "write"
-                                  ? language.t("secondBrain.calendar.google.access.write")
-                                  : language.t("secondBrain.calendar.google.access.read")}
-                              </dd>
-                              <dt class="text-v2-text-text-faint">
-                                {language.t("secondBrain.calendar.google.lastSync")}
-                              </dt>
-                              <dd class="text-v2-text-text-base">
-                                {googleConnection.latest?.lastSyncedAt
-                                  ? new Intl.DateTimeFormat(language.locale(), {
-                                      dateStyle: "medium",
-                                      timeStyle: "short",
-                                    }).format(new Date(googleConnection.latest!.lastSyncedAt!))
-                                  : language.t("secondBrain.calendar.google.never")}
-                              </dd>
-                            </dl>
-                            <Show when={(googleConnection.latest?.pendingWrites ?? 0) > 0}>
-                              <p role="status" class={noteClass}>
-                                {language.t("secondBrain.calendar.google.pendingWrites", {
-                                  count: googleConnection.latest?.pendingWrites ?? 0,
-                                })}
-                              </p>
-                            </Show>
-                            <Show when={(googleConnection.latest?.failedWrites ?? 0) > 0}>
-                              <p role="alert" class={`${noteClass} !text-v2-text-text-critical`}>
-                                {language.t("secondBrain.calendar.google.failedWrites", {
-                                  count: googleConnection.latest?.failedWrites ?? 0,
-                                })}
-                              </p>
-                            </Show>
+                            <ul
+                              class="flex flex-col gap-2"
+                              aria-label={language.t("secondBrain.calendar.google.accounts")}
+                            >
+                              <For each={googleConnection.latest?.accounts ?? []}>
+                                {(account) => (
+                                  <li class="flex flex-col gap-2 rounded-[12px] bg-v2-background-bg-base p-3">
+                                    <div class="flex items-center gap-2">
+                                      <span class="min-w-0 flex-1 truncate text-[12px] text-v2-text-text-base [font-weight:530]">
+                                        {account.label || language.t("secondBrain.calendar.google.accountFallback")}
+                                      </span>
+                                      <ButtonV2
+                                        variant="ghost"
+                                        size="small"
+                                        disabled={state.googleBusy}
+                                        aria-label={language.t("secondBrain.calendar.google.disconnectAccountLabel", {
+                                          account: account.label,
+                                        })}
+                                        onClick={() => void disconnectGoogle(account.id)}
+                                      >
+                                        {language.t("secondBrain.calendar.google.disconnectAccount")}
+                                      </ButtonV2>
+                                    </div>
+                                    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
+                                      <Show when={account.email && account.email !== account.label}>
+                                        <dt class="text-v2-text-text-faint">
+                                          {language.t("secondBrain.calendar.google.account")}
+                                        </dt>
+                                        <dd class="truncate text-v2-text-text-base">{account.email}</dd>
+                                      </Show>
+                                      <dt class="text-v2-text-text-faint">
+                                        {language.t("secondBrain.calendar.google.access")}
+                                      </dt>
+                                      <dd class="text-v2-text-text-base">
+                                        {account.access === "write"
+                                          ? language.t("secondBrain.calendar.google.access.write")
+                                          : language.t("secondBrain.calendar.google.access.read")}
+                                      </dd>
+                                      <dt class="text-v2-text-text-faint">
+                                        {language.t("secondBrain.calendar.google.lastSync")}
+                                      </dt>
+                                      <dd class="text-v2-text-text-base">
+                                        {account.lastSyncedAt
+                                          ? new Intl.DateTimeFormat(language.locale(), {
+                                              dateStyle: "medium",
+                                              timeStyle: "short",
+                                            }).format(new Date(account.lastSyncedAt))
+                                          : language.t("secondBrain.calendar.google.never")}
+                                      </dd>
+                                    </dl>
+                                    <Show when={account.pendingWrites > 0}>
+                                      <p role="status" class={noteClass}>
+                                        {language.t("secondBrain.calendar.google.pendingWrites", {
+                                          count: account.pendingWrites,
+                                        })}
+                                      </p>
+                                    </Show>
+                                    <Show when={account.failedWrites > 0}>
+                                      <p role="alert" class={`${noteClass} !text-v2-text-text-critical`}>
+                                        {language.t("secondBrain.calendar.google.failedWrites", {
+                                          count: account.failedWrites,
+                                        })}
+                                      </p>
+                                    </Show>
+                                    <Show when={account.errorCode}>
+                                      {(code) => (
+                                        <p role="alert" class="text-[11px] text-v2-text-text-critical">
+                                          {googleMessage(new Error(code()))}
+                                        </p>
+                                      )}
+                                    </Show>
+                                  </li>
+                                )}
+                              </For>
+                            </ul>
                             <Show when={state.googleError}>
                               <p role="alert" class="text-[12px] text-v2-text-text-critical">
                                 {state.googleError}
@@ -1365,9 +1445,9 @@ export default function CalendarPage() {
                             <ButtonV2
                               variant="ghost"
                               disabled={state.googleBusy}
-                              onClick={() => void disconnectGoogle()}
+                              onClick={() => setState({ googleAdding: true, googleError: "" })}
                             >
-                              {language.t("secondBrain.calendar.google.disconnect")}
+                              {language.t("secondBrain.calendar.google.addAccount")}
                             </ButtonV2>
                           </div>
                         </Show>
@@ -1415,32 +1495,29 @@ export default function CalendarPage() {
                         onInput={(event) => setState("draft", "title", event.currentTarget.value)}
                       />
                     </label>
-                    <Show
-                      when={
-                        !state.draft.id &&
-                        googleConnection.latest?.connected &&
-                        googleConnection.latest?.access === "write"
-                      }
-                    >
+                    <Show when={!state.draft.id && googleWriteAccounts().length > 0}>
                       <label class={fieldClass} for="calendar-event-source">
                         {language.t("secondBrain.calendar.google.destination")}
                         <SelectV2
                           id="calendar-event-source"
                           aria-label={language.t("secondBrain.calendar.google.destination")}
                           class="!h-8 !w-full"
-                          options={["local", "google"] as const}
-                          current={state.draft.source === "google" ? "google" : "local"}
+                          options={["local", ...googleWriteAccounts().map((account) => account.id)]}
+                          current={state.draft.source === "google" ? state.draft.accountId : "local"}
                           label={(source) =>
-                            source === "google"
-                              ? language.t("secondBrain.calendar.google.title")
-                              : language.t("secondBrain.calendar.sync.local")
+                            source === "local"
+                              ? language.t("secondBrain.calendar.sync.local")
+                              : language.t("secondBrain.calendar.google.destinationAccount", {
+                                  account: googleAccountLabel(source),
+                                })
                           }
                           onSelect={(source) =>
                             source &&
                             setState("draft", {
                               ...state.draft,
-                              source: source === "google" ? "google" : "local",
-                              syncState: source === "google" ? "pending" : "local",
+                              source: source === "local" ? "local" : "google",
+                              accountId: source === "local" ? "" : source,
+                              syncState: source === "local" ? "local" : "pending",
                             })
                           }
                         />

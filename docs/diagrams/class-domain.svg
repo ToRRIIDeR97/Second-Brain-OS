@@ -159,7 +159,7 @@
 <text x="655.0" y="708" text-anchor="middle" class="t">CalendarEvent</text>
 <line class="e" x1="540" y1="716" x2="770" y2="716"/>
 <text x="548" y="732" text-anchor="start" class="s">id, title, date, start?/end?</text>
-<text x="548" y="747" text-anchor="start" class="s">projectId?</text>
+<text x="548" y="747" text-anchor="start" class="s">projectId?, accountId? (Google)</text>
 <text x="548" y="762" text-anchor="start" class="s">source: local | google, syncState</text>
 <rect class="box" x="800" y="690" width="240" height="81" rx="3"/>
 <text x="920.0" y="708" text-anchor="middle" class="t">CalendarSnapshot</text>

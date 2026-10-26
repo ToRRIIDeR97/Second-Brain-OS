@@ -175,9 +175,14 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   (a task's Edit opens it in the Tasks view). Ticking a task completes it at
   once, Google tasks included, with an **Undo** toast. The page scrolls as one
   area. Its Google Calendar & Tasks panel
-  connects a Google account: one **Sign in with Google** button when the build
-  ships its own OAuth client, else (or under **Use your own OAuth client**) the
-  client ID and secret fields.
+  connects one or more Google accounts: one **Sign in with Google** button when
+  the build ships its own OAuth client, else (or under **Use your own OAuth
+  client**) the client ID and secret fields. Once an account is connected the
+  panel lists each account with its access, last sync, queued or failed
+  changes and its own **Disconnect**; **Add account** shows the sign-in form
+  again, and Google lets the user pick a different account. **Sync now** syncs
+  every account. A new event or task's **Save to** offers Local and each
+  account with read and write access.
 - **Notes** holds global notes and Project notes.
 - **Activity** lists threads needing attention, agent runs, changes and
   history. Agent runs shows recent threads with active runs first and a

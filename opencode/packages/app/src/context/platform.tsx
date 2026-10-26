@@ -20,6 +20,20 @@ type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
+export type GoogleAccount = {
+  id: string
+  /** The account's address, read from its primary calendar. */
+  email?: string
+  label: string
+  access: "read" | "write"
+  lastSyncedAt?: string
+  /** The last sync's failure for this account, kept until the next sync. */
+  errorCode?: string
+  pendingWrites: number
+  failedWrites: number
+}
+
+/** The top-level fields summarize every account; `accounts` holds each one. */
 export type GoogleCalendarConnection = {
   available: boolean
   configured: boolean
@@ -32,9 +46,11 @@ export type GoogleCalendarConnection = {
   errorCode?: string
   pendingWrites: number
   failedWrites: number
+  accounts: GoogleAccount[]
 }
 
 export type GoogleCalendarProviderEvent = {
+  accountId: string
   providerId: string
   calendarId: string
   title: string
@@ -62,6 +78,7 @@ export type GoogleCalendarWriteResult = {
 }
 
 export type GoogleTaskProviderTask = {
+  accountId: string
   providerId: string
   taskListId: string
   taskListTitle: string
@@ -86,6 +103,7 @@ export type GoogleTaskWriteResult = {
 
 export type GoogleCalendarPlatform = {
   status(): Promise<GoogleCalendarConnection>
+  /** Adds an account, or renews the one signed in with the same address. */
   connect(input: {
     /** Omit both to use the build's own client. */
     clientId?: string
@@ -94,14 +112,18 @@ export type GoogleCalendarPlatform = {
     /** Electron main process supplies this; renderer values are ignored. */
     windowId?: number
   }): Promise<GoogleCalendarConnection>
+  /** Syncs every account; one account failing leaves the others' results intact. */
   sync(): Promise<{
     events: GoogleCalendarProviderEvent[]
     tasks: GoogleTaskProviderTask[]
+    /** Accounts whose items were fetched; the page replaces only those accounts' items. */
+    syncedAccounts: string[]
     connection: GoogleCalendarConnection
   }>
   write(input: GoogleCalendarWrite): Promise<GoogleCalendarWriteResult>
   writeTask(input: GoogleTaskWrite): Promise<GoogleTaskWriteResult>
-  disconnect(): Promise<GoogleCalendarConnection>
+  /** Disconnects one account, or every account when none is named. */
+  disconnect(input?: { accountId?: string }): Promise<GoogleCalendarConnection>
 }
 
 export type FatalRendererErrorLog = {

@@ -108,7 +108,7 @@ state alive across route changes; it replaced the tab store.
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in `$XDG_DATA_HOME/tenon-workbench`            |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
 | Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
-| Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
+| Google connections         | `packages/desktop/src/main/google-calendar.ts`; an account list with encrypted credentials in the desktop profile; see [Google accounts](#google-accounts) |
 
 Package paths in this table are relative to `opencode/`. Workspace files are
 the source of truth for notes, project records, and local planning. Do not
@@ -168,6 +168,39 @@ Project's file replaces the workspace default instead of stacking. Outside a
 workspace both loaders keep their usual upward lookup. External harnesses
 (Codex, ACP agents) also read `AGENTS.md` from their working folder themselves;
 that lookup is theirs and may still stack inside a git repository.
+
+### Google accounts
+
+The desktop main process keeps every connected Google account in the
+`second-brain.google` electron-store under `accounts`: an ID, the address read
+from the account's primary calendar, a label, the OAuth client, access level,
+last sync time, and the client secret and refresh token encrypted with
+`safeStorage`. The calendar and task outboxes are shared lists whose entries
+carry their `accountId`. A store from before multiple accounts is migrated on
+first read (`migrateLegacyGoogleStore` in `google-calendar-domain.ts`): the
+flat keys become the first account and untagged outbox entries are tagged
+with it. Signing in with an address that is already connected renews that
+account instead of adding a second one. Access tokens are cached per account
+(`createGoogleAccessTokens`), so accounts that share the built-in client never
+share a token, and a 401 clears only that account's token.
+
+`sync` syncs the accounts one at a time and returns the items it fetched with
+their `accountId`, plus `syncedAccounts`. An account that fails keeps its error
+in memory for `status` and its items on the page; the call fails only when
+every account fails. `write` and `writeTask` route by the item's `accountId`
+and need that account's write access. `disconnect({ accountId })` revokes and
+removes one account and its queued writes; with no ID it removes all of them.
+`GoogleCalendarConnection` keeps its aggregate fields for existing callers and
+adds `accounts`.
+
+The Calendar page builds local IDs as
+`google:<accountId>:<calendarId>:<providerId>` and
+`google-task:<accountId>:<taskListId>:<providerId>`, and the workspace
+calendar file stores `accountId` on Google items
+(`packages/opencode/src/planner/calendar.ts`). Items saved before this change
+carry no account; the page treats them as the first account's (the migrated
+one) until the next sync replaces them. The design options are recorded in
+[ADR-012](../adr/ADR-012-google-multi-account.md).
 
 ## Home navigation
 

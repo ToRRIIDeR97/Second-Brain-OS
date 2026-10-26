@@ -25,6 +25,8 @@ export type CalendarEvent = {
   end?: string
   details?: string
   projectId?: string
+  /** The Google account of a provider event; absent on local events and on saves from before multiple accounts. */
+  accountId?: string
   providerId?: string
   calendarId?: string
   etag?: string
@@ -47,6 +49,7 @@ export type PlannerTask = {
   start?: string
   end?: string
   completedAt?: string
+  accountId?: string
   providerId?: string
   taskListId?: string
   taskListTitle?: string
