@@ -889,18 +889,32 @@ harness list for the name.
 
 After the first step of a run, the core runner
 (`core/src/session/runner/llm.ts`, `generateTitle`) titles a top-level session
-that still has its default title and exactly one user message. This covers
-harness sessions too. It runs in the background, with a 30-second timeout, and
-never delays the turn. It uses the hidden `title` agent's prompt through the
-host LLM client. The model is the title agent's model, else the small model
-of the provider behind a base model, else that base model. The base model is the
-session's model for in-process sessions, otherwise the catalog default. Without a
-configured default, the catalog falls back to the newest available model that
-its provider hasn't marked deprecated. The reply is cleaned by `SessionTitle.clean`
-(`core/src/session/title.ts`). The rename is published as
-`SessionV1.Event.Updated` after re-reading the row, so a rename made meanwhile
-wins. If no model resolves or the call fails, the session keeps its default
-title and the sidebar shows "New session".
+that still has its default title and exactly one user message. It runs in the
+background and never delays the turn. The prompt is the hidden `title` agent's.
+
+The title agent is the harness chosen under Settings → Harnesses → Thread
+titles, else the thread's own harness. The choice is stored as `titleAgent` in
+`harness-preferences.json` beside `harnesses.json` in the global config folder
+(`HarnessRegistry.titleAgent`), through `GET`/`PUT /api/harness/title-agent`. A
+choice naming a harness the runtime no longer knows is ignored.
+
+- **Default agent (in-process loop):** the host LLM client, with a 30-second
+  timeout. The model is the title agent's model, else the small model of the
+  provider behind a base model, else that base model. The base model is the
+  session's model for in-process sessions, otherwise the catalog default. The
+  catalog default and the runner's fallback skip models their provider has
+  marked deprecated.
+- **External harness:** `HarnessRuntime.complete` runs one prompt in a fresh
+  native session that belongs to no thread, with a 90-second timeout because it
+  starts a new process. Codex uses an ephemeral, read-only thread with approvals
+  off. ACP agents get a new session whose tool requests are all refused. The
+  thread's own harness uses the thread's model; a harness chosen in settings
+  uses its own default model.
+
+The reply is cleaned by `SessionTitle.clean` (`core/src/session/title.ts`). The
+rename is published as `SessionV1.Event.Updated` after re-reading the row, so a
+rename made meanwhile wins. If the call fails or times out, the failure is
+logged and the session keeps its default title ("New session" in the sidebar).
 
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the
