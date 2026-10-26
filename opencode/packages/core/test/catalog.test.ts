@@ -11,6 +11,8 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Policy } from "@opencode-ai/core/policy"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -273,6 +275,36 @@ describe("CatalogV2", () => {
       })
 
       expect((yield* catalog.model.default())?.id).toMatch("current")
+    }),
+  )
+
+  it.effect("runner model fallback skips deprecated models when the default has no native route", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("test")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, (provider) => {
+          provider.api = { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://test.example.com" }
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("current"), (model) => {
+          model.time.released = 1000
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("retired"), (model) => {
+          model.time.released = 2000
+          model.status = "deprecated"
+        })
+        // The newest served model is the catalog default but has no route the runner supports.
+        catalog.model.update(providerID, ModelV2.ID.make("unsupported"), (model) => {
+          model.time.released = 3000
+          model.api = { id: ModelV2.ID.make("unsupported"), type: "aisdk", package: "@ai-sdk/google" }
+        })
+      })
+
+      const resolved = yield* Effect.gen(function* () {
+        const models = yield* SessionRunnerModel.Service
+        return yield* models.resolve({ id: SessionV2.ID.make("ses_test") } as never)
+      }).pipe(Effect.provide(SessionRunnerModel.locationLayer))
+      expect(String(resolved.id)).toBe("current")
     }),
   )
 
