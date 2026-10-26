@@ -33,6 +33,8 @@ import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-s
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { mountSvgWindows } from "./svg-window"
+import { mountHtmlWindows } from "./html-window"
+import { useDesignSpace } from "../context/design"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -373,6 +375,7 @@ export function Markdown(
 ) {
   const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
   const i18n = useI18n()
+  const designSpace = useDesignSpace()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
   const activeCodeKeys = new Set<string>()
@@ -534,11 +537,25 @@ export function Markdown(
       source: i18n.t("secondBrain.message.svg.source"),
       download: i18n.t("secondBrain.message.svg.download"),
     }
+    const designLabels = {
+      title: i18n.t("secondBrain.message.design.title"),
+      badge: i18n.t("secondBrain.message.design.badge"),
+      use: i18n.t("secondBrain.message.design.use"),
+      open: i18n.t("secondBrain.message.design.open"),
+      source: i18n.t("secondBrain.message.design.source"),
+      preview: i18n.t("secondBrain.message.design.preview"),
+      streaming: i18n.t("secondBrain.message.design.streaming"),
+      tooLarge: i18n.t("secondBrain.message.design.tooLarge"),
+      card: (title: string) => i18n.t("secondBrain.message.design.card", { title }),
+    }
     ;(relabel ? [container] : changed).forEach((block) => {
       block
         .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
         .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
       mountSvgWindows(block, svgLabels)
+      // ```html designs need their fence info string, which only the block's markdown source keeps.
+      const raw = block === container ? local.text : content.find((item) => item.key === block.dataset.markdownKey)?.raw
+      mountHtmlWindows(block, raw ?? local.text, designLabels, { space: designSpace, live: streamed })
     })
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({

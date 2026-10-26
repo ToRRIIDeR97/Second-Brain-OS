@@ -28,3 +28,10 @@ export function redactURL(value: string) {
   const url = new URL(value)
   return url.host ? `${url.protocol}//${url.host}` : url.protocol
 }
+
+// Subframes are the sandboxed srcdoc documents the renderer builds (agent-drawn designs and
+// diagrams in chat). A sandboxed frame can still navigate itself, which would load a page outside
+// its CSP, so a subframe may only (re)load its own inline document.
+export function isSubframeDocumentURL(value: string) {
+  return value === "about:blank" || value === "about:srcdoc" || value.startsWith("about:srcdoc#")
+}
