@@ -1,6 +1,6 @@
 import { Presence } from "@opencode-ai/ui/v2/presence"
-import { prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
-import { createEffect, createMemo, on, onCleanup, untrack, type JSX, type ParentProps } from "solid-js"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
+import { createComputed, createEffect, createMemo, on, onCleanup, untrack, type JSX, type ParentProps } from "solid-js"
 import { replayAnimation } from "@/utils/replay-animation"
 
 /**
@@ -28,11 +28,16 @@ export function SidePanel(
   }>,
 ) {
   const open = createMemo(() => props.open)
-  const panel = { aside: undefined as HTMLElement | undefined }
+  const panel = {
+    aside: undefined as HTMLElement | undefined,
+    height: undefined as Animation | undefined,
+    from: 0,
+  }
   const live = createMemo(() =>
     open()
       ? untrack(() => (
           <aside
+            data-component="side-panel"
             ref={(element) => {
               panel.aside = element
               props.ref?.(element)
@@ -69,15 +74,50 @@ export function SidePanel(
     ),
   )
 
-  createEffect(
+  // A change of view inside the open panel (peek to peek, peek to editor) is one transition: the new
+  // content fades in while the panel's height eases from its old size. The old height is read here, before
+  // the content's DOM updates (computations run ahead of render effects).
+  const view = () => (open() ? props.view : undefined)
+  createComputed(
     on(
-      () => (open() ? props.view : undefined),
-      (view, previous) => {
-        if (view !== undefined && previous !== undefined) replayAnimation(panel.aside)
+      view,
+      (next, previous) => {
+        panel.from = next !== undefined && previous !== undefined ? (panel.aside?.offsetHeight ?? 0) : 0
       },
       { defer: true },
     ),
   )
+  createEffect(
+    on(
+      view,
+      (next, previous) => {
+        if (next === undefined || previous === undefined) return
+        replayAnimation(panel.aside)
+        easeHeight()
+      },
+      { defer: true },
+    ),
+  )
+
+  const easeHeight = () => {
+    const aside = panel.aside
+    panel.height?.cancel()
+    panel.height = undefined
+    if (!aside || !panel.from || prefersReducedMotion()) return
+    const to = aside.offsetHeight
+    if (Math.abs(to - panel.from) < 1) return
+    // Clipped while it eases, so no scrollbar flashes.
+    panel.height = aside.animate(
+      [
+        { height: `${panel.from}px`, overflow: "hidden" },
+        { height: `${to}px`, overflow: "hidden" },
+      ],
+      {
+        duration: motionDuration("medium"),
+        easing: getComputedStyle(aside).getPropertyValue("--v2-ease-emphasized-decelerate").trim() || "ease-out",
+      },
+    )
+  }
 
   return (
     <Presence when={open()} class="min-w-0 overflow-hidden lg:sticky lg:top-3">
