@@ -82,7 +82,7 @@ const layer = Layer.effect(
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
           ].join("\n"),
-          ChatDisplay.svgGuidance,
+          ChatDisplay.abilities("native"),
           references.length === 0
             ? undefined
             : [

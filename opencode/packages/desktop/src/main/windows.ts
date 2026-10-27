@@ -15,7 +15,7 @@ import { createUnresponsiveSampler } from "./unresponsive"
 import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
-import { redactURL, resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { isSubframeDocumentURL, redactURL, resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -208,6 +208,9 @@ export function createMainWindow(id: string = randomUUID()) {
   wireSession(win.webContents.session)
   wireWindowRecovery(win, id)
   wireNavigationPolicy(win)
+  // The app doesn't use WebRTC, and a design frame's CSP doesn't cover it: without a proxy this
+  // stops every UDP STUN/ICE request, also from frames nested in a design (design-fence.ts).
+  win.webContents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
 
   state.manage(win)
   registerWindow(win, id)
@@ -256,6 +259,14 @@ function wireNavigationPolicy(win: BrowserWindow) {
     if (isRendererUrl(url)) return
     event.preventDefault()
     openExternalURL(url)
+  })
+  // will-navigate covers only the main frame. A sandboxed design or diagram frame in chat may run
+  // agent-written script; it can't open popups or navigate the top window, but it can navigate
+  // itself, so any subframe navigation away from its srcdoc is dropped, never opened externally.
+  win.webContents.on("will-frame-navigate", (event) => {
+    if (event.isMainFrame || isSubframeDocumentURL(event.url)) return
+    event.preventDefault()
+    writeLog("window", "blocked subframe navigation", { url: redactURL(event.url) }, "warn")
   })
 }
 

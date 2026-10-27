@@ -1,4 +1,4 @@
-import { createMemo, createSignal, createUniqueId, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, createUniqueId, on, Show } from "solid-js"
 import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
@@ -11,6 +11,7 @@ import { useSDK } from "@/context/sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
+import { fileReveal } from "@/pages/session/file-reference"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 import { pathKey } from "@/utils/path-key"
 
@@ -76,6 +77,15 @@ export function SessionFileBrowserTab(props: {
   })
   const title = createMemo(() => displayName(project() ?? { worktree: sdk().directory }))
   const optionID = (path: string) => `${resultsID}-option-${files().indexOf(path)}`
+
+  // A file reference opened from a reply shows the tree beside the file, so its row can be revealed.
+  createEffect(
+    on(fileReveal, (reveal) => {
+      if (reveal?.directory !== sdk().directory) return
+      setFilter("")
+      if (!props.state.sidebarOpened()) props.state.toggleSidebar()
+    }),
+  )
 
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
     if (event.key === "Escape" && query()) {

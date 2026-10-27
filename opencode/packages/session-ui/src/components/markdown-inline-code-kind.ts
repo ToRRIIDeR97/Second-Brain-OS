@@ -1898,7 +1898,7 @@ export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/[/\\]/.test(text) || /^\.\.?[/\\]/.test(text) || hasPathExtension(text) || hasPathFileName(text)) return "path"
 }
 
-function hasPathExtension(text: string) {
+export function hasPathExtension(text: string) {
   const value = text.toLowerCase()
   if (value.endsWith(".d.ts")) return true
   const index = value.lastIndexOf(".")
@@ -1906,7 +1906,7 @@ function hasPathExtension(text: string) {
   return pathExtensions.has(value.slice(index + 1))
 }
 
-function hasPathFileName(text: string) {
+export function hasPathFileName(text: string) {
   const value = text.toLowerCase()
   if (pathFileNames.has(value)) return true
   const index = value.indexOf(".")

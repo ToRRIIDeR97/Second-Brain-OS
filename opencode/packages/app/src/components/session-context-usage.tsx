@@ -31,7 +31,7 @@ function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
   )
 }
 
-function openSessionContext(args: {
+export function openSessionContext(args: {
   view: ReturnType<ReturnType<typeof useLayout>["view"]>
   layout: ReturnType<typeof useLayout>
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>

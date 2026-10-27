@@ -186,8 +186,11 @@ Handoff text in the first prompt of a runtime (not drawn in the diagram):
 4. When a turn ends without an error, publish `HarnessContinuationSet` with the
    answered user message as `lastSeenMessageID`.
 
-The first prompt of a runtime also starts with the chat display guidance in
-`<tenon-display>` (`renderHarnessPrompt`). Later turns in the same runtime send only the user message. See
+The first prompt of a runtime also starts with a `<tenon-context>` block:
+workspace and Project folders, the AGENTS.md text in effect (one
+`<agents-md>` element per file) and the abilities guidance, which names
+`ask_user` only when the `tenon` server is attached (`renderHarnessPrompt`,
+`core/src/tenon-context.ts`). Later turns in the same runtime send only the user message. See
 [Harness handoff](README.md#harness-handoff) for the budget and wrapper.
 
 ### Sequence: cross-harness delegation
@@ -195,7 +198,9 @@ The first prompt of a runtime also starts with the chat display guidance in
 ![Sequence: the harness runtime gets a scoped token for the loopback MCP endpoint, the calling agent invokes delegate_task, the server creates a child Run on the target harness, waits for its drain and returns the child's final reply](../diagrams/sequence-delegation.svg)
 
 The built-in loop skips the MCP hop: its `delegate_task` tool calls the same
-task handler directly. See [Cross-harness delegation](README.md#cross-harness-delegation).
+task handler directly. The same endpoint serves `ask_user` (not drawn): the call
+becomes a `QuestionV2` request in the caller's session, answered in the
+question dock; see [Questions from harnesses](README.md#questions-from-harnesses). See [Cross-harness delegation](README.md#cross-harness-delegation).
 
 ## Coverage index
 
@@ -211,8 +216,11 @@ task handler directly. See [Cross-harness delegation](README.md#cross-harness-de
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
 | Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`, `claude-code`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |
-| Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `renderHarnessPrompt`, `continuationFor`), `core/src/session/projector.ts` |
+| Harness handoff (bounded history, per-instance continuations, delta on return, `<tenon-context>` block) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `renderHarnessPrompt`, `continuationFor`), `core/src/tenon-context.ts`, `core/src/session/projector.ts` |
 | Chat diagram windows (agent ```svg blocks in a sandboxed iframe, agent guidance) | Subsystem | Trust boundaries; text in [README](README.md#chat-diagram-windows) | `session-ui/src/components/svg-window.ts`, `session-ui/src/components/markdown.tsx`, `session-ui/src/components/markdown.worker.ts`, `core/src/chat-display.ts`, `core/src/system-context/builtins.ts`, `opencode/src/session/system.ts` |
+| Design windows and Canvas tab (agent ```html and ```html canvas blocks in `allow-scripts` frames) | Subsystem | Trust boundaries; text in [README](README.md#design-windows-and-the-canvas-tab) | `session-ui/src/components/design-fence.ts`, `session-ui/src/components/html-window.ts`, `session-ui/src/context/design.tsx`, `app/src/pages/session/design-canvas.tsx`, `app/src/pages/session/canvas-tab.tsx`, `app/src/pages/session/session-side-panel.tsx`, `desktop/src/main/windows.ts` (`will-frame-navigate`), `desktop/src/main/external-url.ts` |
+| File references in chat (peek, reveal in Files, range highlight) | Critical workflow | Text in [README](README.md#file-references-in-chat) | `session-ui/src/components/markdown-file-reference.ts`, `session-ui/src/components/markdown-file-reference-peek.tsx`, `session-ui/src/context/file-reference.tsx`, `app/src/pages/session/file-reference.tsx`, `app/src/pages/session/file-tabs.tsx`, `app/src/pages/session/v2/session-file-browser-tab.tsx` |
+| Composer context strip (Project, branch, harness, changed files, context ring) | Subsystem | Text in [README](README.md#composer-context-strip) | `app/src/components/prompt-input/context-strip.tsx`, `app/src/components/prompt-input/context-strip-model.ts`, `app/src/components/prompt-input-v2.tsx` (`header`), `app/src/pages/session.tsx` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |
 | Workspace files | Shared store | Component, Deployment, Activity: write | `notes/`, `projects/`, `.second-brain/calendar-v1.json` |
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |
@@ -224,7 +232,7 @@ task handler directly. See [Cross-harness delegation](README.md#cross-harness-de
 | Google Calendar and Tasks (multiple accounts) | External integration | Component, Deployment, State: outbox, Class: CalendarEvent; text in [README](README.md#google-accounts) | `desktop/src/main/google-calendar.ts`, `google-calendar-domain.ts` |
 | LLM providers | External integration | Component, Deployment | `core/src/harness.ts` (`opencode` driver) |
 | Codex app-server, ACP agents (including upstream OpenCode via `opencode acp`) | External integration | Component, Deployment, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts` |
-| Cross-harness delegation (loopback MCP endpoint, per-runtime tokens, child Runs) | Critical workflow | Component, Trust boundaries, Sequence: delegation | `core/src/harness/delegation.ts`, `core/src/harness/delegation-tasks.ts`, `core/src/tool/delegate.ts`, `core/src/harness.ts` (`openCodex`, `makeAcpRuntime`), `core/src/harness/acp.ts` (`open`) |
+| Cross-harness delegation and `ask_user` (loopback `tenon` MCP endpoint, per-runtime tokens, child Runs, questions to the dock) | Critical workflow | Component, Trust boundaries, Sequence: delegation; text in [README](README.md#questions-from-harnesses) | `core/src/harness/ask-user.ts`, `core/src/question.ts`, `app/src/pages/session/composer/session-question-dock.tsx`, `core/src/harness/delegation.ts`, `core/src/harness/delegation-tasks.ts`, `core/src/tool/delegate.ts`, `core/src/harness.ts` (`openCodex`, `makeAcpRuntime`, `acpStream`, `codexStream`), `core/src/harness/acp.ts` (`open`) |
 | Built-in harness setup (install, sign-in, API keys, first-run dialog) | Critical workflow | Trust boundaries; text in [README](README.md#built-in-harness-setup) | `core/src/harness/setup.ts`, `core/src/harness.ts` (`setup`, `install`, `signIn`, `setApiKey`, `withSetupKeys`), `server/src/handlers/harness.ts`, `app/src/components/settings-v2/harness-setup.tsx`, `app/src/pages/brain-home.tsx` |
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |

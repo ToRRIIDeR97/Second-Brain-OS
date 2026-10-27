@@ -34,8 +34,12 @@ const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { ty
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
   dispose: (key) => void projections.delete(key),
 })
-// ```svg blocks highlight as XML but keep their own language so svg-window.ts can find them.
-const aliases = new Map([["svg", "xml"]])
+// ```svg blocks highlight as XML but keep their own language so svg-window.ts can find them; ```html
+// keeps a language class too, which shiki's HTML output omits, so html-window.ts can find designs.
+const aliases = new Map([
+  ["svg", "xml"],
+  ["html", "html"],
+])
 
 function shikiLanguage(language: string) {
   const name = aliases.get(language) ?? language
