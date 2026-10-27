@@ -69,13 +69,33 @@ export function createComposerContext() {
       setOpen(false)
       elements.ring?.focus()
     }
+    // Tabbing out of both the ring and the sheet folds it, so it never stays open behind focus elsewhere.
+    const focus = (event: FocusEvent) => !within(event.target) && setOpen(false)
     document.addEventListener("pointerdown", pointer, true)
     document.addEventListener("keydown", key)
+    document.addEventListener("focusin", focus)
     onCleanup(() => {
       document.removeEventListener("pointerdown", pointer, true)
       document.removeEventListener("keydown", key)
+      document.removeEventListener("focusin", focus)
     })
   })
+
+  // The sheet sits before the composer in the DOM, so opening it from the keyboard (a click with no pointer
+  // presses, `detail` 0) moves focus to its first control; a pointer open leaves focus where it is.
+  const toggle = (event: MouseEvent) => {
+    if (open()) return close()
+    if (!context()) return
+    setOpen(true)
+    if (event.detail !== 0) return
+    queueMicrotask(() =>
+      elements.sheet
+        ?.querySelector<HTMLElement>(
+          '[data-slot="context-sheet-body"] :is(button, a[href], [tabindex]:not([tabindex="-1"])):not(:disabled)',
+        )
+        ?.focus({ preventScroll: true }),
+    )
+  }
 
   return {
     id,
@@ -83,7 +103,7 @@ export function createComposerContext() {
     context,
     open,
     close,
-    toggle: () => setOpen((value) => !value && !!context()),
+    toggle,
     setRing: (el: HTMLElement) => (elements.ring = el),
     setSheet: (el: HTMLElement) => (elements.sheet = el),
   }

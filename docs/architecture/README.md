@@ -976,7 +976,11 @@ through the `trailing` prop. It fills with the context percentage from
 used" when the model's limit is unknown); it is hidden until a response has
 reported tokens. Clicking it (`aria-expanded`, `aria-controls` the sheet)
 unfolds the strip upward behind the composer into a sheet; clicking it again,
-Esc, or a click outside the sheet and ring folds it back. The sheet's body row
+Esc while focus is in the ring or sheet, a click outside both, or focus moving
+outside both folds it back. Opening it from the keyboard moves focus to the
+sheet's first control (the sheet sits before the composer in the DOM); folding
+from inside the sheet returns focus to the ring, and a pointer open leaves
+focus where it is. The sheet's body row
 animates from `0fr` to `1fr` in 300 ms (emphasized decelerate), the details
 fade and slide in, and the gauge arc and bars fill after it; with
 `prefers-reduced-motion` nothing animates. The worktree and branch row stays
