@@ -92,10 +92,10 @@ export function SessionTodoDock(props: {
             class="cursor-default inline-flex items-baseline shrink-0 overflow-visible font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
             aria-label={label()}
             style={{
-              "--tool-motion-odometer-ms": "600ms",
+              "--tool-motion-odometer-ms": "var(--v2-duration-long)",
               "--tool-motion-mask": "18%",
               "--tool-motion-mask-height": "0px",
-              "--tool-motion-spring-ms": "560ms",
+              "--tool-motion-spring-ms": "var(--v2-duration-long)",
               "white-space": "pre",
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}

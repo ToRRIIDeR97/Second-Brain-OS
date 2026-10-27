@@ -17,11 +17,11 @@
   }
 
   &[data-closed] {
-    animation: dropdown-menu-close 0.15s ease-out;
+    animation: dropdown-menu-close var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
   }
 
   &[data-expanded] {
-    animation: dropdown-menu-open 0.15s ease-out;
+    animation: dropdown-menu-open var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
   }
 }
 
@@ -131,5 +131,14 @@
   to {
     opacity: 0;
     transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="dropdown-menu-content"][data-closed],
+  [data-component="dropdown-menu-content"][data-expanded],
+  [data-component="dropdown-menu-sub-content"][data-closed],
+  [data-component="dropdown-menu-sub-content"][data-expanded] {
+    animation: none;
   }
 }

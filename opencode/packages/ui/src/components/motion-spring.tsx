@@ -1,6 +1,7 @@
 import { attachSpring, motionValue } from "motion"
 import type { SpringOptions } from "motion"
 import { createComputed, createEffect, createSignal, onCleanup } from "solid-js"
+import { prefersReducedMotion } from "../v2/components/motion"
 
 type Opt = Partial<Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">>
 const eq = (a: Opt | undefined, b: Opt | undefined) =>
@@ -24,8 +25,8 @@ export function useSpring(target: () => number, options?: Opt | (() => Opt), sna
   createComputed(() => {
     const next = target()
     const nextSnap = snapKey?.()
-    if (snapKey && nextSnap !== snapValue) {
-      // State boundaries should adopt their target without animating from the previous context.
+    if ((snapKey && nextSnap !== snapValue) || prefersReducedMotion()) {
+      // State boundaries, and reduced motion, adopt their target without animating from the previous context.
       snapValue = nextSnap
       stop()
       spring.jump(next)
