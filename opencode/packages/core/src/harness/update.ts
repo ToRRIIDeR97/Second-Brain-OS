@@ -41,6 +41,8 @@ export class UpdateError extends Schema.TaggedErrorClass<UpdateError>()("Harness
 }) {}
 
 const checkTTL = 6 * 60 * 60 * 1000
+// A check that couldn't reach the registry is retried sooner, so one offline start doesn't hide updates for hours.
+const failedCheckTTL = 10 * 60 * 1000
 const packageName = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/
 const brewName = /^[a-z0-9][a-z0-9@._+-]*$/
 // Latest-version lookups are network calls, so one result per executable is reused for a few hours.
@@ -108,7 +110,7 @@ export const check = Effect.fn("HarnessUpdate.check")(function* (
   if (cached && cached.expires > Date.now()) return cached.check
   const source = resolved.source
   if (!source) return { version: fallbackVersion, updateAvailable: false } satisfies Check
-  const result = yield* Effect.gen(function* () {
+  const result: Check = yield* Effect.gen(function* () {
     const version = (yield* installedVersion(source)) ?? fallbackVersion
     const latest = yield* latestVersion(process, source)
     return {
@@ -127,7 +129,8 @@ export const check = Effect.fn("HarnessUpdate.check")(function* (
       } satisfies Check),
     ),
   )
-  checks.set(resolved.path, { expires: Date.now() + checkTTL, check: result })
+  const ttl = result.error || !result.latest ? failedCheckTTL : checkTTL
+  checks.set(resolved.path, { expires: Date.now() + ttl, check: result })
   return result
 })
 
