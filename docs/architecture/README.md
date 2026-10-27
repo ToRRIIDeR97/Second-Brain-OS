@@ -55,8 +55,36 @@ collapsible Projects panel). Pages sit on one rounded panel built from
 easing and duration tokens (`--v2-radius-*`, `--v2-ease-*`,
 `--v2-duration-*`) and the accent-container colors live in
 `packages/ui/src/v2/styles/theme.css` and `packages/ui/src/theme/v2/mapping.ts`,
-and the v2 components (pill buttons, circular icon buttons) use them. The sidebar's
-controller (`components/sidebar/sidebar-controller.ts`) reads
+and the v2 components (pill buttons, circular icon buttons) use them.
+
+Motion rules: an element entering uses `--v2-duration-medium` with
+`--v2-ease-emphasized-decelerate`; one leaving uses `--v2-duration-short` with
+`--v2-ease-emphasized-accelerate`; small state changes (colour, hover) use
+`--v2-duration-short` with `--v2-ease-standard`. Every non-trivial motion turns
+off under `prefers-reduced-motion`, which shows the end state at once. Tailwind
+maps the tokens to `ease-standard`, `ease-emphasized-decelerate` (alias
+`ease-emphasized`), `ease-emphasized-accelerate`, `ease-spring`,
+`duration-short|medium|long`, a bare `transition*` default of short + standard,
+and `animate-enter` (fade and 4px rise) / `animate-exit` (fade)
+(`packages/ui/src/styles/tailwind/`). Kobalte overlays (dialogs, menus, selects,
+tooltips, popovers) keep their content mounted for an exit only when the
+`[data-closed]` rule sets a different `animation-name`, so each has its own exit
+keyframes; `context/dialog.tsx` disposes a closed dialog after the short exit.
+Three helpers in `packages/ui/src/v2/components/` cover in-page motion:
+`Reveal` (`@opencode-ai/ui/v2/reveal`; `open`, `class`, `onTransitionEnd`)
+expands and collapses through grid rows and opacity, keeps its children while
+closing and unmounts them once closed (`inert` and `aria-hidden` meanwhile);
+`Presence` (`@opencode-ai/ui/v2/presence`; `when`, `enterClass`, `exitClass`,
+`class`) keeps a wrapper `div` mounted through its exit animation with
+`solid-presence`, defaulting to `animate-enter` / `animate-exit`; `ViewSwitch`
+(`@opencode-ai/ui/v2/view-switch`; `key`, `class`) fades the outgoing view out
+and the incoming one in when `key` changes, rendering one view at a time.
+`@opencode-ai/ui/v2/motion` exposes `prefersReducedMotion()` and
+`motionDuration()` for JS that times work against these animations, and
+`useSpring` (`@opencode-ai/ui/motion-spring`) jumps to its target under reduced
+motion.
+
+The sidebar's controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with
 `serverSync().project.loadSessions(threadDirectory)` (kept live by
 `session.created/updated/deleted` events), adds the recent-session index for

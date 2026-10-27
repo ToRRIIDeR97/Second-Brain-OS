@@ -1,0 +1,33 @@
+/* Reveal: expand/collapse through grid rows (0fr to 1fr) with opacity. Open: medium +
+   emphasized-decelerate. Close: short + emphasized-accelerate. Content clips only while moving, so focus
+   rings and overflowing children show once the reveal has settled open. */
+[data-component="reveal-v2"] {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--v2-duration-short) var(--v2-ease-emphasized-accelerate),
+    opacity var(--v2-duration-short) var(--v2-ease-emphasized-accelerate);
+
+  &[data-open] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition-duration: var(--v2-duration-medium);
+    transition-timing-function: var(--v2-ease-emphasized-decelerate);
+  }
+
+  [data-slot="reveal-v2-content"] {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  &[data-settled] [data-slot="reveal-v2-content"] {
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="reveal-v2"] {
+    transition: none;
+  }
+}
