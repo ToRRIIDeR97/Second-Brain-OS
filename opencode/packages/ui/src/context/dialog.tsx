@@ -76,7 +76,10 @@ function init() {
     if (stack().length === 0) return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return
+      if (event.key !== "Escape") return
+      // Something that used the Escape (a nested menu or select closing) keeps the dialog open. A Kobalte
+      // tab list prevents every Escape without using it, so focus on a tab still closes the dialog.
+      if (event.defaultPrevented && !fromTabList(event)) return
       if (!close()) return
       event.preventDefault()
       event.stopPropagation()
@@ -164,6 +167,11 @@ function init() {
 function exitDelay() {
   if (prefersReducedMotion()) return 0
   return motionDuration("short") + 16
+}
+
+// Kobalte's selectable collection calls preventDefault on Escape for a tab list, where it has nothing to clear.
+function fromTabList(event: KeyboardEvent) {
+  return event.target instanceof Element && event.target.closest('[role="tablist"]') !== null
 }
 
 export function DialogProvider(props: ParentProps) {

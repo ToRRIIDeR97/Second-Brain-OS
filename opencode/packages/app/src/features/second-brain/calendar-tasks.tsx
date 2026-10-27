@@ -342,7 +342,11 @@ export function CalendarTasks(props: {
         </div>
       </section>
 
-      <SidePanel open={state.editing || Boolean(peeked())} view={state.editing ? "edit" : `peek:${state.peek}`}>
+      <SidePanel
+        open={state.editing || Boolean(peeked())}
+        view={state.editing ? "edit" : `peek:${state.peek}`}
+        onEscape={state.editing ? undefined : () => setState("peek", "")}
+      >
         <Show when={!state.editing && peeked()}>
           {(task) => (
             <CalendarPeek
