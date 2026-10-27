@@ -1,4 +1,4 @@
-import { Show, createMemo, type JSX } from "solid-js"
+import { Show, createMemo, untrack, type JSX } from "solid-js"
 import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { useLanguage } from "@/context/language"
@@ -31,6 +31,10 @@ export function SessionComposerRegion(props: {
 
   // The dock objects are rebuilt on every read, so the docks take accessors instead of remounting (which
   // would reset their collapsed state, focus and row motion) whenever the queue or its actions change.
+  // A composer that replaces the handoff placeholder (the prompt was still loading) fades in over it; one
+  // that is ready from the start does not.
+  const handedOff = !untrack(controller.promptReady)
+
   const revertDock = (dock: () => SessionComposerRevertDock) => (
     <SessionRevertDock
       items={dock().items}
@@ -126,6 +130,7 @@ export function SessionComposerRegion(props: {
               <div
                 classList={{
                   "relative z-[70] transition-[margin-top] motion-reduce:transition-none": true,
+                  "animate-in fade-in duration-short ease-standard motion-reduce:animate-none": handedOff,
                   "duration-medium ease-emphasized-decelerate": !!rolled(),
                   "duration-short ease-emphasized-accelerate": !rolled(),
                 }}

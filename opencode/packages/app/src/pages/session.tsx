@@ -83,6 +83,7 @@ import {
   sidePanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { SessionFileReferences, panelSettled, slidePanelOpen } from "@/pages/session/file-reference"
 import { DesignCanvasProvider } from "@/pages/session/design-canvas"
 import { SESSION_SIDE_RAIL_SPACE, SessionSideRail } from "@/pages/session/session-side-rail"
@@ -2248,6 +2249,26 @@ export default function Page() {
             </Show>
             <Show when={terminalOpen()}>
               <div
+                ref={(el) => {
+                  // Stacked under Review, the terminal grows up from the bottom edge (medium + emphasized-
+                  // decelerate) once it is in the DOM; closing snaps, like the side panel.
+                  if (!desktopV2PanelLayout().stacked || prefersReducedMotion()) return
+                  queueMicrotask(() => {
+                    const height = el.getBoundingClientRect().height
+                    if (!el.isConnected || !height) return
+                    el.animate(
+                      [
+                        { height: "0px", overflow: "hidden" },
+                        { height: `${height}px`, overflow: "hidden" },
+                      ],
+                      {
+                        duration: motionDuration("medium"),
+                        easing:
+                          getComputedStyle(el).getPropertyValue("--v2-ease-emphasized-decelerate").trim() || "ease",
+                      },
+                    )
+                  })
+                }}
                 classList={{
                   "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
                   "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
