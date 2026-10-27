@@ -79,6 +79,7 @@ describe("createCompatibleApi", () => {
           "/mcp/docs/connect": true,
           "/mcp/docs/disconnect": true,
           "/api/session": { data: [], cursor: {} },
+          "/session/ses_1": true,
         }
         if (!(path in routes)) return Response.json({ error: "Not Found" }, { status: 404 })
         if (!["/api/health", "/global/health", "/project", "/api/session"].includes(path)) {
@@ -107,6 +108,7 @@ describe("createCompatibleApi", () => {
     await api.mcp.connect({ location, server: "docs" })
     await api.mcp.disconnect({ location, server: "docs" })
     await api.session.list({ directory: "/repo" })
+    await api.session.remove({ sessionID: "ses_1", directory: "/repo" })
     expect(paths).toEqual([
       "/api/health",
       "/global/health",
@@ -117,6 +119,7 @@ describe("createCompatibleApi", () => {
       "/mcp/docs/connect",
       "/mcp/docs/disconnect",
       "/api/session",
+      "/session/ses_1",
     ])
   })
 

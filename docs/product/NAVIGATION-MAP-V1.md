@@ -178,7 +178,22 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   the new thread and sends the message in one step.
 - **Projects** lists Project cards by status and opens a card with Overview,
   Plan, Work, Files, Activity and Map views.
-- **Calendar** shows events and tasks; account setup lives in Settings.
+- **Calendar** shows events and tasks. Today and Week are hour grids
+  (07:00–22:00, widened to fit events) with all-day events and open tasks in a
+  strip above; clicking a day's header opens it in Today. Agenda lists items by
+  day, with the date on the left. Clicking an event or task, in any view and in
+  the Tasks view, opens it read-only in the side panel; **Edit** opens the form
+  (a task's Edit opens it in the Tasks view). Ticking a task completes it at
+  once, Google tasks included, with an **Undo** toast. The page scrolls as one
+  area. Its Google Calendar & Tasks panel
+  connects one or more Google accounts: one **Sign in with Google** button when
+  the build ships its own OAuth client, else (or under **Use your own OAuth
+  client**) the client ID and secret fields. Once an account is connected the
+  panel lists each account with its access, last sync, queued or failed
+  changes and its own **Disconnect**; **Add account** shows the sign-in form
+  again, and Google lets the user pick a different account. **Sync now** syncs
+  every account. A new event or task's **Save to** offers Local and each
+  account with read and write access.
 - **Notes** holds global notes and Project notes. A note's file name keeps
   the title's letters and digits in any script. If a save finds the note
   changed on disk, **Reload from disk** replaces the edits with the saved copy.
@@ -189,14 +204,26 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   both read as idle, so they carry no status. History is the full searchable
   thread list.
 - **Settings** contains General, Shortcuts, Servers, Providers, Models and
-  Harnesses.
+  Harnesses. Harnesses has **Set up built-in agents**. It opens the agent
+  setup dialog. The dialog lists Codex, Claude Code and OpenCode under
+  **Ready** and **Set up**, in the Providers row style, with **Install**,
+  **Connect** or **Manage**. **Connect** opens that agent's sign-in or API-key
+  view. On first run Home opens the same dialog
+  once, unless every built-in agent is already installed and signed in.
 - **Thread** shows the timeline and composer. Each finished agent turn folds
   its tool and reasoning steps into one "Worked {duration}" row. The row stays
   open when a step failed. While the turn runs, the row shows a live ticker:
   the current step with a spinner and timer, the two steps before it, and
   "Show all" to open the full list. The
   side panel has **Review** and **Session** tabs, plus open files. Session
-  replaced the Context tab. It shows the session's totals per harness: input, output, cache
-  hit, cost, context window, subagents and tool counts. It also keeps the
-  context breakdown and raw messages. A value the harness doesn't report reads
-  "Not reported".
+  replaced the Context tab and follows the Thread board's design: four tiles
+  (tokens, context used, messages, harness), a context breakdown bar (system,
+  messages, tools), then a details list of the session's totals per harness
+  (model, provider, context window, input, output, cache hit, cost, times).
+  Values the harness doesn't report are left out. Subagents and tool counts
+  show only when there are any, and raw messages open from a button. The side panel keeps its own width (420px by default) and
+  the chat takes the rest. Hide it with the arrow in its tab row, the
+  titlebar button, `mod+shift+r`, or by dragging its edge past the minimum.
+  While hidden, a slim rail at the right edge shows the changed-file count
+  and context use and reopens the panel. Split diffs need an 800px panel;
+  a narrower panel shows unified diffs.

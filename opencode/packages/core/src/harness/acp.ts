@@ -37,6 +37,8 @@ export interface OpenInput {
   readonly settings: Settings
   readonly directory: string
   readonly continuation?: string
+  /** HTTP MCP servers offered to the agent; dropped when it does not advertise `mcpCapabilities.http`. */
+  readonly mcpServers?: ReadonlyArray<McpServer>
   readonly approve: (request: PermissionRequest) => Effect.Effect<boolean>
   /** Called with the slash commands the agent reports, whenever it reports them. */
   readonly onCommands?: (commands: ReadonlyArray<AcpCommand>) => Effect.Effect<void>
@@ -50,6 +52,8 @@ export interface AcpCommand {
 export interface Session {
   readonly sessionId: string
   readonly resumed: boolean
+  /** The offered MCP servers were passed on: there were some and the agent advertises `mcpCapabilities.http`. */
+  readonly mcpAttached: boolean
   readonly agent: { readonly name?: string; readonly version?: string }
   readonly models: ReadonlyArray<Harness.Model>
   readonly turn: (input: {
@@ -142,12 +146,34 @@ export const discover = (process: Process, settings: Settings, directory: string
     Effect.gen(function* () {
       const { client, initialize } = yield* connect(process, settings, directory)
       const session = yield* createSession(client, { cwd: directory, mcpServers: [] })
-      return { ...agentInfo(initialize), models: sessionModels(session.response).models }
+      const selector = sessionModels(session.response)
+      const configId = selector.configId
+      const levels = (effort: EffortOption | undefined) =>
+        (effort?.values ?? []).filter((value) => value !== EFFORT_DEFAULT)
+      // Agents report levels for the active model only, so this throwaway session switches to each model once.
+      // A switch can fail without saying anything about levels (Claude Code checks some models with its
+      // server first), so a failed switch keeps the active model's levels rather than none.
+      const models =
+        selector.effort && configId
+          ? yield* Effect.forEach(selector.models, (model) =>
+              model.isDefault
+                ? Effect.succeed(model)
+                : client
+                    .request("session/set_config_option", { sessionId: session.sessionId, configId, value: model.id })
+                    .pipe(
+                      Effect.map((response) => levels(sessionModels(response).effort)),
+                      Effect.catch(() => Effect.succeed(levels(selector.effort))),
+                      Effect.map((reasoningEfforts) => Harness.Model.make({ ...model, reasoningEfforts })),
+                    ),
+            )
+          : selector.models
+      return { ...agentInfo(initialize), models }
     }),
   ).pipe(
+    // Claude Code needs about 10s here when warm (one switch per model), more on a busy cold start.
     Effect.timeoutOrElse({
-      duration: "15 seconds",
-      orElse: () => Effect.fail(new ProtocolError("The ACP agent did not start a session within 15 seconds.")),
+      duration: "45 seconds",
+      orElse: () => Effect.fail(new ProtocolError("The ACP agent did not list its models within 45 seconds.")),
     }),
   )
 
@@ -176,9 +202,8 @@ export const verify = (process: Process, settings: Settings, directory: string, 
   )
 
 /**
- * Availability check for the picker. Without a known model list it also opens a session to read the
- * agent's own models, falling back to the handshake alone when the agent can't open one (for example
- * before sign-in). `discovered` is set only when the agent reported its models.
+ * Availability check for the picker: the handshake alone, offering the known models. The agent's own
+ * model list comes from `discover`, which the caller runs separately because it takes much longer.
  */
 export function probe(
   process: Process,
@@ -186,24 +211,17 @@ export function probe(
   settings: Settings,
   directory: string,
   known?: ReadonlyArray<Harness.Model>,
-  rediscover = false,
 ): Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }> {
   const base = { id: instance.id, driver: instance.driver, name: instance.name }
-  const available = (version: string | undefined, models: ReadonlyArray<Harness.Model>) =>
-    Harness.Instance.make({ ...base, status: "available", version, models: withConfigured(models, settings.models) })
-  const handshakeOnly = handshake(process, settings, directory).pipe(
-    Effect.map((agent) => ({ instance: available(agent.version, known ?? []) })),
-  )
-  // With `rediscover`, a stale list is asked for again; a failed session falls back to the known list.
-  const check =
-    known && !rediscover
-      ? handshakeOnly
-      : discover(process, settings, directory).pipe(
-          // An empty list is still recorded, so later checks don't open a session each time.
-          Effect.map((agent) => ({ instance: available(agent.version, agent.models), discovered: agent.models })),
-          Effect.catch(() => handshakeOnly),
-        )
-  return check.pipe(
+  return handshake(process, settings, directory).pipe(
+    Effect.map((agent) => ({
+      instance: Harness.Instance.make({
+        ...base,
+        status: "available",
+        version: agent.version,
+        models: withConfigured(known ?? [], settings.models),
+      }),
+    })),
     Effect.catch((error) =>
       Effect.succeed({
         instance: Harness.Instance.make({
@@ -244,7 +262,8 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
     }),
   )
   const capabilities = isRecord(initialize.agentCapabilities) ? initialize.agentCapabilities : {}
-  const params = { cwd: input.directory, mcpServers: [] }
+  const http = isRecord(capabilities.mcpCapabilities) && capabilities.mcpCapabilities.http === true
+  const params = { cwd: input.directory, mcpServers: http ? (input.mcpServers ?? []) : [] }
   const loaded =
     input.continuation && capabilities.loadSession === true
       ? yield* client.request("session/load", { ...params, sessionId: input.continuation }, SESSION_SETUP_TIMEOUT).pipe(
@@ -306,7 +325,9 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   const turn = (turnInput: { readonly text: string; readonly model?: string; readonly reasoningEffort?: string }) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        yield* setModel(turnInput.model)
+        // A folded level is sent as its `<base>/<level>` model; otherwise as the agent's level option.
+        const variant = `${turnInput.model}/${turnInput.reasoningEffort}`
+        yield* setModel(selector.variants?.has(variant) ? variant : turnInput.model)
         yield* setEffort(turnInput.reasoningEffort)
         yield* Queue.clear(items)
         const parser = acpState(state.sessionCost)
@@ -343,6 +364,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   return {
     sessionId: session.sessionId,
     resumed: loaded !== undefined,
+    mcpAttached: params.mcpServers.length > 0,
     agent: agentInfo(initialize),
     models: selector.models,
     turn,
@@ -352,7 +374,17 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
 // session/load replays history before it answers, so allow more than the initialize handshake.
 const SESSION_SETUP_TIMEOUT = "60 seconds"
 
-function createSession(client: Client, params: { readonly cwd: string; readonly mcpServers: ReadonlyArray<never> }) {
+export interface McpServer {
+  readonly type: "http"
+  readonly name: string
+  readonly url: string
+  readonly headers: ReadonlyArray<{ readonly name: string; readonly value: string }>
+}
+
+function createSession(
+  client: Client,
+  params: { readonly cwd: string; readonly mcpServers: ReadonlyArray<McpServer> },
+) {
   return client.request("session/new", params, SESSION_SETUP_TIMEOUT).pipe(
     Effect.flatMap((response) => {
       const sessionId = isRecord(response) ? string(response.sessionId) : undefined
@@ -874,6 +906,8 @@ export function sessionModels(response: unknown): {
   readonly current?: string
   readonly configId?: string
   readonly effort?: EffortOption
+  /** Ids of models that stand for a base model at one reasoning level, as `<base>/<level>`. */
+  readonly variants?: ReadonlySet<string>
 } {
   const value = isRecord(response) ? response : {}
   const configOptions = Array.isArray(value.configOptions) ? value.configOptions.filter(isRecord) : []
@@ -884,11 +918,8 @@ export function sessionModels(response: unknown): {
   if (isRecord(value.models)) {
     const current = string(value.models.currentModelId)
     const available = Array.isArray(value.models.availableModels) ? value.models.availableModels.filter(isRecord) : []
-    return {
-      current,
-      effort,
-      models: available.flatMap((model) => entry(string(model.modelId), model.name, model.description, current)),
-    }
+    const models = available.flatMap((model) => entry(string(model.modelId), model.name, model.description, current))
+    return { current, effort, ...(effort ? { models } : foldVariants(models, current)) }
   }
   const option = configOptions.find(
     (item) => item.category === "model" && item.type === "select" && typeof item.id === "string",
@@ -897,10 +928,34 @@ export function sessionModels(response: unknown): {
   const current = string(option.currentValue)
   const options = Array.isArray(option.options) ? option.options.filter(isRecord) : []
   return {
-    current,
     configId: string(option.id),
     effort,
-    models: options.flatMap((item) => entry(string(item.value), item.name, item.description, current)),
+    ...foldDefault(
+      options.flatMap((item) => entry(string(item.value), item.name, item.description, current)),
+      current,
+    ),
+  }
+}
+
+// Claude Code lists its account default as a `default` row described by the model it stands for
+// ("Opus" for "Opus 5.5"). Show that model as the current one instead of a model named Default.
+function foldDefault(models: ReadonlyArray<Harness.Model>, current: string | undefined) {
+  const row = models.find((model) => model.id === MODEL_DEFAULT)
+  const name = row?.description
+  const target = name
+    ? models.find((model) => model !== row && (model.name === name || model.name.startsWith(`${name} `)))
+    : undefined
+  if (!row || !target) return { models, current }
+  const active = current === MODEL_DEFAULT
+  return {
+    current: active ? target.id : current,
+    models: models
+      .filter((model) => model !== row)
+      .map((model) =>
+        model === target && active
+          ? Harness.Model.make({ ...model, reasoningEfforts: row.reasoningEfforts, isDefault: true })
+          : model,
+      ),
   }
 }
 
@@ -913,6 +968,7 @@ export type EffortOption = {
 
 // The level OpenCode and other agents use for "no override"; the app shows its own Default entry instead.
 const EFFORT_DEFAULT = "default"
+const MODEL_DEFAULT = "default"
 
 function effortOption(configOptions: ReadonlyArray<Record<string, unknown>>): EffortOption | undefined {
   const option = configOptions.find(
@@ -924,6 +980,37 @@ function effortOption(configOptions: ReadonlyArray<Record<string, unknown>>): Ef
     return value ? [value] : []
   })
   return { configId: option.id as string, current: string(option.currentValue), values }
+}
+
+// OpenCode before `thought_level` lists each level as its own model, `<base>/<level>` named
+// "<base name> (<level>)". Fold those into the base model's levels so the picker shows one model.
+function foldVariants(models: ReadonlyArray<Harness.Model>, current: string | undefined) {
+  const byId = new Map(models.map((model) => [model.id, model]))
+  const levels = new Map<string, string[]>()
+  const variants = new Set(
+    models.flatMap((model) => {
+      const slash = model.id.lastIndexOf("/")
+      const base = slash > 0 ? byId.get(model.id.slice(0, slash)) : undefined
+      const level = model.id.slice(slash + 1)
+      if (!base || model.name !== `${base.name} (${level})`) return []
+      levels.set(base.id, [...(levels.get(base.id) ?? []), level])
+      return [model.id]
+    }),
+  )
+  if (variants.size === 0) return { models }
+  return {
+    variants,
+    models: models
+      .filter((model) => !variants.has(model.id))
+      .map((model) =>
+        Harness.Model.make({
+          ...model,
+          reasoningEfforts: levels.get(model.id) ?? model.reasoningEfforts,
+          isDefault:
+            model.isDefault || (current !== undefined && variants.has(current) && current.startsWith(`${model.id}/`)),
+        }),
+      ),
+  }
 }
 
 function modelEntry(

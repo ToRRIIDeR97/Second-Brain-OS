@@ -113,6 +113,13 @@ export function fallbackHarnesses(): ReadonlyArray<Harness.Instance> {
       status: "unavailable",
       models: [],
     }),
+    HarnessSchema.Instance.make({
+      id: HarnessSchema.ClaudeCode,
+      driver: HarnessSchema.AcpDriver,
+      name: "Claude Code",
+      status: "unavailable",
+      models: [],
+    }),
   ]
 }
 
@@ -139,6 +146,24 @@ export async function listHarnessesForServer(
   return decodeHarnessResponse(await response.json()).data
 }
 
+// The last list each server reported per folder. A composer that opens shows it at once while its own
+// check runs, so opening a thread doesn't wait on the server starting every harness CLI. Every check
+// replaces it; a failed check is never kept.
+const recentHarnesses = new Map<string, ReadonlyArray<HarnessSchema.Instance>>()
+const recentHarnessKey = (url: string, directory: string) => `${url}\n${directory}`
+
+export function rememberedHarnesses(url: string, directory: string) {
+  return recentHarnesses.get(recentHarnessKey(url, directory))
+}
+
+/** Lists the harnesses for a folder and remembers the answer. A failed check returns the fallback list. */
+export async function listHarnessesRemembered(input: Parameters<typeof listHarnessesForServer>[0], directory: string) {
+  const list = await listHarnessesForServer(input, directory).catch(() => undefined)
+  if (!list) return fallbackHarnesses()
+  recentHarnesses.set(recentHarnessKey(input.server.url, directory), list)
+  return list
+}
+
 const decodeSettingsList = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.SettingsEntry)))
 const decodeSettingsEntry = Schema.decodeUnknownSync(Location.response(HarnessSchema.SettingsEntry))
 const decodeDiscovery = Schema.decodeUnknownSync(Location.response(HarnessSchema.Discovery))
@@ -162,7 +187,8 @@ async function locationRequest(
   init?: RequestInit,
 ) {
   const url = new URL(`${input.server.url.replace(/\/+$/, "")}${route}`)
-  url.searchParams.set("location[directory]", directory)
+  // Without a folder the server uses its own default location; harness routes don't depend on it.
+  if (directory) url.searchParams.set("location[directory]", directory)
   const headers = new Headers(init?.headers)
   if (init?.body !== undefined) headers.set("content-type", "application/json")
   if (input.server.password)
@@ -203,6 +229,21 @@ export async function setSkillEnabled(input: HarnessServer, directory: string, n
 
 export async function listHarnessSettings(input: HarnessServer, directory: string) {
   return decodeSettingsList(await harnessSettingsRequest(input, directory, "/settings")).data
+}
+
+const decodeTitleAgent = Schema.decodeUnknownSync(
+  Location.response(Schema.Struct({ id: Schema.optional(HarnessSchema.InstanceID) })),
+)
+
+/** The harness that titles new threads; undefined means each thread's own harness. */
+export async function getTitleAgent(input: HarnessServer, directory: string) {
+  return decodeTitleAgent(await harnessSettingsRequest(input, directory, "/title-agent")).data.id
+}
+
+export async function setTitleAgent(input: HarnessServer, directory: string, id: string | undefined) {
+  return decodeTitleAgent(
+    await harnessSettingsRequest(input, directory, "/title-agent", { method: "PUT", body: JSON.stringify({ id }) }),
+  ).data.id
 }
 
 export async function discoverHarness(input: HarnessServer, directory: string, value: HarnessSchema.DiscoverInput) {
@@ -251,6 +292,44 @@ export async function refreshHarnesses(input: HarnessServer, directory: string, 
   return decodeHarnessResponse(
     await harnessSettingsRequest(input, directory, "/refresh", { method: "POST", body: JSON.stringify({ id }) }),
   ).data
+}
+
+const decodeSetupList = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.SetupStatus)))
+const decodeSetup = Schema.decodeUnknownSync(Location.response(HarnessSchema.SetupStatus))
+const decodeSignIn = Schema.decodeUnknownSync(Location.response(HarnessSchema.SignIn))
+const setupPath = (id: string, action: string) => `/setup/${encodeURIComponent(id)}/${action}`
+
+/** Install and sign-in state of the built-in external harnesses. */
+export async function listHarnessSetup(input: HarnessServer, directory: string) {
+  return decodeSetupList(await harnessSettingsRequest(input, directory, "/setup")).data
+}
+
+export async function installHarness(input: HarnessServer, directory: string, id: string) {
+  return decodeSetup(await harnessSettingsRequest(input, directory, setupPath(id, "install"), { method: "POST" })).data
+}
+
+/** Starts a browser sign-in and returns the link to open. */
+export async function signInHarness(input: HarnessServer, directory: string, id: string) {
+  return decodeSignIn(await harnessSettingsRequest(input, directory, setupPath(id, "sign-in"), { method: "POST" })).data
+}
+
+export async function setHarnessApiKey(
+  input: HarnessServer,
+  directory: string,
+  id: string,
+  value: HarnessSchema.ApiKeyInput,
+) {
+  return decodeSetup(
+    await harnessSettingsRequest(input, directory, setupPath(id, "api-key"), {
+      method: "PUT",
+      body: JSON.stringify(value),
+    }),
+  ).data
+}
+
+export async function removeHarnessApiKey(input: HarnessServer, directory: string, id: string) {
+  return decodeSetup(await harnessSettingsRequest(input, directory, setupPath(id, "api-key"), { method: "DELETE" }))
+    .data
 }
 
 const decodeUpdates = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.UpdateStatus)))

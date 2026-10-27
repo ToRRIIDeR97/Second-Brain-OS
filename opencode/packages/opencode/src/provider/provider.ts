@@ -1315,6 +1315,27 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+export type ModelsDevCatalog = {
+  /** fromModelsDevProvider output per provider. */
+  readonly catalog: Readonly<Record<string, Info>>
+  /** toPublicInfo of each catalog entry. */
+  readonly database: Readonly<Record<string, Info>>
+}
+
+// The conversion depends only on the models.dev snapshot, not on the directory. ModelsDev replaces the
+// snapshot object on refresh instead of mutating it, so its identity versions this cache. Callers must
+// treat the result as read-only and copy anything they mutate.
+const modelsDevCatalogs = new WeakMap<Record<string, ModelsDev.Provider>, ModelsDevCatalog>()
+
+export function fromModelsDev(modelsDev: Record<string, ModelsDev.Provider>): ModelsDevCatalog {
+  const cached = modelsDevCatalogs.get(modelsDev)
+  if (cached) return cached
+  const catalog = mapValues(modelsDev, fromModelsDevProvider)
+  const result = { catalog, database: mapValues(catalog, toPublicInfo) }
+  modelsDevCatalogs.set(modelsDev, result)
+  return result
+}
+
 function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
   if (!body) return model.options
   const options = Object.fromEntries(
@@ -1371,8 +1392,11 @@ const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
-        const catalog = mapValues(modelsDev, fromModelsDevProvider)
-        const database = mapValues(catalog, toPublicInfo)
+        const shared = fromModelsDev(modelsDev)
+        const catalog = shared.catalog as Record<string, Info>
+        // This state mutates its database (plugin models, config, env and auth merges), so it needs its own
+        // copy. The entries are plain JSON values, so structuredClone matches toPublicInfo's JSON round trip.
+        const database = structuredClone(shared.database) as Record<string, Info>
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()

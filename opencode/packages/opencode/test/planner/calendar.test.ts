@@ -87,6 +87,54 @@ describe("PlannerCalendar", () => {
     })
   })
 
+  test("keeps the Google account of provider items and rejects it on local items", () => {
+    const task = {
+      id: "google-task:account-1:list-1:task-1",
+      title: "Review draft",
+      accountId: "account-1",
+      providerId: "task-1",
+      taskListId: "list-1",
+      taskListTitle: "Work",
+      createdAt: "2026-08-25T00:00:00.000Z",
+      updatedAt: "2026-08-25T01:00:00.000Z",
+      source: "google" as const,
+      syncState: "synced" as const,
+    }
+    const event = {
+      id: "google:account-2:primary:event-1",
+      title: "Planning",
+      date: "2026-08-25",
+      accountId: "account-2",
+      providerId: "event-1",
+      calendarId: "primary",
+      allDay: true,
+      participantCount: 0,
+      source: "google" as const,
+      syncState: "synced" as const,
+    }
+    const saved = PlannerCalendar.decode(PlannerCalendar.encode([event], [task]).source)
+
+    expect(saved.tasks[0].accountId).toBe("account-1")
+    expect(saved.events[0].accountId).toBe("account-2")
+    expect(() =>
+      PlannerCalendar.encode(
+        [],
+        [
+          {
+            ...task,
+            id: "task-local",
+            source: "local",
+            syncState: "local",
+            providerId: undefined,
+            taskListId: undefined,
+            taskListTitle: undefined,
+          },
+        ],
+      ),
+    ).toThrow()
+    expect(() => PlannerCalendar.encode([{ ...event, accountId: "" }], [])).toThrow()
+  })
+
   test("rejects event end dates before their start date", () => {
     expect(() =>
       PlannerCalendar.encode([

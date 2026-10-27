@@ -116,7 +116,7 @@ state alive across route changes; it replaced the tab store.
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in `$XDG_DATA_HOME/tenon-workbench`            |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
 | Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
-| Google connections         | `packages/desktop/src/main/google-calendar.ts`; encrypted credentials in the desktop profile                          |
+| Google connections         | `packages/desktop/src/main/google-calendar.ts`; an account list with encrypted credentials in the desktop profile; see [Google accounts](#google-accounts) |
 
 Package paths in this table are relative to `opencode/`. Workspace files are
 the source of truth for notes, project records, and local planning. Do not
@@ -133,6 +133,14 @@ Project's directory: that folder; otherwise the worktree of the OpenCode project
 named by a legacy `location.workspaceId`; otherwise the card folder. Sessions
 keep their exact `directory`, so `GET /api/session?directory=<threadDirectory>`
 returns only that Project's threads.
+
+Creating a Project with no linked folder (`POST /second-brain/projects`, the
+app's New Project form) also creates a visible `projects/<name>` folder and sets
+`location.path` to it, so the Project's threads run there and a later scan finds
+the folder already claimed. `BrainProject.folderName` turns the name into one
+safe path segment. A name whose folder another Project uses gets a ` (2)`
+suffix, and an existing unclaimed folder of that name is adopted. Projects
+created before this change keep their card folder as their thread directory.
 
 Entry points (legacy instance routes, scoped to the workspace directory through
 workspace routing):
@@ -168,6 +176,39 @@ Project's file replaces the workspace default instead of stacking. Outside a
 workspace both loaders keep their usual upward lookup. External harnesses
 (Codex, ACP agents) also read `AGENTS.md` from their working folder themselves;
 that lookup is theirs and may still stack inside a git repository.
+
+### Google accounts
+
+The desktop main process keeps every connected Google account in the
+`second-brain.google` electron-store under `accounts`: an ID, the address read
+from the account's primary calendar, a label, the OAuth client, access level,
+last sync time, and the client secret and refresh token encrypted with
+`safeStorage`. The calendar and task outboxes are shared lists whose entries
+carry their `accountId`. A store from before multiple accounts is migrated on
+first read (`migrateLegacyGoogleStore` in `google-calendar-domain.ts`): the
+flat keys become the first account and untagged outbox entries are tagged
+with it. Signing in with an address that is already connected renews that
+account instead of adding a second one. Access tokens are cached per account
+(`createGoogleAccessTokens`), so accounts that share the built-in client never
+share a token, and a 401 clears only that account's token.
+
+`sync` syncs the accounts one at a time and returns the items it fetched with
+their `accountId`, plus `syncedAccounts`. An account that fails keeps its error
+in memory for `status` and its items on the page; the call fails only when
+every account fails. `write` and `writeTask` route by the item's `accountId`
+and need that account's write access. `disconnect({ accountId })` revokes and
+removes one account and its queued writes; with no ID it removes all of them.
+`GoogleCalendarConnection` keeps its aggregate fields for existing callers and
+adds `accounts`.
+
+The Calendar page builds local IDs as
+`google:<accountId>:<calendarId>:<providerId>` and
+`google-task:<accountId>:<taskListId>:<providerId>`, and the workspace
+calendar file stores `accountId` on Google items
+(`packages/opencode/src/planner/calendar.ts`). Items saved before this change
+carry no account; the page treats them as the first account's (the migrated
+one) until the next sync replaces them. The design options are recorded in
+[ADR-012](../adr/ADR-012-google-multi-account.md).
 
 ## Home navigation
 
@@ -234,7 +275,7 @@ except that neither the registry nor config files can replace a built-in. The
 registry is re-read on each list and stream call, so new entries appear
 without a restart.
 
-`configuredInstances()` in `harness.ts` defines three built-in instances. The
+`configuredInstances()` in `harness.ts` defines four built-in instances. The
 reserved IDs are listed in `packages/core/src/harness/registry.ts`.
 
 | ID             | Driver     | Shown as     | Runs                                                                 |
@@ -242,6 +283,7 @@ reserved IDs are listed in `packages/core/src/harness/registry.ts`.
 | `opencode`     | `opencode` | Tenon Workbench | Tenon Workbench's own in-process LLM loop                               |
 | `codex`        | `codex`    | Codex        | `codex app-server`                                                   |
 | `opencode-acp` | `acp`      | OpenCode     | Upstream OpenCode from `PATH` as `opencode acp`, via the ACP driver |
+| `claude-code`  | `acp`      | Claude Code  | Anthropic's `claude-agent-acp` adapter from `PATH`, via the ACP driver |
 
 The `opencode` ID is kept for the Tenon Workbench loop so stored sessions keep
 routing to it. `Harness.OpenCodeAcp` in `packages/schema/src/harness.ts` names
@@ -251,10 +293,22 @@ otherwise. The upstream child gets only the harness environment allowlist from
 `core/src/harness/env.ts`, so no `OPENCODE_*` variables or app provider keys
 reach it. It uses its own credentials from `opencode auth login`.
 
+`Harness.ClaudeCode` names the Claude Code instance. It runs
+`claude-agent-acp`, which users install with
+`npm install -g @agentclientprotocol/claude-agent-acp`; until then the picker
+shows it as unavailable ("Could not start claude-agent-acp."). The adapter
+wraps the Claude Agent SDK, so it signs in with the user's own Claude Code
+login under `~/.claude`. `ANTHROPIC_API_KEY` is not in the harness allowlist
+and built-ins take no `env`, so API-key users add a config-file harness under
+another ID with the key in its `env`. Its models
+(`default`, `sonnet`, `opus`, `haiku`, …) come from the adapter's
+`session/new` response, its skills from `~/.claude/skills`, and Settings >
+Harnesses offers npm updates for it like any npm-installed harness CLI.
+
 Both harness pickers (Home in `pages/brain-home.tsx` and the session composer in
 `components/prompt-input/harness-controls.tsx`) list the built-in loop, named
 "Default agent", first, then every other instance under one "External agents" group: Codex,
-OpenCode, and any `harnesses.json` or config-file agents. The group always ends
+OpenCode, Claude Code, and any `harnesses.json` or config-file agents. The group always ends
 with "Add harness", which opens Settings > Harnesses to register a new ACP agent.
 
 Tenon Workbench's core `Global` paths use the app name `tenon-workbench`
@@ -316,6 +370,10 @@ The driver switches models with `session/set_model` or
 efforts; before each prompt the driver sends the chosen effort, or the agent's
 `default` level when none is chosen, with `session/set_config_option`, and
 re-reads the levels from each response because a model switch can change them.
+Older OpenCode (before `thought_level`) lists each level as its own model,
+`<base>/<level>` named "<base name> (<level>)". The driver folds those into
+the base model's reasoning efforts and sends a chosen level by switching to the
+matching `<base>/<level>` model.
 
 `AcpHarness.parseAcpNotification` turns `session/update` notifications into
 stream events. A tool call is published at `in_progress` (or when it finishes),
@@ -386,9 +444,24 @@ handoff. Codex and ACP keep their own native thread or session, so
   only, not a new request, and carries no instructions. The new user message
   follows after a `---` separator.
 - The first prompt of each runtime (any handoff other than none) starts
-  with the chat display guidance inside `<tenon-display>`
-  (`renderHarnessPrompt`), because harness agents don't receive Tenon's
-  system context. See [Chat diagram windows](#chat-diagram-windows).
+  with one `<tenon-context trust="data">` block (`renderHarnessPrompt`,
+  built by `core/src/tenon-context.ts`). ACP agents get no system context;
+  Codex gets it as `developerInstructions` (`renderCodexInstructions`) with
+  the `core/chat-display` entry cut out, so the block is its only abilities
+  text. It holds the workspace root, the Project folder
+  (a linked folder or `projects/<name>`, named by its folder) and the thread
+  folder; the `Instructions from:` sections of the request's system context
+  (the AGENTS.md files in effect, most specific first, 4,000 estimated
+  tokens, read from the latest instructions update when there is one), each
+  in its own `<agents-md path="…">` element with the truncated or omitted
+  marker last inside it; and the chat abilities. The abilities name
+  `ask_user` only when the `tenon` MCP server is attached (`abilities("harness")`;
+  an ACP agent without `mcpCapabilities.http` gets `abilities("reply")`,
+  which says to ask in the reply). OpenCode's own agent prompt, skill and
+  reference guidance, environment and date are not forwarded in the block.
+  `<tenon-context`, `<agents-md` and their closing tags (any case) in the
+  content get a backslash after `<` before clipping. Later turns send only
+  the user message. See [Chat diagram windows](#chat-diagram-windows).
 
 `metadata.harnessRevision` still increases on every switch to a different
 instance. It keys the in-memory runtimes, so a harness that is switched back
@@ -412,6 +485,85 @@ Built-ins and config-file entries are read-only. After each change the runtime
 refreshes its cached instance list, so the next turn and the picker see it.
 Agents have no tool for registering harnesses.
 
+### Cross-harness delegation
+
+An agent in one harness can hand a task to an agent in another, for example
+Claude Code asking Codex to do computer use with a GPT model. This is separate
+from subagents, which a harness runs inside itself. The decision and the
+options considered are in [ADR-011](../adr/ADR-011-cross-harness-delegation.md).
+
+![Sequence: the harness runtime gets a scoped token, the calling agent calls delegate_task over the loopback MCP endpoint, the server creates a child Run on the target harness and returns its final reply](../diagrams/sequence-delegation.svg)
+
+- `core/src/harness/delegation.ts` serves a Streamable HTTP MCP server on
+  `127.0.0.1` (port chosen by the OS, started with the first harness runtime
+  that asks for it). Each Codex or ACP runtime gets its own bearer token,
+  bound to the Run that owns the runtime and revoked when the runtime closes.
+  Requests with an `Origin` header are refused.
+- ACP agents receive the server in `session/new` and `session/load` as
+  `{ type: "http", name: "tenon", url, headers }`, but only when they advertise
+  `mcpCapabilities.http` (Claude Code's `claude-agent-acp` adapter does).
+  Codex receives `-c mcp_servers.tenon.url=…`,
+  `bearer_token_env_var="TENON_DELEGATION_TOKEN"` and `tool_timeout_sec=660`
+  ahead of `app-server`, and the token in that environment variable.
+- The built-in loop gets the same four tools natively (`core/src/tool/delegate.ts`).
+  Starting or stopping a task there asks permission `delegate`.
+- `core/src/harness/delegation-tasks.ts` is mounted by the server next to its
+  routes (`opencode/src/server/routes/instance/httpapi/server.ts`). It runs
+  each task as a child Run: `SessionV2.create({ parentID, harnessInstanceID,
+  harnessModel, location })` in the caller's location, then `prompt` with the
+  task text and `resume`. The task ID is the child's session ID, and the
+  result is the child's last assistant reply (capped at 100,000 characters).
+
+Tools: `list_agents` (harness instances with models and reasoning efforts,
+the caller's own marked `current`), `delegate_task` (`agent`, `task`, optional
+`model`, `reasoning_effort`, `title`, `wait_seconds` up to 600, default 300),
+`task_result` and `cancel_task`. A task still running when `delegate_task`
+returns is collected with `task_result`. A delegated agent may delegate once
+more (depth 2); a Run may have four tasks running at once; only the Run that
+started a task can read or stop it. Child Runs nest under the caller in the
+sidebar, and their approvals reach the caller's composer through the existing
+session request tree.
+
+### Questions from harnesses
+
+The same endpoint serves `ask_user`, so Codex and ACP agents can ask the user
+through the question dock that native agents reach with the `question` tool.
+Each Codex and ACP runtime now gets the `tenon` server whenever it has a
+question service or a delegation handler, which in practice is always. With
+delegation off, `tools/list` shows only `ask_user` and the delegation tools
+answer that delegation is turned off.
+
+- `ask_user` takes `{ questions: [{ question, header, options: [{ label,
+  description }], multiple? }] }`, checked against `QuestionV2.Prompt`.
+- `core/src/harness/ask-user.ts` keeps one open question per runtime. Each
+  Codex and ACP runtime in `core/src/harness.ts` makes its own asker and hands
+  its `ask` to `HarnessDelegation.endpoint`. The asker calls `QuestionV2.ask`
+  with its own ID, which publishes `question.v2.asked`; the dock
+  (`app/src/pages/session/composer/session-question-dock.tsx`) replaces the
+  composer until the user answers or dismisses it, or the question is withdrawn.
+- A call waits up to 240 s (below Node fetch's 300 s header timeout). If the
+  user hasn't answered, it returns a "still open" text; calling again with the
+  same questions in the same turn keeps waiting without asking twice, and an
+  answer given in between is returned at once. A call with different questions
+  withdraws the old one (`QuestionV2.reject(id)`), and so does closing the
+  runtime.
+- When the harness turn ends, whether it finishes, fails or the user stops it,
+  the turn stream's finalizer (`acpStream`, `codexStream`) runs the asker's
+  `endTurn`. It withdraws a question still open, which also answers a call
+  still waiting as declined, and forgets an answer the agent never collected,
+  so a later turn asking the same questions asks afresh. The composer is
+  therefore not left behind a dock nobody waits on.
+- Closing the MCP HTTP request mid-wait does not withdraw the question: a
+  client timeout closes it too, and the "call again" flow depends on the
+  question surviving between calls. The turn end bounds its lifetime instead.
+- The result text matches the native tool's (`QuestionTool.toModelOutput`).
+  A dismissal tells the agent to continue with its best judgement or ask in
+  chat.
+- The dock shows "<harness> is asking" for the built-in harnesses, picks an
+  option with 1–9 and dismisses with Esc. In a single-choice question Enter
+  takes the focused option and moves on or submits. In a multi-select question
+  Enter toggles the focused option, and Next/Submit or Ctrl/Cmd+Enter moves on.
+
 ### Harness model lists
 
 The picker shows the models each harness reports, not a list saved when the
@@ -424,10 +576,16 @@ in-memory caches per instance configuration:
   checked. The list is dropped when the server stops, so every app launch
   reads it again.
 
-On the first check for an ACP harness, `AcpHarness.probe` runs the handshake
-and `session/new` and reads the agent's models. Later checks run only the
-handshake, until the list is 10 minutes old. If `session/new` fails (for example before sign-in), the probe falls
-back to the handshake. Codex checks call `model/list` each time, with a
+An ACP check (`AcpHarness.probe`) runs only the handshake, so a list answers
+in about a second. When no model list is known, or it is 10 minutes old, the
+check also starts `AcpHarness.discover` in the background (`session/new` plus
+one model switch each, about 10 seconds for Claude Code, 45-second timeout).
+When it finishes, it stores the models and drops the cached check, so the next
+list carries them; if it fails (for example before sign-in), the next check
+after the cache expires tries again. Concurrent lists of one harness share a
+single in-flight check. While the selected harness is available but has no
+models yet, the composer and Brain Home ask again every 3 seconds, up to 10
+times. Codex checks call `model/list` each time, with a
 15-second timeout for a cold start. A failed check keeps the last model list.
 Each ACP session that opens for a Run also updates the list. Saved model IDs in
 `harnesses.json` are used only when an agent reports none, and Settings no
@@ -437,7 +595,15 @@ longer saves them when adding a harness.
 all, then lists again. Settings → Harnesses → Refresh models calls it. The
 composer has no refresh button: its harness list revalidates in the background
 when the window regains focus or the harness picker opens, at most once a
-minute, and keeps showing the last list until the answer arrives. Settings → Harnesses shows a harness list beside
+minute, and keeps showing the last list until the answer arrives. The renderer
+also remembers the last good list per server and folder
+(`listHarnessesRemembered` in `app/src/utils/server.ts`). A composer that opens
+shows it at once and checks in the background, and Brain Home uses it as
+placeholder data after its query is collected. A failed check shows the fallback
+list but never replaces the remembered one. The composer never suspends on the
+list, so opening a thread or a new thread doesn't wait for every harness CLI to
+answer. Brain Home lets you send with the Default agent before the list has
+loaded. Settings → Harnesses shows a harness list beside
 the selected harness's details. Models are grouped by their provider prefix
 (the part of the ID before `/`, such as `openrouter` in OpenCode's
 `openrouter/anthropic/...`), with one switch per provider and one per model.
@@ -468,7 +634,8 @@ resolving its command on `PATH` to a real path:
 Other installs, such as a standalone binary or a curl-script copy, show their
 version only and are updated outside the app. The latest version comes from
 the npm registry configured in the user's `.npmrc` (`/<pkg>/latest`) or from
-`brew info --json=v2`. Results are cached for six hours per executable.
+`brew info --json=v2`. Results are cached for six hours per executable, or
+ten minutes when the latest version couldn't be read.
 
 `GET /api/harness/updates` lists installed and latest versions for enabled
 Codex and ACP harnesses. The renderer's `HarnessUpdateNotifier` (mounted in the
@@ -497,6 +664,75 @@ Brain system prompt, the task instructions travel in the first user message.
    short prompt in the proposed agent, refusing tool permissions.
 3. A failed test is sent back to the chat, up to three times automatically.
 4. A passed test enables Save. The assistant can't save anything itself.
+
+### Built-in harness setup
+
+New users can install and sign in to the built-in external harnesses (Codex,
+Claude Code and OpenCode) without a terminal. The options considered are in
+[ADR-013](../adr/ADR-013-built-in-harness-setup.md).
+
+`core/src/harness/setup.ts` defines one recipe per built-in: npm package
+(`@openai/codex`, `@agentclientprotocol/claude-agent-acp`, `opencode-ai`),
+command, sign-in kind, login command and key options. `HarnessRuntime` serves
+it through these routes:
+
+- `GET /api/harness/setup` reports, per harness:
+  - whether the command resolves on `PATH`;
+  - its version and availability;
+  - the sign-in state, read from the CLI's own files: Codex `account/read`,
+    `oauthAccount` in `~/.claude.json`, or a non-empty OpenCode `auth.json`;
+  - which key option is stored.
+- `POST /api/harness/setup/:id/install` runs
+  `npm install --global <package>@latest` (10-minute timeout), then restarts
+  that harness's runtimes and clears its probe cache.
+- `POST /api/harness/setup/:id/sign-in` works for Codex only.
+  - It starts `codex app-server`, sends `account/login/start` with
+    `type: "chatgpt"`, and returns the browser link.
+  - The app-server hosts the login callback, so it stays open until
+    `account/login/completed` or 10 minutes have passed. Only one login runs
+    at a time.
+- `PUT`/`DELETE /api/harness/setup/:id/api-key` set or remove a key.
+  - **Codex:** the key goes to the app-server (`account/login/start` with
+    `type: "apiKey"`, or `account/logout`), and Codex stores it in its own
+    home.
+  - **Claude Code and OpenCode:** the key is written to
+    `harness-credentials.json` (`0600`) in the data folder, and
+    `withSetupKeys` in `harness.ts` adds it to that built-in's environment as
+    `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY`.
+  - Each change bumps a process-wide revision, because runtimes are built per
+    Location. Before its next turn, each Location reloads its instances and
+    closes the open processes of any harness whose config changed.
+
+The renderer's `DialogHarnessSetup`
+(`app/src/components/settings-v2/harness-setup.tsx`) reuses two existing
+patterns.
+
+- **List:** the rows of Settings → Providers, grouped under **Ready** and
+  **Set up**. Each row has the harness's provider icon and one action:
+  **Install**, **Connect**, or **Manage**.
+- **Connect:** a drill-in view laid out like the provider Connect dialog. It
+  has a back arrow, a "Connect {name}" title, and method chips for
+  "Sign in with …" or **Use an API key**, then a labelled key field and
+  **Continue**.
+
+Sign-in works per harness:
+
+- Codex sign-in opens the returned link in the browser.
+- Claude Code and OpenCode sign-in starts an embedded terminal that runs their
+  login command (`claude-agent-acp --cli auth login --claudeai`,
+  `opencode auth login`). On servers that still serve the legacy PTY routes,
+  the terminal is created through them, because the `Terminal` component
+  connects through them. `Pty.create` (`core/src/pty.ts`) resolves every
+  terminal command on `PATH` first and runs Windows `.cmd`/`.bat` shims (how
+  npm installs these CLIs) through `cmd.exe /d /c`. A command that isn't found
+  fails the request with `InvalidRequestError` instead of reaching `node-pty`,
+  which would report it from a worker thread and stop the server.
+- The dialog re-checks every 5 seconds while it is open.
+
+Home opens the dialog once on first run (`settings.harnesses.setupPrompted`),
+unless every built-in is already installed and signed in. It runs in the
+harness-assistant folder, so a user with no workspace can use it. Settings →
+Harnesses opens it from "Set up built-in agents".
 
 ### Harness skills
 
@@ -562,12 +798,77 @@ The iframe document defines `--tenon-fg`, `--tenon-muted`, `--tenon-accent`,
 app's font and `color-scheme`, so diagrams read in light and dark themes. A
 theme change applies to windows mounted after it.
 
-Agents learn about this from one fixed text, `ChatDisplay.svgGuidance` in
-`core/src/chat-display.ts`. It goes into the `core/chat-display` system
-context entry (v2 runner), the legacy `SystemPrompt.environment`, and the
-first prompt of each Codex or ACP runtime (see
-[Harness handoff](#harness-handoff)). Sanitizing and sandbox limits are in
-the [threat model](../security/threat-model.md#agent-authored-svg-in-chat).
+Agents learn about this, the design blocks and file references below, and
+how to ask the user from fixed text in `core/src/chat-display.ts`:
+`ChatDisplay.abilities("native")` (names the `question` tool) goes into the
+`core/chat-display` system context entry (v2 runner) and the legacy
+`SystemPrompt.environment`, and is cut out of Codex's instructions;
+`abilities("harness")` (names `ask_user` on the `tenon` MCP server), or
+`abilities("reply")` when that server isn't attached, goes into the first
+prompt of each Codex or ACP runtime (see [Harness handoff](#harness-handoff)). Sanitizing and sandbox limits are
+in the [threat model](../security/threat-model.md#agent-authored-svg-in-chat).
+
+### Design windows and the Canvas tab
+
+A fenced block tagged `html` is a design. `session-ui/src/components/design-fence.ts`
+parses the info string (`html`, `html title="X"`, `html canvas title="X"`),
+builds the frame document and collects a thread's designs;
+`html-window.ts` mounts them from `Markdown` next to the SVG windows, using
+the block's markdown source because only it keeps the info string. Only
+assistant text parts opt in (the `designs` prop, set by `TextPartDisplay` in
+`message-part.tsx`); tool output, user text, reasoning, subagent tabs and the
+note preview keep `html` blocks as highlighted code.
+
+- A plain `html` block becomes an inline window: title, an "html · sandboxed"
+  label, Source/Preview, the page in a sandboxed frame sized from a height
+  message, and "Use this one" and "Open in Canvas".
+- Every finished window and card has a Source toggle, also a card without
+  "Open in Canvas" and a design over the size cap, so the code stays reachable.
+- An `html canvas` block becomes a compact card in the thread and an artboard
+  in the right panel's Canvas tab (`app/src/pages/session/canvas-tab.tsx`,
+  tab ID `canvas` in `helpers.ts`). The tab lists the thread's closed canvas
+  blocks from assistant text, in message order, plus inline designs sent there
+  with "Open in Canvas", as scaled previews; clicking one shows it large.
+  `createDesignList` in `design-canvas.tsx` keeps one object per design ID and
+  the large view is keyed on the ID, so a streamed token never rebuilds an
+  unchanged artboard's frame.
+- While a fence is open the thread shows a placeholder, and the frame is built
+  once, when the fence closes. When a canvas block finishes streaming in the
+  current view, the panel opens on the Canvas tab once per design; loading
+  history never opens it.
+- "Use this one" appends `Use design "<title>"` to the composer prompt
+  (`appendPromptText` in `app/src/utils/prompt.ts`).
+- `session-ui/src/context/design.tsx` (`DesignSpaceProvider`) carries the
+  `use`, `open` and `reveal` callbacks from the app
+  (`app/src/pages/session/design-canvas.tsx`, mounted in `SessionProviders`).
+  Without a provider, or outside a saved desktop session, windows have no
+  action buttons. Canvas state is in memory per session.
+
+### File references in chat
+
+Inline code that names a file relative to the thread folder, optionally with
+`:N`, `:N-M`, `:N:col`, `#LN` or `#LN-LM`, becomes a link chip in assistant
+text (`session-ui/src/components/markdown-file-reference.ts`, marked and
+wired by `markdown-file-reference-peek.tsx`). The classifier must call it a
+path and its last segment must have a known extension or file name. Paths
+with `..`, `~`, control characters, a Windows drive-relative path (`D:x.ts`),
+or an absolute path outside the thread folder stay plain code; absolute paths
+inside it become relative.
+
+- Hover or focus shows a peek with up to 12 lines, read through the Files
+  tab's own APIs (cached `file.get`, else `file.read`; existence checked with
+  `file.list` on the parent, because `/file/content` returns empty text for a
+  missing file).
+- Click or "Open in Files" opens the right panel, expands the ancestor
+  folders, opens the file as a preview tab, sets the selected lines (steady
+  tint) and scrolls the start line into view with a short flash
+  (`file-tabs.tsx`, `data-file-reference` in the file viewer).
+- A bare file name is tried at the thread folder, then through
+  `file.searchFiles`; it is used only when exactly one file matches.
+- The app supplies `FileReferenceProvider` (`session-ui/src/context/file-reference.tsx`)
+  from `app/src/pages/session/file-reference.tsx`, and turns it off below
+  768 px, where there is no right panel. The handler checks the path again
+  before any read.
 
 ## Session compatibility and review
 
@@ -623,6 +924,28 @@ unions `GET /api/session/:sessionID/diff` across the selected turn and every
 later turn, and asks for confirmation with that file list before staging.
 Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
 files, so the compatibility layer rejects `files: false` for them.
+
+### Composer context strip
+
+`ComposerContextStrip` (`app/src/components/prompt-input/context-strip.tsx`)
+sits on the top edge of a thread's composer through `PromptInputV2`'s
+`header` prop. It replaces the composer's own context ring. One button shows:
+
+- the Project, from the sidebar's project-threads query and its
+  `projectForDirectory` matching (General inside the workspace, else the
+  workspace or folder name), with a status dot;
+- the git branch (`sync().data.vcs.branch`);
+- the harness and, for the built-in loop, the agent;
+- the changed-file count: the Review panel's count while it is open, else the
+  length of the git status list (`vcs.status`), which loads without patches;
+- the context ring and percent from `getSessionContext`.
+
+Hover (400 ms) or click opens a popover with tokens used of the limit, the
+last response's token breakdown and session cost, the Project's status,
+progress, next milestone and blocker, and the instructions file in effect
+(read with `GET /second-brain/instructions` while the popover is open). Items
+without data are hidden; as the composer narrows, files, then branch, then
+harness are hidden. There is no strip in drafts.
 
 ### Composer delivery, background send and stash
 
@@ -743,16 +1066,32 @@ harness list for the name.
 
 After the first step of a run, the core runner
 (`core/src/session/runner/llm.ts`, `generateTitle`) titles a top-level session
-that still has its default title and exactly one user message. This covers
-harness sessions too. It runs in the background, with a 30-second timeout, and
-never delays the turn. It uses the hidden `title` agent's prompt through the
-host LLM client. The model is the title agent's model, else the small model
-of the session's provider, else the session's model (in-process sessions only),
-else the catalog default. The reply is cleaned by `SessionTitle.clean`
-(`core/src/session/title.ts`). The rename is published as
-`SessionV1.Event.Updated` after re-reading the row, so a rename made meanwhile
-wins. If no model resolves or the call fails, the session keeps its default
-title and the sidebar shows "New session".
+that still has its default title and exactly one user message. It runs in the
+background and never delays the turn. The prompt is the hidden `title` agent's.
+
+The title agent is the harness chosen under Settings → Harnesses → Thread
+titles, else the thread's own harness. The choice is stored as `titleAgent` in
+`harness-preferences.json` beside `harnesses.json` in the global config folder
+(`HarnessRegistry.titleAgent`), through `GET`/`PUT /api/harness/title-agent`. A
+choice naming a harness the runtime no longer knows is ignored.
+
+- **Default agent (in-process loop):** the host LLM client, with a 30-second
+  timeout. The model is the title agent's model, else the small model of the
+  provider behind a base model, else that base model. The base model is the
+  session's model for in-process sessions, otherwise the catalog default. The
+  catalog default and the runner's fallback skip models their provider has
+  marked deprecated.
+- **External harness:** `HarnessRuntime.complete` runs one prompt in a fresh
+  native session that belongs to no thread, with a 90-second timeout because it
+  starts a new process. Codex uses an ephemeral, read-only thread with approvals
+  off. ACP agents get a new session whose tool requests are all refused. The
+  thread's own harness uses the thread's model; a harness chosen in settings
+  uses its own default model.
+
+The reply is cleaned by `SessionTitle.clean` (`core/src/session/title.ts`). The
+rename is published as `SessionV1.Event.Updated` after re-reading the row, so a
+rename made meanwhile wins. If the call fails or times out, the failure is
+logged and the session keeps its default title ("New session" in the sidebar).
 
 Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the

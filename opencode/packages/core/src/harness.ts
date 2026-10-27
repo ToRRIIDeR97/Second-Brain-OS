@@ -8,12 +8,12 @@ import {
   TransportReason,
   type ContentPart,
   type LLMRequest,
-  type Message,
+  Message,
 } from "@opencode-ai/llm"
 import { Harness } from "@opencode-ai/schema/harness"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { SessionID } from "@opencode-ai/schema/session-id"
-import { Context, DateTime, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Context, DateTime, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { eq } from "drizzle-orm"
 import os from "os"
@@ -33,15 +33,20 @@ import {
   type Client as CodexClient,
   type ServerRequest,
 } from "./harness/codex-app-server"
+import { HarnessAskUser } from "./harness/ask-user"
+import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
+import { HarnessSetup } from "./harness/setup"
 import { HarnessUpdate } from "./harness/update"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
-import { ChatDisplay } from "./chat-display"
+import { FSUtil } from "./fs-util"
 import { PermissionV2 } from "./permission"
 import { AppProcess } from "./process"
 import { QuestionV2 } from "./question"
 import { SessionTable } from "./session/sql"
+import { TenonContext } from "./tenon-context"
+import { ChatDisplay } from "./chat-display"
 import { Token } from "./util/token"
 
 export { Harness }
@@ -51,6 +56,14 @@ export interface Driver {
   readonly kind: Harness.DriverKind
   readonly snapshot: Effect.Effect<Harness.Instance>
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, LLMError>
+  /** One prompt in a fresh, throwaway native session; undefined for the in-process loop. */
+  readonly complete?: (input: CompleteInput) => Effect.Effect<string, LLMError>
+}
+
+export interface CompleteInput {
+  readonly directory: string
+  readonly request: LLMRequest
+  readonly model?: Harness.ModelSelection
 }
 
 export interface StreamInput {
@@ -73,6 +86,16 @@ export interface Interface {
   readonly stream: (
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
   ) => Stream.Stream<LLMEvent, LLMError>
+  /**
+   * Runs one prompt in a fresh native session of the harness and returns the reply text. The session
+   * is not tied to any thread, tool requests are refused, and it closes when the reply ends.
+   */
+  readonly complete: (
+    input: CompleteInput & { readonly instanceID: Harness.InstanceID },
+  ) => Effect.Effect<string, LLMError>
+  /** The harness that titles new threads, when one is set in settings; otherwise each thread's own. */
+  readonly titleAgent: () => Effect.Effect<Harness.InstanceID | undefined>
+  readonly setTitleAgent: (id: Harness.InstanceID | undefined) => Effect.Effect<void, HarnessRegistry.RegisterError>
   readonly settings: () => Effect.Effect<ReadonlyArray<Harness.SettingsEntry>>
   /** Slash commands an ACP harness last reported in this app process, if any. */
   readonly reportedCommands: (id: Harness.InstanceID) => ReadonlyArray<AcpHarness.AcpCommand> | undefined
@@ -86,6 +109,17 @@ export interface Interface {
   readonly verify: (input: unknown) => Effect.Effect<Harness.Verification, HarnessRegistry.RegisterError>
   /** A non-project folder for setup-assistant sessions, so they stay out of project lists. */
   readonly assistantDirectory: () => Effect.Effect<string>
+  /** Install and sign-in state of the built-in external harnesses. */
+  readonly setup: () => Effect.Effect<ReadonlyArray<Harness.SetupStatus>>
+  /** Installs a built-in harness CLI from its fixed npm package. */
+  readonly install: (id: string) => Effect.Effect<Harness.SetupStatus, HarnessSetup.SetupError>
+  /** Starts a browser sign-in (Codex) and returns the link to open. */
+  readonly signIn: (id: string) => Effect.Effect<Harness.SignIn, HarnessSetup.SetupError>
+  /** Saves (or with `undefined` removes) the API key a built-in harness uses. */
+  readonly setApiKey: (
+    id: string,
+    input: Harness.ApiKeyInput | undefined,
+  ) => Effect.Effect<Harness.SetupStatus, HarnessSetup.SetupError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/HarnessRuntime") {}
@@ -102,12 +136,22 @@ interface CodexRuntime {
   readonly client: CodexClient
   readonly scope: Scope.Closeable
   readonly threadID: string
+  readonly workspace?: TenonContext.Workspace
+  /** The `tenon` MCP server, and with it `ask_user`, is attached to this thread. */
+  readonly askUser: boolean
+  /** Withdraws an `ask_user` question left open when a turn ends. */
+  readonly endTurn?: Effect.Effect<void>
   handoff: Handoff
 }
 
 interface AcpRuntime {
   readonly session: AcpHarness.Session
   readonly scope: Scope.Closeable
+  readonly workspace?: TenonContext.Workspace
+  /** The agent accepted the `tenon` MCP server, and with it `ask_user`. */
+  readonly askUser: boolean
+  /** Withdraws an `ask_user` question left open when a turn ends. */
+  readonly endTurn: Effect.Effect<void>
   handoff: Handoff
 }
 
@@ -129,19 +173,39 @@ const layer = Layer.effect(
     const permissions = yield* PermissionV2.Service
     const questions = yield* QuestionV2.Service
     const global = yield* Global.Service
+    const fsUtil = yield* FSUtil.Service
     const entries = yield* config.entries()
-    // Registry entries can be added while the location is open, so instances are re-read per call.
-    let latest = configuredInstances(entries, yield* HarnessRegistry.read(global.config))
-    const instances = HarnessRegistry.read(global.config).pipe(
-      Effect.map((registry) => {
-        latest = configuredInstances(entries, registry)
-        return latest
-      }),
+    const layerScope = yield* Effect.scope
+    // Registry entries and setup API keys can change while the location is open, so instances are re-read per call.
+    const load = Effect.all([HarnessRegistry.read(global.config), HarnessSetup.readKeys(global.data)]).pipe(
+      Effect.map(([registry, keys]) => withSetupKeys(configuredInstances(entries, registry), keys)),
     )
+    let latest = yield* load
+    let loadedKeys = HarnessSetup.keysVersion()
+    // A harness whose config changed (for example a new API key) restarts its open processes.
+    const instances = Effect.suspend(() => {
+      const revision = HarnessSetup.keysVersion()
+      return load.pipe(
+        Effect.tap((current) => {
+          const previous = latest
+          latest = current
+          loadedKeys = revision
+          return Effect.forEach(
+            current.filter((instance) => {
+              const before = previous.find((item) => item.id === instance.id)
+              return before !== undefined && JSON.stringify(before.config) !== JSON.stringify(instance.config)
+            }),
+            (instance) => closeRuntimes(instance.id),
+            { discard: true },
+          )
+        }),
+      )
+    })
     const runtimes = new Map<string, CodexRuntime>()
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
     const probes = new Map<string, { readonly expires: number; readonly instance: Harness.Instance }>()
+    const inflight = new Map<string, Deferred.Deferred<Harness.Instance>>()
     // Models each harness reported. After catalogTTL a check asks for them again; a failed check
     // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
     const catalogs = new Map<string, { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }>()
@@ -160,10 +224,17 @@ const layer = Layer.effect(
       return Effect.suspend(() => {
         const cached = probes.get(key)
         if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
+        // Home, open threads, and Settings list at once on startup and focus; they share one check.
+        const running = inflight.get(key)
+        if (running) return Deferred.await(running)
+        const done = Deferred.makeUnsafe<Harness.Instance>()
+        inflight.set(key, done)
         const catalog = catalogs.get(key)
         const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
         return probe(catalog?.models, rediscover).pipe(
           Effect.map((result) => {
+            // Background discovery finished first: this result holds the older list, so nothing is cached.
+            if (catalogs.get(key) !== catalog) return result.instance
             // A failed rediscovery still counts as checked, so it isn't retried on every probe.
             if (result.discovered || rediscover)
               catalogs.set(key, { models: result.discovered ?? catalog!.models, checked: Date.now() })
@@ -171,8 +242,32 @@ const layer = Layer.effect(
             probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
             return result.instance
           }),
+          // An interrupted check (the caller went away) still releases everyone waiting on it.
+          Effect.onExit((exit) =>
+            Effect.sync(() => inflight.delete(key)).pipe(Effect.andThen(Deferred.done(done, exit))),
+          ),
         )
       })
+    }
+    // Listing an ACP agent's models opens a session and switches to each model once (about 10s for
+    // Claude Code), so it runs beside the listing; its result reaches the picker on the next list.
+    const discovering = new Set<string>()
+    const discoverAcpModels = (instance: InstanceConfig, settings: AcpHarness.Settings) => {
+      const key = instanceKey(instance)
+      if (discovering.has(key)) return Effect.void
+      discovering.add(key)
+      return AcpHarness.discover(process, settings, location.directory).pipe(
+        Effect.tap((agent) =>
+          Effect.sync(() => {
+            catalogs.set(key, { models: agent.models, checked: Date.now() })
+            probes.delete(key)
+          }),
+        ),
+        Effect.ignore,
+        Effect.ensuring(Effect.sync(() => discovering.delete(key))),
+        Effect.forkIn(layerScope),
+        Effect.asVoid,
+      )
     }
     // Ends the harness processes behind open threads; each reconnects on its next message.
     const closeRuntimes = (id: string) =>
@@ -255,6 +350,10 @@ const layer = Layer.effect(
         })
       })
 
+    // The workspace a runtime's handoff turn describes in its <tenon-context> block.
+    const workspaceOf = (directory: string) =>
+      TenonContext.workspace(directory, global.data).pipe(Effect.provideService(FSUtil.Service, fsUtil))
+
     const makeRuntime = Effect.fn("HarnessRuntime.makeCodexRuntime")(function* (
       instance: InstanceConfig,
       input: StreamInput,
@@ -263,8 +362,14 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const close = Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)
       const runtime = yield* Effect.gen(function* () {
-        const opened = yield* openCodex(process, settings, input.directory, (request) =>
-          handleCodexRequest(request, input.sessionID, input.directory, permissions, questions),
+        const asker = yield* HarnessAskUser.make(questions, input.sessionID)
+        const delegation = yield* HarnessDelegation.endpoint(input.sessionID, asker.ask)
+        const opened = yield* openCodex(
+          process,
+          settings,
+          input.directory,
+          (request) => handleCodexRequest(request, input.sessionID, input.directory, permissions, questions),
+          delegation,
         )
         const revision = input.revision ?? 0
         const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
@@ -317,6 +422,10 @@ const layer = Layer.effect(
           client: opened.client,
           scope: runtimeScope,
           threadID,
+          workspace: yield* workspaceOf(input.directory),
+          // Every endpoint here carries `ask_user`, because the runtime always has the question service.
+          askUser: delegation !== undefined,
+          endTurn: asker.endTurn,
           // A failed resume starts a fresh thread, which gets the bounded full history.
           handoff: thread.resumed && continuation ? continuation.handoff : "full",
         } satisfies CodexRuntime
@@ -359,10 +468,17 @@ const layer = Layer.effect(
       const runtimeScope = yield* Scope.make()
       const revision = input.revision ?? 0
       const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
+      const asker = yield* HarnessAskUser.make(questions, input.sessionID).pipe(
+        Effect.provideService(Scope.Scope, runtimeScope),
+      )
+      const delegation = yield* HarnessDelegation.endpoint(input.sessionID, asker.ask).pipe(
+        Effect.provideService(Scope.Scope, runtimeScope),
+      )
       const session = yield* AcpHarness.open(process, {
         settings,
         directory: input.directory,
         continuation: continuation?.nativeID,
+        mcpServers: delegation ? [HarnessDelegation.acpServer(delegation)] : [],
         onCommands: (reported) =>
           Effect.sync(() => {
             commands.set(instance.id, reported)
@@ -395,6 +511,9 @@ const layer = Layer.effect(
       return {
         session,
         scope: runtimeScope,
+        workspace: yield* workspaceOf(input.directory),
+        askUser: delegation !== undefined && session.mcpAttached,
+        endTurn: asker.endTurn,
         handoff: session.resumed && continuation ? continuation.handoff : "full",
       } satisfies AcpRuntime
     })
@@ -428,12 +547,14 @@ const layer = Layer.effect(
       Stream.unwrap(
         getAcpRuntime(instance, settings, input).pipe(
           Effect.map((runtime) => {
-            const text = renderHarnessPrompt(input.request, runtime.handoff)
+            const text = renderHarnessPrompt(input.request, runtime.handoff, runtime)
             runtime.handoff = "none"
             return onTurnSuccess(
               runtime.session
                 .turn({ text, model: input.model?.id, reasoningEffort: input.model?.reasoningEffort })
                 .pipe(
+                  // However the turn ends, a question it left open in the dock has nobody waiting.
+                  Stream.ensuring(runtime.endTurn),
                   Stream.catch((error) =>
                     Stream.unwrap(discardAcpRuntime(instance, input, runtime).pipe(Effect.as(Stream.fail(error)))),
                   ),
@@ -442,6 +563,43 @@ const layer = Layer.effect(
             )
           }),
           Effect.mapError((error) => llmError("AcpHarness", "stream", errorMessage(error))),
+        ),
+      )
+
+    // An ephemeral, read-only thread with approvals off: nothing is saved and tools can't change files.
+    const codexComplete = (settings: CodexSettings, input: CompleteInput) =>
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        return yield* Effect.gen(function* () {
+          const opened = yield* openCodex(process, settings, input.directory)
+          const thread = yield* opened.client.request(
+            "thread/start",
+            {
+              model: input.model?.id,
+              cwd: input.directory,
+              runtimeWorkspaceRoots: [input.directory],
+              approvalPolicy: "never",
+              sandbox: "read-only",
+              ephemeral: true,
+            },
+            THREAD_SETUP_TIMEOUT,
+          )
+          const threadID = responseThreadID(thread)
+          if (!threadID) return yield* Effect.fail(new ProtocolError("Codex did not return a thread ID."))
+          const runtime: CodexRuntime = { client: opened.client, scope, threadID, askUser: false, handoff: "none" }
+          const request = { ...input.request, system: [], messages: [Message.user(oneShotPrompt(input.request))] }
+          return yield* replyText(
+            codexStream(Effect.succeed(runtime), {
+              sessionID: SessionID.make("ses_title"),
+              directory: input.directory,
+              request,
+              model: input.model,
+            }),
+          )
+        }).pipe(Effect.provideService(Scope.Scope, scope), Effect.ensuring(Scope.close(scope, Exit.void)))
+      }).pipe(
+        Effect.mapError((error) =>
+          error instanceof LLMError ? error : llmError("CodexHarness", "complete", errorMessage(error)),
         ),
       )
 
@@ -496,6 +654,7 @@ const layer = Layer.effect(
                   (runtime) => markSeen(instance, input, runtime.threadID),
                 )
               : Stream.fail(llmError("CodexHarness", "stream", `${instance.name} is disabled.`)),
+          complete: (input) => codexComplete(settings, input),
         }
       }
       if (instance.driver === Harness.AcpDriver) {
@@ -512,13 +671,36 @@ const layer = Layer.effect(
           kind: instance.driver,
           snapshot: instance.enabled
             ? cachedProbe(instance, (known, rediscover) =>
-                AcpHarness.probe(process, instance, settings, location.directory, known, rediscover),
+                (known && !rediscover ? Effect.void : discoverAcpModels(instance, settings)).pipe(
+                  Effect.andThen(AcpHarness.probe(process, instance, settings, location.directory, known)),
+                ),
               )
             : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
           stream: (input) =>
             instance.enabled
               ? acpStream(instance, settings, input)
               : Stream.fail(llmError("AcpHarness", "stream", `${instance.name} is disabled.`)),
+          complete: (input) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                const session = yield* AcpHarness.open(process, {
+                  settings,
+                  directory: input.directory,
+                  approve: () => Effect.succeed(false),
+                })
+                return yield* replyText(
+                  session.turn({
+                    text: oneShotPrompt(input.request),
+                    model: input.model?.id,
+                    reasoningEffort: input.model?.reasoningEffort,
+                  }),
+                )
+              }),
+            ).pipe(
+              Effect.mapError((error) =>
+                error instanceof LLMError ? error : llmError("AcpHarness", "complete", errorMessage(error)),
+              ),
+            ),
         }
       }
       return {
@@ -541,8 +723,147 @@ const layer = Layer.effect(
         Effect.map((check) => Harness.UpdateStatus.make({ id: instance.id, name: instance.name, ...check })),
       )
 
+    const setupFailure = (reason: HarnessSetup.SetupError["reason"], message: string) =>
+      new HarnessSetup.SetupError({ reason, message })
+    const setupRecipe = (id: string): Effect.Effect<HarnessSetup.Recipe, HarnessSetup.SetupError> => {
+      const item = HarnessSetup.recipe(id)
+      return item ? Effect.succeed(item) : Effect.fail(setupFailure("not-found", `"${id}" has no setup.`))
+    }
+    const setupStatus = (
+      item: HarnessSetup.Recipe,
+      current: ReadonlyArray<Harness.Instance>,
+      keys: HarnessSetup.Keys,
+    ) =>
+      Effect.gen(function* () {
+        const instance = current.find((candidate) => candidate.id === item.id)
+        const stored = keys[item.id]
+        const resolved = yield* HarnessUpdate.resolve(item.command)
+        const auth =
+          item.id === Harness.Codex
+            ? instance?.authenticated
+              ? ("signed-in" as const)
+              : ("signed-out" as const)
+            : stored
+              ? ("api-key" as const)
+              : yield* HarnessSetup.signedIn(item)
+        return Harness.SetupStatus.make({
+          id: item.id,
+          name: instance?.name ?? item.id,
+          packageName: item.packageName,
+          installed: resolved !== undefined,
+          // A cached check can still hold the version of a CLI that was removed since.
+          version: resolved ? instance?.version : undefined,
+          available: instance?.status === "available",
+          error: instance?.status === "available" ? undefined : instance?.error,
+          signIn: item.signIn,
+          login: item.login ? [...item.login] : undefined,
+          auth,
+          apiKeys: item.apiKeys.map((option) => ({ id: option.id, label: option.label })),
+          apiKey: stored?.option,
+        })
+      })
+    const setup = () =>
+      Effect.all([list(), HarnessSetup.readKeys(global.data)]).pipe(
+        Effect.flatMap(([current, keys]) =>
+          Effect.forEach(HarnessSetup.recipes, (item) => setupStatus(item, current, keys), {
+            concurrency: "unbounded",
+          }),
+        ),
+      )
+    // A changed CLI or credential takes effect on the next probe and the next message of each open thread.
+    const setupChanged = (item: HarnessSetup.Recipe) =>
+      closeRuntimes(item.id).pipe(
+        Effect.andThen(Effect.sync(() => forget(item.id))),
+        Effect.andThen(setup()),
+        Effect.map((current) => current.find((status) => status.id === item.id)!),
+      )
+    // Codex keeps its own login: the app-server runs the browser flow and stores the result in CODEX_HOME.
+    const codexAccount = <A>(run: (client: CodexClient) => Effect.Effect<A, ProtocolError>, keep = false) =>
+      Effect.gen(function* () {
+        const instance = latest.find((candidate) => candidate.id === Harness.Codex)
+        if (!instance) return yield* Effect.fail(setupFailure("not-found", "Codex is not configured."))
+        const scope = yield* Scope.make()
+        const close = Scope.close(scope, Exit.void).pipe(Effect.ignore)
+        const result = yield* openCodex(process, decodeCodexSettings(instance.config), os.homedir()).pipe(
+          Effect.flatMap((opened) =>
+            run(opened.client).pipe(Effect.map((value) => ({ value, client: opened.client }))),
+          ),
+          Effect.provideService(Scope.Scope, scope),
+          Effect.mapError((error) => setupFailure("sign-in-failed", `Codex sign-in failed: ${errorMessage(error)}`)),
+          Effect.onExit((exit) => (keep && Exit.isSuccess(exit) ? Effect.void : close)),
+        )
+        return { ...result, close }
+      })
+    // Only one browser login at a time: Codex's callback listens on a fixed local port.
+    let pendingLogin: Effect.Effect<void> | undefined
+
     return Service.of({
       list,
+      setup,
+      install: (id) =>
+        setupRecipe(id).pipe(
+          Effect.tap((item) => HarnessSetup.install(process, item)),
+          Effect.flatMap(setupChanged),
+        ),
+      signIn: (id) =>
+        Effect.gen(function* () {
+          const item = yield* setupRecipe(id)
+          if (item.signIn !== "link")
+            return yield* Effect.fail(setupFailure("invalid-input", `${id} signs in from a terminal.`))
+          if (pendingLogin) yield* pendingLogin
+          const started = yield* codexAccount(
+            (client) => client.request("account/login/start", { type: "chatgpt" }, THREAD_SETUP_TIMEOUT),
+            true,
+          )
+          const url = isRecord(started.value) ? string(started.value.authUrl) : undefined
+          if (!url) {
+            yield* started.close
+            return yield* Effect.fail(setupFailure("sign-in-failed", "Codex did not return a sign-in link."))
+          }
+          const finish = started.close.pipe(Effect.andThen(setupChanged(item)), Effect.ignore)
+          pendingLogin = finish
+          // Keep the app-server, which hosts the login callback, until Codex reports the result or 10 minutes pass.
+          yield* started.client.notifications.pipe(
+            Stream.filter((notification) => notification.method === "account/login/completed"),
+            Stream.take(1),
+            Stream.runDrain,
+            Effect.timeout("10 minutes"),
+            Effect.ignore,
+            Effect.ensuring(
+              Effect.suspend(() => {
+                if (pendingLogin === finish) pendingLogin = undefined
+                return finish
+              }),
+            ),
+            Effect.forkIn(layerScope),
+          )
+          return Harness.SignIn.make({ url })
+        }),
+      setApiKey: (id, input) =>
+        Effect.gen(function* () {
+          const item = yield* setupRecipe(id)
+          if (input && !item.apiKeys.some((option) => option.id === input.option))
+            return yield* Effect.fail(setupFailure("invalid-input", `${id} has no "${input.option}" key option.`))
+          if (item.id === Harness.Codex) {
+            yield* codexAccount((client) =>
+              input
+                ? client.request(
+                    "account/login/start",
+                    { type: "apiKey", apiKey: input.key.trim() },
+                    THREAD_SETUP_TIMEOUT,
+                  )
+                : client.request("account/logout", undefined, THREAD_SETUP_TIMEOUT),
+            )
+            return yield* setupChanged(item)
+          }
+          yield* HarnessSetup.writeKey(
+            global.data,
+            item.id,
+            input ? { option: input.option, key: input.key.trim() } : undefined,
+          )
+          yield* instances
+          return yield* setupChanged(item)
+        }),
       reportedCommands: (id) => commands.get(id),
       updates: () =>
         instances.pipe(
@@ -576,8 +897,9 @@ const layer = Layer.effect(
       refresh: (id) => Effect.sync(() => forget(id)).pipe(Effect.andThen(list())),
       driver: (instanceID) => latest.find((instance) => instance.id === instanceID)?.driver,
       stream(input) {
-        // Known instances stream without touching the registry; only a newly registered ID needs a re-read.
-        const known = latest.find((item) => item.id === input.instanceID)
+        // Known instances stream without touching the registry; a new ID or a changed setup key needs a re-read.
+        const known =
+          loadedKeys === HarnessSetup.keysVersion() ? latest.find((item) => item.id === input.instanceID) : undefined
         if (known) return driverFor(known).stream(input)
         return Stream.unwrap(
           instances.pipe(
@@ -590,6 +912,18 @@ const layer = Layer.effect(
           ),
         )
       },
+      complete: (input) =>
+        instances.pipe(
+          Effect.flatMap((current) => {
+            const instance = current.find((item) => item.id === input.instanceID)
+            const complete = instance?.enabled ? driverFor(instance).complete : undefined
+            return complete
+              ? complete(input)
+              : Effect.fail(llmError("HarnessRuntime", "complete", `${input.instanceID} can't run a one-off prompt.`))
+          }),
+        ),
+      titleAgent: () => HarnessRegistry.titleAgent(global.config),
+      setTitleAgent: (id) => HarnessRegistry.setTitleAgent(global.config, id),
       settings,
       add: (input) =>
         instances.pipe(
@@ -649,6 +983,7 @@ export const node = makeLocationNode({
     PermissionV2.node,
     QuestionV2.node,
     Global.node,
+    FSUtil.node,
   ],
 })
 
@@ -681,6 +1016,16 @@ export function settingsEntries(
   })
 }
 
+/** Adds each built-in harness's stored setup API key to its process environment. */
+function withSetupKeys(instances: ReadonlyArray<InstanceConfig>, keys: HarnessSetup.Keys) {
+  return instances.map((instance) => {
+    const env = HarnessSetup.keyEnvironment(HarnessSetup.recipe(instance.id), keys[instance.id])
+    if (Object.keys(env).length === 0) return instance
+    const current = isRecord(instance.config.env) ? instance.config.env : {}
+    return { ...instance, config: { ...instance.config, env: { ...current, ...env } } }
+  })
+}
+
 export function configuredInstances(
   entries: ReadonlyArray<Config.Entry>,
   registry: Readonly<Record<string, ConfigHarness.Instance>> = {},
@@ -702,6 +1047,18 @@ export function configuredInstances(
         config: { command: "opencode", args: ["acp"] },
       },
     ],
+    // Claude Code through Anthropic's ACP adapter (`npm install -g @agentclientprotocol/claude-agent-acp`).
+    // It signs in with the user's own Claude login or ANTHROPIC_API_KEY, kept in its process.
+    [
+      Harness.ClaudeCode,
+      {
+        id: Harness.ClaudeCode,
+        driver: Harness.AcpDriver,
+        name: "Claude Code",
+        enabled: true,
+        config: { command: "claude-agent-acp", args: [] },
+      },
+    ],
   ])
   const decodeID = Schema.decodeUnknownOption(Harness.InstanceID)
   for (const [rawID, value] of Object.entries(registry)) {
@@ -720,7 +1077,7 @@ export function configuredInstances(
     for (const [rawID, value] of Object.entries(entry.info.harnesses)) {
       const id = Option.getOrUndefined(decodeID(rawID))
       // Reserved IDs must not be replaced from config files either; only the
-      // built-in definitions own the opencode, opencode-acp and codex instances (issue #40).
+      // built-in definitions own the opencode, opencode-acp, claude-code and codex instances (issue #40).
       if (!id || HarnessRegistry.reserved.has(id)) continue
       instances.set(id, {
         id,
@@ -756,14 +1113,17 @@ function openCodex(
   settings: CodexSettings,
   directory: string,
   handleRequest?: (request: ServerRequest) => Effect.Effect<unknown, ProtocolError>,
+  delegation?: HarnessDelegation.Endpoint,
 ) {
   return Effect.gen(function* () {
+    const args = [...(delegation ? HarnessDelegation.codexArgs(delegation) : []), "app-server"]
     const handle = yield* process.spawn(
-      ChildProcess.make(settings.binaryPath?.trim() || "codex", ["app-server", ...(settings.launchArgs ?? [])], {
+      ChildProcess.make(settings.binaryPath?.trim() || "codex", [...args, ...(settings.launchArgs ?? [])], {
         cwd: directory,
         env: harnessEnvironment({
           CODEX_HOME: settings.homePath ? expandHome(settings.homePath) : undefined,
           ...settings.env,
+          ...(delegation ? { [HarnessDelegation.TOKEN_ENV]: delegation.token } : {}),
         }),
         extendEnv: false,
         forceKillAfter: "2 seconds",
@@ -911,7 +1271,7 @@ function codexStream(
     runtime.pipe(
       Effect.flatMap((runtime) =>
         Effect.sync(() => {
-          const prompt = renderHarnessPrompt(input.request, runtime.handoff)
+          const prompt = renderHarnessPrompt(input.request, runtime.handoff, runtime)
           runtime.handoff = "none"
           return prompt
         }).pipe(
@@ -947,6 +1307,8 @@ function codexStream(
                               .pipe(Effect.ignore),
                       ),
                     ),
+                    // However the turn ends, a question it left open in the dock has nobody waiting.
+                    Stream.ensuring(runtime.endTurn ?? Effect.void),
                     Stream.catch((error) => Stream.unwrap(onFailure(runtime).pipe(Effect.as(Stream.fail(error))))),
                   )
                   return onTurnSuccess(turn, onSuccess(runtime))
@@ -1245,20 +1607,39 @@ export function continuationFor(
   return value ? { nativeID: value, handoff: "none" } : undefined
 }
 
-function renderCodexInstructions(request: LLMRequest) {
+/** Codex's developerInstructions: the request's system text, without the native agents' chat abilities. */
+export function renderCodexInstructions(request: LLMRequest) {
+  return harnessSystem(request).join("\n\n")
+}
+
+/**
+ * The system texts a harness may see. The system context's `core/chat-display` entry tells native agents
+ * to ask with the `question` tool, which harnesses don't have; the `<tenon-context>` block gives them
+ * the harness abilities instead, so that entry (one baseline paragraph) is cut out.
+ */
+function harnessSystem(request: LLMRequest) {
+  const native = ChatDisplay.abilities("native")
   return request.system
-    .map((part) => part.text)
+    .map((part) => part.text.replaceAll(`\n\n${native}`, "").replaceAll(native, "").trim())
     .filter(Boolean)
-    .join("\n\n")
 }
 
 export const HANDOFF_TOKEN_BUDGET = 16_000
 
-/** A harness turn's text; the first turn of each runtime also carries Tenon's chat display guidance. */
-export function renderHarnessPrompt(request: LLMRequest, handoff: Handoff = "none") {
+/**
+ * A harness turn's text. A handoff turn (a runtime's first) also carries the `<tenon-context>` block
+ * (workspace, AGENTS.md text and Tenon's chat abilities). ACP agents get no system context at all, and
+ * Codex gets it without the chat abilities (`renderCodexInstructions`). `context.askUser` says whether
+ * the `tenon` MCP server, and with it `ask_user`, is attached; without it the block says to ask in chat.
+ */
+export function renderHarnessPrompt(
+  request: LLMRequest,
+  handoff: Handoff = "none",
+  context: TenonContext.Context = {},
+) {
   const prompt = renderCodexPrompt(request, handoff)
   if (handoff === "none") return prompt
-  return `<tenon-display>\n${ChatDisplay.svgGuidance}\n</tenon-display>\n\n${prompt}`
+  return `${TenonContext.render(request, context)}\n\n${prompt}`
 }
 
 export function renderCodexPrompt(request: LLMRequest, handoff: Handoff = "none", budget = HANDOFF_TOKEN_BUDGET) {
@@ -1448,6 +1829,21 @@ function expandHome(input: string) {
   if (value === "~") return os.homedir()
   if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))
   return path.resolve(value)
+}
+
+/** A one-off prompt for a harness with no system channel: instructions first, then the request. */
+function oneShotPrompt(request: LLMRequest) {
+  return [...harnessSystem(request), renderCodexPrompt(request)].filter(Boolean).join("\n\n")
+}
+
+function replyText<E>(stream: Stream.Stream<LLMEvent, E>) {
+  return Stream.runCollect(stream).pipe(
+    Effect.map((events) =>
+      Array.from(events)
+        .flatMap((event) => (event.type === "text-delta" ? [event.text] : []))
+        .join(""),
+    ),
+  )
 }
 
 function llmError(module: string, method: string, message: string) {

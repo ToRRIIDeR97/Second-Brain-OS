@@ -16,6 +16,8 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
+import { useSDK } from "@/context/sdk"
+import { clearFileReveal, fileReveal } from "@/pages/session/file-reference"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -186,6 +188,7 @@ function SessionFileViewV2(props: { tab: string }) {
   const language = useLanguage()
   const prompt = usePrompt()
   const fileComponent = useFileComponent()
+  const sdk = useSDK()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
     tabs,
@@ -391,6 +394,61 @@ function SessionFileViewV2(props: { tab: string }) {
     active: false,
   }
 
+  // A file reference from a reply: once its lines render, scroll them into view and mark them. The
+  // persisted selection gives the steady tint; the mark adds a gutter accent and a one-off flash.
+  let viewport: HTMLDivElement | undefined
+  const referenceRoot = () => viewport?.querySelector("diffs-container")?.shadowRoot
+  const clearReferenceMarks = () =>
+    referenceRoot()
+      ?.querySelectorAll("[data-file-reference]")
+      .forEach((node) => node.removeAttribute("data-file-reference"))
+
+  createEffect(() => {
+    const reveal = fileReveal()
+    const p = path()
+    if (!reveal || reveal.directory !== sdk().directory || reveal.path !== p || !state()?.loaded) return
+    const start = reveal.start
+    const end = reveal.end ?? start
+    if (!start || !end) {
+      requestAnimationFrame(clearFileReveal)
+      return
+    }
+    setNote("selected", null)
+    let frame: number | undefined
+    const attempt = (count: number) => {
+      frame = undefined
+      const root = referenceRoot()
+      const line = root?.querySelector(`[data-line="${start}"]`)
+      if (!viewport || !root || !(line instanceof HTMLElement)) {
+        // Large files render lazily; jump near the line so the virtualizer renders it.
+        if (count === 10 && viewport && root?.querySelector("[data-line]")) viewport.scrollTop = (start - 1) * 24
+        if (count < 120) frame = requestAnimationFrame(() => attempt(count + 1))
+        else clearFileReveal()
+        return
+      }
+      const top = Math.max(
+        0,
+        line.getBoundingClientRect().top -
+          viewport.getBoundingClientRect().top +
+          viewport.scrollTop -
+          viewport.clientHeight / 3,
+      )
+      viewport.scrollTop = top
+      view().setScroll(props.tab, { x: 0, y: top })
+      clearReferenceMarks()
+      Array.from({ length: end - start + 1 }, (_, index) => start + index).forEach((number) =>
+        root
+          .querySelectorAll(`[data-line="${number}"], [data-column-number="${number}"]`)
+          .forEach((node) => node.setAttribute("data-file-reference", "")),
+      )
+      clearFileReveal()
+    }
+    frame = requestAnimationFrame(() => attempt(0))
+    onCleanup(() => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    })
+  })
+
   createEffect(() => {
     const loaded = !!state()?.loaded
     const ready = file.ready()
@@ -422,6 +480,7 @@ function SessionFileViewV2(props: { tab: string }) {
         renderAnnotation={commentsUi.renderAnnotation}
         renderGutterUtility={commentsUi.renderGutterUtility}
         onLineSelected={(range: SelectedLineRange | null) => {
+          clearReferenceMarks()
           commentsUi.onLineSelected(range)
         }}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
@@ -456,7 +515,14 @@ function SessionFileViewV2(props: { tab: string }) {
 
   const content = () => (
     <div class="mt-3 relative h-full min-h-0">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
+      <ScrollView
+        class="h-full"
+        viewportRef={(el: HTMLDivElement) => {
+          viewport = el
+          scrollSync.setViewport(el)
+        }}
+        onScroll={scrollSync.handleScroll as any}
+      >
         <Switch>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>

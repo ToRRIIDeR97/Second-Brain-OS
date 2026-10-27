@@ -14,6 +14,8 @@ import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useDrafts } from "@/context/drafts"
 import { useCommand } from "@/context/command"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogHarnessSetup } from "@/components/settings-v2/harness-setup"
 import { PageFrame, PageSection, pageRowClass } from "@/components/page"
 import { localDateKey } from "@/features/second-brain/calendar-domain"
 import { readCalendar, type CalendarEvent, type PlannerTask } from "@/features/second-brain/client"
@@ -21,12 +23,17 @@ import { useBrainProjects } from "@/components/sidebar/sidebar-controller"
 import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeSessionsController } from "@/pages/home/home-sessions-controller"
 import { Harness } from "@opencode-ai/schema/harness"
-import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
+import {
+  harnessAssistantDirectory,
+  listHarnessSetup,
+  listHarnessesRemembered,
+  rememberedHarnesses,
+} from "@/utils/server"
 import {
   PromptInputHarnessControls,
   type PromptInputHarnessController,
 } from "@/components/prompt-input/harness-controls"
-import { defaultModel } from "@/components/prompt-input/harness-controller"
+import { MODEL_RETRIES, MODEL_RETRY_MS, defaultModel } from "@/components/prompt-input/harness-controller"
 import { useSettings, withVisibleModels } from "@/context/settings"
 
 type TodayItem = { kind: "event"; value: CalendarEvent } | { kind: "task"; value: PlannerTask; overdue: boolean }
@@ -58,6 +65,22 @@ export default function BrainHomePage() {
   // The sidebar workspace switcher owns this choice; the page only follows it.
   const directory = () => layout.home.workspace() ?? ""
 
+  // First run: offer the built-in agent setup once, unless every built-in agent is already installed and signed in.
+  // It runs in the server's non-project assistant folder, so a new user needs no workspace for it.
+  const dialog = useDialog()
+  createEffect(() => {
+    if (!settings.ready() || settings.harnesses.setupPrompted()) return
+    settings.harnesses.setSetupPrompted()
+    const harnessServer = { server: serverSDK().server.http, fetch: platform.fetch }
+    void listHarnessSetup(harnessServer, "")
+      .then(async (statuses) => {
+        if (statuses.every((item) => item.installed && item.auth !== "signed-out")) return
+        const target = await harnessAssistantDirectory(harnessServer, "")
+        void dialog.show(() => <DialogHarnessSetup directory={target} />)
+      })
+      .catch(() => undefined)
+  })
+
   const projects = useBrainProjects()
   const [calendar, calendarActions] = createResource(
     () => directory() || undefined,
@@ -66,13 +89,19 @@ export default function BrainHomePage() {
   const harnessQuery = useQuery(() => ({
     queryKey: ["home", "harnesses", server.key, directory()],
     enabled: !!directory(),
-    queryFn: () =>
-      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory()).catch(
-        fallbackHarnesses,
-      ),
+    queryFn: () => listHarnessesRemembered({ server: serverSDK().server.http, fetch: platform.fetch }, directory()),
+    // After the cached query is collected, the last good list keeps the picker usable while it reloads.
+    placeholderData: () => rememberedHarnesses(serverSDK().server.http.url, directory()),
     staleTime: 30_000,
     refetchOnMount: true,
     retry: false,
+    // The selected agent can answer before its models are listed; ask again until they arrive, as threads do.
+    refetchInterval: (query) => {
+      const selected = query.state.data?.find((item) => item.id === state.harnessInstanceID)
+      const waiting =
+        selected?.driver !== Harness.OpenCodeDriver && selected?.status === "available" && selected.models.length === 0
+      return waiting && query.state.dataUpdateCount <= MODEL_RETRIES ? MODEL_RETRY_MS : false
+    },
   }))
   // Models hidden in Settings never reach the picker or the default-model choice, as in the thread composer.
   // Reading `data` suspends, so callers outside the controls' Suspense boundary check `isPending` first.
@@ -102,7 +131,7 @@ export default function BrainHomePage() {
     instances: harnesses,
     // Only the first load blocks the picker; a stale list stays usable while it refreshes.
     loading: () => harnessQuery.isPending,
-    // Window focus already refetches through the query; opening the picker does too once stale.
+    // Opening the picker refetches once stale; the app's queries don't refetch on window focus.
     revalidate: () => void (harnessQuery.isStale && harnessQuery.refetch()),
     current: () => state.harnessInstanceID,
     select: selectHarness,
@@ -148,9 +177,12 @@ export default function BrainHomePage() {
     })
   })
 
+  // The built-in agent needs no check, so only another harness waits for the list. The thread page
+  // sends once its own list has loaded, and keeps the prompt if the harness turns out unavailable.
+  const waitingForHarness = () => harnessQuery.isPending && state.harnessInstanceID !== Harness.OpenCode
   const startSession = async () => {
     const prompt = state.prompt.trim()
-    if (!prompt || !directory() || state.starting || harnessQuery.isPending) return
+    if (!prompt || !directory() || state.starting || waitingForHarness()) return
     setState("starting", true)
     try {
       // The draft page sends the prompt as soon as its composer is ready.
@@ -247,7 +279,7 @@ export default function BrainHomePage() {
                 class="!size-10"
                 aria-label={language.t("secondBrain.home.start")}
                 icon={<Icon name="arrow-up" />}
-                disabled={!state.prompt.trim() || state.starting || harnessQuery.isPending}
+                disabled={!state.prompt.trim() || state.starting || waitingForHarness()}
               />
             </div>
           </form>

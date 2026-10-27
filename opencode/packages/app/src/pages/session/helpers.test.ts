@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  CANVAS_TAB,
   SESSION_OPEN_FILE_TAB,
   createOpenReviewFile,
   createOpenSessionFileTab,
@@ -154,6 +155,30 @@ describe("createSessionTabs", () => {
 
       expect(result.activeTab()).toBe("context")
       expect(result.agentTabs()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("keeps the canvas tab out of file tabs and falls back to it after context", () => {
+    createRoot((dispose) => {
+      const [state, setState] = createStore({
+        active: CANVAS_TAB as string | undefined,
+        all: [CANVAS_TAB, "file://src/a.ts"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+        normalizeTab: (tab) => tab,
+      })
+
+      expect(result.activeTab()).toBe(CANVAS_TAB)
+      expect(result.closableTab()).toBe(CANVAS_TAB)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.panelTabs()).toEqual(["file://src/a.ts"])
+      setState({ active: undefined, all: [CANVAS_TAB] })
+      expect(result.canvasOpen()).toBe(true)
+      expect(result.activeTab()).toBe(CANVAS_TAB)
       dispose()
     })
   })

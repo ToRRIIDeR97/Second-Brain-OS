@@ -11,6 +11,7 @@ import { Location } from "./location"
 import { PtyID } from "./pty/schema"
 import { Shell } from "./shell"
 import { lazy } from "./util/lazy"
+import { which } from "./util/which"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
 // Trim only once the buffer passes the limit by a quarter, so a full buffer is copied once per
@@ -86,10 +87,17 @@ export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.Exi
   ptyID: PtyID,
 }) {}
 
+// node-pty reports a missing executable from a worker thread, where nothing can catch it and the
+// process dies, so a command must resolve to a file before it is spawned.
+export class SpawnError extends Schema.TaggedErrorClass<SpawnError>()("Pty.SpawnError", {
+  command: Schema.String,
+  message: Schema.String,
+}) {}
+
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: PtyID) => Effect.Effect<Info, NotFoundError>
-  readonly create: (input: CreateInput) => Effect.Effect<Info>
+  readonly create: (input: CreateInput) => Effect.Effect<Info, SpawnError>
   readonly update: (id: PtyID, input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly remove: (id: PtyID) => Effect.Effect<void, NotFoundError>
   readonly write: (id: PtyID, data: string) => Effect.Effect<void, NotFoundError>
@@ -187,12 +195,13 @@ const layer = Layer.effect(
         env.LC_CTYPE = "C.UTF-8"
         env.LANG = "C.UTF-8"
       }
+      const target = yield* spawnTarget(command, args, env)
       yield* Effect.logInfo("creating session", { id, cmd: command, args, cwd })
       const { spawn } = yield* Effect.promise(() => pty())
       // Subscribe in the same synchronous step as spawn: a fiber yield between the two would let a
       // fast child write or exit before anyone listens, and that output or exit would be lost.
       const info = yield* Effect.sync(() => {
-        const proc = spawn(command, args, { name: "xterm-256color", cwd, env })
+        const proc = spawn(target.file, target.args, { name: "xterm-256color", cwd, env })
         const info: Info = {
           id,
           title: input.title || `Terminal ${id.slice(-4)}`,
@@ -336,3 +345,16 @@ function trimBuffer(session: Active, limit: number) {
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
 
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })
+
+/**
+ * The file and arguments to hand to the PTY. Windows can't start the `.cmd` and `.bat` shims that
+ * npm installs (`opencode.cmd`) directly, so those run through `cmd.exe /c`.
+ */
+function spawnTarget(command: string, args: string[], env: Record<string, string>) {
+  const file = which(command, env)
+  if (!file)
+    return Effect.fail(new SpawnError({ command, message: `Can't start "${command}": it was not found on PATH.` }))
+  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(file))
+    return Effect.succeed({ file: env.ComSpec || env.COMSPEC || "cmd.exe", args: ["/d", "/c", file, ...args] })
+  return Effect.succeed({ file, args })
+}

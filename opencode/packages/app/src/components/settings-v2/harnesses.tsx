@@ -2,6 +2,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -19,6 +20,7 @@ import { harnessSettingsChanged } from "@/components/prompt-input/harness-contro
 import {
   addHarness,
   discoverHarness,
+  getTitleAgent,
   harnessAssistantDirectory,
   listHarnessSettings,
   listHarnessUpdates,
@@ -26,11 +28,14 @@ import {
   refreshHarnesses,
   removeHarness,
   setHarnessEnabled,
+  setTitleAgent,
   upgradeHarness,
 } from "@/utils/server"
 import { showToast } from "@/utils/toast"
 import { SettingsListV2 } from "./parts/list"
+import { SettingsRowV2 } from "./parts/row"
 import { DialogHarnessAssistant } from "./harness-assistant"
+import { DialogHarnessSetup } from "./harness-setup"
 import "./settings-v2.css"
 
 // Splits an arguments field on whitespace; quoted arguments with spaces aren't supported here.
@@ -66,6 +71,9 @@ export const SettingsHarnessesV2: Component<{
   )
   const [updates, { mutate: setUpdates }] = createResource(directory, (dir) =>
     listHarnessUpdates(server(), dir).catch(() => []),
+  )
+  const [titleAgent, { mutate: setTitleAgentValue }] = createResource(directory, (dir) =>
+    getTitleAgent(server(), dir).catch(() => undefined),
   )
   const [state, setState] = createStore({
     selected: undefined as string | undefined,
@@ -125,6 +133,20 @@ export const SettingsHarnessesV2: Component<{
     )
   }
 
+  const openSetup = () => {
+    const dir = directory()
+    if (!dir) return
+    void dialog.show(() => (
+      <DialogHarnessSetup
+        directory={dir}
+        onClose={() => {
+          changed()
+          props.onBack()
+        }}
+      />
+    ))
+  }
+
   const refreshModels = (id: string) =>
     run(id, () => refreshHarnesses(server(), directory()!, id).then((next) => setInstances(next)))
 
@@ -141,6 +163,17 @@ export const SettingsHarnessesV2: Component<{
     })
 
   const entryList = createMemo(() => [...builtIn(), ...registered()])
+  // An empty value titles each thread with its own agent; a disabled harness can't title anything.
+  const titleOptions = createMemo(() => [
+    { value: "", label: language.t("harness.settings.titleAgent.thread") },
+    ...entryList()
+      .filter((entry) => entry.enabled)
+      .map((entry) => ({ value: entry.id as string, label: entry.name })),
+  ])
+  const chooseTitleAgent = (value: string) =>
+    run("title-agent", () =>
+      setTitleAgent(server(), directory()!, value || undefined).then((id) => setTitleAgentValue(id)),
+    )
   // The first harness stays selected until the user picks another, or the selected one is removed.
   const selected = createMemo(() => entryList().find((entry) => entry.id === state.selected) ?? entryList()[0])
   const instance = (id: string) => instances.latest?.find((item) => item.id === id)
@@ -163,6 +196,26 @@ export const SettingsHarnessesV2: Component<{
             {entries.error instanceof Error ? entries.error.message : language.t("harness.probeFailed")}
           </div>
         </Show>
+
+        <SettingsListV2>
+          <SettingsRowV2
+            title={language.t("harness.settings.titleAgent")}
+            description={language.t("harness.settings.titleAgent.description")}
+          >
+            <SelectV2
+              appearance="inline"
+              data-action="settings-title-agent"
+              options={titleOptions()}
+              current={titleOptions().find((option) => option.value === (titleAgent.latest ?? "")) ?? titleOptions()[0]}
+              placement="bottom-end"
+              gutter={6}
+              disabled={!directory() || state.busy !== undefined}
+              value={(option) => option.value}
+              label={(option) => option.label}
+              onSelect={(option) => option && chooseTitleAgent(option.value)}
+            />
+          </SettingsRowV2>
+        </SettingsListV2>
 
         <div class="settings-v2-harness-layout">
           <nav class="settings-v2-harness-nav" aria-label={language.t("harness.settings.title")}>
@@ -187,6 +240,9 @@ export const SettingsHarnessesV2: Component<{
               )}
             </For>
             <div class="settings-v2-harness-nav-actions">
+              <ButtonV2 size="normal" variant="ghost" icon="download" disabled={!directory()} onClick={openSetup}>
+                {language.t("harness.settings.setup")}
+              </ButtonV2>
               <ButtonV2 size="normal" variant="ghost" icon="plus" disabled={!directory()} onClick={openAssistant}>
                 {language.t("harness.settings.assistant")}
               </ButtonV2>

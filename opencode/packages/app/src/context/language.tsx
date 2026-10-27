@@ -38,6 +38,7 @@ type PluralKey =
   | "secondBrain.turnSteps.failed"
   | "secondBrain.turnSteps.laneSteps"
   | `secondBrain.turnSteps.${StepKind}`
+  | "secondBrain.contextStrip.files"
 type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {

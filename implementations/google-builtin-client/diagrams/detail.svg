@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" role="img" aria-labelledby="t d">
+<title id="t">Client resolution detail</title>
+<desc id="d">resolveGoogleClient checks typed credentials first, then the built-in client, then fails with google_client_missing.</desc>
+<style>
+rect{fill:#f4f4f5;stroke:#52525b;stroke-width:1.2}
+text{font:13px system-ui,sans-serif;fill:#18181b}
+.s{font-size:11px;fill:#52525b}
+.err{fill:#fef2f2;stroke:#b91c1c}
+.ok{fill:#f0fdf4;stroke:#15803d}
+line{stroke:#52525b;stroke-width:1.2;marker-end:url(#a)}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#52525b"/></marker></defs>
+<rect x="20" y="30" width="230" height="60" rx="10"/>
+<text x="34" y="54">connect({ clientId?, clientSecret?,</text>
+<text x="34" y="72">access, windowId })</text>
+<line x1="250" y1="60" x2="300" y2="60"/>
+<rect x="300" y="30" width="200" height="60" rx="10"/>
+<text x="314" y="54">Any typed field non-blank?</text>
+<text class="s" x="314" y="74">domain: resolveGoogleClient</text>
+<line x1="500" y1="60" x2="550" y2="60"/>
+<text class="s" x="508" y="52">yes</text>
+<rect class="ok" x="550" y="30" width="190" height="60" rx="10"/>
+<text x="564" y="54">validate + trim typed</text>
+<text class="s" x="564" y="74">invalid: existing codes (AC-3)</text>
+<line x1="400" y1="90" x2="400" y2="140"/>
+<text class="s" x="406" y="120">no</text>
+<rect x="300" y="140" width="200" height="60" rx="10"/>
+<text x="314" y="164">builtInGoogleClient(env)?</text>
+<text class="s" x="314" y="184">valid pair or undefined (AC-1)</text>
+<line x1="500" y1="170" x2="550" y2="170"/>
+<text class="s" x="508" y="162">yes</text>
+<rect class="ok" x="550" y="140" width="190" height="60" rx="10"/>
+<text x="564" y="164">use built-in (AC-2)</text>
+<line x1="400" y1="200" x2="400" y2="240"/>
+<text class="s" x="406" y="226">no</text>
+<rect class="err" x="300" y="240" width="200" height="50" rx="10"/>
+<text x="314" y="270">google_client_missing (AC-4)</text>
+<text class="s" x="20" y="150">Then: authorize() and writeConfig()</text>
+<text class="s" x="20" y="166">store the resolved client, so tokens</text>
+<text class="s" x="20" y="182">keep refreshing even if a later build</text>
+<text class="s" x="20" y="198">has no built-in client.</text>
+</svg>

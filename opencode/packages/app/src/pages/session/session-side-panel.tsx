@@ -45,6 +45,7 @@ import { useSettings } from "@/context/settings"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
+  CANVAS_TAB,
   SESSION_OPEN_FILE_TAB,
   agentTabPartID,
   createOpenSessionFileTab,
@@ -57,6 +58,7 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { pagePanelClass } from "@/components/page"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
+import { SessionCanvasTab } from "@/pages/session/canvas-tab"
 
 type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
 type RenderDiff = FileDiffInfo | (SnapshotFileDiff & { file: string }) | VcsFileDiff
@@ -243,9 +245,16 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty" && !agentTabPartID(active)
+    return (
+      active !== "review" &&
+      active !== "context" &&
+      active !== CANVAS_TAB &&
+      active !== "empty" &&
+      !agentTabPartID(active)
+    )
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
+  const reviewToggleKeybind = createMemo(() => command.keybindParts("review.toggle"))
   const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
@@ -310,6 +319,15 @@ export function SessionSidePanel(props: {
     </Show>
   )
 
+  const canvasTrigger = () => (
+    <Show when={tabState.canvasOpen()}>
+      <TabsV2.Trigger value={CANVAS_TAB} onMiddleClick={() => tabs().close(CANVAS_TAB)}>
+        <span>{language.t("secondBrain.canvas.title")}</span>
+        {closeButton(CANVAS_TAB)}
+      </TabsV2.Trigger>
+    </Show>
+  )
+
   const agentTriggers = () => (
     <For each={agentTabs()}>
       {(tab) => (
@@ -330,6 +348,16 @@ export function SessionSidePanel(props: {
           </div>
         </TabsV2.Content>
       )}
+    </Show>
+  )
+
+  const canvasContent = () => (
+    <Show when={activeTab() === CANVAS_TAB}>
+      <TabsV2.Content value={CANVAS_TAB} class="flex min-h-0 flex-col !overflow-hidden contain-strict">
+        <div class="relative flex-1 min-h-0 overflow-hidden">
+          <SessionCanvasTab />
+        </div>
+      </TabsV2.Content>
     </Show>
   )
 
@@ -364,6 +392,31 @@ export function SessionSidePanel(props: {
         />
       </TooltipV2>
     </div>
+  )
+
+  const hideButton = () => (
+    <TooltipV2
+      value={
+        <>
+          {language.t("secondBrain.sidePanel.hide")}
+          <Show when={reviewToggleKeybind().length > 0}>
+            <KeybindV2 keys={reviewToggleKeybind()} variant="neutral" />
+          </Show>
+        </>
+      }
+      placement="bottom"
+      class="flex shrink-0 items-center"
+    >
+      <IconButtonV2
+        icon={<Icon name="chevron-right" />}
+        variant="ghost-muted"
+        size="large"
+        onClick={() => view().reviewPanel.close()}
+        aria-label={language.t("secondBrain.sidePanel.hide")}
+        aria-controls="review-panel"
+        aria-expanded={true}
+      />
+    </TooltipV2>
   )
 
   const selectToOpen = () => (
@@ -457,6 +510,7 @@ export function SessionSidePanel(props: {
                                 </TabsV2.Trigger>
                               </Show>
                               {contextTrigger()}
+                              {canvasTrigger()}
                               {agentTriggers()}
                               <SortableProvider ids={openedTabs()}>
                                 <For each={panelTabs()}>
@@ -483,11 +537,13 @@ export function SessionSidePanel(props: {
                                 })
                               })}
                             </TabsV2.List>
+                            {hideButton()}
                           </div>
 
                           {reviewContent()}
                           {selectToOpen()}
                           {contextContent()}
+                          {canvasContent()}
                           {agentContent()}
 
                           <Show when={activeFileTab()} keyed>
@@ -565,6 +621,7 @@ export function SessionSidePanel(props: {
                               </TabsV2.Trigger>
                             </Show>
                             {contextTrigger()}
+                            {canvasTrigger()}
                             {agentTriggers()}
                             <For each={panelTabs()}>
                               {(tab) => (
@@ -593,11 +650,13 @@ export function SessionSidePanel(props: {
                           >
                             <OpenInAppV2 directory={projectDirectory} />
                           </div>
+                          {hideButton()}
                         </div>
 
                         {reviewContent()}
                         {selectToOpen()}
                         {contextContent()}
+                        {canvasContent()}
                         {agentContent()}
 
                         <Show when={fileBrowserMounted()}>

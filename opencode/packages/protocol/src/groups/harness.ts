@@ -38,6 +38,8 @@ const errors = [
   HarnessSettingsWriteError,
 ]
 
+const TitleAgent = Schema.Struct({ id: Schema.optional(Harness.InstanceID) })
+
 const annotate = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({ identifier, summary, description })
 
@@ -64,6 +66,36 @@ export const HarnessGroup = HttpApiGroup.make("server.harness")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         annotate("v2.harness.settings", "List harness settings", "List harnesses with their source and editability."),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("harness.titleAgent", "/api/harness/title-agent", {
+      query: LocationQuery,
+      success: Location.response(TitleAgent),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.titleAgent",
+          "Get title agent",
+          "The harness that titles new threads. Without one, each thread is titled by its own harness.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.put("harness.setTitleAgent", "/api/harness/title-agent", {
+      query: LocationQuery,
+      payload: TitleAgent,
+      success: Location.response(TitleAgent),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.setTitleAgent",
+          "Set title agent",
+          "Choose the harness that titles new threads, or omit id to title each thread with its own harness.",
+        ),
       ),
   )
   .add(
@@ -185,6 +217,79 @@ export const HarnessGroup = HttpApiGroup.make("server.harness")
           "v2.harness.upgrade",
           "Update harness CLI",
           "Update a harness CLI with the package manager that installed it and restart its processes.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("harness.setup", "/api/harness/setup", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(Harness.SetupStatus)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.setup",
+          "List harness setup",
+          "Install and sign-in state of the built-in external harnesses (Codex, Claude Code, OpenCode).",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("harness.install", "/api/harness/setup/:id/install", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      success: Location.response(Harness.SetupStatus),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.install",
+          "Install harness",
+          "Install a built-in harness CLI globally with npm, from the package the server knows for it.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("harness.signIn", "/api/harness/setup/:id/sign-in", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      success: Location.response(Harness.SignIn),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.signIn",
+          "Start harness sign-in",
+          "Start a browser sign-in for a harness that supports one and return the link to open.",
+        ),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.put("harness.setKey", "/api/harness/setup/:id/api-key", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      payload: Harness.ApiKeyInput,
+      success: Location.response(Harness.SetupStatus),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(annotate("v2.harness.setKey", "Set harness API key", "Save the API key a built-in harness uses.")),
+  )
+  .add(
+    HttpApiEndpoint.delete("harness.removeKey", "/api/harness/setup/:id/api-key", {
+      params: { id: Schema.String },
+      query: LocationQuery,
+      success: Location.response(Harness.SetupStatus),
+      error: errors,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.removeKey",
+          "Remove harness API key",
+          "Remove the API key a built-in harness uses, or sign Codex out.",
         ),
       ),
   )

@@ -139,7 +139,7 @@ describe("SessionV2.create", () => {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
       const created = yield* session.create({ location, harnessInstanceID: Harness.Codex })
-      const gemini = Harness.InstanceID.make("gemini")
+      const custom = Harness.InstanceID.make("custom-agent")
       const metadata = () =>
         db
           .select({ metadata: SessionTable.metadata })
@@ -174,21 +174,21 @@ describe("SessionV2.create", () => {
 
       yield* set(Harness.Codex, "thread-1")
       yield* set(Harness.Codex, "thread-1", "msg-1")
-      yield* session.switchHarness({ sessionID: created.id, instanceID: gemini })
-      yield* set(gemini, "acp-1", "msg-2")
+      yield* session.switchHarness({ sessionID: created.id, instanceID: custom })
+      yield* set(custom, "acp-1", "msg-2")
       yield* set(Harness.Codex, "thread-1")
 
       const stored = yield* metadata()
       expect(stored).not.toHaveProperty("harnessContinuation")
       expect(stored?.harnessContinuations).toEqual({
         [Harness.Codex]: { nativeID: "thread-1", lastSeenMessageID: "msg-1" },
-        gemini: { nativeID: "acp-1", lastSeenMessageID: "msg-2" },
+        "custom-agent": { nativeID: "acp-1", lastSeenMessageID: "msg-2" },
       })
 
       yield* set(Harness.Codex, "thread-2")
       expect((yield* metadata())?.harnessContinuations).toMatchObject({
         [Harness.Codex]: { nativeID: "thread-2" },
-        gemini: { nativeID: "acp-1" },
+        "custom-agent": { nativeID: "acp-1" },
       })
       expect((yield* metadata())?.harnessContinuations).not.toHaveProperty([Harness.Codex, "lastSeenMessageID"])
     }),

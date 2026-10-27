@@ -202,3 +202,18 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
   if (images.length === 0) return result
   return [...result, ...images]
 }
+
+/** Adds `text` after a prompt's text (and before its images), separated by a space when needed. */
+export function appendPromptText(prompt: Prompt, text: string): Prompt {
+  const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
+  const parts = prompt.filter((part) => part.type !== "image")
+  const current = parts.map((part) => part.content).join("")
+  if (!current.trim()) return [{ type: "text", content: text, start: 0, end: text.length }, ...images]
+  const content = /\s$/.test(current) ? text : ` ${text}`
+  const last = parts.at(-1)
+  const next: Prompt =
+    last?.type === "text"
+      ? [...parts.slice(0, -1), { ...last, content: last.content + content, end: last.end + content.length }]
+      : [...parts, { type: "text", content, start: current.length, end: current.length + content.length }]
+  return [...next, ...images]
+}

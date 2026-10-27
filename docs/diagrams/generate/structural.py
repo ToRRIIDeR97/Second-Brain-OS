@@ -26,12 +26,12 @@ def component():
     s.box(360, 340, 290, 80, "Location services", ["core: LocationMutation, FileMutation", "path containment, CAS writes"], cls="sub")
     s.box(360, 440, 290, 170, "Agent runtime", ["core/src/session: SessionV2,", "SessionInput, SessionRunner",
           "core/src/harness.ts: HarnessRuntime", "drivers: opencode, codex, acp", "core/src/permission.ts: PermissionV2",
-          "EventV2 (durable events), Snapshot", "harness/registry.ts"], cls="sub")
+          "EventV2 (durable events), Snapshot", "registry.ts, tenon MCP (ask, delegate)"], cls="sub")
     # stores
     s.box(760, 335, 200, 76, "Workspace files", ["notes/, projects/*, .tenon/", ".second-brain/calendar-v1.json"], cls="store")
     s.box(760, 445, 200, 56, "Profile SQLite", ["sessions, events, permissions"], cls="store")
     s.box(760, 515, 200, 44, "Snapshot git repo", [], cls="store")
-    s.box(760, 573, 200, 44, "harnesses.json (0600)", [], cls="store")
+    s.box(760, 573, 200, 44, "harnesses.json, keys (0600)", [], cls="store")
     s.box(760, 631, 200, 56, "auth.json (XDG data)", ["provider credentials", "data/tenon-workbench"], cls="store")
     # externals
     s.box(20, 705, 200, 60, "Google APIs", ["Calendar v3, Tasks v1"], cls="ext", stereo=None)
@@ -52,30 +52,30 @@ def component():
     s.edge([(650, 473), (760, 473)], "durable events", at=(705, 466))
     s.edge([(650, 537), (760, 537)], "capture/diff", at=(705, 530))
     s.edge([(650, 595), (760, 595)], "registry", at=(705, 588))
-    s.edge([(415, 610), (415, 705)], "JSON-RPC stdio", at=(415, 668))
-    s.edge([(590, 610), (590, 705)], "ACP stdio", at=(590, 668))
+    s.edge([(415, 610), (415, 705)], "JSON-RPC stdio\n+ tenon MCP", at=(415, 668))
+    s.edge([(590, 610), (590, 705)], "ACP stdio\n+ tenon MCP", at=(590, 668))
     s.edge([(640, 610), (760, 705)], "HTTPS", at=(722, 690))
     s.save(f"{OUT}/component-overview.svg")
 
 
 def trust():
-    s = SVG(1000, 706, "Trust boundaries and sensitive-data flow",
+    s = SVG(1000, 722, "Trust boundaries and sensitive-data flow",
             "Trust zones of the desktop app: sandboxed renderer, privileged Electron main, loopback server, workspace "
             "files, harness child processes and external services, with the control at each crossing and known gaps in red.")
     s.heading("Trust boundaries and sensitive data", "dashed = trust zone · orange = sensitive data · red = known gap (see threat model)")
     s.zone(20, 70, 230, 230, "Renderer sandbox (untrusted input)")
     s.box(40, 100, 190, 86, "Solid renderer", ["contextIsolation, sandbox,", "no nodeIntegration",
-          "svg blocks: sandboxed iframe"], cls="sub")
+          "svg, html: sandboxed iframes"], cls="sub")
     s.box(40, 198, 190, 90, "Untrusted inputs", ["note bodies, URLs, IPC args,", "provider + agent output,", "workspace content"], cls="sub")
     s.zone(20, 330, 230, 290, "Electron main (privileged)")
     s.box(40, 360, 190, 84, "IPC handlers", ["allowlisted channels", "session export: basename,", "≤32 MiB, native dialog"], cls="sub")
-    s.box(40, 456, 190, 66, "Google service", ["PKCE loopback OAuth", "safeStorage-encrypted secrets"], cls="sub")
+    s.box(40, 456, 190, 66, "Google service", ["PKCE loopback OAuth, N accounts", "safeStorage-encrypted secrets"], cls="sub")
     s.box(40, 534, 190, 70, "Profile data", ["drafts.sqlite (plaintext)", "electron-store files"], cls="store")
     s.zone(300, 70, 330, 380, "Loopback server process")
     s.box(320, 100, 290, 74, "Authorization", ["Basic auth opencode:<uuid>", "header or auth_token query"], cls="sub")
     s.box(320, 186, 290, 70, "Workspace routing", ["directory → instance", "LocationMutation containment"], cls="sub")
     s.box(320, 268, 290, 84, "PermissionV2", ["rules: allow / ask / deny", "harness add: Settings only, no tool", "plan agent denies edits"], cls="sub")
-    s.box(320, 364, 220, 70, "Secrets at rest", ["auth.json (data/tenon-workbench)", "SQLite profile, harnesses.json"], cls="store")
+    s.box(320, 364, 220, 70, "Secrets at rest", ["auth.json, harness-credentials.json", "SQLite profile, harnesses.json"], cls="store")
     s.zone(680, 70, 300, 150, "Workspace filesystem")
     s.box(700, 100, 260, 100, "Canonical files", ["notes/, projects/*, .tenon/", ".second-brain/calendar-v1.json", "source of truth"], cls="store")
     s.zone(680, 250, 300, 180, "Harness child processes (run as user)")
@@ -84,18 +84,19 @@ def trust():
     s.zone(300, 480, 680, 140, "External network")
     s.box(315, 512, 155, 84, "Google APIs", ["oauth2, Calendar, Tasks", "via net.fetch"], cls="ext")
     s.box(485, 512, 155, 84, "LLM providers", ["prompts include", "workspace content"], cls="ext")
-    s.box(655, 512, 155, 84, "Package registries", ["npm, Homebrew: harness", "CLI version + update"], cls="ext")
+    s.box(655, 512, 155, 84, "Package registries", ["npm, Homebrew: harness", "CLI install + update"], cls="ext")
     s.box(825, 512, 145, 84, "System browser", ["http/https/mailto", "via openExternal"], cls="ext")
     s.edge([(230, 137), (260, 137), (260, 400), (230, 400)], "preload\nIPC", at=(280, 260))
     s.edge([(230, 120), (320, 120)], "HTTP 127.0.0.1", at=(275, 113), cls="sens", head="as")
     s.edge([(610, 221), (700, 160)], "validated\nrelative paths", at=(655, 182), cls="sens", head="as")
     s.edge([(610, 310), (700, 310)], "spawn + stdio", at=(655, 303))
     s.edge([(700, 330), (630, 330)], "", head="a")
+    s.edge([(700, 400), (630, 400)], "tenon MCP\nper-runtime token", at=(665, 393))
     s.edge([(230, 489), (300, 540), (320, 540)], "tokens", at=(282, 530), cls="sens", head="as")
     s.edge([(575, 352), (575, 512)], "prompts + context", at=(520, 470), cls="sens", head="as")
     s.edge([(600, 450), (600, 470), (732, 470), (732, 512)], "update: server-chosen\nnpm / brew, user's ID only", at=(690, 456))
     s.edge([(230, 425), (282, 425), (282, 608), (897, 608), (897, 596)], "open-external", at=(560, 612))
-    s.box(20, 636, 960, 56, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted · per-harness env visible to that harness"], cls="gapz")
+    s.box(20, 636, 960, 72, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted", "per-harness env visible to that harness · html design frames: WebRTC TURN over TCP from nested frames"], cls="gapz")
     s.save(f"{OUT}/trust-boundaries.svg")
 
 
@@ -118,13 +119,13 @@ def deployment():
           "drafts.sqlite (+wal/shm)", "window-state-<id>.json", "logs/<stamp>/, Crashpad/", "tenon-workbench/ server state",
           "(XDG_STATE_HOME default)", "cli/<ver>/opencode-cli (v2)",
           ".user-data-migrated (dev copy)"], cls="store")
-    s.box(290, 430, 200, 100, "XDG data/tenon-workbench", ["auth.json, mcp-auth.json", "profile SQLite, snapshots", "workspace-links.json", "copied once from opencode/"], cls="store")
+    s.box(290, 430, 200, 100, "XDG data/tenon-workbench", ["auth.json, mcp-auth.json,", "harness-credentials.json", "SQLite, snapshots, links", "copied once from opencode/"], cls="store")
     s.box(290, 545, 200, 64, "Global config dir", ["config/tenon-workbench", "harnesses.json"], cls="store")
     s.box(510, 430, 230, 90, "Workspace directories", ["notes/, projects/* (Projects)", ".tenon/ (cards, manifest)", ".second-brain/"], cls="store")
     s.box(800, 100, 180, 60, "Google APIs", ["oauth2, calendar v3,", "tasks v1"], cls="ext")
     s.box(800, 180, 180, 60, "LLM provider APIs", ["opencode driver, agents"], cls="ext")
     s.box(800, 260, 180, 50, "System browser", [], cls="ext")
-    s.box(800, 480, 180, 60, "Package registries", ["npm, Homebrew:", "harness CLI updates"], cls="ext")
+    s.box(800, 480, 180, 60, "Package registries", ["npm, Homebrew: harness", "CLI installs, updates"], cls="ext")
     s.box(800, 340, 180, 118, "Build host", ["bun run desktop:build", "prebuild: build-node.ts", "electron-builder,", "publish: null →",
           "installer + SHA-256"], cls="sub")
     s.edge([(260, 172), (270, 172)])

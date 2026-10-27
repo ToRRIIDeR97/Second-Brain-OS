@@ -218,7 +218,41 @@ def seq_acp():
     s.save(f"{OUT}/sequence-acp-turn.svg")
 
 
+def seq_delegation():
+    s = SVG(1100, 900, "Sequence: cross-harness delegation",
+            "UML sequence for one agent delegating a task to another harness: the runtime gets a scoped token for the "
+            "loopback MCP endpoint, the calling agent invokes delegate_task, the server creates a child Run on the target "
+            "harness, waits for its drain and returns the child's final reply.")
+    s.heading("Sequence: cross-harness delegation", "core/src/harness.ts · harness/delegation.ts · harness/delegation-tasks.ts · session.ts")
+    H, C, E, T, V, W = 80, 250, 430, 610, 790, 980
+    s.lifelines([("HarnessRuntime", H, "caller's runtime"), ("Calling agent", C, "Claude Code (ACP) or Codex"),
+                 ("Delegation endpoint", E, "127.0.0.1 MCP"), ("Delegation tasks", T, "server layer"),
+                 ("SessionV2", V, None), ("Target harness", W, "e.g. Codex")], 64, 880, w=160)
+    s.msg(H, E, 140, "endpoint(sessionID) → token (runtime scope)")
+    s.frag(40, 160, 1030, 100, "alt", "[ACP agent advertises mcpCapabilities.http]",
+           dividers=[(212, "[Codex]")])
+    s.msg(H, C, 200, "session/new + tenon (Bearer)")
+    s.msg(H, C, 248, "-c mcp_servers.tenon · token env")
+    s.msg(C, E, 300, "POST /mcp initialize · tools/list")
+    s.msg(C, E, 346, "tools/call list_agents")
+    s.msg(E, T, 376, "listAgents(caller Run)")
+    s.msg(T, C, 406, "harnesses + models (current marked)", reply=True)
+    s.msg(C, E, 452, "tools/call delegate_task(agent, task, model)")
+    s.msg(E, T, 482, "delegate(caller Run, input)")
+    s.msg(T, T, 496, "depth < 2 · running < 4 · agent available")
+    s.msg(T, V, 546, "create(parentID = caller, harness, model)")
+    s.msg(T, V, 576, "prompt(framed task, resume false) · resume")
+    s.msg(V, W, 606, "drain child Run → harness turn")
+    s.msg(W, V, 646, "child reply · approvals reach caller's composer", reply=True)
+    s.frag(40, 670, 1030, 110, "alt", "[child finishes within wait_seconds]", dividers=[(728, "[still running]")])
+    s.msg(T, C, 712, "completed | failed: final reply text", reply=True)
+    s.msg(T, C, 762, "running + task_id; later task_result / cancel_task", reply=True)
+    s.msg(H, H, 820, "runtime closes → token revoked")
+    s.save(f"{OUT}/sequence-delegation.svg")
+
+
 states_session()
 states_platform()
 seq_startup()
 seq_acp()
+seq_delegation()

@@ -162,8 +162,8 @@ const layer = Layer.effect(
       }
     })
 
-    // Title model order: the title agent's model, the small model of the session's provider, the
-    // session's own model (host sessions only), then the catalog default.
+    // Title model for the in-process agent: the title agent's model, then the small model of the provider
+    // behind the session's own model (host sessions only) or else the catalog default, then that model itself.
     const titleModel = Effect.fn("SessionRunner.titleModel")(function* (
       session: SessionSchema.Info,
       agent: AgentV2.Info,
@@ -172,13 +172,13 @@ const layer = Layer.effect(
         models.resolve({ ...session, model }).pipe(Effect.option, Effect.map(Option.getOrUndefined))
       const configured = agent.model ? yield* resolve(agent.model) : undefined
       if (configured) return configured
-      const sessionModel =
-        harnesses.driver(session.harnessInstanceID) === Harness.OpenCodeDriver
+      const base =
+        (harnesses.driver(session.harnessInstanceID) === Harness.OpenCodeDriver
           ? yield* resolve(session.model)
-          : undefined
-      const small = sessionModel ? yield* catalog.model.small(ProviderV2.ID.make(sessionModel.provider)) : undefined
+          : undefined) ?? (yield* resolve(undefined))
+      const small = base ? yield* catalog.model.small(ProviderV2.ID.make(base.provider)) : undefined
       const smallModel = small ? yield* resolve({ id: small.id, providerID: small.providerID }) : undefined
-      return smallModel ?? sessionModel ?? (yield* resolve(undefined))
+      return smallModel ?? base
     })
 
     const generateTitle = Effect.fn("SessionRunner.generateTitle")(function* (sessionID: SessionSchema.ID) {
@@ -195,26 +195,34 @@ const layer = Layer.effect(
         return
       const agent = yield* agents.get(AgentV2.ID.make("title"))
       if (!agent) return
-      const model = yield* titleModel(session, agent)
-      if (!model) return
-      const title = SessionTitle.clean(
-        yield* llm
-          .stream(
-            LLM.request({
-              model,
-              system: agent.system ? [SystemPart.make(agent.system)] : [],
-              messages: [Message.user(SessionTitle.prompt(users[0]))],
-              tools: [],
-            }),
-          )
-          .pipe(
-            Stream.filter(LLMEvent.is.textDelta),
-            Stream.map((event) => event.text),
-            Stream.mkString,
-            // A stalled title call must not hold a fiber for the life of the runner.
-            Effect.timeout(TITLE_TIMEOUT),
-          ),
-      )
+      const system = agent.system ? [SystemPart.make(agent.system)] : []
+      const messages = [Message.user(SessionTitle.prompt(users[0]))]
+      // The thread's own agent titles it, unless settings name a harness that is still known.
+      const preferred = yield* harnesses.titleAgent()
+      const instanceID = preferred && harnesses.driver(preferred) ? preferred : session.harnessInstanceID
+      const text =
+        harnesses.driver(instanceID) === Harness.OpenCodeDriver
+          ? yield* Effect.gen(function* () {
+              const model = yield* titleModel(session, agent)
+              if (!model) return ""
+              return yield* llm.stream(LLM.request({ model, system, messages, tools: [] })).pipe(
+                Stream.filter(LLMEvent.is.textDelta),
+                Stream.map((event) => event.text),
+                Stream.mkString,
+                // A stalled title call must not hold a fiber for the life of the runner.
+                Effect.timeout(TITLE_TIMEOUT),
+              )
+            })
+          : // An external agent starts a fresh process and session for the title, so it gets longer.
+            yield* harnesses
+              .complete({
+                instanceID,
+                directory: session.location.directory,
+                request: LLM.request({ model: harnessRequestModel(session), system, messages, tools: [] }),
+                model: instanceID === session.harnessInstanceID ? session.harnessModel : undefined,
+              })
+              .pipe(Effect.timeout(HARNESS_TITLE_TIMEOUT))
+      const title = SessionTitle.clean(text)
       if (!title) return
       // Re-read so a rename made while the title was generating wins, and the snapshot is current.
       const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
@@ -640,6 +648,7 @@ const localToolCallsSinceLastUser = (context: ReadonlyArray<SessionMessage.Messa
     )
 
 const TITLE_TIMEOUT = "30 seconds"
+const HARNESS_TITLE_TIMEOUT = "90 seconds"
 
 const PROVIDER_RETRY_LIMIT = 5
 const PROVIDER_RETRY_BASE_MS = 2_000

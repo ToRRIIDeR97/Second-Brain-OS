@@ -11,6 +11,10 @@ import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { ChatDisplay } from "@opencode-ai/core/chat-display"
+import { TenonContext } from "@opencode-ai/core/tenon-context"
+import { renderCodexInstructions, renderHarnessPrompt } from "@opencode-ai/core/harness"
+import { LLM, Model } from "@opencode-ai/llm"
+import { route } from "@opencode-ai/llm/protocols/openai-chat"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
@@ -74,7 +78,7 @@ describe("SystemContextBuiltIns", () => {
           "",
           `Today's date: ${localDate(timestamp)}`,
           "",
-          ChatDisplay.svgGuidance,
+          ChatDisplay.abilities("native"),
         ].join("\n"),
       )
     }),
@@ -124,11 +128,49 @@ describe("SystemContextBuiltIns", () => {
           "",
           `Today's date: ${localDate(timestamp)}`,
           "",
-          ChatDisplay.svgGuidance,
+          ChatDisplay.abilities("native"),
           "",
           `Instructions from: ${instructionFile}\nBe precise.`,
         ].join("\n"),
       )
+    }),
+  )
+
+  itWithInstructions.effect("harness handoffs read the instructions back from the baseline", () =>
+    Effect.gen(function* () {
+      const context = yield* SystemContextRegistry.Service
+      const baseline = (yield* SystemContext.initialize(yield* context.load())).baseline
+      const request = LLM.request({
+        model: Model.make({ id: "gpt-test", provider: "test", route }),
+        system: [{ type: "text", text: baseline }],
+      })
+
+      expect(TenonContext.instructionFiles(request)).toEqual([{ path: instructionFile, content: "Be precise." }])
+    }),
+  )
+
+  itWithInstructions.effect("Codex gets one way to ask: its instructions drop the native chat abilities", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(timestamp)
+      const context = yield* SystemContextRegistry.Service
+      const baseline = (yield* SystemContext.initialize(yield* context.load())).baseline
+      const request = LLM.request({
+        model: Model.make({ id: "gpt-test", provider: "test", route }),
+        system: [
+          { type: "text", text: "You are a coding agent." },
+          { type: "text", text: baseline },
+        ],
+        prompt: "Hi",
+      })
+      const instructions = renderCodexInstructions(request)
+
+      expect(instructions).toContain("You are a coding agent.\n\nHere is some useful information")
+      expect(instructions).toContain(`Today's date: ${localDate(timestamp)}\n\nInstructions from: ${instructionFile}`)
+      expect(instructions).not.toContain(ChatDisplay.askGuidance.native)
+      expect(instructions).not.toContain("```svg")
+      const prompt = renderHarnessPrompt(request, "full", { askUser: true })
+      expect(prompt).toContain(ChatDisplay.askGuidance.harness)
+      expect(prompt).not.toContain(ChatDisplay.askGuidance.native)
     }),
   )
 })

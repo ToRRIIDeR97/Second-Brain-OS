@@ -47,8 +47,10 @@ export type PromptInputV2ComposerProps = {
   controller: PromptInputV2ComposerController
   harness?: PromptInputHarnessController
   borderUnderlay?: boolean
-  /** Extra controls before the stash menu, such as the session's context usage ring. */
+  /** Extra controls before the stash menu. */
   trailing?: JSX.Element
+  /** A strip attached to the composer's top edge, such as the thread's context strip. */
+  header?: JSX.Element
 }
 
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
@@ -70,7 +72,8 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   }
 
   return (
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col">
+      {props.header}
       <PromptInputV2
         controller={props.controller}
         runtimeControl={props.harness ? <PromptInputHarnessControls controller={props.harness} /> : undefined}

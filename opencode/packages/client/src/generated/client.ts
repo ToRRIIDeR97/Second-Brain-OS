@@ -61,6 +61,10 @@ import type {
   HarnessesListOutput,
   HarnessesSettingsInput,
   HarnessesSettingsOutput,
+  HarnessesTitleAgentInput,
+  HarnessesTitleAgentOutput,
+  HarnessesSetTitleAgentInput,
+  HarnessesSetTitleAgentOutput,
   HarnessesDiscoverInput,
   HarnessesDiscoverOutput,
   HarnessesAssistantDirectoryInput,
@@ -79,6 +83,16 @@ import type {
   HarnessesUpdatesOutput,
   HarnessesUpgradeInput,
   HarnessesUpgradeOutput,
+  HarnessesSetupInput,
+  HarnessesSetupOutput,
+  HarnessesInstallInput,
+  HarnessesInstallOutput,
+  HarnessesSignInInput,
+  HarnessesSignInOutput,
+  HarnessesSetKeyInput,
+  HarnessesSetKeyOutput,
+  HarnessesRemoveKeyInput,
+  HarnessesRemoveKeyOutput,
   IntegrationsListInput,
   IntegrationsListOutput,
   IntegrationsGetInput,
@@ -681,6 +695,31 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      titleAgent: (input?: HarnessesTitleAgentInput, requestOptions?: RequestOptions) =>
+        request<HarnessesTitleAgentOutput>(
+          {
+            method: "GET",
+            path: `/api/harness/title-agent`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      setTitleAgent: (input?: HarnessesSetTitleAgentInput, requestOptions?: RequestOptions) =>
+        request<HarnessesSetTitleAgentOutput>(
+          {
+            method: "PUT",
+            path: `/api/harness/title-agent`,
+            query: { location: input?.["location"] },
+            body: { id: input?.["id"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
       discover: (input: HarnessesDiscoverInput, requestOptions?: RequestOptions) =>
         request<HarnessesDiscoverOutput>(
           {
@@ -793,6 +832,67 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/harness/upgrade/${encodeURIComponent(input.id)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      setup: (input?: HarnessesSetupInput, requestOptions?: RequestOptions) =>
+        request<HarnessesSetupOutput>(
+          {
+            method: "GET",
+            path: `/api/harness/setup`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      install: (input: HarnessesInstallInput, requestOptions?: RequestOptions) =>
+        request<HarnessesInstallOutput>(
+          {
+            method: "POST",
+            path: `/api/harness/setup/${encodeURIComponent(input.id)}/install`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      signIn: (input: HarnessesSignInInput, requestOptions?: RequestOptions) =>
+        request<HarnessesSignInOutput>(
+          {
+            method: "POST",
+            path: `/api/harness/setup/${encodeURIComponent(input.id)}/sign-in`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      setKey: (input: HarnessesSetKeyInput, requestOptions?: RequestOptions) =>
+        request<HarnessesSetKeyOutput>(
+          {
+            method: "PUT",
+            path: `/api/harness/setup/${encodeURIComponent(input.id)}/api-key`,
+            query: { location: input["location"] },
+            body: { option: input["option"], key: input["key"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 409, 500, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      removeKey: (input: HarnessesRemoveKeyInput, requestOptions?: RequestOptions) =>
+        request<HarnessesRemoveKeyOutput>(
+          {
+            method: "DELETE",
+            path: `/api/harness/setup/${encodeURIComponent(input.id)}/api-key`,
             query: { location: input["location"] },
             successStatus: 200,
             declaredStatuses: [400, 404, 409, 500, 401],
@@ -1121,7 +1221,7 @@ export function make(options: ClientOptions) {
               env: input?.["env"],
             },
             successStatus: 200,
-            declaredStatuses: [401, 400],
+            declaredStatuses: [400, 401],
             empty: false,
           },
           requestOptions,

@@ -1,7 +1,7 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createComputed, createEffect, createMemo, createResource, onCleanup, onMount } from "solid-js"
+import { createComputed, createEffect, createMemo, createResource, on, onCleanup, onMount } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useDirectoryPicker } from "@/components/directory-picker"
@@ -347,12 +347,14 @@ export function createSidebarController() {
     const brain = brainDirectory()
     if (brain && isWithinDirectory(brain, directory)) return BRAIN_GROUP
   })
-  createEffect(() => {
-    const id = activeProjectID()
-    if (!id) return
-    if (state.current !== id) setState("current", id)
-    if (!state.expanded[id]) setState("expanded", id, true)
-  })
+  // Expand a group only when the route enters it, so the user can still collapse the active group.
+  createEffect(
+    on(activeProjectID, (id) => {
+      if (!id) return
+      if (state.current !== id) setState("current", id)
+      if (!state.expanded[id]) setState("expanded", id, true)
+    }),
+  )
   const currentProject = createMemo(() => {
     const id = activeProjectID() ?? state.current
     return projects().find((project) => project.id === id)
