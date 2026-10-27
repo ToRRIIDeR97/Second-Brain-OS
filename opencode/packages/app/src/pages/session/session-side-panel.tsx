@@ -56,6 +56,7 @@ import {
 } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { panelSettled } from "@/pages/session/file-reference"
 import { pagePanelClass } from "@/components/page"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 import { SessionCanvasTab } from "@/pages/session/canvas-tab"
@@ -474,7 +475,11 @@ export function SessionSidePanel(props: {
         style={{ width: panelWidth() }}
       >
         <Show when={open()}>
-          <div class="size-full flex">
+          {/* Mounted at once so files load, but shown only once the sliding panel has arrived. */}
+          <div
+            class="size-full flex transition-opacity duration-200 ease-out motion-reduce:transition-none"
+            classList={{ "opacity-0": !panelSettled() }}
+          >
             <Show when={reviewOpen()}>
               <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
                 <div class="size-full min-w-0 h-full bg-v2-background-bg-base">
@@ -663,7 +668,7 @@ export function SessionSidePanel(props: {
                           <div
                             id={fileBrowserTabPanelID}
                             role="tabpanel"
-                            class="flex-1 min-h-0 overflow-hidden"
+                            class="flex-1 min-h-0 overflow-hidden animate-in fade-in duration-200 motion-reduce:animate-none"
                             classList={{ hidden: !fileBrowserVisible() }}
                             inert={!fileBrowserVisible() || undefined}
                           >

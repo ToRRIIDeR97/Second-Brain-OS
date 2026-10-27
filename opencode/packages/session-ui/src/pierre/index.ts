@@ -137,21 +137,58 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
-/* Lines revealed from a file reference in a reply: a gutter accent, plus a flash when first marked. */
+/*
+ * Lines revealed from a file reference in a reply: a gutter accent, plus a highlight when first marked.
+ * The stronger tint wipes in from the left (a cover in the editor background slides off to the right)
+ * for 200ms, then settles to the steady selected-line tint over 400ms. Reduced motion shows the end state.
+ */
 [data-file] [data-column-number][data-file-reference] {
   box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  [data-file] [data-line][data-file-reference],
+  [data-file] [data-line][data-file-reference] {
+    background-image: linear-gradient(to right, transparent 50%, var(--diffs-bg) 50%);
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: file-reference-wipe 600ms both;
+  }
+
   [data-file] [data-column-number][data-file-reference] {
-    animation: file-reference-flash 1.2s ease-out;
+    animation: file-reference-gutter 600ms both;
   }
 }
 
-@keyframes file-reference-flash {
-  from {
+@keyframes file-reference-wipe {
+  0% {
+    background-position: 100% 0;
     background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  33% {
+    background-position: 0 0;
+    background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
+    animation-timing-function: ease;
+  }
+  100% {
+    background-position: 0 0;
+    background-color: var(--diffs-bg-selection);
+  }
+}
+
+@keyframes file-reference-gutter {
+  0% {
+    box-shadow: inset 2px 0 0 transparent;
+    background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
+  }
+  33% {
+    box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
+    background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
+    animation-timing-function: ease;
+  }
+  100% {
+    box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
+    background-color: var(--diffs-bg-selection-number);
   }
 }
 

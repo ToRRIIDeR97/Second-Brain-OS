@@ -6,6 +6,8 @@ import {
   createMemo,
   createSignal,
   For,
+  on,
+  onCleanup,
   Show,
   splitProps,
   type ComponentProps,
@@ -28,6 +30,8 @@ import { virtualScrollElement } from "@/components/virtual-scroll-element"
 export type { Kind } from "@/components/file-tree"
 
 const INDENT_STEP = 16
+// Roughly how long the smooth scroll to a revealed folder takes before it expands.
+const REVEAL_EXPAND_MS = 300
 
 function rowPaddingStart(level: number, type: FileNode["type"]) {
   if (type === "directory") return 8 + level * INDENT_STEP
@@ -125,6 +129,8 @@ function GuideLines(props: { level: number }) {
 
 export default function FileTreeV2(props: {
   active?: string
+  /** A folder opened from a reply: its row glides into view, flashes, keeps an accent, and expands. */
+  revealed?: string
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
@@ -170,6 +176,9 @@ export default function FileTreeV2(props: {
     void file.tree.list("")
   })
 
+  const revealed = () => normalizeFileTreeV2Path(props.revealed ?? "")
+  const still = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
   // Only scroll when the active path changes (or first appears in the tree).
   // Do not re-scroll when expand/collapse reshuffles `rows()`.
   let scrolledActive: string | undefined
@@ -187,7 +196,8 @@ export default function FileTreeV2(props: {
       const next = rows().findIndex((row) => row.node.path === path)
       if (next < 0) return
       if (virtualizer.range && next >= virtualizer.range.startIndex && next <= virtualizer.range.endIndex) return
-      virtualizer.scrollToIndex(next, { align: "auto" })
+      if (path === revealed() && !still()) virtualizer.scrollToIndex(next, { align: "center", behavior: "smooth" })
+      else virtualizer.scrollToIndex(next, { align: "auto" })
     })
   })
 
@@ -205,6 +215,26 @@ export default function FileTreeV2(props: {
       return
     }
     file.tree.expand(originalPath, live() ? undefined : { list: false })
+  }
+
+  // The revealed folder opens once its row has glided into view, so its chevron turns and its
+  // children fade in where the eye already is. A newer reveal cancels the pending one.
+  createEffect(
+    on(revealed, (path) => {
+      if (!path) return
+      const timer = setTimeout(
+        () => {
+          const row = rows().find((item) => item.node.path === path)
+          if (!expanded(path)) file.tree.expand(row?.node.originalPath ?? path, live() ? undefined : { list: false })
+        },
+        still() ? 0 : REVEAL_EXPAND_MS,
+      )
+      onCleanup(() => clearTimeout(timer))
+    }),
+  )
+  const revealChild = (path: string) => {
+    const parent = revealed()
+    return !!parent && path.startsWith(`${parent}/`) && !path.slice(parent.length + 1).includes("/")
   }
 
   const rowByKey = createMemo(() => new Map(rows().map((row) => [row.node.path, row] as const)))
@@ -249,6 +279,7 @@ export default function FileTreeV2(props: {
                           as="button"
                           type="button"
                           class="relative"
+                          data-reveal-child={revealChild(row().node.path) ? "" : undefined}
                           onFocus={() => setFocused(row().node.path)}
                           onBlur={() => setFocused(undefined)}
                           onClick={() => selectFile(row().node, props.onFileClick)}
@@ -274,6 +305,8 @@ export default function FileTreeV2(props: {
                         as="button"
                         type="button"
                         class="relative"
+                        data-revealed={row().node.path === revealed() ? "" : undefined}
+                        data-reveal-child={revealChild(row().node.path) ? "" : undefined}
                         onFocus={() => setFocused(row().node.path)}
                         onBlur={() => setFocused(undefined)}
                         aria-expanded={expanded(row().node.path)}

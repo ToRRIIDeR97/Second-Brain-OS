@@ -16,9 +16,11 @@ export type FileReferenceLabels = {
   copied: string
   loading: string
   missing: string
+  folderMissing: string
   binary: string
   empty: string
   more: (count: number) => string
+  items: (count: number) => string
 }
 
 export function fileReferenceLabels(i18n: UiI18n): FileReferenceLabels {
@@ -28,9 +30,11 @@ export function fileReferenceLabels(i18n: UiI18n): FileReferenceLabels {
     copied: i18n.t("ui.message.copied"),
     loading: i18n.t("secondBrain.fileReference.loading"),
     missing: i18n.t("secondBrain.fileReference.missing"),
+    folderMissing: i18n.t("secondBrain.fileReference.folderMissing"),
     binary: i18n.t("secondBrain.fileReference.binary"),
     empty: i18n.t("secondBrain.fileReference.empty"),
     more: (count) => i18n.plural("secondBrain.fileReference.more", count, { count }),
+    items: (count) => i18n.plural("secondBrain.fileReference.items", count, { count }),
   }
 }
 
@@ -43,13 +47,17 @@ const chipAttributes = [
   "data-file-reference",
   "data-file-reference-start",
   "data-file-reference-end",
+  "data-file-reference-kind",
+  "data-file-reference-folder",
   "role",
   "tabindex",
 ]
 
 /**
- * Marks inline code that cites a file inside `directory` as a focusable link chip. The resolved
- * relative path and range live in data attributes so the delegated handlers never re-parse.
+ * Marks inline code that cites a file or folder inside `directory` as a focusable link chip. The
+ * resolved relative path, range and kind live in data attributes so the delegated handlers never
+ * re-parse. `data-file-reference-folder` (the folder icon) is set for a trailing slash here, and for an
+ * extensionless path once the peek has found a folder there.
  */
 export function markFileReferences(root: Element, directory: string | undefined) {
   root.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((code) => {
@@ -63,6 +71,10 @@ export function markFileReferences(root: Element, directory: string | undefined)
     code.dataset.fileReference = path
     code.setAttribute("role", "button")
     code.tabIndex = 0
+    if (reference.kind) code.dataset.fileReferenceKind = reference.kind
+    else code.removeAttribute("data-file-reference-kind")
+    if (reference.kind === "folder") code.dataset.fileReferenceFolder = ""
+    else if (!reference.kind) code.removeAttribute("data-file-reference-folder")
     if (!reference.start || !reference.end) return
     code.dataset.fileReferenceStart = String(reference.start)
     code.dataset.fileReferenceEnd = String(reference.end)
@@ -72,7 +84,13 @@ export function markFileReferences(root: Element, directory: string | undefined)
 function chipReference(chip: HTMLElement): FileReference {
   const start = Number(chip.dataset.fileReferenceStart) || undefined
   const end = Number(chip.dataset.fileReferenceEnd) || start
-  return { path: chip.dataset.fileReference!, start, end }
+  const kind = chip.dataset.fileReferenceKind
+  return {
+    path: chip.dataset.fileReference!,
+    start,
+    end,
+    kind: kind === "folder" || kind === "either" ? kind : undefined,
+  }
 }
 
 /** Delegated hover peek and open handling for the chips under `root`. Returns its cleanup. */
@@ -264,6 +282,14 @@ function FileReferencePeek(props: {
     const value = result()
     if (value?.status === "found") return value
   }
+  const folderCount = () => {
+    const value = result()
+    if (value?.status === "folder") return value.count
+  }
+  // An extensionless chip shows the folder icon once the listing says it names a folder.
+  createEffect(() => {
+    if (folderCount() !== undefined) props.target?.chip.setAttribute("data-file-reference-folder", "")
+  })
   // A bare file name shows its full path once the app has found it.
   const path = () => result()?.path ?? reference()?.path ?? ""
   const name = () => path().split("/").at(-1) ?? ""
@@ -363,6 +389,9 @@ function FileReferencePeek(props: {
                 </Show>
               )}
             </Match>
+            <Match when={folderCount() !== undefined}>
+              <div data-slot="file-reference-peek-status">{props.labels().items(folderCount()!)}</div>
+            </Match>
             <Match when={preview.loading}>
               <div data-slot="file-reference-peek-status" role="status">
                 {props.labels().loading}
@@ -373,7 +402,7 @@ function FileReferencePeek(props: {
             </Match>
             <Match when={true}>
               <div data-slot="file-reference-peek-status" data-missing="">
-                {props.labels().missing}
+                {current().kind === "folder" ? props.labels().folderMissing : props.labels().missing}
               </div>
             </Match>
           </Switch>

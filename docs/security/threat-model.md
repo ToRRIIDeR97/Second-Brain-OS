@@ -601,17 +601,21 @@ may quote workspace content.
 
 ## File references in chat
 
-Inline-code file references in assistant text open files in the right panel
+Inline-code file and folder references in assistant text open files, or
+reveal folders in the Files tree, in the right panel
 (`session-ui/src/components/markdown-file-reference.ts`,
 `app/src/pages/session/file-reference.tsx`). The reference is model output, so
-the path is checked twice, when the chip is marked and again in the app
-handler before any read: no `..` segment, no leading `~`, no control
+the path is checked twice, the same way for files and folders, when the chip
+is marked and again in the app handler before any read or listing: no `..`
+segment, no leading `~`, no control
 characters, no Windows drive-relative path (`D:x.ts`, which resolves against
 that drive's current folder), and an absolute path only when it is inside the thread folder
 (converted to relative; Windows paths compare case-insensitively). Reads go
 through the existing file read, list and search APIs with relative paths, so
 the server's own containment check (`FSUtil.contains`) still applies. Peeks
-show at most 12 lines.
+show at most 12 lines; a folder peek shows only its item count. Whether an
+extensionless path is a file or a folder comes from the parent folder's
+listing, never from the model's text, and a missing entry opens nothing.
 
 ## Checks
 
