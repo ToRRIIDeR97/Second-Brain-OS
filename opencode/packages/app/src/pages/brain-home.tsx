@@ -31,7 +31,7 @@ import {
   PromptInputHarnessControls,
   type PromptInputHarnessController,
 } from "@/components/prompt-input/harness-controls"
-import { defaultModel } from "@/components/prompt-input/harness-controller"
+import { MODEL_RETRIES, MODEL_RETRY_MS, defaultModel } from "@/components/prompt-input/harness-controller"
 import { useSettings, withVisibleModels } from "@/context/settings"
 
 type TodayItem = { kind: "event"; value: CalendarEvent } | { kind: "task"; value: PlannerTask; overdue: boolean }
@@ -96,6 +96,13 @@ export default function BrainHomePage() {
     staleTime: 30_000,
     refetchOnMount: true,
     retry: false,
+    // The selected agent can answer before its models are listed; ask again until they arrive, as threads do.
+    refetchInterval: (query) => {
+      const selected = query.state.data?.find((item) => item.id === state.harnessInstanceID)
+      const waiting =
+        selected?.driver !== Harness.OpenCodeDriver && selected?.status === "available" && selected.models.length === 0
+      return waiting && query.state.dataUpdateCount <= MODEL_RETRIES ? MODEL_RETRY_MS : false
+    },
   }))
   // Models hidden in Settings never reach the picker or the default-model choice, as in the thread composer.
   // Reading `data` suspends, so callers outside the controls' Suspense boundary check `isPending` first.

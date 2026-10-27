@@ -30,6 +30,9 @@ export const defaultModel = (instance: Harness.Instance) => {
 
 // Background checks run at most this often; each can start every harness CLI on the server.
 const REVALIDATE_MS = 60_000
+// Listing Claude Code's models takes about 10s, longer on a cold start.
+export const MODEL_RETRY_MS = 3_000
+export const MODEL_RETRIES = 10
 
 // Bumped by Settings after a harness is added, toggled, or removed, so open prompts refetch the list.
 const [settingsVersion, setSettingsVersion] = createSignal(0)
@@ -70,6 +73,23 @@ export function createPromptHarnessController(selection: HarnessSelection) {
   window.addEventListener("focus", revalidate)
   onCleanup(() => window.removeEventListener("focus", revalidate))
   const instance = createMemo(() => instances()?.find((item) => item.id === selection.current()))
+  // An ACP agent answers before its models are listed (the server reads them in the background),
+  // so a harness that is up but has no models yet is asked again a few times.
+  let retries = 0
+  createEffect(() => {
+    const current = instance()
+    if (!current || current.driver === Harness.OpenCodeDriver || current.status !== "available") return
+    if (current.models.length > 0) {
+      retries = 0
+      return
+    }
+    if (loaded.loading || retries >= MODEL_RETRIES) return
+    const timer = setTimeout(() => {
+      retries++
+      void refetch()
+    }, MODEL_RETRY_MS)
+    onCleanup(() => clearTimeout(timer))
+  })
 
   createEffect(() => {
     const available = instances()
