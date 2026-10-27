@@ -90,13 +90,10 @@
   [data-slot="collapsible-content"] {
     overflow: hidden;
 
+    /* Opens and closes at once: these bodies sit in virtualized timeline rows, which must reach their final
+       height in one frame. */
     &[data-expanded] {
       overflow: visible;
-      animation: collapsible-slide-down var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
-    }
-
-    &[data-closed] {
-      animation: collapsible-slide-up var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
     }
   }
 
@@ -131,38 +128,6 @@
   &[data-variant="ghost"][data-scope="file-tree-v2"] {
     > [data-slot="collapsible-trigger"] {
       height: 28px;
-    }
-  }
-}
-
-/* Overflow stays hidden while the height animates; expanded content returns to overflow: visible after. */
-@keyframes collapsible-slide-down {
-  from {
-    height: 0;
-    overflow: hidden;
-  }
-  to {
-    height: var(--kb-collapsible-content-height);
-    overflow: hidden;
-  }
-}
-
-@keyframes collapsible-slide-up {
-  from {
-    height: var(--kb-collapsible-content-height);
-    overflow: hidden;
-  }
-  to {
-    height: 0;
-    overflow: hidden;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="collapsible"] [data-slot="collapsible-content"] {
-    &[data-expanded],
-    &[data-closed] {
-      animation: none;
     }
   }
 }

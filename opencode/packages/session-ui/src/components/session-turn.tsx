@@ -26,7 +26,6 @@ import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { normalize } from "./session-diff"
-import { AccordionReveal } from "./accordion-reveal"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -469,7 +468,7 @@ export function SessionTurn(
                               active,
                               (value) => {
                                 if (!value) {
-                                  // The diff stays while the item closes; AccordionReveal's onClosed drops it.
+                                  setShown(false)
                                   return
                                 }
 
@@ -483,7 +482,7 @@ export function SessionTurn(
                           )
 
                           return (
-                            <Accordion.Item value={diff.file} forceMount>
+                            <Accordion.Item value={diff.file}>
                               <StickyAccordionHeader>
                                 <Accordion.Trigger>
                                   <div data-slot="session-turn-diff-trigger">
@@ -506,13 +505,13 @@ export function SessionTurn(
                                   </div>
                                 </Accordion.Trigger>
                               </StickyAccordionHeader>
-                              <AccordionReveal open={active()} onClosed={() => setShown(false)}>
+                              <Accordion.Content>
                                 <Show when={shown()}>
                                   <div data-slot="session-turn-diff-view" data-scrollable>
                                     <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
                                   </div>
                                 </Show>
-                              </AccordionReveal>
+                              </Accordion.Content>
                             </Accordion.Item>
                           )
                         }}

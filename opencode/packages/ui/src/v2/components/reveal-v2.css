@@ -1,6 +1,7 @@
 /* Reveal: expand/collapse through grid rows (0fr to 1fr) with opacity. Open: medium +
-   emphasized-decelerate. Close: short + emphasized-accelerate. Content clips only while moving, so focus
-   rings and overflowing children show once the reveal has settled open. */
+   emphasized-decelerate. Close: short + emphasized-accelerate. The grid and the clip apply only while
+   moving; settled open is a plain block (flow-root, so margins stay inside as they do in a grid item) and
+   closed is display: none, so a settled reveal adds no layout work. */
 [data-component="reveal-v2"] {
   display: grid;
   grid-template-rows: 0fr;
@@ -9,20 +10,37 @@
     grid-template-rows var(--v2-duration-short) var(--v2-ease-emphasized-accelerate),
     opacity var(--v2-duration-short) var(--v2-ease-emphasized-accelerate);
 
-  &[data-open] {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transition-duration: var(--v2-duration-medium);
-    transition-timing-function: var(--v2-ease-emphasized-decelerate);
-  }
-
-  [data-slot="reveal-v2-content"] {
+  > [data-slot="reveal-v2-content"] {
     min-height: 0;
     overflow: hidden;
   }
 
-  &[data-settled] [data-slot="reveal-v2-content"] {
-    overflow: visible;
+  &[data-phase="closed"] {
+    display: none;
+  }
+
+  &[data-phase="opening"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition-duration: var(--v2-duration-medium);
+    transition-timing-function: var(--v2-ease-emphasized-decelerate);
+
+    /* Opening from display: none starts from the closed state. */
+    @starting-style {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+  }
+
+  &[data-phase="open"] {
+    display: flow-root;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition: none;
+
+    > [data-slot="reveal-v2-content"] {
+      overflow: visible;
+    }
   }
 }
 

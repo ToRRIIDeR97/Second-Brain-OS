@@ -143,15 +143,6 @@
     overflow: hidden;
   }
 
-  /* Review diffs mount behind a 160px placeholder, so Kobalte's measured-height keyframes would grow to the
-     placeholder and then snap; they open at once (content toggles with display) instead. */
-  [data-slot="accordion-item"][data-file] [data-slot="accordion-content"] {
-    &[data-expanded],
-    &[data-closed] {
-      animation: none;
-    }
-  }
-
   [data-slot="session-review-trigger-content"] {
     display: flex;
     align-items: center;

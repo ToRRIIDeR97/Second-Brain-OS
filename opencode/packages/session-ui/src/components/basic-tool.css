@@ -320,14 +320,3 @@ body[data-new-layout] {
     }
   }
 }
-
-/* BasicTool opens and closes its body with Reveal (grid rows, motion tokens), so the Kobalte content's
-   measured-height keyframes stay off. The root's gap moves inside the reveal: a closed body adds no space. */
-[data-component="collapsible"].tool-collapsible > [data-component="reveal-v2"] {
-  margin-top: calc(-1 * var(--tool-content-gap, 0px));
-
-  > [data-slot="reveal-v2-content"] > [data-slot="collapsible-content"] {
-    padding-top: var(--tool-content-gap, 0px);
-    animation: none;
-  }
-}

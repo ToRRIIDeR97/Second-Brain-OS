@@ -1209,16 +1209,7 @@
     gap: 0px;
   }
 
-  /* The sticky trigger's padding holds the gap here, so the body's reveal takes none (basic-tool.css). */
-  > [data-component="collapsible"].tool-collapsible > [data-component="reveal-v2"] {
-    margin-top: 0;
-  }
-
-  > [data-component="collapsible"].tool-collapsible
-    > [data-component="reveal-v2"]
-    > [data-slot="reveal-v2-content"]
-    > [data-slot="collapsible-content"] {
-    padding-top: 0;
+  > [data-component="collapsible"] > [data-slot="collapsible-content"] {
     border: none;
     background: transparent;
   }
@@ -1434,13 +1425,4 @@ body[data-new-layout] [data-component="user-message"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-/* AccordionReveal animates diff bodies with Reveal, so the Kobalte measured-height keyframes stay off. */
-[data-component="accordion"]
-  [data-slot="accordion-item"]
-  > [data-component="reveal-v2"]
-  > [data-slot="reveal-v2-content"]
-  > [data-slot="accordion-content"] {
-  animation: none;
 }

@@ -13,7 +13,9 @@ export interface RevealProps extends ParentProps {
 /**
  * Expands and collapses its children (grid rows 0fr to 1fr, with opacity). Opening uses medium +
  * emphasized-decelerate, closing short + emphasized-accelerate. Children stay mounted while closing and
- * unmount once closed; reduced motion opens and closes at once.
+ * unmount once closed; reduced motion opens and closes at once. The grid and its clip apply only while
+ * moving (`data-phase` opening or closing): settled open, the wrapper is a plain block, so it adds no grid
+ * layout to every reflow; closed, it is `display: none` and empty.
  */
 export function Reveal(props: RevealProps) {
   const reveal = createReveal(
@@ -25,7 +27,7 @@ export function Reveal(props: RevealProps) {
     <div
       data-component="reveal-v2"
       data-open={props.open ? "" : undefined}
-      data-settled={reveal.phase() === "open" ? "" : undefined}
+      data-phase={reveal.phase()}
       class={props.class}
       inert={props.open ? undefined : true}
       aria-hidden={props.open ? undefined : "true"}

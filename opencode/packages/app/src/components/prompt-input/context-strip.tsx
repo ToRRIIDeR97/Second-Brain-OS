@@ -3,7 +3,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
-import { For, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from "solid-js"
+import { Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from "solid-js"
 import { openSessionContext } from "@/components/session-context-usage"
 import { createSessionContextFormatter } from "@/components/session/session-context-format"
 import { getSessionContext } from "@/components/session/session-context-metrics"
@@ -317,7 +317,7 @@ function SheetDetails(props: {
         </Show>
       </div>
       <div class="flex min-w-0 flex-col gap-[9px] pt-0.5">
-        <For each={rows()}>
+        <Index each={rows()}>
           {(row) => (
             <div
               data-slot="context-sheet-row"
@@ -327,7 +327,7 @@ function SheetDetails(props: {
                 "grid-cols-[minmax(0,1fr)_auto]": !limit(),
               }}
             >
-              <span class="truncate">{language.t(TOKEN_LABEL[row.key])}</span>
+              <span class="truncate">{language.t(TOKEN_LABEL[row().key])}</span>
               <Show when={limit()}>
                 {(max) => (
                   <span data-slot="context-sheet-bar-track" class="h-2 overflow-hidden rounded-full">
@@ -335,7 +335,7 @@ function SheetDetails(props: {
                       data-slot="context-sheet-bar"
                       class="block h-full rounded-full"
                       style={{
-                        width: `max(3px, ${Math.min(100, (row.value / max()) * 100)}%)`,
+                        width: `max(3px, ${Math.min(100, (row().value / max()) * 100)}%)`,
                         transform: props.open ? "scaleX(1)" : "scaleX(0)",
                       }}
                     />
@@ -343,14 +343,16 @@ function SheetDetails(props: {
                 )}
               </Show>
               <span class="text-right tabular-nums text-v2-text-text-base [font-weight:600]">
-                {formatter().number(row.value)}
+                {formatter().number(row().value)}
               </span>
               <Show when={limit()}>
-                {(max) => <span class="text-right tabular-nums">{formatShare(row.value, max(), language.intl())}</span>}
+                {(max) => (
+                  <span class="text-right tabular-nums">{formatShare(row().value, max(), language.intl())}</span>
+                )}
               </Show>
             </div>
           )}
-        </For>
+        </Index>
         <div class="flex min-w-0 items-center gap-3 border-t border-v2-border-border-muted pt-1.5">
           <span class="min-w-0 truncate font-mono" title={props.context.modelLabel}>
             {props.context.modelLabel}
