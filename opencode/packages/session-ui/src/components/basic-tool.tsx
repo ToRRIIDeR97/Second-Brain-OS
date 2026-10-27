@@ -16,7 +16,6 @@ import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import type { IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { useData } from "../context"
 import { Markdown } from "./markdown"
 import { stepIcon, stepVerbKey, toolStep } from "./step-kind"
@@ -147,7 +146,7 @@ export function BasicTool(props: BasicToolProps) {
         if (!props.defer) return
         if (!value) {
           cancel()
-          // The body stays mounted while Reveal closes it; it unmounts once the close has settled (below).
+          setState("ready", false)
           return
         }
 
@@ -236,7 +235,7 @@ export function BasicTool(props: BasicToolProps) {
   )
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} forceMount class="tool-collapsible">
+    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
       <Show
         when={props.triggerAsLink || props.triggerHref}
         fallback={
@@ -260,19 +259,11 @@ export function BasicTool(props: BasicToolProps) {
           {trigger()}
         </Collapsible.Trigger>
       </Show>
-      {/* Reveal animates the body (grid rows) and unmounts it once closed, so the root force-mounts the
-          Kobalte content and its measured-height keyframes stay off (basic-tool.css). */}
+      {/* The body opens and closes at once: a timeline row must reach its final height in one frame. */}
       <Show when={hasChildren() && !props.hideDetails}>
-        <Reveal
-          open={open()}
-          onSettled={(phase) => {
-            if (phase === "closed" && props.defer) setState("ready", false)
-          }}
-        >
-          <Collapsible.Content>
-            <Show when={!props.defer || ready()}>{props.children}</Show>
-          </Collapsible.Content>
-        </Reveal>
+        <Collapsible.Content>
+          <Show when={!props.defer || ready()}>{props.children}</Show>
+        </Collapsible.Content>
       </Show>
     </Collapsible>
   )

@@ -66,14 +66,19 @@ maps the tokens to `ease-standard`, `ease-emphasized-decelerate` (alias
 `ease-emphasized`), `ease-emphasized-accelerate`, `ease-spring`,
 `duration-short|medium|long`, a bare `transition*` default of short + standard,
 and `animate-enter` (fade and 4px rise) / `animate-exit` (fade)
-(`packages/ui/src/styles/tailwind/`). Kobalte overlays (dialogs, menus, selects,
-tooltips, popovers) keep their content mounted for an exit only when the
-`[data-closed]` rule sets a different `animation-name`, so each has its own exit
-keyframes; `context/dialog.tsx` disposes a closed dialog after the short exit.
+(`packages/ui/src/styles/tailwind/`). Kobalte overlays (dialogs, tooltips,
+popovers) keep their content mounted for an exit only when the `[data-closed]`
+rule sets a different `animation-name`, so each has its own exit keyframes;
+`context/dialog.tsx` disposes a closed dialog after the short exit. MenuV2 and
+SelectV2 menus enter with short + emphasized-decelerate and close at once: an
+exit would keep the menu mounted, so a selection or dismissal would wait on it.
 Three helpers in `packages/ui/src/v2/components/` cover in-page motion:
 `Reveal` (`@opencode-ai/ui/v2/reveal`; `open`, `class`, `onTransitionEnd`)
 expands and collapses through grid rows and opacity, keeps its children while
-closing and unmounts them once closed (`inert` and `aria-hidden` meanwhile);
+closing and unmounts them once closed (`inert` and `aria-hidden` meanwhile).
+Its grid and clip apply only while it moves (`data-phase` `opening` or
+`closing`); settled open it is a plain `flow-root` block and closed it is
+`display: none`, so a settled `Reveal` adds no layout work to each reflow;
 `Presence` (`@opencode-ai/ui/v2/presence`; `when`, `enterClass`, `exitClass`,
 `class`) keeps a wrapper `div` mounted through its exit animation with
 `solid-presence`, defaulting to `animate-enter` / `animate-exit`; `ViewSwitch`
@@ -102,16 +107,21 @@ Escape. Live lists (sidebar threads, running sessions) animate only
 rows that join after the first render (`utils/fresh-items.ts`), never the
 initial list or a reorder.
 
-In the thread, tool rows and diff accordions open through `Reveal`
-(`session-ui` `AccordionReveal` force-mounts the Kobalte item so its
-measured-height keyframes stay off), the question and permission docks grow in
-as the composer folds away, and the queued and rolled-back docks keep removed
-rows closing in place with `createExitList`
-(`pages/session/composer/exit-list.ts`). Animation stays off for streaming text
-and the initial history load; only rows a toggle adds or removes animate. A click
-on any control with `aria-expanded` in the thread holds the scroll position while
-the content eases (`MessageTimeline` stops following the bottom and `session.tsx`
-pauses auto-scroll), then following resumes if the view is still at the bottom.
+The virtualized timeline expands and collapses instantly, as it did before the
+motion pass: tool rows, context and tool groups, diff accordions (Kobalte
+`Collapsible` and `Accordion` content has no height keyframes), a turn's step
+rows, the live steps card and the thinking-to-reasoning-to-text handoff all
+reach their final geometry in one frame, and the timeline stays bottom-anchored
+through a toggle. The virtualizer measures a row once per change and keeps the
+bottom anchor from that measurement, so a row whose height eased over several
+frames moved the anchor and the rows below it on every frame (breaking the
+`timeline-stability` suite's bottom-anchor, ordering and no-blank contracts),
+and grid-row wrappers on every row made each layout pass of a streaming turn
+markedly more expensive. Inside a row only transform, opacity and colour
+animate (chevrons, hover colours, the count and status labels). Outside the
+timeline, the question and permission docks grow in as the composer folds away,
+and the queued and rolled-back docks keep removed rows closing in place with
+`createExitList` (`pages/session/composer/exit-list.ts`).
 
 The sidebar's controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with

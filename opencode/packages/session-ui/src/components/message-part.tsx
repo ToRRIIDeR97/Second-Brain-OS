@@ -43,7 +43,6 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
-import { AccordionReveal } from "./accordion-reveal"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
@@ -1559,17 +1558,15 @@ export const ToolRegistry = {
 
 function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
   const value = createMemo(() => props.path || "tool-file")
-  const [open, setOpen] = createSignal(true)
 
   return (
     <Accordion
       multiple
       data-scope="apply-patch"
       style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
-      value={open() ? [value()] : []}
-      onChange={(next) => setOpen(Array.isArray(next) ? next.includes(value()) : next === value())}
+      defaultValue={[value()]}
     >
-      <Accordion.Item value={value()} forceMount>
+      <Accordion.Item value={value()}>
         <StickyAccordionHeader>
           <Accordion.Trigger>
             <div data-slot="apply-patch-trigger-content">
@@ -1589,7 +1586,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
             </div>
           </Accordion.Trigger>
         </StickyAccordionHeader>
-        <AccordionReveal open={open()}>{props.children}</AccordionReveal>
+        <Accordion.Content>{props.children}</Accordion.Content>
       </Accordion.Item>
     </Accordion>
   )
@@ -2539,7 +2536,7 @@ ToolRegistry.register({
 
                       createEffect(() => {
                         if (!active()) {
-                          // The diff stays while the item closes; AccordionReveal's onClosed drops it.
+                          setVisible(false)
                           return
                         }
 
@@ -2550,7 +2547,7 @@ ToolRegistry.register({
                       })
 
                       return (
-                        <Accordion.Item value={file.filePath} data-type={file.type} forceMount>
+                        <Accordion.Item value={file.filePath} data-type={file.type}>
                           <StickyAccordionHeader>
                             <Accordion.Trigger>
                               <div data-slot="apply-patch-trigger-content">
@@ -2589,7 +2586,7 @@ ToolRegistry.register({
                               </div>
                             </Accordion.Trigger>
                           </StickyAccordionHeader>
-                          <AccordionReveal open={active()} onClosed={() => setVisible(false)}>
+                          <Accordion.Content>
                             <Show when={props.deferContent === false || visible()}>
                               <div data-component="apply-patch-file-diff">
                                 <Dynamic
@@ -2602,7 +2599,7 @@ ToolRegistry.register({
                                 />
                               </div>
                             </Show>
-                          </AccordionReveal>
+                          </Accordion.Content>
                         </Accordion.Item>
                       )
                     }}
