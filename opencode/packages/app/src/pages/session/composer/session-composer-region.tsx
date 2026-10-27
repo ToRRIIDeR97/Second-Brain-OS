@@ -29,12 +29,14 @@ export function SessionComposerRegion(props: {
     controller.followup()?.items.length ? controller.followup() : last,
   )
 
-  const revertDock = (dock: SessionComposerRevertDock) => (
+  // The dock objects are rebuilt on every read, so the docks take accessors instead of remounting (which
+  // would reset their collapsed state, focus and row motion) whenever the queue or its actions change.
+  const revertDock = (dock: () => SessionComposerRevertDock) => (
     <SessionRevertDock
-      items={dock.items}
-      restoring={dock.restoring}
-      disabled={dock.disabled}
-      onRestore={dock.onRestore}
+      items={dock().items}
+      restoring={dock().restoring}
+      disabled={dock().disabled}
+      onRestore={(id) => dock().onRestore(id)}
     />
   )
 
@@ -103,9 +105,7 @@ export function SessionComposerRegion(props: {
               fallback={
                 <>
                   <Reveal open={!!rolled()}>
-                    <Show when={revert()} keyed>
-                      {(dock) => <div class="pb-2">{revertDock(dock)}</div>}
-                    </Show>
+                    <Show when={revert()}>{(dock) => <div class="pb-2">{revertDock(dock)}</div>}</Show>
                   </Reveal>
                   <div
                     class="w-full min-h-32 md:min-h-40 rounded-[28px] bg-v2-background-bg-layer-01 px-5 py-4 text-v2-text-text-faint whitespace-pre-wrap pointer-events-none"
@@ -120,9 +120,7 @@ export function SessionComposerRegion(props: {
                   eases with the revert dock's reveal, so the composer's offset never jumps. */}
               <div style={{ "margin-top": `${-36 * controller.dockProgress()}px` }}>
                 <Reveal open={!!rolled()}>
-                  <Show when={revert()} keyed>
-                    {(dock) => revertDock(dock)}
-                  </Show>
+                  <Show when={revert()}>{(dock) => revertDock(dock)}</Show>
                 </Reveal>
               </div>
               <div
@@ -136,8 +134,10 @@ export function SessionComposerRegion(props: {
                 }}
               >
                 <Reveal open={!!controller.followup()?.items.length}>
-                  <Show when={followup()} keyed>
-                    {(dock) => <SessionFollowupDock items={dock.items} pending={dock.pending} actions={dock.actions} />}
+                  <Show when={followup()}>
+                    {(dock) => (
+                      <SessionFollowupDock items={dock().items} pending={dock().pending} actions={dock().actions} />
+                    )}
                   </Show>
                 </Reveal>
                 <Show when={controller.child()} fallback={props.promptInput}>

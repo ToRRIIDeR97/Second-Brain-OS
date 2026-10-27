@@ -192,7 +192,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const attempt = (tries: number) => {
       focusFrame = undefined
       const el = next === options().length ? customRef : optsRef[next]
-      if (!el || el.isConnected || tries === 0) return el?.focus()
+      // preventScroll: inside an opening Reveal the content is clipped, and scrolling it into view would shift it.
+      if (!el || el.isConnected || tries === 0) return el?.focus({ preventScroll: true })
       focusFrame = requestAnimationFrame(() => attempt(tries - 1))
     }
     focusFrame = requestAnimationFrame(() => attempt(30))
@@ -448,7 +449,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const focusCustom = (el: HTMLTextAreaElement) => {
     setTimeout(() => {
-      el.focus()
+      el.focus({ preventScroll: true })
       resizeInput(el)
     }, 0)
   }

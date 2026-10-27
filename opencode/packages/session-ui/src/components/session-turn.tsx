@@ -27,7 +27,6 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { normalize } from "./session-diff"
 import { AccordionReveal } from "./accordion-reveal"
-import { prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -471,7 +470,6 @@ export function SessionTurn(
                               (value) => {
                                 if (!value) {
                                   // The diff stays while the item closes; AccordionReveal's onClosed drops it.
-                                  if (prefersReducedMotion()) setShown(false)
                                   return
                                 }
 

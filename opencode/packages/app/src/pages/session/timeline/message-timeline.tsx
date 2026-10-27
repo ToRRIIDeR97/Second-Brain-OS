@@ -342,6 +342,8 @@ export function MessageTimeline(props: {
   // Only the toggled rows animate, never the initial history load.
   const [stepMotion, setStepMotion] = createSignal<{ turn: string; keys: Set<string>; phase: "enter" | "exit" }>()
   let stepMotionTimer: ReturnType<typeof setTimeout> | undefined
+  // A fold waiting for its fade-out; a toggle that arrives first (on any turn) applies it at once.
+  let pendingFold: (() => void) | undefined
   onCleanup(() => clearTimeout(stepMotionTimer))
   const stepRowKeys = (row: TimelineRow.TurnSteps) => {
     const rows = timelineRows()
@@ -365,6 +367,9 @@ export function MessageTimeline(props: {
     }
     clearTimeout(stepMotionTimer)
     setStepMotion(undefined)
+    const pending = pendingFold
+    pendingFold = undefined
+    pending?.()
     if (prefersReducedMotion()) return apply()
     if (open) {
       apply()
@@ -373,7 +378,9 @@ export function MessageTimeline(props: {
       return
     }
     setStepMotion({ turn, keys: stepRowKeys(row), phase: "exit" })
+    pendingFold = apply
     stepMotionTimer = setTimeout(() => {
+      pendingFold = undefined
       setStepMotion(undefined)
       apply()
     }, motionDuration("short"))
