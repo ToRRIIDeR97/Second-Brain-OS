@@ -58,7 +58,11 @@ function FileCommentMenuV2(props: {
 
 type ScrollPos = { x: number; y: number }
 
-function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {
+function createScrollSync(input: {
+  tab: () => string
+  view: ReturnType<typeof useSessionLayout>["view"]
+  paused?: () => boolean
+}) {
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
   let restoreFrame: number | undefined
@@ -117,7 +121,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 
   const restore = () => {
     const el = scroll
-    if (!el) return
+    if (!el || input.paused?.()) return
 
     const pos = input.view().scroll(input.tab())
     if (!pos) return
@@ -222,9 +226,12 @@ function SessionFileViewV2(props: { tab: string }) {
     if (file.ready()) return (file.selectedLines(p) as SelectedLineRange | undefined) ?? null
     return (getSessionHandoff(sessionKey())?.files[p] as SelectedLineRange | undefined) ?? null
   })
+  // While a file reference glides the viewer, restoring the saved scroll would pull it back.
+  let gliding = false
   const scrollSync = createScrollSync({
     tab: () => props.tab,
     view,
+    paused: () => gliding,
   })
 
   const selectionPreview = (source: string, selection: FileSelection) => {
@@ -401,7 +408,7 @@ function SessionFileViewV2(props: { tab: string }) {
   // A file reference from a reply, once the panel has arrived and the lines render: the code fades in
   // where it is, glides to the lines, then selects and marks them. The selection gives the steady tint;
   // the mark adds the gutter accent and the wipe-in highlight. A newer reveal re-runs this effect, and
-  // its cleanup cancels the frame in flight, so a second click retargets from wherever the glide is.
+  // its cleanup stops the glide in flight, so a second click retargets from wherever the glide is.
   let viewport: HTMLDivElement | undefined
   const referenceRoot = () => viewport?.querySelector("diffs-container")?.shadowRoot
   const clearReferenceMarks = () =>
@@ -424,17 +431,44 @@ function SessionFileViewV2(props: { tab: string }) {
     clearReferenceMarks()
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     let frame: number | undefined
-    // Ease-in-out scroll, after the code's fade-in; reduced motion lands on the end state at once.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // Ease-in-out scroll that starts once the code has faded in; reduced motion lands on the end state.
     const glide = (el: HTMLDivElement, to: number, delay: number, done: () => void) => {
-      const from = el.scrollTop
-      const begin = performance.now() + (still ? 0 : delay)
-      const step = (now: number) => {
-        const t = still ? 1 : Math.min(1, Math.max(0, (now - begin) / REFERENCE_SCROLL_MS))
-        el.scrollTop = from + (to - from) * (t < 0.5 ? 2 * t * t : 1 - (2 - 2 * t) ** 2 / 2)
-        frame = t < 1 ? requestAnimationFrame(step) : undefined
-        if (t === 1) done()
+      const run = () => {
+        timer = undefined
+        gliding = true
+        const from = el.scrollTop
+        const begin = performance.now()
+        const step = (now: number) => {
+          const t = still ? 1 : Math.min(1, Math.max(0, (now - begin) / REFERENCE_SCROLL_MS))
+          el.scrollTop = from + (to - from) * (t < 0.5 ? 2 * t * t : 1 - (2 - 2 * t) ** 2 / 2)
+          frame = t < 1 ? requestAnimationFrame(step) : undefined
+          if (t < 1) return
+          gliding = false
+          done()
+        }
+        frame = requestAnimationFrame(step)
       }
-      frame = requestAnimationFrame(step)
+      if (still || delay === 0) return run()
+      timer = setTimeout(run, delay)
+    }
+    const stop = () => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      clearTimeout(timer)
+      frame = undefined
+      timer = undefined
+      gliding = false
+    }
+    // Scrolling, clicking or typing in the viewer takes over: the glide stops, and the lines are only selected.
+    const takeOver = () => {
+      stop()
+      file.setSelectedLines(p, { start, end })
+      clearFileReveal()
+    }
+    if (viewport) {
+      makeEventListener(viewport, "wheel", takeOver, { passive: true })
+      makeEventListener(viewport, "pointerdown", takeOver)
+      makeEventListener(viewport, "keydown", takeOver)
     }
     const mark = (root: ShadowRoot) => {
       view().setScroll(props.tab, { x: 0, y: viewport?.scrollTop ?? 0 })
@@ -473,9 +507,7 @@ function SessionFileViewV2(props: { tab: string }) {
       glide(viewport, top, count > 10 ? 0 : REFERENCE_FADE_MS, () => mark(root))
     }
     frame = requestAnimationFrame(() => attempt(0))
-    onCleanup(() => {
-      if (frame !== undefined) cancelAnimationFrame(frame)
-    })
+    onCleanup(stop)
   })
 
   createEffect(() => {

@@ -615,7 +615,9 @@ through the existing file read, list and search APIs with relative paths, so
 the server's own containment check (`FSUtil.contains`) still applies. Peeks
 show at most 12 lines; a folder peek shows only its item count. Whether an
 extensionless path is a file or a folder comes from the parent folder's
-listing, never from the model's text, and a missing entry opens nothing.
+listing, never from the model's text; it is plain code until that listing (of
+a top-level folder named by its first segment, then its parent) finds it, and
+a missing entry opens nothing.
 
 ## Checks
 

@@ -1,4 +1,4 @@
-import { createSignal, type ParentProps } from "solid-js"
+import { createEffect, createSignal, on, onCleanup, type ParentProps } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import {
   FileReferenceProvider,
@@ -82,6 +82,31 @@ export function SessionFileReferences(props: ParentProps) {
       )
   }
 
+  // Prose such as `and/or` or `owner/repo` rarely starts with a top-level folder, so the root listing,
+  // read once per thread folder, screens extensionless paths before their parent folder is listed.
+  let rootFolders: { directory: string; names: Promise<Set<string>> } | undefined
+  const listedEntry = async (input: string) => {
+    const directory = sdk().directory
+    const path = resolveFileReferencePath(input, directory)
+    if (!path) return
+    if (rootFolders?.directory !== directory) {
+      const current = {
+        directory,
+        names: listed("").then((nodes) => {
+          if (!nodes && rootFolders === current) rootFolders = undefined
+          return new Set(
+            (nodes ?? [])
+              .filter((node) => node.type === "directory")
+              .map((node) => file.normalize(node.path).replaceAll("\\", "/")),
+          )
+        }),
+      }
+      rootFolders = current
+    }
+    if (!(await rootFolders.names).has(path.split("/")[0])) return
+    return entryType(path)
+  }
+
   const readFileRange = async (reference: FileReference, limit: number): Promise<FileReferencePreview> => {
     const found = await locate(reference)
     if (!found) return { status: "missing", path: reference.path }
@@ -138,11 +163,24 @@ export function SessionFileReferences(props: ParentProps) {
     })
   }
 
+  // A reveal waits for its view to mount; one that never did must not replay when a later view mounts.
+  createEffect(
+    on(
+      () => view().reviewPanel.opened(),
+      (opened) => {
+        if (!opened) clearFileReveal()
+      },
+      { defer: true },
+    ),
+  )
+  onCleanup(clearFileReveal)
+
   const actions = {
     get directory() {
       return sdk().directory
     },
     readFileRange,
+    entryType: listedEntry,
     onFileReference,
   } satisfies FileReferenceActions
 

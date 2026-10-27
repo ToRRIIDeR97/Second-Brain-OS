@@ -578,7 +578,7 @@ export function Markdown(
     const directory = local.fileReferences?.directory
     if (directory || referenceDirectory)
       (directory !== referenceDirectory ? [container] : changed).forEach((block) =>
-        markFileReferences(block, directory),
+        markFileReferences(block, directory, local.fileReferences?.entryType),
       )
     referenceDirectory = directory
     if (directory && !referenceCleanup)

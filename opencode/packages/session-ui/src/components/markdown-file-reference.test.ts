@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { fileReferenceRangeLabel, parseFileReference, resolveFileReferencePath } from "./markdown-file-reference"
+import {
+  fileReferenceRangeLabel,
+  parseFileReference,
+  resolveFileReferencePath,
+  settleFileReference,
+} from "./markdown-file-reference"
 
 describe("parseFileReference", () => {
   test("reads a path with an optional line or range", () => {
@@ -42,6 +47,41 @@ describe("parseFileReference", () => {
     expect(parseFileReference("a.ts:12-x")).toBeUndefined()
     expect(parseFileReference("foo(bar.ts)")).toBeUndefined()
     expect(parseFileReference("1.2")).toBeUndefined()
+  })
+})
+
+describe("settleFileReference", () => {
+  const settle = (text: string, type?: "file" | "directory") => {
+    const reference = parseFileReference(text)
+    return reference && settleFileReference(reference, type)
+  }
+
+  test("keeps an extensionless path plain until the listing names it", () => {
+    const prose = [
+      "owner/repo",
+      "and/or",
+      "input/output",
+      "application/json",
+      "origin/main",
+      "@types/node",
+      "CI/CD",
+      "1/2",
+      "github.com/a/b",
+      "localhost:3000/api",
+      "owner/repo#12",
+      "x/y,",
+    ]
+    prose.forEach((text) => expect(settle(text)).toBeUndefined())
+  })
+
+  test("turns a listed extensionless path into a file or folder chip", () => {
+    expect(settle("src/components", "directory")).toEqual({ path: "src/components", kind: "folder" })
+    expect(settle("bin/opencode", "file")).toEqual({ path: "bin/opencode" })
+  })
+
+  test("leaves files and trailing-slash folders as parsed", () => {
+    expect(settle("src/app.tsx:3")).toEqual({ path: "src/app.tsx", start: 3, end: 3 })
+    expect(settle("notes/")).toEqual({ path: "notes/", kind: "folder" })
   })
 })
 

@@ -643,25 +643,31 @@ export default function Page() {
   let diffFrame: number | undefined
   let diffTimer: number | undefined
 
-  createComputed((prev) => {
-    const open = desktopReviewOpen()
-    if (prev === undefined || prev === open) return open
+  const panelState = () => ({
+    open: desktopReviewOpen(),
+    shown: desktopReviewOpen() || desktopFileTreeOpen(),
+    key: sessionKey(),
+  })
+  createComputed((prev: ReturnType<typeof panelState>) => {
+    const next = panelState()
+    if (prev.open === next.open) return next
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
-    // Opening slides the panel in while the thread column eases left; its content follows once it has
-    // arrived. Closing still snaps, so the column never sweeps across an emptied panel.
-    if (open) {
+    // Opening a closed side panel slides it in while the thread column eases left; its content follows
+    // once it has arrived. Everything else snaps: closing (so the column never sweeps across an emptied
+    // panel), switching sessions, and adding Review beside a file tree that is already showing.
+    if (next.open && !prev.shown && prev.key === next.key) {
       setUi("reviewSnap", false)
       slidePanelOpen()
-      return open
+      return next
     }
     setUi("reviewSnap", true)
     reviewFrame = requestAnimationFrame(() => {
       reviewFrame = undefined
       setUi("reviewSnap", false)
     })
-    return open
-  }, desktopReviewOpen())
+    return next
+  }, panelState())
 
   const legacyTurnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => {

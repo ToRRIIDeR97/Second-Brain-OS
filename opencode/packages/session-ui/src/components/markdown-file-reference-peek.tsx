@@ -7,6 +7,7 @@ import {
   fileReferenceRangeLabel,
   parseFileReference,
   resolveFileReferencePath,
+  settleFileReference,
   type FileReference,
 } from "./markdown-file-reference"
 
@@ -48,21 +49,29 @@ const chipAttributes = [
   "data-file-reference-start",
   "data-file-reference-end",
   "data-file-reference-kind",
-  "data-file-reference-folder",
   "role",
   "tabindex",
 ]
 
+/** Whether a path in the thread folder is a file or a folder, from its parent's listing. */
+export type FileReferenceEntryLookup = (path: string) => Promise<"file" | "directory" | undefined>
+
+// Listing results for extensionless paths, by thread folder and path. Rendering re-marks often, so each
+// path is listed once; `pending` holds its place while the lookup runs.
+const entries = new Map<string, "file" | "directory" | "missing" | "pending">()
+
 /**
  * Marks inline code that cites a file or folder inside `directory` as a focusable link chip. The
  * resolved relative path, range and kind live in data attributes so the delegated handlers never
- * re-parse. `data-file-reference-folder` (the folder icon) is set for a trailing slash here, and for an
- * extensionless path once the peek has found a folder there.
+ * re-parse. An extensionless path (`src/components`, but also `owner/repo` or `and/or`) stays plain
+ * code until `lookup` finds it in the thread folder; `root` is then marked again.
  */
-export function markFileReferences(root: Element, directory: string | undefined) {
+export function markFileReferences(root: Element, directory: string | undefined, lookup?: FileReferenceEntryLookup) {
   root.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((code) => {
-    const reference = directory && !code.closest("a") ? parseFileReference(code.textContent ?? "") : undefined
-    const path = reference && resolveFileReferencePath(reference.path, directory!)
+    const parsed = directory && !code.closest("a") ? parseFileReference(code.textContent ?? "") : undefined
+    const path = parsed && resolveFileReferencePath(parsed.path, directory!)
+    const reference =
+      parsed && path ? settleFileReference(parsed, listedEntry(root, directory!, path, lookup)) : undefined
     if (!reference || !path) {
       if (!code.hasAttribute("data-file-reference")) return
       chipAttributes.forEach((name) => code.removeAttribute(name))
@@ -71,26 +80,40 @@ export function markFileReferences(root: Element, directory: string | undefined)
     code.dataset.fileReference = path
     code.setAttribute("role", "button")
     code.tabIndex = 0
-    if (reference.kind) code.dataset.fileReferenceKind = reference.kind
+    if (reference.kind === "folder") code.dataset.fileReferenceKind = "folder"
     else code.removeAttribute("data-file-reference-kind")
-    if (reference.kind === "folder") code.dataset.fileReferenceFolder = ""
-    else if (!reference.kind) code.removeAttribute("data-file-reference-folder")
-    if (!reference.start || !reference.end) return
+    if (!reference.start || !reference.end) {
+      code.removeAttribute("data-file-reference-start")
+      code.removeAttribute("data-file-reference-end")
+      return
+    }
     code.dataset.fileReferenceStart = String(reference.start)
     code.dataset.fileReferenceEnd = String(reference.end)
   })
 }
 
+function listedEntry(root: Element, directory: string, path: string, lookup?: FileReferenceEntryLookup) {
+  const key = `${directory}\n${path}`
+  const known = entries.get(key)
+  if (known === "file" || known === "directory") return known
+  if (known || !lookup) return
+  entries.set(key, "pending")
+  void lookup(path)
+    .then(
+      (type) => type ?? "missing",
+      () => "missing" as const,
+    )
+    .then((type) => {
+      entries.set(key, type)
+      if (type !== "missing" && root.isConnected) markFileReferences(root, directory, lookup)
+    })
+}
+
 function chipReference(chip: HTMLElement): FileReference {
   const start = Number(chip.dataset.fileReferenceStart) || undefined
   const end = Number(chip.dataset.fileReferenceEnd) || start
-  const kind = chip.dataset.fileReferenceKind
-  return {
-    path: chip.dataset.fileReference!,
-    start,
-    end,
-    kind: kind === "folder" || kind === "either" ? kind : undefined,
-  }
+  const kind = chip.dataset.fileReferenceKind === "folder" ? "folder" : undefined
+  return { path: chip.dataset.fileReference!, start, end, kind }
 }
 
 /** Delegated hover peek and open handling for the chips under `root`. Returns its cleanup. */
@@ -286,10 +309,6 @@ function FileReferencePeek(props: {
     const value = result()
     if (value?.status === "folder") return value.count
   }
-  // An extensionless chip shows the folder icon once the listing says it names a folder.
-  createEffect(() => {
-    if (folderCount() !== undefined) props.target?.chip.setAttribute("data-file-reference-folder", "")
-  })
   // A bare file name shows its full path once the app has found it.
   const path = () => result()?.path ?? reference()?.path ?? ""
   const name = () => path().split("/").at(-1) ?? ""

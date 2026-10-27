@@ -22,6 +22,8 @@ export type FileReferenceActions = {
   directory: string
   /** Reads at most `limit` lines from the start of the reference (or of the file). */
   readFileRange: (reference: FileReference, limit: number) => Promise<FileReferencePreview>
+  /** Whether a relative path is listed as a file or a folder; an extensionless reference is a chip only then. */
+  entryType: (path: string) => Promise<"file" | "directory" | undefined>
   /** Reveals the reference in the right panel's Files view: a file in its viewer, a folder in the tree. */
   onFileReference: (reference: FileReference) => void
 }
