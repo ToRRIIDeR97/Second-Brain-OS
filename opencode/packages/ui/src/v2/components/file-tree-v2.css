@@ -144,6 +144,9 @@
  * A folder opened from a reply: an accent wash that settles to the selected style, keeping a 2px
  * accent inset; its chevron turns as it expands and its children fade in. The wash and fade-in play once
  * per reveal (`data-reveal-flash` is cleared afterwards). Reduced motion shows the end state.
+ * Timings come from the motion tokens, and the app's file-tree-v2.tsx reads the same ones: the folder
+ * expands after `--v2-duration-medium` (the smooth scroll) and the flash clears after twice
+ * `--v2-duration-long`, the wash's length.
  */
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-revealed] {
   box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
@@ -151,27 +154,28 @@
 
 @media (prefers-reduced-motion: no-preference) {
   [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-reveal-flash] {
-    animation: file-tree-v2-reveal 900ms ease-out;
+    animation: file-tree-v2-reveal calc(var(--v2-duration-long) * 2) var(--v2-ease-standard);
   }
 
   [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-revealed] [data-slot="file-tree-v2-chevron"] svg {
-    transition-duration: 240ms;
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-duration: var(--v2-duration-medium);
+    transition-timing-function: var(--v2-ease-emphasized-decelerate);
   }
 
   [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-reveal-child] {
-    animation: file-tree-v2-reveal-child 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: file-tree-v2-reveal-child var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
   }
 }
 
-/* Holds until the smooth scroll has brought the row into view (about 300ms), then washes and settles. */
+/* Holds for the first third (medium, while the smooth scroll brings the row into view), then washes
+   and settles. */
 @keyframes file-tree-v2-reveal {
   0%,
-  30% {
+  33% {
     background-color: transparent;
     box-shadow: inset 0 0 0 transparent;
   }
-  40% {
+  43% {
     background-color: color-mix(in oklch, var(--v2-text-text-accent) 30%, transparent);
     box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
   }

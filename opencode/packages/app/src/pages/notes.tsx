@@ -5,6 +5,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { debounce } from "@solid-primitives/scheduled"
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show } from "solid-js"
@@ -15,6 +16,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
+import { focusWhenConnected } from "@/utils/focus-when-connected"
 import {
   listNotes,
   readNote,
@@ -412,7 +414,7 @@ export default function NotesPage() {
                     <Icon name="magnifying-glass" size="small" />
                   </span>
                   <input
-                    class="h-9 w-full rounded-full bg-v2-background-bg-layer-01 pl-9 pr-3 text-[13px] text-v2-text-text-base outline-none transition-[background-color,box-shadow] duration-150 ease-standard placeholder:text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                    class="h-9 w-full rounded-full bg-v2-background-bg-layer-01 pl-9 pr-3 text-[13px] text-v2-text-text-base outline-none transition-[background-color,box-shadow] duration-short ease-standard placeholder:text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                     aria-label={language.t("secondBrain.notes.search")}
                     placeholder={language.t("secondBrain.notes.search")}
                     value={state.search}
@@ -437,7 +439,7 @@ export default function NotesPage() {
                 </Show>
               </div>
 
-              <Show when={state.creating}>
+              <Reveal open={state.creating} class="shrink-0">
                 <form
                   class="mx-3 mb-2 flex shrink-0 flex-col gap-2 rounded-[16px] bg-v2-background-bg-layer-01 p-3"
                   onSubmit={(event) => {
@@ -457,15 +459,14 @@ export default function NotesPage() {
                     id="new-note-title"
                     class="!w-full min-w-0"
                     appearance="large"
-                    // Solid's `autofocus` does not focus a field inserted after the page loaded.
-                    ref={(element) => queueMicrotask(() => element.focus())}
+                    ref={focusWhenConnected}
                     invalid={!!state.error}
                     aria-describedby={state.error ? "new-note-error" : undefined}
                     value={state.newTitle}
                     onInput={(event) => setState("newTitle", event.currentTarget.value)}
                   />
                   <Show when={state.error}>
-                    <p id="new-note-error" role="alert" class="text-[12px] text-v2-text-text-critical">
+                    <p id="new-note-error" role="alert" class="animate-enter text-[12px] text-v2-text-text-critical">
                       {state.error}
                     </p>
                   </Show>
@@ -483,7 +484,7 @@ export default function NotesPage() {
                     </ButtonV2>
                   </div>
                 </form>
-              </Show>
+              </Reveal>
 
               <nav
                 class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3"
@@ -557,7 +558,7 @@ export default function NotesPage() {
               >
                 <header class="flex h-14 shrink-0 items-center gap-2 pl-4 pr-3 pt-1 sm:pl-6">
                   <input
-                    class="h-9 min-w-0 flex-1 truncate rounded-[12px] bg-transparent px-2 text-[17px] text-v2-text-text-base outline-none transition-colors duration-150 ease-standard placeholder:text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none [font-weight:560]"
+                    class="h-9 min-w-0 flex-1 truncate rounded-[12px] bg-transparent px-2 text-[17px] text-v2-text-text-base outline-none transition-colors duration-short ease-standard placeholder:text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none [font-weight:560]"
                     aria-label={language.t("secondBrain.notes.name")}
                     value={state.title}
                     onInput={(event) => setState("title", event.currentTarget.value)}
@@ -570,12 +571,18 @@ export default function NotesPage() {
                     })()}
                   >
                     <Show when={dirty()}>
-                      <span class="size-1.5 rounded-full bg-v2-icon-icon-accent" aria-hidden="true" />
+                      <span class="size-1.5 animate-enter rounded-full bg-v2-icon-icon-accent" aria-hidden="true" />
                     </Show>
                     {dirty() ? language.t("secondBrain.notes.unsaved") : language.t("secondBrain.notes.saved")}
                   </span>
                   <Show when={dirty()}>
-                    <ButtonV2 size="small" variant="ghost" disabled={state.saving} onClick={discard}>
+                    <ButtonV2
+                      size="small"
+                      variant="ghost"
+                      class="animate-enter"
+                      disabled={state.saving}
+                      onClick={discard}
+                    >
                       {language.t("secondBrain.notes.discard")}
                     </ButtonV2>
                   </Show>
@@ -593,7 +600,7 @@ export default function NotesPage() {
                         >
                           <For each={projectList()}>
                             {(project) => (
-                              <label class="flex cursor-pointer items-center rounded-full px-2.5 py-1 text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover has-[:checked]:bg-v2-background-bg-accent-container has-[:checked]:text-v2-text-text-on-accent-container has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-v2-border-border-focus motion-reduce:transition-none">
+                              <label class="flex cursor-pointer items-center rounded-full px-2.5 py-1 text-v2-text-text-muted transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover has-[:checked]:bg-v2-background-bg-accent-container has-[:checked]:text-v2-text-text-on-accent-container has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-v2-border-border-focus motion-reduce:transition-none">
                                 <input
                                   type="checkbox"
                                   class="sr-only"
@@ -614,7 +621,7 @@ export default function NotesPage() {
                         </div>
                       </Show>
                       <input
-                        class="h-7 min-w-32 flex-1 rounded-full bg-transparent px-2.5 text-[12px] text-v2-text-text-muted outline-none transition-colors duration-150 ease-standard placeholder:text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                        class="h-7 min-w-32 flex-1 rounded-full bg-transparent px-2.5 text-[12px] text-v2-text-text-muted outline-none transition-colors duration-short ease-standard placeholder:text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                         aria-label={language.t("secondBrain.notes.tags")}
                         value={state.tags}
                         placeholder={language.t("secondBrain.notes.tagsPlaceholder")}
@@ -632,7 +639,7 @@ export default function NotesPage() {
                           {(note) => (
                             <button
                               type="button"
-                              class="max-w-48 truncate rounded-full bg-v2-background-bg-layer-01 px-2.5 py-1 text-[11px] text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                              class="max-w-48 truncate rounded-full bg-v2-background-bg-layer-01 px-2.5 py-1 text-[11px] text-v2-text-text-muted transition-colors duration-short ease-standard hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                               onClick={() => chooseNote(note)}
                             >
                               {note.title}
@@ -648,7 +655,7 @@ export default function NotesPage() {
                     </Show>
 
                     <Show when={loadedNote.error}>
-                      <div class="flex flex-wrap items-center gap-2">
+                      <div class="flex animate-enter flex-wrap items-center gap-2">
                         <p role="alert" class="text-[12px] text-v2-text-text-critical">
                           {language.t("secondBrain.error.request")}
                         </p>
@@ -659,7 +666,7 @@ export default function NotesPage() {
                     </Show>
 
                     <Show when={state.error}>
-                      <div class="flex flex-wrap items-center gap-2">
+                      <div class="flex animate-enter flex-wrap items-center gap-2">
                         <p role="alert" class="text-[12px] text-v2-text-text-critical">
                           {state.error}
                         </p>
@@ -688,7 +695,10 @@ export default function NotesPage() {
                           <>
                             <span class="flex items-center gap-1.5 px-1 text-[11px] text-v2-text-text-faint">
                               <Show when={dirty()}>
-                                <span class="size-1.5 rounded-full bg-v2-icon-icon-accent" aria-hidden="true" />
+                                <span
+                                  class="size-1.5 animate-enter rounded-full bg-v2-icon-icon-accent"
+                                  aria-hidden="true"
+                                />
                               </Show>
                               {dirty()
                                 ? language.t("secondBrain.notes.unsaved")

@@ -252,8 +252,32 @@
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
-  background-color: var(--v2-background-bg-accent-container);
   color: var(--v2-text-text-on-accent-container);
+}
+
+/* The selection pill slides between tabs (tabs-v2 indicator); before it is placed, the tab draws it. */
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  [data-slot="tabs-v2-list"]:not([data-indicator])
+  [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  background-color: var(--v2-background-bg-accent-container);
+}
+
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  [data-slot="tabs-v2-list"][data-indicator]
+  [data-slot="tabs-v2-indicator"] {
+  background-color: var(--v2-background-bg-accent-container);
+}
+
+/* A tab's content enters as it replaces the previous one (Kobalte unmounts the old panel at once). */
+[data-component="tabs-v2"][data-variant="settings"] [data-slot="tabs-v2-content"] {
+  animation: settings-v2-panel-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+}
+
+@keyframes settings-v2-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -262,8 +286,14 @@
   [data-component="settings-v2-list"] > *,
   .settings-v2-keybind-button,
   .settings-v2-models-group-trigger,
-  .settings-v2-models-group-chevron {
+  .settings-v2-models-group-chevron,
+  .settings-v2-harness-group-chevron,
+  .settings-v2-harness-setup-chip {
     transition: none;
+  }
+
+  [data-component="tabs-v2"][data-variant="settings"] [data-slot="tabs-v2-content"] {
+    animation: none;
   }
 }
 
@@ -607,6 +637,14 @@
 .settings-v2-harness-group-toggle [data-component="icon"] {
   flex-shrink: 0;
   color: var(--v2-icon-icon-muted);
+}
+
+.settings-v2-harness-group-chevron {
+  transition: transform var(--v2-duration-medium) var(--v2-ease-standard);
+}
+
+.settings-v2-harness-group-toggle[aria-expanded="false"] .settings-v2-harness-group-chevron {
+  transform: rotate(-90deg);
 }
 
 .settings-v2-harness-group-models {
@@ -1106,8 +1144,8 @@
   color: var(--v2-text-text-base);
   background: var(--v2-background-bg-layer-02);
   transition:
-    background-color var(--v2-duration-short, 150ms) var(--v2-ease-standard, ease),
-    border-radius var(--v2-duration-short, 150ms) var(--v2-ease-standard, ease);
+    background-color var(--v2-duration-short) var(--v2-ease-standard),
+    border-radius var(--v2-duration-medium) var(--v2-ease-standard);
 }
 
 .settings-v2-harness-setup-chip:hover {

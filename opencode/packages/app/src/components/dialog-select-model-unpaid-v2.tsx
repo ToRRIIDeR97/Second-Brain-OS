@@ -100,7 +100,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                 >
                   <button
                     type="button"
-                    class="flex min-h-10 w-full scroll-my-3.5 flex-row items-center gap-1.5 rounded-[16px] px-4 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none active:rounded-[12px] motion-reduce:transition-none"
+                    class="flex min-h-10 w-full scroll-my-3.5 flex-row items-center gap-1.5 rounded-[16px] px-4 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none active:rounded-[12px] motion-reduce:transition-none"
                     classList={{
                       "!bg-v2-background-bg-accent-container !text-v2-text-text-on-accent-container":
                         currentKey() === modelKey(item),
@@ -139,7 +139,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                     <button
                       type="button"
                       data-provider-id={provider.id}
-                      class="flex min-h-11 w-full scroll-my-3.5 flex-row items-start gap-2 rounded-[16px] bg-v2-background-bg-base px-3 py-2.5 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-background-bg-layer-01 focus:bg-v2-background-bg-layer-01 focus:outline-none active:rounded-[12px] motion-reduce:transition-none"
+                      class="flex min-h-11 w-full scroll-my-3.5 flex-row items-start gap-2 rounded-[16px] bg-v2-background-bg-base px-3 py-2.5 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-background-bg-layer-01 focus:bg-v2-background-bg-layer-01 focus:outline-none active:rounded-[12px] motion-reduce:transition-none"
                       classList={{
                         "border-[0.5px] border-v2-border-border-muted": theme.mode() !== "dark",
                         "border-[0.5px] border-v2-border-border-strong": theme.mode() === "dark",
@@ -155,7 +155,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                 </For>
                 <button
                   type="button"
-                  class="col-span-full flex h-8 w-full scroll-my-3.5 items-center justify-start rounded-full px-4 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none motion-reduce:transition-none"
+                  class="col-span-full flex h-8 w-full scroll-my-3.5 items-center justify-start rounded-full px-4 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none motion-reduce:transition-none"
                   onClick={() => openProviders()}
                 >
                   {language.t("dialog.model.unpaid.viewMoreProviders")}

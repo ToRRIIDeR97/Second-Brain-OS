@@ -170,8 +170,13 @@
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"]
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
-  background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
+}
+
+[data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"]
+  [data-slot="tabs-v2-list"]:not([data-indicator])
+  [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  background-color: var(--v2-background-bg-layer-03);
   border: 0.5px solid var(--v2-border-border-muted);
 }
 
@@ -184,6 +189,7 @@
   gap: 4px;
   overflow-y: auto;
   border-inline-end: 1px solid var(--v2-border-border-base);
+  position: relative;
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-section-title"] {
@@ -219,8 +225,13 @@
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
-  background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
+}
+
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  [data-slot="tabs-v2-list"]:not([data-indicator])
+  [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  background-color: var(--v2-background-bg-layer-03);
 }
 
 /* Material 3 shape: pill tab triggers. */
@@ -236,4 +247,40 @@
     color var(--v2-duration-short) var(--v2-ease-standard),
     background-color var(--v2-duration-short) var(--v2-ease-standard),
     border-color var(--v2-duration-short) var(--v2-ease-standard);
+}
+
+/* Sliding selection highlight (pill and settings variants; tabs-v2.tsx places it). It sits under the
+   triggers and moves between them: medium + standard. Until it is placed, the selected trigger draws its
+   own highlight. */
+[data-component="tabs-v2"] [data-slot="tabs-v2-indicator"] {
+  display: none;
+}
+
+[data-component="tabs-v2"] [data-slot="tabs-v2-list"][data-indicator] [data-slot="tabs-v2-indicator"] {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--tabs-v2-indicator-width);
+  height: var(--tabs-v2-indicator-height);
+  transform: translate(var(--tabs-v2-indicator-x), var(--tabs-v2-indicator-y));
+  border-radius: var(--v2-radius-full);
+  background-color: var(--v2-background-bg-layer-03);
+  pointer-events: none;
+  transition:
+    transform var(--v2-duration-medium) var(--v2-ease-standard),
+    width var(--v2-duration-medium) var(--v2-ease-standard),
+    height var(--v2-duration-medium) var(--v2-ease-standard);
+}
+
+[data-component="tabs-v2"][data-variant="pill"]
+  [data-slot="tabs-v2-list"][data-indicator]
+  [data-slot="tabs-v2-indicator"] {
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tabs-v2"] [data-slot="tabs-v2-list"][data-indicator] [data-slot="tabs-v2-indicator"] {
+    transition: none;
+  }
 }

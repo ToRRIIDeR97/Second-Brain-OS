@@ -127,12 +127,12 @@ function ProviderTip() {
           ref={setRef}
           data-component="provider-tip"
           data-visible={visible()}
-          class="group/provider-tip pointer-events-auto relative flex h-8 max-w-full items-center transition-[opacity,transform] duration-300 ease-emphasized motion-reduce:transition-none"
-          classList={{ "data-[visible=false]:animate-out fade-out slide-out-to-bottom-4": true }}
+          class="group/provider-tip pointer-events-auto relative flex h-8 max-w-full items-center"
+          classList={{ "animate-enter": visible(), "animate-exit": !visible() }}
         >
           <button
             type="button"
-            class="flex h-8 min-w-0 items-center rounded-full pl-3.5 pr-1.5 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+            class="flex h-8 min-w-0 items-center rounded-full pl-3.5 pr-1.5 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
             onClick={openProviders}
           >
             <span class="truncate">{language.t("home.providerTip")}</span>
@@ -141,14 +141,14 @@ function ProviderTip() {
             </span>
           </button>
           <TooltipV2
-            class="hover-reveal absolute left-full top-0 flex h-8 w-9 items-center justify-end delay-0 duration-0 group-hover/provider-tip:delay-[250ms] group-hover/provider-tip:duration-150 group-hover/provider-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
+            class="hover-reveal absolute left-full top-0 flex h-8 w-9 items-center justify-end delay-0 duration-0 group-hover/provider-tip:delay-[250ms] group-hover/provider-tip:duration-short group-hover/provider-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
             placement="top"
             openDelay={1000}
             value={language.t("common.dismiss")}
           >
             <button
               type="button"
-              class="flex size-8 items-center justify-center rounded-full text-v2-icon-icon-muted transition-[background-color,color] duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+              class="flex size-8 items-center justify-center rounded-full text-v2-icon-icon-muted transition-[background-color,color] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
               aria-label={language.t("common.dismiss")}
               onClick={() => setPersistedState("dismissedAt", Date.now())}
             >

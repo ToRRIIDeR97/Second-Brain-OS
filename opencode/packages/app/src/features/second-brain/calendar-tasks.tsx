@@ -10,9 +10,11 @@ import { createEffect, createMemo, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { PageEmpty, pageRowClass } from "@/components/page"
 import { useLanguage } from "@/context/language"
+import { focusWhenConnected } from "@/utils/focus-when-connected"
 import { localDateKey } from "./calendar-domain"
 import { CalendarPeek, TaskCheck } from "./calendar-peek"
 import type { PlannerTask, ProjectRecord } from "./client"
+import { revealSidePanel, SidePanel, sidePanelGridClass } from "./side-panel"
 
 export type CalendarTaskFilter = "today" | "upcoming" | "unscheduled" | "completed"
 type TaskErrorKey =
@@ -241,12 +243,7 @@ export function CalendarTasks(props: {
   const remove = () => persist(props.tasks.filter((task) => task.id !== state.draft.id))
 
   return (
-    <div
-      classList={{
-        "grid flex-1 items-start gap-3 px-3 pb-3": true,
-        "lg:grid-cols-[minmax(0,1fr)_340px]": state.editing || Boolean(peeked()),
-      }}
-    >
+    <div class={sidePanelGridClass(state.editing || Boolean(peeked()))}>
       <section class="flex min-h-0 min-w-0 flex-col" aria-label={language.t("secondBrain.tasks.title")}>
         <div class="flex shrink-0 flex-wrap items-center gap-2 px-3 pb-2">
           <div class="min-w-0 flex-1">
@@ -345,9 +342,9 @@ export function CalendarTasks(props: {
         </div>
       </section>
 
-      <Show when={!state.editing && peeked()}>
-        {(task) => (
-          <aside class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3">
+      <SidePanel open={state.editing || Boolean(peeked())} view={state.editing ? "edit" : `peek:${state.peek}`}>
+        <Show when={!state.editing && peeked()}>
+          {(task) => (
             <CalendarPeek
               tag={`${language.t("secondBrain.home.kind.task")} · ${language.t(`secondBrain.calendar.source.${task().source}`)}`}
               title={task().title}
@@ -364,15 +361,11 @@ export function CalendarTasks(props: {
               onEdit={() => openTask(task())}
               onClose={() => setState("peek", "")}
             />
-          </aside>
-        )}
-      </Show>
-      <Show when={state.editing}>
-        <aside
-          ref={(element) => revealEditor(element)}
-          class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3"
-        >
+          )}
+        </Show>
+        <Show when={state.editing}>
           <form
+            ref={revealSidePanel}
             class="flex flex-col gap-3 p-4"
             onSubmit={(event) => {
               event.preventDefault()
@@ -403,7 +396,7 @@ export function CalendarTasks(props: {
               {language.t("secondBrain.tasks.name")}
               <TextInputV2
                 id="task-title"
-                ref={(element) => queueMicrotask(() => element.focus())}
+                ref={focusWhenConnected}
                 value={state.draft.title}
                 invalid={state.errorField === "title"}
                 aria-describedby={state.errorField === "title" ? "task-error" : undefined}
@@ -567,19 +560,11 @@ export function CalendarTasks(props: {
               </ButtonV2>
             </div>
           </form>
-        </aside>
-      </Show>
+        </Show>
+      </SidePanel>
     </div>
   )
 }
 
-/** Below the two-column layout the editor opens under the list; bring it into view. */
-function revealEditor(element: HTMLElement) {
-  queueMicrotask(() => {
-    if (window.matchMedia("(min-width: 1024px)").matches) return
-    element.scrollIntoView({ block: "nearest", behavior: "smooth" })
-  })
-}
-
 const dateInputClass =
-  "h-9 w-full min-w-0 rounded-[12px] border-0 bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-shadow duration-150 ease-standard focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
+  "h-9 w-full min-w-0 rounded-[12px] border-0 bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-shadow duration-short ease-standard focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"

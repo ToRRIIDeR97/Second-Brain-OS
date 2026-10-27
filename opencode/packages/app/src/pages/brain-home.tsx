@@ -3,11 +3,13 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createEffect, createMemo, createResource, For, Show, Suspense } from "solid-js"
 import { useQuery } from "@tanstack/solid-query"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
+import { createFreshItems } from "@/utils/fresh-items"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
@@ -169,6 +171,7 @@ export default function BrainHomePage() {
       })
       .slice(0, 8)
   })
+  const freshRun = createFreshItems()
   const runningSessions = createMemo(() => {
     const data = openCodeHome.server.focusedSync().session.data
     return openCodeSessions.data.records().filter((record) => {
@@ -237,7 +240,7 @@ export default function BrainHomePage() {
       >
         <div class="mx-auto flex w-full max-w-[720px] flex-col gap-8 px-6 pb-12 pt-[15vh]">
           <form
-            class="flex flex-col gap-2 rounded-[28px] bg-v2-background-bg-base p-3 shadow-[0_0_0_1px_var(--v2-border-border-base),0_8px_28px_-12px_rgb(0_0_0/0.18)] transition-shadow duration-200 ease-standard focus-within:shadow-[0_0_0_1px_var(--v2-border-border-focus),0_8px_28px_-12px_rgb(0_0_0/0.18)] motion-reduce:transition-none"
+            class="flex flex-col gap-2 rounded-[28px] bg-v2-background-bg-base p-3 shadow-[0_0_0_1px_var(--v2-border-border-base),0_8px_28px_-12px_rgb(0_0_0/0.18)] transition-shadow duration-short ease-standard focus-within:shadow-[0_0_0_1px_var(--v2-border-border-focus),0_8px_28px_-12px_rgb(0_0_0/0.18)] motion-reduce:transition-none"
             onSubmit={(event) => {
               event.preventDefault()
               void startSession()
@@ -285,7 +288,7 @@ export default function BrainHomePage() {
           </form>
 
           <Show when={projects.failed() || calendar.error}>
-            <div class="flex flex-wrap items-center justify-center gap-2">
+            <div class="flex animate-enter flex-wrap items-center justify-center gap-2">
               <p role="alert" class="text-[13px] text-v2-text-text-critical">
                 {language.t("secondBrain.error.request")}
               </p>
@@ -323,8 +326,11 @@ export default function BrainHomePage() {
             </section>
           </Show>
 
-          <Show when={runningSessions().length > 0}>
+          {/* Runs start and stop live: the section opens and closes, and a run that starts later enters.
+              The column gap moves inside the reveal (-mt-8 / pt-8), so a closed section takes no room. */}
+          <Reveal open={runningSessions().length > 0} class="-mt-8">
             <PageSection
+              class="pt-8"
               id="brain-home-running"
               title={language.t("secondBrain.home.running")}
               onTitle={() => navigate("/activity")}
@@ -334,8 +340,9 @@ export default function BrainHomePage() {
                   {(record) => {
                     const approvals = () =>
                       openCodeHome.server.focusedSync().session.data.permission[record.session.id]?.length ?? 0
+                    const enter = freshRun(record.session.id)
                     return (
-                      <li>
+                      <li class={enter ? "animate-enter" : undefined}>
                         <button
                           type="button"
                           class={pageRowClass}
@@ -360,7 +367,7 @@ export default function BrainHomePage() {
                 </For>
               </ul>
             </PageSection>
-          </Show>
+          </Reveal>
 
           <Show when={todayItems().length > 0}>
             <PageSection
@@ -447,7 +454,7 @@ export default function BrainHomePage() {
                         </span>
                         <span class="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-v2-background-bg-layer-03">
                           <span
-                            class="block h-full rounded-full bg-v2-background-bg-accent transition-[width] duration-200 ease-standard motion-reduce:transition-none"
+                            class="block h-full rounded-full bg-v2-background-bg-accent transition-[width] duration-medium ease-standard motion-reduce:transition-none"
                             style={{ width: `${project.progressPercent}%` }}
                           />
                         </span>

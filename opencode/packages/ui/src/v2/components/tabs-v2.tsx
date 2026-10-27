@@ -1,5 +1,5 @@
 import { Tabs as Kobalte } from "@kobalte/core/tabs"
-import { Show, splitProps, type JSX } from "solid-js"
+import { createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js"
 import type { ComponentProps, ParentProps, Component } from "solid-js"
 import { useI18n } from "../../context/i18n"
 import "./tabs-v2.css"
@@ -35,17 +35,66 @@ function TabsV2Root(props: TabsV2Props) {
 }
 
 function TabsV2List(props: TabsV2ListProps) {
-  const [split, rest] = splitProps(props, ["class", "classList"])
+  const [split, rest] = splitProps(props, ["class", "classList", "children"])
+  const [indicator, setIndicator] = createSignal<HTMLElement>()
+  // The list is the indicator's parent, so a caller's `ref` on the list still reaches Kobalte untouched.
+  const placed = createTabsIndicator(() => indicator()?.parentElement ?? undefined)
   return (
     <Kobalte.List
       {...rest}
       data-slot="tabs-v2-list"
+      data-indicator={placed() ? "" : undefined}
       classList={{
         ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
-    />
+    >
+      <div ref={setIndicator} data-slot="tabs-v2-indicator" aria-hidden="true" />
+      {split.children}
+    </Kobalte.List>
   )
+}
+
+/**
+ * The selected-tab highlight of the pill and settings variants slides between tabs: the list measures the
+ * selected trigger and positions one indicator (`--tabs-v2-indicator-*`). The normal variant keeps its
+ * static underline, because its tabs can be dragged to reorder and move by transform meanwhile. Returns
+ * whether the indicator is placed; until then each selected tab draws its own highlight.
+ */
+function createTabsIndicator(list: () => HTMLElement | undefined) {
+  const [placed, setPlaced] = createSignal(false)
+
+  onMount(() => {
+    const element = list()
+    const variant = element?.closest<HTMLElement>('[data-component="tabs-v2"]')?.dataset.variant
+    if (!element || (variant !== "pill" && variant !== "settings")) return
+    if (typeof MutationObserver === "undefined" || typeof ResizeObserver === "undefined") return
+
+    const measure = () => {
+      const wrapper = element.querySelector<HTMLElement>('[data-slot="tabs-v2-trigger"][data-selected]')?.parentElement
+      if (!wrapper || wrapper.offsetParent !== element) {
+        setPlaced(false)
+        return
+      }
+      element.style.setProperty("--tabs-v2-indicator-x", `${wrapper.offsetLeft}px`)
+      element.style.setProperty("--tabs-v2-indicator-y", `${wrapper.offsetTop}px`)
+      element.style.setProperty("--tabs-v2-indicator-width", `${wrapper.offsetWidth}px`)
+      element.style.setProperty("--tabs-v2-indicator-height", `${wrapper.offsetHeight}px`)
+      setPlaced(true)
+    }
+
+    const mutations = new MutationObserver(measure)
+    mutations.observe(element, { subtree: true, childList: true, attributeFilter: ["data-selected"] })
+    const resize = new ResizeObserver(measure)
+    resize.observe(element)
+    measure()
+    onCleanup(() => {
+      mutations.disconnect()
+      resize.disconnect()
+    })
+  })
+
+  return placed
 }
 
 function TabsV2Trigger(props: ParentProps<TabsV2TriggerProps>) {
