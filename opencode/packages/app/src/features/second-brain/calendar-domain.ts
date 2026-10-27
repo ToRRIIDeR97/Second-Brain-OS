@@ -36,7 +36,7 @@ function shiftDateKey(key: string, amount: number) {
 
 export function providerEvent(event: GoogleCalendarProviderEvent, projectId?: string): CalendarEvent {
   return {
-    id: `google:${event.calendarId}:${event.providerId}`,
+    id: `google:${event.accountId}:${event.calendarId}:${event.providerId}`,
     title: event.title,
     date: event.date,
     ...(event.endDate ? { endDate: event.endDate } : {}),
@@ -44,6 +44,7 @@ export function providerEvent(event: GoogleCalendarProviderEvent, projectId?: st
     ...(event.end ? { end: event.end } : {}),
     ...(event.details ? { details: event.details } : {}),
     ...(projectId ? { projectId } : {}),
+    accountId: event.accountId,
     providerId: event.providerId,
     calendarId: event.calendarId,
     ...(event.etag ? { etag: event.etag } : {}),
@@ -56,32 +57,50 @@ export function providerEvent(event: GoogleCalendarProviderEvent, projectId?: st
   }
 }
 
+export type ProviderMergeOptions = {
+  /** Maps a stored item's account, which may be missing on items from before multiple accounts, to an account ID. */
+  accountOf?: (accountId: string | undefined) => string | undefined
+  /** Accounts that are still connected but failed this sync: their items stay as they are. */
+  failed?: (account: string | undefined) => boolean
+  /** Accounts this sync fetched. */
+  synced?: (account: string | undefined) => boolean
+  today?: string
+}
+
 /**
- * Merge a Google sync into the local calendar. Local events stay. A Google event with an
- * unsynced write (queued, failed or in conflict) stays as it is, whether or not Google returned
- * it, so a sync never silently drops or overwrites the user's change. Every other Google event
- * is replaced by Google's copy, keeping its Project link. Ids stay unique, and remote events
- * farthest from `today` are dropped if the calendar would exceed its limit.
+ * Merge a Google sync into the local calendar. Local events stay, and so does every event of
+ * an account that failed this sync. A synced account's event with an unsynced write (queued,
+ * failed or in conflict) stays as it is, whether or not Google returned it, so a sync never
+ * silently drops or overwrites the user's change. Every other event of a synced account is
+ * replaced by Google's copy, keeping its Project link; events of accounts that are gone are
+ * dropped. Ids stay unique, and remote events farthest from `today` are dropped if the
+ * calendar would exceed its limit.
  */
 export function mergeProviderEvents(
   current: ReadonlyArray<CalendarEvent>,
   remote: ReadonlyArray<GoogleCalendarProviderEvent>,
-  today = localDateKey(new Date()),
+  options: ProviderMergeOptions = {},
 ) {
+  const accountOf = options.accountOf ?? ((accountId) => accountId)
+  const failed = options.failed ?? (() => false)
+  const synced = options.synced ?? (() => true)
+  const today = options.today ?? localDateKey(new Date())
   const projectByProvider = new Map(
     current.flatMap((event) =>
-      event.source === "google" && event.providerId && event.projectId ? [[event.providerId, event.projectId]] : [],
+      event.source === "google" && event.providerId && event.projectId
+        ? [[`${accountOf(event.accountId)}:${event.providerId}`, event.projectId]]
+        : [],
     ),
   )
-  const unsynced = new Map(
-    current.flatMap((event) =>
-      event.source === "google" && event.outboxKey && event.syncState !== "synced" ? [[event.id, event]] : [],
-    ),
-  )
-  const kept = [...current.filter((event) => event.source === "local"), ...unsynced.values()]
+  const kept = current.filter((event) => {
+    if (event.source !== "google") return true
+    const account = accountOf(event.accountId)
+    if (failed(account)) return true
+    return synced(account) && Boolean(event.outboxKey) && event.syncState !== "synced"
+  })
   const keptIds = new Set(kept.map((event) => event.id))
   const fresh = remote
-    .map((event) => providerEvent(event, projectByProvider.get(event.providerId)))
+    .map((event) => providerEvent(event, projectByProvider.get(`${event.accountId}:${event.providerId}`)))
     .filter((event) => {
       if (keptIds.has(event.id)) return false
       keptIds.add(event.id)

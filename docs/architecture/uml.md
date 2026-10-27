@@ -72,7 +72,8 @@ Notes on the class view:
   `{ nativeID, lastSeenMessageID }`) live in the session's `metadata` JSON.
   They have no separate table.
 - Built-in `HarnessInstance` IDs are `opencode` (driver `opencode`, shown as
-  Tenon Workbench), `codex`, and `opencode-acp` (driver `acp`, shown as OpenCode).
+  Tenon Workbench), `codex`, `opencode-acp` (driver `acp`, shown as OpenCode) and
+  `claude-code` (driver `acp`, shown as Claude Code).
   They are reserved, so `harnesses.json` and config files can't replace them.
 - Permission requests exist only in memory. Saved permission rows are allow
   rules, scoped to a project.
@@ -160,7 +161,8 @@ discussion. The V2 runtime emits no `session.status` busy or idle events, so
 ![Sequence: prompt admission, drain, ACP runtime open with session load or new, streaming updates, permission ask answered in the renderer, completion and interrupt](../diagrams/sequence-acp-turn.svg)
 
 The built-in `opencode-acp` instance (upstream OpenCode started as
-`opencode acp`) follows this sequence unchanged. The Codex driver follows the
+`opencode acp`) and `claude-code` instance (`claude-agent-acp`) follow this
+sequence unchanged. The Codex driver follows the
 same outline. It speaks the `codex app-server`
 JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 `turn/interrupt`) instead of ACP. Its approvals come from
@@ -169,6 +171,8 @@ JSON-RPC protocol (`thread/start` or `thread/resume`, `turn/start`,
 Before `session/prompt` (not drawn in the diagram), the ACP driver switches the
 model and then the reasoning effort (`thought_level` option) when they differ
 from the session's, through `session/set_model` or `session/set_config_option`.
+For older OpenCode, which lists levels as `<base>/<level>` models, the chosen
+level is sent as a switch to that model instead.
 
 Handoff text in the first prompt of a runtime (not drawn in the diagram):
 
@@ -182,9 +186,21 @@ Handoff text in the first prompt of a runtime (not drawn in the diagram):
 4. When a turn ends without an error, publish `HarnessContinuationSet` with the
    answered user message as `lastSeenMessageID`.
 
-The first prompt of a runtime also starts with the chat display guidance in
-`<tenon-display>` (`renderHarnessPrompt`). Later turns in the same runtime send only the user message. See
+The first prompt of a runtime also starts with a `<tenon-context>` block:
+workspace and Project folders, the AGENTS.md text in effect (one
+`<agents-md>` element per file) and the abilities guidance, which names
+`ask_user` only when the `tenon` server is attached (`renderHarnessPrompt`,
+`core/src/tenon-context.ts`). Later turns in the same runtime send only the user message. See
 [Harness handoff](README.md#harness-handoff) for the budget and wrapper.
+
+### Sequence: cross-harness delegation
+
+![Sequence: the harness runtime gets a scoped token for the loopback MCP endpoint, the calling agent invokes delegate_task, the server creates a child Run on the target harness, waits for its drain and returns the child's final reply](../diagrams/sequence-delegation.svg)
+
+The built-in loop skips the MCP hop: its `delegate_task` tool calls the same
+task handler directly. The same endpoint serves `ask_user` (not drawn): the call
+becomes a `QuestionV2` request in the caller's session, answered in the
+question dock; see [Questions from harnesses](README.md#questions-from-harnesses). See [Cross-harness delegation](README.md#cross-harness-delegation).
 
 ## Coverage index
 
@@ -199,19 +215,25 @@ The first prompt of a runtime also starts with the chat display guidance in
 | Workspace project scan and AGENTS.md defaults | Critical workflow | Class; text in [README](README.md#projects-and-thread-directories) | `opencode/src/project/brain.ts` (`scan`, `link`, `unlink`, instructions), `core/src/workspace-instructions.ts`, `core/src/instruction-context.ts`, `opencode/src/session/instruction.ts` |
 | Location services | Subsystem | Component, Activity: write | `core/src/location-mutation.ts`, `core/src/file-mutation.ts` |
 | Session runtime | Subsystem | Component, Class, Activity: prompt run, State: run, Sequence: ACP turn | `core/src/session.ts`, `core/src/session/` |
-| Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |
-| Harness handoff (bounded history, per-instance continuations, delta on return) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `renderHarnessPrompt`, `continuationFor`), `core/src/session/projector.ts` |
+| Harness drivers and registry (built-ins `opencode`, `codex`, `opencode-acp`, `claude-code`) | Subsystem | Component, Deployment, Class, Sequence: ACP turn | `core/src/harness.ts` (`configuredInstances`), `core/src/harness/acp.ts`, `core/src/harness/registry.ts`, `core/src/harness/env.ts`, `schema/src/harness.ts`, `server/src/handlers/harness.ts` |
+| Harness handoff (bounded history, per-instance continuations, delta on return, `<tenon-context>` block) | Critical workflow | Class, Sequence: ACP turn (handoff notes) | `core/src/harness.ts` (`renderCodexPrompt`, `renderHarnessPrompt`, `continuationFor`), `core/src/tenon-context.ts`, `core/src/session/projector.ts` |
 | Chat diagram windows (agent ```svg blocks in a sandboxed iframe, agent guidance) | Subsystem | Trust boundaries; text in [README](README.md#chat-diagram-windows) | `session-ui/src/components/svg-window.ts`, `session-ui/src/components/markdown.tsx`, `session-ui/src/components/markdown.worker.ts`, `core/src/chat-display.ts`, `core/src/system-context/builtins.ts`, `opencode/src/session/system.ts` |
+| Design windows and Canvas tab (agent ```html and ```html canvas blocks in `allow-scripts` frames) | Subsystem | Trust boundaries; text in [README](README.md#design-windows-and-the-canvas-tab) | `session-ui/src/components/design-fence.ts`, `session-ui/src/components/html-window.ts`, `session-ui/src/context/design.tsx`, `app/src/pages/session/design-canvas.tsx`, `app/src/pages/session/canvas-tab.tsx`, `app/src/pages/session/session-side-panel.tsx`, `desktop/src/main/windows.ts` (`will-frame-navigate`), `desktop/src/main/external-url.ts` |
+| File references in chat (peek, reveal in Files, range highlight) | Critical workflow | Text in [README](README.md#file-references-in-chat) | `session-ui/src/components/markdown-file-reference.ts`, `session-ui/src/components/markdown-file-reference-peek.tsx`, `session-ui/src/context/file-reference.tsx`, `app/src/pages/session/file-reference.tsx`, `app/src/pages/session/file-tabs.tsx`, `app/src/pages/session/v2/session-file-browser-tab.tsx` |
+| Composer context strip (Project, branch, harness, changed files, context ring) | Subsystem | Text in [README](README.md#composer-context-strip) | `app/src/components/prompt-input/context-strip.tsx`, `app/src/components/prompt-input/context-strip-model.ts`, `app/src/components/prompt-input-v2.tsx` (`header`), `app/src/pages/session.tsx` |
 | Permissions | Subsystem | Activity: prompt run, State: permission, Sequence: ACP turn | `core/src/permission.ts`, `core/src/plugin/agent.ts` |
 | Workspace files | Shared store | Component, Deployment, Activity: write | `notes/`, `projects/`, `.second-brain/calendar-v1.json` |
 | Profile SQLite (`opencode.db`) | Shared store | Component, Deployment, Class | `core/src/database/`, `core/src/event.ts` |
 | Snapshot repository | Shared store | Component, Class, Activity: prompt run | `core/src/snapshot.ts` |
 | Global XDG paths and legacy-folder migration (`opencode` → `tenon-workbench`) | Critical workflow | Deployment; text in [README](README.md#harness-drivers-and-registration) | `core/src/global.ts`, `core/src/legacy-storage.ts` |
 | `harnesses.json` | Shared store | Component, Deployment | `core/src/harness/registry.ts` (written only from Settings → Harnesses through `/api/harness/registry`) |
+| `harness-preferences.json` (title agent) | Shared store | Text in [README](README.md#thread-titles) | `core/src/harness/registry.ts` (`titleAgent`, `setTitleAgent`; written only from Settings → Harnesses through `/api/harness/title-agent`) |
 | `drafts.sqlite`, electron-store files | Shared store | Component, Deployment | `desktop/src/main/draft-store.ts`, `desktop/src/main/store.ts`; per-window `drafts` and `sidebar` keys from `app/src/context/drafts.tsx` and the sidebar controller |
-| Google Calendar and Tasks (sync, outbox, reconnect) | External integration | Component, Deployment, State: outbox | `desktop/src/main/google-calendar.ts`, `desktop/src/main/google-calendar-domain.ts`, `app/src/features/second-brain/calendar-domain.ts` (`mergeProviderEvents`) |
+| Google Calendar and Tasks (multiple accounts, sync, outbox) | External integration | Component, Deployment, State: outbox, Class: CalendarEvent; text in [README](README.md#google-accounts) | `desktop/src/main/google-calendar.ts`, `desktop/src/main/google-calendar-domain.ts`, `app/src/features/second-brain/calendar-domain.ts` (`mergeProviderEvents`) |
 | LLM providers | External integration | Component, Deployment | `core/src/harness.ts` (`opencode` driver) |
 | Codex app-server, ACP agents (including upstream OpenCode via `opencode acp`) | External integration | Component, Deployment, Sequence: ACP turn | `core/src/harness.ts`, `core/src/harness/acp.ts` |
+| Cross-harness delegation and `ask_user` (loopback `tenon` MCP endpoint, per-runtime tokens, child Runs, questions to the dock) | Critical workflow | Component, Trust boundaries, Sequence: delegation; text in [README](README.md#questions-from-harnesses) | `core/src/harness/ask-user.ts`, `core/src/question.ts`, `app/src/pages/session/composer/session-question-dock.tsx`, `core/src/harness/delegation.ts`, `core/src/harness/delegation-tasks.ts`, `core/src/tool/delegate.ts`, `core/src/harness.ts` (`openCodex`, `makeAcpRuntime`, `acpStream`, `codexStream`), `core/src/harness/acp.ts` (`open`) |
+| Built-in harness setup (install, sign-in, API keys, first-run dialog) | Critical workflow | Trust boundaries; text in [README](README.md#built-in-harness-setup) | `core/src/harness/setup.ts`, `core/src/harness.ts` (`setup`, `install`, `signIn`, `setApiKey`, `withSetupKeys`), `server/src/handlers/harness.ts`, `app/src/components/settings-v2/harness-setup.tsx`, `app/src/pages/brain-home.tsx` |
 | Prompt run | Critical workflow | Activity: prompt run, Sequence: ACP turn | `core/src/session/runner/llm.ts` |
 | Note or calendar write | Critical workflow | Activity: write | `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
 | Project thread directories, folder scan and link index | Critical workflow | Class | `opencode/src/project/brain.ts` (`ensureForWorkspace`, `threadDirectory`, `scan`, `link`, `linkedFolders`), `core/src/workspace-instructions.ts`, `opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts` |
@@ -223,14 +245,14 @@ The first prompt of a runtime also starts with the chat display guidance in
 | Markdown front matter parsing | Subsystem | Text in [threat model](../security/threat-model.md#assets-and-boundaries) | `core/src/frontmatter.ts`, `core/src/config/markdown.ts`, `opencode/src/knowledge/note.ts`, `opencode/src/project/brain.ts` |
 | Session timeline (folded turn steps) and side-panel Session tab (session usage) | Subsystem | Text only ([README](README.md#session-compatibility-and-review)) | `app/src/pages/session/timeline/rows.ts`, `timeline/row-reconciliation.ts` (`foldTimelineRows`), `timeline/message-timeline.tsx`, `app/src/components/session/turn-steps-summary.tsx`, `app/src/components/session/session-usage.ts`, `app/src/components/session/session-context-tab.tsx`, `session-ui/src/components/step-kind.ts` |
 | Harness settings (add, assistant, verify, toggle, remove) | Critical workflow | Component | `app/src/components/settings-v2/harnesses.tsx`, `app/src/components/settings-v2/harness-assistant.tsx`, `server/src/handlers/harness.ts`, `core/src/harness/registry.ts` |
-| Harness model lists (live discovery, background revalidation, refresh, hidden models) | Critical workflow | Text in [README](README.md#harness-model-lists) | `core/src/harness.ts` (`cachedProbe`, `refresh`), `core/src/harness/acp.ts` (`probe`), `app/src/components/prompt-input/harness-controller.ts` (`revalidate`), `app/src/context/settings.tsx` (`harnesses.hiddenModels`, `harnesses.hiddenProviders`), `app/src/components/settings-v2/harnesses.tsx` |
+| Harness model lists (live discovery, background revalidation, renderer's last good list, refresh, hidden models) | Critical workflow | Text in [README](README.md#harness-model-lists) | `core/src/harness.ts` (`cachedProbe`, `discoverAcpModels`, `refresh`), `core/src/harness/acp.ts` (`probe`, `discover`), `app/src/components/prompt-input/harness-controller.ts` (`revalidate`, model retry), `app/src/utils/server.ts` (`listHarnessesRemembered`), `app/src/pages/brain-home.tsx` (`harnessQuery`), `app/src/context/settings.tsx` (`harnesses.hiddenModels`, `harnesses.hiddenProviders`), `app/src/components/settings-v2/harnesses.tsx` |
 | Harness CLI updates (check, notify, update) | Critical workflow | Deployment, trust boundaries; text in [README](README.md#harness-cli-updates) | `core/src/harness/update.ts`, `core/src/harness.ts` (`updates`, `upgrade`), `server/src/handlers/harness.ts`, `app/src/components/harness-update-notifier.tsx`, `app/src/components/settings-v2/harnesses.tsx` |
 | npm registry, Homebrew | External integration | Deployment, trust boundaries | `core/src/harness/update.ts` |
 | Renderer event stream reconnect and resync (backoff, directory list reload, busy status reconcile) | Critical workflow | Text in [README](README.md#product-entry-points-and-persistence) | `app/src/context/server-sdk.tsx` (`reconnectDelay`), `app/src/context/server-sync.tsx` (`createResyncTracker`, `reconcileActiveSessionStatuses`), `app/src/context/global-sync/event-names.ts` |
 | Home one-step start (draft sends on open) | Critical workflow | Text in [README](README.md#home-navigation) | `app/src/pages/brain-home.tsx`, `app/src/context/drafts.tsx` (`takeSend`, `canSendOnOpen`), `app/src/pages/new-session/new-session-draft-controller.ts` |
 | ACP subagent transcript and agent tabs (transcript, usage, live checkpoints, side-panel agent tab) | Critical workflow | Sequence: ACP turn (subagent updates); text in [README](README.md#harness-drivers-and-registration) and [README](README.md#session-compatibility-and-review) | `core/src/harness/acp.ts` (`recordChild`, `subagentSnapshot`), `app/src/utils/session-message.ts`, `app/src/pages/session/helpers.ts` (`agentTabs`), `app/src/components/session/subagent-detail.ts`, `app/src/components/session/subagent-tab.tsx`, `session-ui/src/components/message-part.tsx` (`acp_subagent` card), `app/src/components/session/turn-steps-summary.tsx` |
 | `skills.json` (switched-off Tenon skills) | Shared store | Text in [README](README.md#harness-skills) | `core/src/skill/toggle.ts`, `core/src/skill.ts` (`list`, `all`), `core/src/harness/skills.ts` (`setEnabled`) |
-| Thread titles for harness and V2 sessions | Critical workflow | Text in [README](README.md#thread-titles) | `core/src/session/runner/llm.ts` (`generateTitle`), `core/src/session/title.ts`, `core/src/plugin/agent.ts` (`title` agent) |
+| Thread titles for harness and V2 sessions | Critical workflow | Text in [README](README.md#thread-titles) | `core/src/session/runner/llm.ts` (`generateTitle`), `core/src/harness.ts` (`complete`), `core/src/session/title.ts`, `core/src/plugin/agent.ts` (`title` agent) |
 | Skills catalog (Tenon and per-harness skills, Settings → Skills) | Subsystem | Text in [README](README.md#harness-skills); trust boundaries | `core/src/harness/skills.ts`, `core/src/harness.ts` (`reportedCommands`), `schema/src/skill.ts`, `protocol/src/groups/skill.ts`, `server/src/handlers/skill.ts`, `app/src/utils/server.ts` (`listSkillCatalog`, `setSkillEnabled`), `app/src/components/settings-v2/skills.tsx` |
 | Harness skill folders (`~/.codex/skills`, `~/.claude/skills`, `~/.agents/skills`, `~/.config/opencode/skill(s)`, `/etc/codex/skills`, project equivalents up to the repo root) | Shared store (read-only) | Text in [README](README.md#harness-skills) | `core/src/harness/skills.ts` |
 

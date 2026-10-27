@@ -27,21 +27,28 @@ import { createSessionContextFormatter } from "./session-context-format"
 import { getSessionUsage } from "./session-usage"
 import { stepCountPhrases } from "./turn-steps-summary"
 
-const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
-  system: "var(--syntax-info)",
-  user: "var(--syntax-success)",
-  assistant: "var(--syntax-property)",
-  tool: "var(--syntax-warning)",
-  other: "var(--syntax-comment)",
+// User and assistant turns share one "Messages" segment, as in the Thread design; tones of the accent, not hues.
+type BreakdownGroup = "system" | "messages" | "tool" | "other"
+const BREAKDOWN_COLOR: Record<BreakdownGroup, string> = {
+  system: "var(--v2-background-bg-accent)",
+  messages: "color-mix(in srgb, var(--v2-background-bg-accent) 50%, var(--v2-background-bg-layer-02))",
+  tool: "var(--v2-background-bg-layer-03)",
+  other: "color-mix(in srgb, var(--v2-text-text-faint) 45%, transparent)",
 }
+const breakdownGroup = (key: SessionContextBreakdownKey): BreakdownGroup =>
+  key === "user" || key === "assistant" ? "messages" : key
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
     <div class="flex min-w-0 flex-col gap-0.5 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5">
       <div class="truncate text-[11px] leading-4 text-v2-text-text-muted">{props.label}</div>
-      <div class="break-words text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">{props.value}</div>
+      <div class="truncate text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">{props.value}</div>
     </div>
   )
+}
+
+function SectionLabel(props: { children: JSX.Element }) {
+  return <div class="pl-1 text-[12px] text-v2-text-text-muted [font-weight:530]">{props.children}</div>
 }
 
 function RawMessageContent(props: { message: Message; getParts: (id: string) => Part[]; onRendered: () => void }) {
@@ -152,6 +159,7 @@ export function SessionContextTab() {
   const harnessLabel = (id: string) => {
     if (id === Harness.OpenCode) return language.t("harness.tenonWorkbench")
     if (id === Harness.OpenCodeAcp) return language.t("harness.openCode")
+    if (id === Harness.ClaudeCode) return language.t("harness.claudeCode")
     if (id === Harness.Codex) return language.t("harness.codex")
     return id
   }
@@ -160,7 +168,6 @@ export function SessionContextTab() {
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const usage = createMemo(() => getSessionUsage(messages(), { harness: selectedHarness() }))
-  const notReported = () => language.t("secondBrain.sessionTab.notReported")
   const harnessParts = createMemo(() =>
     messages()
       .filter(
@@ -192,27 +199,6 @@ export function SessionContextTab() {
       ]
     }),
   )
-  const tiles = [
-    { label: "secondBrain.sessionTab.input", value: () => formatter().number(usage().input) },
-    { label: "secondBrain.sessionTab.output", value: () => formatter().number(usage().output) },
-    {
-      label: "secondBrain.sessionTab.cacheHit",
-      value: () => {
-        const hit = usage().cacheHit
-        if (hit === undefined) return notReported()
-        return hit.toLocaleString(language.intl(), { style: "percent", maximumFractionDigits: 0 })
-      },
-    },
-    {
-      label: "secondBrain.sessionTab.cost",
-      value: () => {
-        const cost = usage().cost
-        if (cost === undefined) return notReported()
-        return usd().format(cost)
-      },
-    },
-  ] satisfies { label: string; value: () => JSX.Element }[]
-
   const counts = createMemo(() => {
     const all = messages()
     const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
@@ -261,33 +247,79 @@ export function SessionContextTab() {
     ),
   )
 
-  const breakdownLabel = (key: SessionContextBreakdownKey) => {
+  const breakdownGroups = createMemo(() => {
+    const groups = new Map<BreakdownGroup, { width: number; percent: number }>()
+    for (const segment of breakdown()) {
+      const key = breakdownGroup(segment.key)
+      const current = groups.get(key) ?? { width: 0, percent: 0 }
+      groups.set(key, { width: current.width + segment.width, percent: current.percent + segment.percent })
+    }
+    return [...groups].map(([key, value]) => ({ key, ...value }))
+  })
+
+  const breakdownLabel = (key: BreakdownGroup) => {
     if (key === "system") return language.t("context.breakdown.system")
-    if (key === "user") return language.t("context.breakdown.user")
-    if (key === "assistant") return language.t("context.breakdown.assistant")
+    if (key === "messages") return language.t("context.stats.messages")
     if (key === "tool") return language.t("context.breakdown.tool")
     return language.t("context.breakdown.other")
   }
 
-  const stats = [
-    { label: "context.stats.session", value: () => info()?.title ?? params.id ?? "—" },
-    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
-    { label: "context.stats.provider", value: providerLabel },
-    { label: "context.stats.model", value: modelLabel },
-    { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
-    { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
-    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.message.tokens.output) },
-    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.message.tokens.reasoning) },
+  const tiles = [
+    { label: "secondBrain.sessionTab.tokens", value: () => formatter().number(ctx()?.total) },
     {
-      label: "context.stats.cacheTokens",
-      value: () =>
-        `${formatter().number(ctx()?.message.tokens.cache.read)} / ${formatter().number(ctx()?.message.tokens.cache.write)}`,
+      label: "secondBrain.sessionTab.contextShare",
+      value: () => (ctx()?.limit ? formatter().percent(ctx()?.usage) : "—"),
     },
-    { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
-    { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
-    { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
-    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
+    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
+    {
+      label: "harness.label",
+      value: () => (selectedHarness() ? harnessLabel(selectedHarness()!) : "—"),
+    },
   ] satisfies { label: string; value: () => JSX.Element }[]
+
+  // Only what the harness reported; a missing value hides its row instead of reading "Not reported".
+  const details = createMemo(() => {
+    const c = ctx()
+    const u = usage()
+    const rows: { label: Parameters<typeof language.t>[0]; value: string | undefined }[] = [
+      { label: "context.stats.model", value: c ? modelLabel() : undefined },
+      { label: "context.stats.provider", value: c ? providerLabel() : undefined },
+      {
+        label: "secondBrain.sessionTab.contextWindow",
+        value: c?.limit
+          ? language.t("secondBrain.sessionTab.contextUsed", {
+              used: formatter().number(c.total),
+              limit: formatter().number(c.limit),
+            })
+          : undefined,
+      },
+      { label: "secondBrain.sessionTab.input", value: u.input > 0 ? formatter().number(u.input) : undefined },
+      { label: "secondBrain.sessionTab.output", value: u.output > 0 ? formatter().number(u.output) : undefined },
+      {
+        label: "context.stats.reasoningTokens",
+        value: u.reasoning > 0 ? formatter().number(u.reasoning) : undefined,
+      },
+      {
+        label: "secondBrain.sessionTab.cacheHit",
+        value:
+          u.cacheHit === undefined
+            ? undefined
+            : u.cacheHit.toLocaleString(language.intl(), { style: "percent", maximumFractionDigits: 0 }),
+      },
+      { label: "secondBrain.sessionTab.cost", value: u.cost === undefined ? undefined : usd().format(u.cost) },
+      {
+        label: "context.stats.sessionCreated",
+        value: info()?.time.created ? formatter().time(info()?.time.created) : undefined,
+      },
+      {
+        label: "context.stats.lastActivity",
+        value: c ? formatter().time(c.message.time.created) : undefined,
+      },
+    ]
+    return rows.flatMap((row) => (row.value ? [{ label: row.label, value: row.value }] : []))
+  })
+
+  const [raw, setRaw] = createSignal(false)
 
   const exportSession = async () => {
     const sessionID = params.id
@@ -376,7 +408,7 @@ export function SessionContextTab() {
       }}
       onScroll={handleScroll}
     >
-      <div class="px-4 pt-2 pb-10 flex flex-col gap-6">
+      <div class="px-4 pt-2 pb-10 flex flex-col gap-4">
         <Show when={harnessOptions().length > 1}>
           <div class="flex items-center justify-between gap-3 rounded-[16px] bg-v2-background-bg-layer-01 py-1.5 pl-3 pr-1.5">
             <div class="text-[12px] text-v2-text-text-muted">{language.t("harness.label")}</div>
@@ -393,72 +425,62 @@ export function SessionContextTab() {
           </div>
         </Show>
 
-        <div
-          data-slot="session-tab-heading"
-          class="flex min-w-0 items-center gap-1.5 text-[13px] text-v2-text-text-muted"
-        >
-          <span class="truncate text-v2-text-text-base [font-weight:530]">
-            {selectedHarness() ? harnessLabel(selectedHarness()!) : notReported()}
-          </span>
-          <span aria-hidden="true">·</span>
-          <span class="truncate">{ctx() ? modelLabel() : notReported()}</span>
-          <span aria-hidden="true">·</span>
-          <span class="shrink-0">
-            {language.plural("secondBrain.sessionTab.messages", counts().all, {
-              count: counts().all.toLocaleString(language.intl()),
-            })}
-          </span>
-        </div>
-
         <div class="grid grid-cols-2 gap-2">
           <For each={tiles}>
             {(tile) => <Stat label={language.t(tile.label as Parameters<typeof language.t>[0])} value={tile.value()} />}
           </For>
         </div>
 
-        <div
-          data-slot="session-tab-context"
-          class="flex flex-col gap-2 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5"
-        >
-          <div class="flex items-center justify-between gap-3 text-[11px] leading-4 text-v2-text-text-muted">
-            <span>{language.t("secondBrain.sessionTab.contextWindow")}</span>
-            <Show when={ctx()?.limit}>
-              <span>{formatter().percent(ctx()?.usage)}</span>
-            </Show>
-          </div>
-          <Show
-            when={ctx()?.limit}
-            fallback={<div class="text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">{notReported()}</div>}
-          >
-            {(limit) => (
-              <>
-                <div class="text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">
-                  {language.t("secondBrain.sessionTab.contextUsed", {
-                    used: formatter().number(ctx()?.total),
-                    limit: formatter().number(limit()),
-                  })}
-                </div>
-                <div class="h-1.5 w-full overflow-hidden rounded-full bg-v2-background-bg-layer-02">
+        <Show when={breakdownGroups().length > 0}>
+          <div data-slot="session-tab-context" class="flex flex-col gap-2">
+            <SectionLabel>{language.t("context.breakdown.title")}</SectionLabel>
+            <div class="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full">
+              <For each={breakdownGroups()}>
+                {(segment) => (
                   <div
-                    class="h-full rounded-full bg-v2-background-bg-accent"
-                    style={{ width: `${Math.min(100, ctx()?.usage ?? 0)}%` }}
+                    class="h-full"
+                    style={{ width: `${segment.width}%`, "background-color": BREAKDOWN_COLOR[segment.key] }}
                   />
-                </div>
-              </>
-            )}
-          </Show>
-        </div>
-
-        <div data-slot="session-tab-subagents" class="flex flex-col gap-2">
-          <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
-            {language.t("secondBrain.sessionTab.subagents")}
+                )}
+              </For>
+            </div>
+            <div class="flex flex-wrap gap-x-3.5 gap-y-1 pl-1">
+              <For each={breakdownGroups()}>
+                {(segment) => (
+                  <div class="flex items-center gap-1.5 text-[11.5px] text-v2-text-text-muted">
+                    <div class="size-2 rounded-full" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
+                    <div>{breakdownLabel(segment.key)}</div>
+                    <div class="text-v2-text-text-faint">
+                      {Math.round(segment.percent).toLocaleString(language.intl())}%
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
           </div>
-          <Show
-            when={subagents().length > 0}
-            fallback={
-              <div class="text-[13px] text-v2-text-text-muted">{language.t("secondBrain.sessionTab.none")}</div>
-            }
-          >
+        </Show>
+
+        <Show when={details().length > 0}>
+          <div data-slot="session-tab-details" class="flex flex-col gap-2">
+            <SectionLabel>{language.t("secondBrain.sessionTab.details")}</SectionLabel>
+            <dl class="m-0 flex flex-col rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-1">
+              <For each={details()}>
+                {(row) => (
+                  <div class="flex min-h-8 items-center justify-between gap-3 text-[13px]">
+                    <dt class="shrink-0 text-v2-text-text-muted">{language.t(row.label)}</dt>
+                    <dd class="m-0 min-w-0 truncate text-right text-v2-text-text-base [font-variant-numeric:tabular-nums]">
+                      {row.value}
+                    </dd>
+                  </div>
+                )}
+              </For>
+            </dl>
+          </div>
+        </Show>
+
+        <Show when={subagents().length > 0}>
+          <div data-slot="session-tab-subagents" class="flex flex-col gap-2">
+            <SectionLabel>{language.t("secondBrain.sessionTab.subagents")}</SectionLabel>
             <div class="flex flex-col gap-1">
               <For each={subagents()}>
                 {(agent) => (
@@ -474,19 +496,12 @@ export function SessionContextTab() {
                 )}
               </For>
             </div>
-          </Show>
-        </div>
-
-        <div data-slot="session-tab-tools" class="flex flex-col gap-2">
-          <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
-            {language.t("secondBrain.sessionTab.tools")}
           </div>
-          <Show
-            when={toolPhrases().length > 0}
-            fallback={
-              <div class="text-[13px] text-v2-text-text-muted">{language.t("secondBrain.sessionTab.none")}</div>
-            }
-          >
+        </Show>
+
+        <Show when={toolPhrases().length > 0}>
+          <div data-slot="session-tab-tools" class="flex flex-col gap-2">
+            <SectionLabel>{language.t("secondBrain.sessionTab.tools")}</SectionLabel>
             <div class="flex flex-wrap gap-1.5">
               <For each={toolPhrases()}>
                 {(phrase) => (
@@ -496,57 +511,13 @@ export function SessionContextTab() {
                 )}
               </For>
             </div>
-          </Show>
-        </div>
-
-        <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
-          {language.t("secondBrain.sessionTab.details")}
-        </div>
-        <div class="-mt-4 grid grid-cols-2 @[32rem]:grid-cols-3 gap-2">
-          <For each={stats}>
-            {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
-          </For>
-        </div>
-
-        <Show when={breakdown().length > 0}>
-          <div class="flex flex-col gap-2">
-            <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
-              {language.t("context.breakdown.title")}
-            </div>
-            <div class="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-v2-background-bg-layer-02">
-              <For each={breakdown()}>
-                {(segment) => (
-                  <div
-                    class="h-full"
-                    style={{
-                      width: `${segment.width}%`,
-                      "background-color": BREAKDOWN_COLOR[segment.key],
-                    }}
-                  />
-                )}
-              </For>
-            </div>
-            <div class="flex flex-wrap gap-x-3.5 gap-y-1">
-              <For each={breakdown()}>
-                {(segment) => (
-                  <div class="flex items-center gap-1.5 text-[11.5px] text-v2-text-text-muted">
-                    <div class="size-2 rounded-full" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
-                    <div>{breakdownLabel(segment.key)}</div>
-                    <div class="text-v2-text-text-faint">{segment.percent.toLocaleString(language.intl())}%</div>
-                  </div>
-                )}
-              </For>
-            </div>
-            <div class="hidden text-[11px] text-v2-text-text-faint">{language.t("context.breakdown.note")}</div>
           </div>
         </Show>
 
         <Show when={systemPrompt()}>
           {(prompt) => (
             <div class="flex flex-col gap-2">
-              <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
-                {language.t("context.systemPrompt.title")}
-              </div>
+              <SectionLabel>{language.t("context.systemPrompt.title")}</SectionLabel>
               <div class="rounded-[16px] bg-v2-background-bg-layer-01 px-4 py-2.5">
                 <Markdown text={prompt()} class="text-[12px]" />
               </div>
@@ -555,22 +526,29 @@ export function SessionContextTab() {
         </Show>
 
         <div class="flex flex-col gap-2">
-          <div class="flex items-center justify-between">
-            <div class="text-[12px] text-v2-text-text-muted [font-weight:530]">
+          <div class="flex flex-wrap items-center gap-2">
+            <ButtonV2 variant="outline" size="small" aria-expanded={raw()} onClick={() => setRaw((value) => !value)}>
               {language.t("context.rawMessages.title")}
-            </div>
-            <ButtonV2 variant="outline" class="gap-1.5" onClick={exportSession}>
+            </ButtonV2>
+            <ButtonV2 variant="ghost" size="small" class="gap-1.5" onClick={exportSession}>
               <Icon name="download" />
               <span>{language.t("context.export.session")}</span>
             </ButtonV2>
           </div>
-          <AccordionV2 multiple class="thread-collapsibles">
-            <For each={messages()}>
-              {(message) => (
-                <RawMessage message={message} getParts={getParts} onRendered={restoreScroll} time={formatter().time} />
-              )}
-            </For>
-          </AccordionV2>
+          <Show when={raw()}>
+            <AccordionV2 multiple class="thread-collapsibles">
+              <For each={messages()}>
+                {(message) => (
+                  <RawMessage
+                    message={message}
+                    getParts={getParts}
+                    onRendered={restoreScroll}
+                    time={formatter().time}
+                  />
+                )}
+              </For>
+            </AccordionV2>
+          </Show>
         </div>
       </div>
     </ScrollView>

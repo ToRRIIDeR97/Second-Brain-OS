@@ -137,6 +137,24 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
+/* Lines revealed from a file reference in a reply: a gutter accent, plus a flash when first marked. */
+[data-file] [data-column-number][data-file-reference] {
+  box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-file] [data-line][data-file-reference],
+  [data-file] [data-column-number][data-file-reference] {
+    animation: file-reference-flash 1.2s ease-out;
+  }
+}
+
+@keyframes file-reference-flash {
+  from {
+    background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
+  }
+}
+
 @media (pointer: fine) {
   [data-gutter-utility-slot] {
     opacity: 0;

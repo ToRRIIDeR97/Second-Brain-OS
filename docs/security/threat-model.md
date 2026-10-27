@@ -13,10 +13,10 @@ Detailed permission and request flows are in
 
 | Boundary                   | Current control and location                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Renderer to native process | The main window uses `contextIsolation`, `sandbox`, and disabled `nodeIntegration`. `opencode/packages/desktop/src/preload/index.ts` exposes specific IPC methods implemented in `opencode/packages/desktop/src/main/ipc.ts`. Packaged builds serve the renderer with a Content-Security-Policy (see Renderer content policy) and ignore `ELECTRON_RENDERER_URL`.                                     |
+| Renderer to native process | The main window uses `contextIsolation`, `sandbox`, and disabled `nodeIntegration`. `opencode/packages/desktop/src/preload/index.ts` exposes specific IPC methods implemented in `opencode/packages/desktop/src/main/ipc.ts`. Packaged builds ignore `ELECTRON_RENDERER_URL`; see Renderer content policy for remote media.                                     |
 | Renderer to managed server | Electron starts the OpenCode server on `127.0.0.1` with a generated password. Server authorization checks credentials for protected routes. See `opencode/packages/desktop/src/main/index.ts` and `opencode/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts`.                                                                         |
 | Server to workspace files  | Second Brain handlers run in an instance location context. Note and project code resolves targets through `LocationMutation` before reading or writing files. See `opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `opencode/packages/opencode/src/knowledge/note.ts`, and `opencode/packages/opencode/src/project/brain.ts`. |
-| Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service encrypts its client secret and refresh token with Electron `safeStorage` and disables connection when secure storage is unavailable. The loopback callback ignores requests without the expected state. `reconnect` reuses the stored client after an expired grant. See `opencode/packages/desktop/src/main/google-calendar.ts`. |
+| Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service keeps any number of accounts, encrypts each account's client secret and refresh token with Electron `safeStorage`, and disables connection when secure storage is unavailable. Access tokens are cached per account, writes are routed to the account named by the item, and the loopback callback ignores requests without the expected state. See `opencode/packages/desktop/src/main/google-calendar.ts`. |
 
 `POST /second-brain/projects/workspace` takes only an OpenCode project id. The
 server looks the id up in its own project table and rejects `global` and the
@@ -88,7 +88,19 @@ log credentials or full private content.
 ## Credentials, extensions, and recovery
 
 Google token encryption is specific to the desktop integration. It does not
-establish encryption for every provider credential store. Provider
+establish encryption for every provider credential store. Each connected Google
+account is one entry in the main-owned `second-brain.google` store; the renderer
+sees only account IDs, labels, addresses, access levels and write counts, never
+tokens. Disconnecting an account revokes its refresh token and deletes its entry
+and queued writes. An account ID from the renderer selects an existing account
+only; an unknown ID is rejected (`google_account_not_found`). A build may compile
+a Google "Desktop app" OAuth client ID and secret into the main process from
+the git-ignored `opencode/packages/desktop/.env.local`
+(`MAIN_VITE_GOOGLE_CLIENT_ID`, `MAIN_VITE_GOOGLE_CLIENT_SECRET`). Google treats
+an installed app's client secret as non-confidential: anyone with the build can
+read it, and it grants nothing without the user's consent in the browser. The
+renderer only learns whether such a client exists. Keep the values out of git
+and logs. Provider
 credentials (`auth.json`, `mcp-auth.json`) and the session database
 (`opencode.db`) live in the XDG data directory (by default
 `~/.local/share/tenon-workbench/`), outside Electron `userData`. `userData` holds
@@ -121,17 +133,15 @@ must preserve both canonical workspace files and session/draft profile state.
 
 ## Renderer content policy
 
-Packaged builds serve `index.html` from `oc://renderer` with this policy
-(`opencode/packages/desktop/src/main/windows.ts`):
-`default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' http: https: ws: wss: data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'`.
-The terminal needs WebAssembly, the Markdown and Shiki workers are bundled
-module workers, and file previews use data URLs for images and audio.
-`connect-src` stays open because the renderer talks to the local server and to
-user-configured remote servers. Rendered Markdown also drops every image and
-media source that is not `data:` or `blob:` before it reaches the DOM
-(`session-ui/src/components/markdown-media.ts`), so a note or model reply
-cannot beacon to a remote host. The development server keeps no policy so Vite
-HMR works.
+Rendered Markdown drops every image and media source that is not `data:` or
+`blob:` before it reaches the DOM (`session-ui/src/components/markdown-media.ts`),
+so a note or model reply cannot beacon to a remote host.
+
+The packaged renderer has no page-wide Content-Security-Policy yet. Design
+previews run their own inline scripts in sandboxed `srcdoc` frames, and a
+`srcdoc` frame inherits its parent's policy, so a `script-src 'self'` policy on
+`index.html` would block them. Adding one needs the previews served from their
+own origin first.
 
 `file://` links (terminal output, Markdown) open with the default app only for
 documents. Executables (Windows `PATHEXT` plus `.lnk`, `.hta`, `.msi`, `.scr`;
@@ -229,6 +239,40 @@ same way a manual `npm install -g` or `brew upgrade` would. A harness whose
 command path points into a `node_modules` folder the user doesn't control would
 be updated from that package's registry entry.
 
+## Built-in harness setup
+
+The setup dialog ([ADR-013](../adr/ADR-013-built-in-harness-setup.md),
+`opencode/packages/core/src/harness/setup.ts`) adds these surfaces:
+
+- **Install.** `POST /api/harness/setup/:id/install` takes only a harness ID.
+  - The npm package comes from a fixed recipe for the three built-ins, so no
+    renderer string reaches npm.
+  - npm runs as the user with the app's full environment (proxy and registry
+    settings), from the home directory, with arguments as an array and no
+    shell.
+  - It trusts the user's npm registry, like a manual `npm install -g`.
+- **Sign in.** Codex's browser login runs inside `codex app-server`, which
+  holds the OAuth callback and stores the result in its own home. The app sees
+  only the returned link. Claude Code and OpenCode log in through their own
+  CLI in an app terminal, the same PTY capability the terminal panel already
+  has. The app never reads or stores their tokens; it only checks that their
+  login files exist (`oauthAccount` in `~/.claude.json`, a non-empty OpenCode
+  `auth.json`).
+- **API keys.**
+  - Codex keys go straight to Codex.
+  - Claude Code and OpenCode keys are stored in plain text in
+    `harness-credentials.json` (`0600`, atomic write) in the data folder, like
+    provider keys in `auth.json`.
+  - A key is added only to its own harness's environment, under one fixed
+    variable name. No other harness or child process receives it.
+  - The settings and setup routes never return a key, only which key option is
+    stored.
+  - Keys aren't validated when saved.
+
+Known gap: anyone who can read the user's data folder can read stored harness
+keys. That is the same exposure as `auth.json`; OS-keychain storage would need
+the desktop main process.
+
 ## Harness registration
 
 A registered harness is a command that the app later runs as the user, with
@@ -267,9 +311,19 @@ only `harnesses.json` entries under the same lock. A malformed file is
 reported and never overwritten, and built-in or config-file harnesses are
 refused.
 
+Thread titles send the thread's first user message to the title agent: the
+thread's own harness, or the harness chosen in Settings → Harnesses. A chosen
+harness may belong to a different provider than the thread, so that message
+crosses to it; the choice is the user's, stored in `harness-preferences.json`
+(atomic write) and read only from `/api/harness/title-agent`. The one-off
+session gets no delegation endpoint and no thread history. Codex runs it as an
+ephemeral, read-only thread with approvals off; ACP agents have every tool
+request refused. An ACP agent may still keep that session in its own history
+(for example Claude Code's session list).
+
 The registry stores commands, arguments, and model IDs only. Agents can't
 store environment variables or secrets in it, and it can't replace the
-built-in `opencode`, `codex`, and `opencode-acp` instances. ACP agents get no client
+built-in `opencode`, `codex`, `opencode-acp` and `claude-code` instances. ACP agents get no client
 file-system or terminal capability. Their own tool approvals arrive as
 `session/request_permission` and use Second Brain permissions. Treat output
 from an ACP agent as untrusted model output.
@@ -281,6 +335,50 @@ locale, temp and terminal variables, `XDG_*`, Windows system variables) plus the
 the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.
+
+### Cross-harness delegation
+
+Agents can start work in another harness through the delegation endpoint
+([ADR-011](../adr/ADR-011-cross-harness-delegation.md),
+`opencode/packages/core/src/harness/delegation.ts`). Controls:
+
+- The endpoint listens on `127.0.0.1` only, on its own port. Every request
+  needs a bearer token (32 random bytes, compared in constant time). Each
+  Codex or ACP runtime gets its own token, bound to the Run that owns the
+  runtime, and the token is revoked when the runtime closes. A token can
+  only act as that Run: list harnesses, and start, read or stop that Run's
+  own child tasks.
+- Requests that carry an `Origin` header get 403, so a web page can't drive
+  the endpoint through the user's browser. Bodies are capped at 1 MB, and
+  only `POST /mcp` is served.
+- ACP agents get the token in the `session/new` request over their stdio.
+  Codex gets it in the `TENON_DELEGATION_TOKEN` environment variable, so it
+  stays out of the process arguments. A harness process can read its own
+  token, as with any credential in its environment.
+- A delegated task runs as a normal child Run on the target harness with that
+  harness's usual approval flow. Delegation grants no permission the target
+  wouldn't ask for anyway. Its approvals reach the delegating Run's composer.
+- The built-in loop asks permission `delegate` before starting or stopping a
+  task. Codex and ACP agents apply their own MCP tool policy to the call.
+- A delegated agent may delegate once more (depth 2), and a Run may have at
+  most four delegated tasks running, which bounds runaway fan-out and cost.
+- The delegated agent receives only the task text the caller wrote, framed as
+  a delegated task. The reply returns to the caller as tool output: it is
+  untrusted model output and may carry text from workspace files.
+
+The endpoint also serves `ask_user` and is now attached to every Codex and
+ACP runtime, not only when delegation is on. With delegation off it lists
+only `ask_user`. The same token rules apply: a token can only ask in its own
+Run's session. `ask_user` has no permission check of its own (the native
+`question` tool asks permission `question`); the harness's MCP tool policy
+applies instead. Questions and options are model output shown as text in the
+dock. Each runtime has at most one open question; a new question withdraws the
+old one, and the end of the harness turn (finished, failed or stopped) or
+closing the runtime withdraws what is still open. An answer the agent didn't
+collect in that turn is dropped, so it can't answer a later turn's question.
+
+Known gaps: interrupting a Run doesn't stop the tasks it delegated. An ACP
+agent without HTTP MCP support gets neither delegation nor `ask_user`.
 
 ### Harness skill catalog
 
@@ -334,6 +432,13 @@ separate child process running as the user, and it gets the same treatment:
   `PermissionV2`, so the user approves them in Tenon Workbench.
 - Which binary runs depends on `PATH`. A different `opencode` earlier on
   `PATH` would run instead.
+- Setup installs it from npm as `opencode-ai` (see
+  [Built-in harness setup](#built-in-harness-setup)).
+
+The built-in `claude-code` instance runs `claude-agent-acp` from `PATH` under
+the same rules: allowlisted environment only, its own Claude Code login in
+`~/.claude`, and tool approvals through `session/request_permission`. A
+different `claude-agent-acp` earlier on `PATH` would run instead.
 
 Resolved: Tenon Workbench's core `Global` paths now use the app name
 `tenon-workbench` (`core/src/global.ts`), so Tenon Workbench and upstream OpenCode
@@ -386,9 +491,40 @@ so it is treated as untrusted data:
   or command output, aren't forwarded.
 - A returning harness gets only the messages since it last took part.
 
-The wrapper is a prompt-level signal, not an enforcement boundary. A model may
-still act on instructions in the history, so the permission checks on its
-tools remain the control.
+The first prompt of a runtime also carries a `<tenon-context trust="data">`
+block (`core/src/tenon-context.ts`). It sends workspace content that
+previously stayed in Tenon's own system context to the external agent:
+
+- The workspace, Project and thread folder paths, and the text of the AGENTS.md
+  files in effect, taken from the request's system context. OpenCode's own
+  agent prompt, skill and reference guidance, environment and date are left
+  out.
+- The block opens with a line saying the quoted folders and files are data:
+  each AGENTS.md is the user's project conventions, not commands that override
+  the user's messages or part of the block.
+- Each AGENTS.md sits in its own `<agents-md path="…">` element (a `"` in the
+  path becomes `&quot;`), so headings such as `## Abilities` in a cloned
+  repository's file stay inside that file's element instead of reading as
+  Tenon's sections.
+- Instructions are bounded to 4,000 estimated tokens, most specific file
+  first; a clipped file is marked truncated and files that don't fit are
+  marked omitted. The marker is Tenon's, last inside the file's element.
+- `<tenon-context`, `</tenon-context`, `<agents-md` and `</agents-md` (any
+  letter case) in the content get a backslash after `<` before clipping, so
+  the content can't open or close the block or an element, and clipping can't
+  produce a tag.
+- The abilities name `ask_user` only when the `tenon` MCP server is attached.
+  An ACP agent that doesn't advertise `mcpCapabilities.http` gets no server,
+  so it is told to ask in its reply instead.
+
+Codex also receives the request's system context as `developerInstructions`
+(`renderCodexInstructions`), which includes the AGENTS.md text, environment
+and date. The `core/chat-display` entry, written for native agents and their
+`question` tool, is cut out there so Codex gets one way to ask.
+
+The wrappers are a prompt-level signal, not an enforcement boundary. A model may
+still act on instructions in the history or the instructions text, so the
+permission checks on its tools remain the control.
 
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
@@ -412,10 +548,70 @@ include workspace content, so it is untrusted:
 - The renderer reads nothing back from the frame. Download saves the
   sanitized markup as `diagram.svg` through the browser download flow.
 
-The guidance that tells agents about this (`core/src/chat-display.ts`) is
-fixed text with no workspace content. It goes into the native system context
-and, wrapped in `<tenon-display>`, at the start of each harness runtime's
-first prompt.
+The guidance that tells agents about this, the design blocks and file
+references (`core/src/chat-display.ts`) is fixed text with no workspace
+content. It goes into the native system context and, inside
+`<tenon-context>`, at the start of each harness runtime's first prompt.
+
+## Agent-authored HTML designs in chat
+
+Agents can show designs by writing a fenced block tagged `html` (an inline
+window) or `html canvas` (an artboard in the Canvas tab). Unlike SVG, the page
+keeps its scripts so designs can animate and respond, so the frame, not
+sanitizing, is the control (`session-ui/src/components/design-fence.ts`,
+`html-window.ts`, `app/src/pages/session/canvas-tab.tsx`):
+
+- Frames get `sandbox="allow-scripts"` only (`DESIGN_SANDBOX`), set before the
+  document and before the frame joins the page. No `allow-same-origin`, so the
+  frame has an opaque origin and can't reach the renderer, its storage or
+  `window.api`; no top navigation, popups, forms or modals.
+- The `srcdoc` starts with the CSP `default-src 'none'; style-src
+  'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src
+  data:` (`DESIGN_CSP`), ahead of anything from the page, so the frame can't
+  fetch, load remote resources or submit. After it come
+  `x-dns-prefetch-control: off` and a guard script that makes
+  `RTCPeerConnection`, `webkitRTCPeerConnection` and `RTCDataChannel`
+  undefined, non-writable and non-configurable before any page script runs.
+- Electron main sets `disable_non_proxied_udp` as the WebRTC IP handling
+  policy of every app window (`desktop/src/main/windows.ts`); the app doesn't
+  use WebRTC, and without a proxy this stops all UDP STUN/ICE traffic, also
+  from frames nested inside a design.
+- Only assistant text parts render `html` blocks as designs; tool output, user
+  text, reasoning, subagent tabs and the note preview show them as code.
+- Designs over 512 KB (UTF-8) show a notice instead of a frame.
+- Inline windows post their content height. The renderer accepts a message
+  only from a design frame's own window, with origin `"null"` and a finite
+  number, clamps it to 48–720 px and sends nothing back. Canvas frames send
+  nothing.
+- The main window keeps `contextIsolation`, `sandbox` and no
+  `nodeIntegrationInSubFrames`, so the preload never runs in frames. Electron
+  main's `will-frame-navigate` handler drops any subframe navigation other than
+  `about:srcdoc` and `about:blank` (`isSubframeDocumentURL` in
+  `desktop/src/main/external-url.ts`), so a frame can't navigate itself to a
+  page outside its CSP. It logs only the redacted URL and never opens it. This
+  also covers the SVG frames.
+- The existing permission handlers deny subframe origins (camera,
+  notifications and so on), because they aren't the trusted renderer URL.
+
+Known gap: the in-frame WebRTC guard is defence in depth only, because a page
+can reach the constructors again through a nested frame it creates. There the
+UDP policy still blocks STUN, but TURN over TCP (and the DNS lookup of its
+host) could in theory leak what the page contains, which is model output that
+may quote workspace content.
+
+## File references in chat
+
+Inline-code file references in assistant text open files in the right panel
+(`session-ui/src/components/markdown-file-reference.ts`,
+`app/src/pages/session/file-reference.tsx`). The reference is model output, so
+the path is checked twice, when the chip is marked and again in the app
+handler before any read: no `..` segment, no leading `~`, no control
+characters, no Windows drive-relative path (`D:x.ts`, which resolves against
+that drive's current folder), and an absolute path only when it is inside the thread folder
+(converted to relative; Windows paths compare case-insensitively). Reads go
+through the existing file read, list and search APIs with relative paths, so
+the server's own containment check (`FSUtil.contains`) still applies. Peeks
+show at most 12 lines.
 
 ## Checks
 

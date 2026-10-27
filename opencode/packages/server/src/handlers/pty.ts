@@ -8,7 +8,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
-import { ForbiddenError, PtyNotFoundError } from "@opencode-ai/protocol/errors"
+import { ForbiddenError, InvalidRequestError, PtyNotFoundError } from "@opencode-ai/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
   PTY_CONNECT_TOKEN_HEADER,
@@ -51,6 +51,10 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
                 ...(yield* environment.get({ directory: location.directory, cwd })),
               },
             }),
+          ).pipe(
+            Effect.catchTag("Pty.SpawnError", (error) =>
+              Effect.fail(new InvalidRequestError({ message: error.message, field: "command" })),
+            ),
           )
         }),
       )

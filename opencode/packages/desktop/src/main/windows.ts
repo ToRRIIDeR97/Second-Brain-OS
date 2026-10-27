@@ -16,7 +16,7 @@ import { createUnresponsiveSampler } from "./unresponsive"
 import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
-import { redactURL, resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { isSubframeDocumentURL, redactURL, resolveExternalURL, resolveLocalFilePath } from "./external-url"
 import { localFileAction } from "./local-file-policy"
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -33,23 +33,6 @@ const oc2Background = {
 }
 const documentPolicyHeader = "Document-Policy"
 const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
-// Packaged renderer only (the dev server keeps Vite's inline HMR). Scripts come from the app
-// bundle; the terminal needs WebAssembly. Images, audio and fonts load only from the bundle or
-// data/blob URLs, so Markdown from a note, a model or a provider cannot beacon to a remote host.
-// connect-src stays open: the renderer talks to the local server and to configured remote servers.
-const rendererContentSecurityPolicy = [
-  "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "media-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "worker-src 'self' blob:",
-  "connect-src 'self' http: https: ws: wss: data: blob:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join("; ")
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -227,6 +210,9 @@ export function createMainWindow(id: string = randomUUID()) {
   wireSession(win.webContents.session)
   wireWindowRecovery(win, id)
   wireNavigationPolicy(win)
+  // The app doesn't use WebRTC, and a design frame's CSP doesn't cover it: without a proxy this
+  // stops every UDP STUN/ICE request, also from frames nested in a design (design-fence.ts).
+  win.webContents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
 
   state.manage(win)
   registerWindow(win, id)
@@ -289,6 +275,14 @@ function wireNavigationPolicy(win: BrowserWindow) {
     if (isRendererUrl(url)) return
     event.preventDefault()
     openExternalURL(url)
+  })
+  // will-navigate covers only the main frame. A sandboxed design or diagram frame in chat may run
+  // agent-written script; it can't open popups or navigate the top window, but it can navigate
+  // itself, so any subframe navigation away from its srcdoc is dropped, never opened externally.
+  win.webContents.on("will-frame-navigate", (event) => {
+    if (event.isMainFrame || isSubframeDocumentURL(event.url)) return
+    event.preventDefault()
+    writeLog("window", "blocked subframe navigation", { url: redactURL(event.url) }, "warn")
   })
 }
 
@@ -497,7 +491,6 @@ function addDocumentPolicy(response: Response, file: string) {
   if (!file.toLowerCase().endsWith(".html")) return response
   const headers = new Headers(response.headers)
   headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
-  headers.set("Content-Security-Policy", rendererContentSecurityPolicy)
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 

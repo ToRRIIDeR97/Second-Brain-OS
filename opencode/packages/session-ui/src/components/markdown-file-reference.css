@@ -1,0 +1,115 @@
+/* File reference chips in assistant replies; matched after markdown.css so they override path styling. */
+[data-component="markdown"] :not(pre) > code[data-file-reference] {
+  color: var(--v2-text-text-accent);
+  background: color-mix(in oklch, var(--v2-text-text-accent) var(--markdown-inline-code-bg-mix), transparent);
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in oklch, var(--v2-text-text-accent) 55%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration-style: solid;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 1px;
+  }
+}
+
+/* Above modal dialogs (z-index 50), like menus. */
+[data-component="file-reference-peek"] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(480px, calc(100vw - 16px));
+  padding: 8px 0 4px;
+  visibility: hidden;
+  background: var(--v2-background-bg-layer-01);
+  border-radius: 8px;
+  box-shadow: var(--v2-elevation-floating);
+  color: var(--v2-text-text-base);
+  font-size: 12px;
+
+  &[data-placed] {
+    visibility: visible;
+  }
+
+  [data-slot="file-reference-peek-header"] {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 12px 6px;
+  }
+
+  [data-slot="file-reference-peek-name"] {
+    flex-shrink: 0;
+    font-weight: var(--font-weight-medium);
+  }
+
+  [data-slot="file-reference-peek-folder"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="file-reference-peek-range"] {
+    margin-inline-start: auto;
+    flex-shrink: 0;
+    color: var(--v2-text-text-accent);
+    font-family: var(--font-family-mono);
+  }
+
+  [data-slot="file-reference-peek-lines"] {
+    overflow-x: auto;
+    padding: 4px 0;
+    background: var(--v2-background-bg-base);
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    line-height: 18px;
+  }
+
+  [data-slot="file-reference-peek-line"] {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  [data-slot="file-reference-peek-number"] {
+    position: sticky;
+    left: 0;
+    flex-shrink: 0;
+    width: 44px;
+    padding-inline-end: 10px;
+    box-sizing: border-box;
+    text-align: end;
+    color: var(--v2-text-text-muted);
+    background: var(--v2-background-bg-base);
+    user-select: none;
+  }
+
+  [data-slot="file-reference-peek-text"] {
+    padding-inline-end: 12px;
+    white-space: pre;
+  }
+
+  [data-slot="file-reference-peek-more"],
+  [data-slot="file-reference-peek-status"] {
+    padding: 4px 12px;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="file-reference-peek-actions"] {
+    display: flex;
+    gap: 4px;
+    padding: 4px 8px 0;
+  }
+}

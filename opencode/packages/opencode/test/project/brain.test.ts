@@ -244,6 +244,15 @@ describe("BrainProject workspace threads", () => {
     expect(await run(tmp.path, BrainProject.list())).toHaveLength(2)
   })
 
+  test("folderName keeps one safe path segment", () => {
+    expect(BrainProject.folderName("a/b\\c")).toBe("a-b-c")
+    expect(BrainProject.folderName("Notes. ")).toBe("Notes")
+    expect(BrainProject.folderName("CON")).toBe("Project CON")
+    expect(BrainProject.folderName(".hidden")).toBe("Project .hidden")
+    expect(BrainProject.folderName("project_01ABC")).toBe("Project project_01ABC")
+    expect(BrainProject.folderName("  ")).toBe("Project")
+  })
+
   test("threadDirectory uses the linked Workspace, else the Project folder (created for flat cards)", async () => {
     await using tmp = await tmpdir()
     const linked = (await run(tmp.path, BrainProject.ensureForWorkspace({ id: "proj_a", worktree: "/work/a" }))).project
@@ -449,6 +458,28 @@ describe("BrainProject project folders", () => {
       mkdirSync(path.join(root, folder), { recursive: true })
     writeFileSync(path.join(root, "Projects", "notes.md"), "not a folder")
   }
+
+  test("create without a location makes a visible projects/<name> folder that threads and scan use", async () => {
+    await using tmp = await tmpdir()
+    const root = tmp.path
+    const data = path.join(tmp.path, ".data")
+    mkdirSync(path.join(tmp.path, "Projects", "Taken"), { recursive: true })
+    await run(root, data, BrainProject.scan())
+    const alpha = await run(root, data, BrainProject.create({ name: "Alpha: v2?", outcome: "Ship it" }))
+    expect(alpha.location).toEqual({ displayPath: "Projects/Alpha- v2-", path: "Projects/Alpha- v2-" })
+    expect(existsSync(path.join(tmp.path, "Projects", "Alpha- v2-"))).toBe(true)
+    expect(await run(root, data, BrainProject.threadDirectory(alpha))).toMatchObject({
+      kind: "project",
+      directory: path.join(tmp.path, "Projects", "Alpha- v2-"),
+    })
+    // The scanned "Taken" folder is claimed, so a Project whose name maps to it gets a suffix.
+    const scanned = (await run(root, data, BrainProject.list())).find((project) => project.name === "Taken")!
+    await run(root, data, BrainProject.update(scanned.id, { name: "Old" }))
+    const taken = await run(root, data, BrainProject.create({ name: "Taken", outcome: "Ship it" }))
+    expect(taken.location?.path).toBe("Projects/Taken (2)")
+    expect((await run(root, data, BrainProject.scan())).created).toBe(0)
+    expect(await run(root, data, BrainProject.list())).toHaveLength(3)
+  })
 
   test("scan gives each projects/ subfolder one card and is idempotent", async () => {
     await using tmp = await tmpdir()

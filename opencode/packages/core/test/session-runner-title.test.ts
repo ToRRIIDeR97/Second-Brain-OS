@@ -92,9 +92,20 @@ const turn = [
   LLMEvent.finish({ reason: "stop" }),
 ]
 const harnessID = Harness.InstanceID.make("fake-acp")
+const otherHarnessID = Harness.InstanceID.make("other-acp")
+// One-off title prompts sent to a harness, with the harness that answered.
+const harnessTitles: Array<HarnessRuntime.CompleteInput & { readonly instanceID: Harness.InstanceID }> = []
+let preferredTitleAgent: Harness.InstanceID | undefined
 const harnesses = Layer.mock(HarnessRuntime.Service, {
-  driver: (id) => (id === harnessID ? Harness.DriverKind.make("acp") : Harness.OpenCodeDriver),
+  driver: (id) =>
+    id === harnessID || id === otherHarnessID ? Harness.DriverKind.make("acp") : Harness.OpenCodeDriver,
   stream: () => Stream.fromIterable(turn),
+  complete: (input) =>
+    Effect.sync(() => {
+      harnessTitles.push(input)
+      return titleReply
+    }),
+  titleAgent: () => Effect.sync(() => preferredTitleAgent),
   reportedCommands: () => undefined,
 })
 
@@ -186,6 +197,8 @@ const setup = (input: { harness?: boolean; agentModel?: boolean } = {}) =>
     const { db } = yield* Database.Service
     const agents = yield* AgentV2.Service
     titleRequests.length = 0
+    harnessTitles.length = 0
+    preferredTitleAgent = undefined
     titleReply = "<think>naming</think>\nFix login redirect\n"
     titleFails = false
     titleHangs = false
@@ -213,7 +226,7 @@ const setup = (input: { harness?: boolean; agentModel?: boolean } = {}) =>
         directory: "/project",
         title: defaultTitle,
         version: "test",
-        metadata: input.harness ? { harnessInstanceID: harnessID } : undefined,
+        metadata: input.harness ? { harnessInstanceID: harnessID, harnessModel: { id: "haiku" } } : undefined,
         model: input.harness ? undefined : { id: "main", providerID: "fake" },
       })
       .run()
@@ -274,14 +287,47 @@ describe("session runner titles", () => {
     }),
   )
 
-  it.effect("titles a harness session with a host model", () =>
+  it.effect("titles a harness session with its own agent and model, not a catalog model", () =>
     Effect.gen(function* () {
       yield* setup({ harness: true })
       yield* ask("Explore the harness code")
       yield* settle
 
+      expect(titleRequests).toHaveLength(0)
+      expect(harnessTitles).toHaveLength(1)
+      expect(harnessTitles[0]?.instanceID).toBe(harnessID)
+      expect(harnessTitles[0]?.model?.id).toBe("haiku")
+      expect(harnessTitles[0]?.directory).toBe("/project")
+      expect(harnessTitles[0]?.request.tools).toEqual([])
+      expect(harnessTitles[0]?.request.system.map((part) => part.text)).toEqual(["You generate thread titles."])
+      expect(yield* storedTitle).toBe("Fix login redirect")
+    }),
+  )
+
+  it.effect("uses the harness chosen in settings, with that harness's default model", () =>
+    Effect.gen(function* () {
+      yield* setup({ harness: true })
+      preferredTitleAgent = otherHarnessID
+      yield* ask("Explore the harness code")
+      yield* settle
+
+      expect(harnessTitles).toHaveLength(1)
+      expect(harnessTitles[0]?.instanceID).toBe(otherHarnessID)
+      expect(harnessTitles[0]?.model).toBeUndefined()
+      expect(yield* storedTitle).toBe("Fix login redirect")
+    }),
+  )
+
+  it.effect("titles a harness session in-process when settings choose the default agent", () =>
+    Effect.gen(function* () {
+      yield* setup({ harness: true })
+      preferredTitleAgent = Harness.OpenCode
+      yield* ask("Explore the harness code")
+      yield* settle
+
+      expect(harnessTitles).toHaveLength(0)
       expect(titleRequests).toHaveLength(1)
-      expect(titleRequests[0]?.model.id as string | undefined).toBe("default-model")
+      expect(titleRequests[0]?.model.id as string | undefined).toBe("small-model")
       expect(yield* storedTitle).toBe("Fix login redirect")
     }),
   )

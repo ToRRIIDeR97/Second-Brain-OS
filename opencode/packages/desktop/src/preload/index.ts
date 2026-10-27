@@ -57,11 +57,10 @@ const api: ElectronAPI = {
   googleCalendar: {
     status: () => ipcRenderer.invoke("google-calendar-status"),
     connect: (input) => ipcRenderer.invoke("google-calendar-connect", input),
-    reconnect: (input) => ipcRenderer.invoke("google-calendar-reconnect", input),
     sync: () => ipcRenderer.invoke("google-calendar-sync"),
     write: (input) => ipcRenderer.invoke("google-calendar-write", input),
     writeTask: (input) => ipcRenderer.invoke("google-task-write", input),
-    disconnect: () => ipcRenderer.invoke("google-calendar-disconnect"),
+    disconnect: (input) => ipcRenderer.invoke("google-calendar-disconnect", input),
   },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),

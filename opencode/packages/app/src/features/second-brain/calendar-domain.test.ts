@@ -12,7 +12,8 @@ import {
   weekRange,
 } from "./calendar-domain"
 
-const remote = (providerId: string, title = providerId, date = "2026-08-25") => ({
+const remote = (providerId: string, title = providerId, date = "2026-08-25", accountId = "a1") => ({
+  accountId,
   providerId,
   calendarId: "primary",
   title,
@@ -22,9 +23,10 @@ const remote = (providerId: string, title = providerId, date = "2026-08-25") => 
 })
 
 const google = (providerId: string, extra: Partial<CalendarEvent> = {}): CalendarEvent => ({
-  id: `google:primary:${providerId}`,
+  id: `google:a1:primary:${providerId}`,
   title: providerId,
   date: "2026-08-25",
+  accountId: "a1",
   providerId,
   calendarId: "primary",
   allDay: true,
@@ -60,10 +62,10 @@ test("a Google sync keeps unsynced Google writes and Project links", () => {
   const merged = mergeProviderEvents(current, [remote("failed", "Theirs"), remote("linked", "Renamed"), remote("new")])
   expect(merged.map((event) => event.id)).toEqual([
     "l1",
-    "google:primary:queued",
-    "google:primary:failed",
-    "google:primary:linked",
-    "google:primary:new",
+    "google:a1:primary:queued",
+    "google:a1:primary:failed",
+    "google:a1:primary:linked",
+    "google:a1:primary:new",
   ])
   expect(merged.find((event) => event.providerId === "failed")?.title).toBe("Mine")
   expect(merged.find((event) => event.providerId === "linked")).toMatchObject({
@@ -72,6 +74,23 @@ test("a Google sync keeps unsynced Google writes and Project links", () => {
   })
   // Duplicate remote ids collapse to one.
   expect(mergeProviderEvents([], [remote("dup"), remote("dup")])).toHaveLength(1)
+})
+
+test("an account that failed this sync keeps its events; a removed account loses them", () => {
+  const other = (providerId: string, accountId: string, extra: Partial<CalendarEvent> = {}) =>
+    google(providerId, { id: `google:${accountId}:primary:${providerId}`, accountId, ...extra })
+  const current = [
+    other("kept", "failing"),
+    other("dropped", "removed"),
+    other("queued", "removed", { syncState: "offline", outboxKind: "create", outboxKey: "k" }),
+    google("refreshed"),
+  ]
+  const merged = mergeProviderEvents(current, [remote("refreshed", "New title")], {
+    failed: (account) => account === "failing",
+    synced: (account) => account === "a1",
+  })
+  expect(merged.map((event) => event.id)).toEqual(["google:failing:primary:kept", "google:a1:primary:refreshed"])
+  expect(merged[1].title).toBe("New title")
 })
 
 test("a Google sync keeps the remote events nearest to today within the limit", () => {
@@ -88,7 +107,7 @@ test("a Google sync keeps the remote events nearest to today within the limit", 
   const merged = mergeProviderEvents(
     local,
     [remote("far", "far", "2030-01-01"), remote("near", "near", "2026-08-26")],
-    "2026-08-25",
+    { today: "2026-08-25" },
   )
   expect(merged).toHaveLength(5_000)
   expect(merged.at(-1)?.providerId).toBe("near")

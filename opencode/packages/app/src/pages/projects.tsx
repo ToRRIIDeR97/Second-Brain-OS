@@ -68,7 +68,7 @@ export default function ProjectsPage() {
   const serverSDK = useServerSDK()
   const drafts = useDrafts()
   const queryClient = useQueryClient()
-  const [search] = useSearchParams<{ project?: string }>()
+  const [search, setSearch] = useSearchParams<{ project?: string; new?: string }>()
   const [state, setState] = createStore<PageState>({
     filter: "active" as ProjectStatus,
     selectedId: "",
@@ -125,6 +125,18 @@ export default function ProjectsPage() {
           openedLink = id
           setState({ selectedId: project.id, filter: project.status })
         }
+      },
+    ),
+  )
+
+  // `?new=1` (the sidebar's New Project action) opens the create form, then drops the flag.
+  createEffect(
+    on(
+      () => search.new,
+      (value) => {
+        if (!value) return
+        setState({ creating: true, selectedId: "", error: "" })
+        setSearch({ new: undefined }, { replace: true })
       },
     ),
   )

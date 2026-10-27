@@ -22,6 +22,8 @@ export const Event = Schema.Struct({
   end: Schema.optional(Schema.String),
   details: Schema.optional(Schema.String),
   projectId: Schema.optional(Schema.String),
+  /** The Google account the provider item belongs to; absent on local items and pre-multi-account saves. */
+  accountId: Schema.optional(Schema.String),
   providerId: Schema.optional(Schema.String),
   calendarId: Schema.optional(Schema.String),
   etag: Schema.optional(Schema.String),
@@ -46,6 +48,7 @@ export const Task = Schema.Struct({
   start: Schema.optional(Schema.String),
   end: Schema.optional(Schema.String),
   completedAt: Schema.optional(Schema.String),
+  accountId: Schema.optional(Schema.String),
   providerId: Schema.optional(Schema.String),
   taskListId: Schema.optional(Schema.String),
   taskListTitle: Schema.optional(Schema.String),
@@ -177,6 +180,9 @@ function validate(events: ReadonlyArray<Event>) {
     ) {
       throw new InvalidError({ reason: "invalid_provider_event" })
     }
+    if (event.accountId !== undefined && (event.source !== "google" || !accountIdValid(event.accountId))) {
+      throw new InvalidError({ reason: "invalid_provider_account" })
+    }
     if (
       Boolean(event.outboxKind) !== Boolean(event.outboxKey) ||
       (event.outboxKey && event.outboxKey.length > 256) ||
@@ -234,6 +240,9 @@ function validateTasks(tasks: ReadonlyArray<Task>) {
     ) {
       throw new InvalidError({ reason: "invalid_provider_task" })
     }
+    if (task.accountId !== undefined && (task.source !== "google" || !accountIdValid(task.accountId))) {
+      throw new InvalidError({ reason: "invalid_provider_account" })
+    }
     if (
       Boolean(task.outboxKind) !== Boolean(task.outboxKey) ||
       (task.outboxKey && task.outboxKey.length > 256) ||
@@ -243,4 +252,8 @@ function validateTasks(tasks: ReadonlyArray<Task>) {
       throw new InvalidError({ reason: "invalid_task_outbox_reference" })
     }
   }
+}
+
+function accountIdValid(value: string) {
+  return value.length > 0 && value.length <= 128
 }

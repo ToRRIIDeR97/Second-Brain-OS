@@ -6,7 +6,9 @@ import {
   createSessionForServer,
   fallbackHarnesses,
   listHarnessesForServer,
+  listHarnessesRemembered,
   listSkillCatalog,
+  rememberedHarnesses,
   setSkillEnabled,
   switchHarnessForServer,
 } from "./server"
@@ -60,6 +62,7 @@ describe("listHarnessesForServer", () => {
       expect.objectContaining({ id: Harness.OpenCode, name: "Default agent", status: "available" }),
       expect.objectContaining({ id: Harness.Codex, status: "unavailable" }),
       expect.objectContaining({ id: Harness.OpenCodeAcp, driver: Harness.AcpDriver, status: "unavailable" }),
+      expect.objectContaining({ id: Harness.ClaudeCode, driver: Harness.AcpDriver, status: "unavailable" }),
     ])
   })
 
@@ -94,6 +97,33 @@ describe("listHarnessesForServer", () => {
     expect(harnesses[0]).toMatchObject({ id: Harness.Codex, authenticated: true })
     expect(new URL(request!.url).searchParams.get("location[directory]")).toBe("C:\\repo")
     expect(request!.headers.get("authorization")).toBe(`Basic ${btoa("kit:secret")}`)
+  })
+})
+
+describe("listHarnessesRemembered", () => {
+  test("keeps the last good list and never a failed check", async () => {
+    const codex = { id: Harness.Codex, driver: Harness.CodexDriver, name: "Codex", status: "available", models: [] }
+    let ok = true
+    const fetcher = Object.assign(
+      async () =>
+        ok
+          ? Response.json({
+              location: { directory: "C:\\brain", project: { id: "p", directory: "C:\\brain" } },
+              data: [codex],
+            })
+          : new Response(null, { status: 500 }),
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const input = { server: { url: "http://localhost:4097" }, fetch: fetcher }
+
+    expect(rememberedHarnesses("http://localhost:4097", "C:\\brain")).toBeUndefined()
+    await listHarnessesRemembered(input, "C:\\brain")
+    expect(rememberedHarnesses("http://localhost:4097", "C:\\brain")).toMatchObject([{ id: Harness.Codex }])
+
+    ok = false
+    expect(await listHarnessesRemembered(input, "C:\\brain")).toEqual(fallbackHarnesses())
+    expect(rememberedHarnesses("http://localhost:4097", "C:\\brain")).toMatchObject([{ id: Harness.Codex }])
+    expect(rememberedHarnesses("http://localhost:4097", "C:\\other")).toBeUndefined()
   })
 })
 

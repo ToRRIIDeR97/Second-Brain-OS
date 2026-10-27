@@ -10,6 +10,9 @@ import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
+import { Harness } from "@opencode-ai/schema/harness"
+import type { HarnessSession } from "@/utils/session"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
@@ -64,6 +67,7 @@ function Option(props: {
 
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
+  const sync = useSync()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
@@ -100,6 +104,19 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
     return language.t("session.question.progress", { current: n, total: total() })
+  })
+  // External harnesses ask through Tenon's ask_user tool; name the one asking. The built-in loop needs no label.
+  const asker = createMemo(() => {
+    const id = (sync().session.get(props.request.sessionID) as HarnessSession | undefined)?.harnessInstanceID
+    const key =
+      id === Harness.ClaudeCode
+        ? "harness.claudeCode"
+        : id === Harness.Codex
+          ? "harness.codex"
+          : id === Harness.OpenCodeAcp
+            ? "harness.openCode"
+            : undefined
+    return key ? language.t(key) : undefined
   })
   const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
   const customPlaceholder = () => language.t("ui.question.custom.placeholder")
@@ -341,8 +358,34 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const target =
       event.target instanceof HTMLElement ? event.target.closest('[data-slot="question-options"]') : undefined
     if (store.editing) return
-    if (!(target instanceof HTMLElement)) return
     if (event.altKey || event.ctrlKey || event.metaKey) return
+
+    // 1-9 pick the matching option (the last number past the options is "type your own answer").
+    if (!store.minimized && /^[1-9]$/.test(event.key) && Number(event.key) <= count()) {
+      event.preventDefault()
+      const index = Number(event.key) - 1
+      selectOption(index)
+      if (index < options().length) focus(index)
+      return
+    }
+
+    if (!(target instanceof HTMLElement)) return
+
+    // Enter confirms a single choice: it takes the focused option, then the dock moves on or submits.
+    // In a multi-select question Enter is left to the focused button, so it toggles that option like
+    // a click; Next/Submit or Ctrl/Cmd+Enter moves on.
+    if (event.key === "Enter" && !event.shiftKey && !multi()) {
+      if (event.repeat) return
+      event.preventDefault()
+      if (store.focus === options().length) {
+        if (on() && input().trim()) next()
+        else customOpen()
+        return
+      }
+      selectOption(store.focus)
+      next()
+      return
+    }
 
     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
       event.preventDefault()
@@ -460,7 +503,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         onKeyDown={nav}
         header={
           <>
-            <div data-slot="question-header-title">{summary()}</div>
+            <div data-slot="question-header-title">
+              <Show when={asker()}>{(agent) => `${language.t("harness.question.asking", { agent: agent() })} · `}</Show>
+              {summary()}
+            </div>
             <div data-slot="question-header-actions">
               <Show when={total() > 1}>
                 <div data-slot="question-progress">

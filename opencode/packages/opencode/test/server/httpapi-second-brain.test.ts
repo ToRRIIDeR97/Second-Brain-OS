@@ -75,7 +75,9 @@ describe("second brain project threads HttpApi", () => {
           headers,
           body: JSON.stringify({ name: "Alpha", outcome: "Ship alpha" }),
         }).pipe(Effect.flatMap(json<BrainProject.Info>))
-        const alphaDirectory = path.join(test.directory, alpha.folder)
+        // A Project created without a linked folder runs in its visible `projects/<name>` folder.
+        const alphaDirectory = path.join(test.directory, alpha.location!.path!)
+        expect(alpha.location?.path).toBe("projects/Alpha")
         yield* Effect.promise(() => mkdir(alphaDirectory, { recursive: true }))
         yield* Session.use.create({ title: "alpha thread" }).pipe(provideInstanceEffect(alphaDirectory))
 
@@ -87,7 +89,7 @@ describe("second brain project threads HttpApi", () => {
         const folder = first.find((item) => item.project.id === alpha.id)
         expect(folder).toMatchObject({
           threadDirectory: alphaDirectory,
-          threadDirectoryKind: "folder",
+          threadDirectoryKind: "project",
           workspace: null,
           rootSessionCount: 1,
         })

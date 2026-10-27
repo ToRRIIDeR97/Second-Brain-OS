@@ -13,7 +13,12 @@ import { AcpHarness } from "./acp"
 // The app-owned list of harnesses added after setup. It lives beside the global config and holds
 // commands only: agents can't store environment variables here.
 export const fileName = "harnesses.json"
-export const reserved: ReadonlySet<string> = new Set([Harness.OpenCode, Harness.OpenCodeAcp, Harness.Codex])
+export const reserved: ReadonlySet<string> = new Set([
+  Harness.OpenCode,
+  Harness.OpenCodeAcp,
+  Harness.ClaudeCode,
+  Harness.Codex,
+])
 
 const slug = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/
 // Serializes the read-modify-write of harnesses.json so concurrent registrations can't drop an entry.
@@ -215,6 +220,30 @@ function update(
     })
   }).pipe(writeLock.withPermits(1))
 }
+
+export const preferencesFileName = "harness-preferences.json"
+
+/** The harness chosen in settings to title new threads, if any. */
+export const titleAgent = (configDir: string): Effect.Effect<Harness.InstanceID | undefined> =>
+  Effect.tryPromise(() => fs.readFile(path.join(configDir, preferencesFileName), "utf8")).pipe(
+    Effect.map((text) => {
+      const value = Option.getOrUndefined(decodeJson(text))
+      const id = isRecord(value) ? value.titleAgent : undefined
+      return typeof id === "string" && id ? Harness.InstanceID.make(id) : undefined
+    }),
+    Effect.orElseSucceed(() => undefined),
+  )
+
+/** Sets the title harness; undefined goes back to each thread's own harness. */
+export const setTitleAgent = (configDir: string, id: Harness.InstanceID | undefined) =>
+  Effect.tryPromise({
+    try: () =>
+      writeAtomic(
+        path.join(configDir, preferencesFileName),
+        `${JSON.stringify(id ? { titleAgent: id } : {}, null, 2)}\n`,
+      ),
+    catch: (cause) => registerError("write-failed", `Could not save ${preferencesFileName}: ${String(cause)}`),
+  }).pipe(writeLock.withPermits(1))
 
 // The desktop app runs core under Node, so file and PATH lookups here must not use Bun globals.
 function readRaw(configDir: string) {

@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto"
-import type { GoogleCalendarProviderEvent, GoogleTaskProviderTask } from "@opencode-ai/app"
+import type {
+  GoogleAccount,
+  GoogleCalendarConnection,
+  GoogleCalendarProviderEvent,
+  GoogleTaskProviderTask,
+} from "@opencode-ai/app"
 
 export type GoogleEventResponse = {
   id?: string
@@ -34,6 +39,37 @@ export function googleScopes(access: "read" | "write") {
   return scopes
 }
 
+export type GoogleClient = { clientId: string; clientSecret: string }
+
+/** Validates and trims a Desktop OAuth client, throwing the error code the Calendar page maps. */
+export function validateGoogleClient(clientId: string, clientSecret: string): GoogleClient {
+  const id = clientId.trim()
+  const secret = clientSecret.trim()
+  if (!id.endsWith(".apps.googleusercontent.com") || id.length > 512) throw new Error("google_client_id_invalid")
+  if (!secret || secret.length > 512 || /\s/.test(secret)) throw new Error("google_client_secret_invalid")
+  return { clientId: id, clientSecret: secret }
+}
+
+/** The client compiled into this build, or undefined when the build has none or an invalid one. */
+export function builtInGoogleClient(env: { clientId?: string; clientSecret?: string }) {
+  try {
+    return validateGoogleClient(env.clientId ?? "", env.clientSecret ?? "")
+  } catch {
+    return undefined
+  }
+}
+
+/** Typed credentials win over the built-in client; a partly typed pair is validated, never replaced. */
+export function resolveGoogleClient(
+  input: { clientId?: string; clientSecret?: string },
+  builtIn: GoogleClient | undefined,
+): GoogleClient {
+  const typed = Boolean(input.clientId?.trim() || input.clientSecret?.trim())
+  if (typed) return validateGoogleClient(input.clientId ?? "", input.clientSecret ?? "")
+  if (builtIn) return builtIn
+  throw new Error("google_client_missing")
+}
+
 export function pkceChallenge(verifier: string) {
   return createHash("sha256").update(verifier).digest("base64url")
 }
@@ -49,6 +85,7 @@ export function googleEventId(idempotencyKey: string) {
  */
 export function normalizeGoogleEvent(
   input: GoogleEventResponse,
+  accountId: string,
   timeZone?: string,
 ): GoogleCalendarProviderEvent | undefined {
   if (!input.id || input.status === "cancelled" || !input.start || !input.end) return
@@ -59,6 +96,7 @@ export function normalizeGoogleEvent(
   if (!date) return
   const endDate = allDay && input.end.date ? previousDate(input.end.date) : end?.slice(0, 10)
   return {
+    accountId,
     providerId: input.id,
     calendarId: "primary",
     title: input.summary?.trim() || "Untitled event",
@@ -104,9 +142,11 @@ export function googleEventPayload(event: GoogleCalendarProviderEvent) {
 export function normalizeGoogleTask(
   input: GoogleTaskResponse,
   taskList: { id: string; title: string },
+  accountId: string,
 ): GoogleTaskProviderTask | undefined {
   if (!input.id || input.deleted || !input.updated) return
   return {
+    accountId,
     providerId: input.id,
     taskListId: taskList.id,
     taskListTitle: taskList.title.trim() || "Google Tasks",
@@ -175,19 +215,26 @@ export async function requestGoogleToken(fetch: Fetch, endpoint: string, input: 
   return value
 }
 
-/** Caches the access token until shortly before `expires_in`, so queued writes share one exchange. */
+/**
+ * Caches each account's access token until shortly before `expires_in`, so queued writes share one
+ * exchange. Keyed by account: two accounts signed in through the same client never share a token.
+ */
 export function createGoogleAccessTokens(input: {
   fetch: Fetch
   endpoint: string
-  onRotate: (refreshToken: string) => void
+  onRotate: (accountId: string, refreshToken: string) => void
   now?: () => number
 }) {
   const now = input.now ?? Date.now
-  let cached: { clientId: string; token: string; expiresAt: number } | undefined
-  const fresh = (config: Credentials) => cached?.clientId === config.clientId && cached.expiresAt > now()
+  const cached = new Map<string, { clientId: string; token: string; expiresAt: number }>()
+  const fresh = (config: Credentials) => {
+    const entry = cached.get(config.accountId)
+    return Boolean(entry && entry.clientId === config.clientId && entry.expiresAt > now())
+  }
   const get = async (config: Credentials) => {
-    if (cached && fresh(config)) return cached.token
-    cached = undefined
+    const entry = cached.get(config.accountId)
+    if (entry && fresh(config)) return entry.token
+    cached.delete(config.accountId)
     const tokens = await requestGoogleToken(input.fetch, input.endpoint, {
       client_id: config.clientId,
       client_secret: config.clientSecret,
@@ -195,10 +242,16 @@ export function createGoogleAccessTokens(input: {
       grant_type: "refresh_token",
     })
     if (!tokens.access_token) throw new Error("google_reconnect_required")
-    if (tokens.refresh_token) input.onRotate(tokens.refresh_token)
+    if (tokens.refresh_token) input.onRotate(config.accountId, tokens.refresh_token)
     // Renew a minute early so a token never expires during a request.
     const lifetime = (tokens.expires_in ?? 0) * 1_000 - 60_000
-    if (lifetime > 0) cached = { clientId: config.clientId, token: tokens.access_token, expiresAt: now() + lifetime }
+    if (lifetime > 0) {
+      cached.set(config.accountId, {
+        clientId: config.clientId,
+        token: tokens.access_token,
+        expiresAt: now() + lifetime,
+      })
+    }
     return tokens.access_token
   }
   return {
@@ -211,17 +264,86 @@ export function createGoogleAccessTokens(input: {
       const reused = fresh(config)
       return request(await get(config)).catch(async (error) => {
         if (!reused || !(error instanceof Error) || error.message !== "google_reconnect_required") throw error
-        cached = undefined
+        cached.delete(config.accountId)
         return request(await get(config))
       })
     },
-    clear() {
-      cached = undefined
+    /** Drops one account's token, or every token when no account is named. */
+    clear(accountId?: string) {
+      if (accountId) return void cached.delete(accountId)
+      cached.clear()
     },
   }
 }
 
-type Credentials = { clientId: string; clientSecret: string; refreshToken: string }
+type Credentials = { accountId: string; clientId: string; clientSecret: string; refreshToken: string }
+
+/** The pre-multi-account store kept one connection in flat top-level keys. */
+export const GOOGLE_LEGACY_KEYS = ["clientId", "clientSecret", "refreshToken", "access", "accountLabel", "lastSyncedAt"]
+
+/**
+ * Turns the flat single-account keys into one account entry, still encrypted, and tags the
+ * untagged outbox entries with its ID. Returns undefined when there is nothing to migrate.
+ */
+export function migrateLegacyGoogleStore<O extends { accountId?: string }, T extends { accountId?: string }>(input: {
+  read: (key: string) => unknown
+  id: string
+  outbox: O[]
+  taskOutbox: T[]
+}) {
+  const text = (key: string) => {
+    const value = input.read(key)
+    return typeof value === "string" && value ? value : undefined
+  }
+  const clientId = text("clientId")
+  const clientSecret = text("clientSecret")
+  const refreshToken = text("refreshToken")
+  if (!clientId || !clientSecret || !refreshToken) return
+  const tag = <E extends { accountId?: string }>(entry: E) =>
+    entry.accountId ? entry : { ...entry, accountId: input.id }
+  const label = text("accountLabel")
+  const lastSyncedAt = text("lastSyncedAt")
+  return {
+    account: {
+      id: input.id,
+      // The label was the primary calendar's summary or ID, which is the account's email address.
+      ...(label?.includes("@") ? { email: label } : {}),
+      label: label ?? "Google",
+      clientId,
+      clientSecret,
+      refreshToken,
+      access: input.read("access") === "write" ? ("write" as const) : ("read" as const),
+      ...(lastSyncedAt ? { lastSyncedAt } : {}),
+    },
+    outbox: input.outbox.map(tag),
+    taskOutbox: input.taskOutbox.map(tag),
+  }
+}
+
+/** The page reads the aggregate fields; `accounts` carries the per-account detail. */
+export function googleConnection(input: {
+  configured: boolean
+  builtInClient: boolean
+  accounts: GoogleAccount[]
+}): GoogleCalendarConnection {
+  const first = input.accounts[0]
+  const lastSyncedAt = input.accounts
+    .flatMap((account) => (account.lastSyncedAt ? [account.lastSyncedAt] : []))
+    .sort()
+    .at(-1)
+  return {
+    available: true,
+    configured: input.configured,
+    builtInClient: input.builtInClient,
+    connected: input.accounts.length > 0,
+    access: input.accounts.some((account) => account.access === "write") ? "write" : "read",
+    pendingWrites: input.accounts.reduce((sum, account) => sum + account.pendingWrites, 0),
+    failedWrites: input.accounts.reduce((sum, account) => sum + account.failedWrites, 0),
+    accounts: input.accounts,
+    ...(first ? { accountLabel: first.label } : {}),
+    ...(lastSyncedAt ? { lastSyncedAt } : {}),
+  }
+}
 
 /** Drops succeeded entries first, then old failures. Queued (pending or offline) writes are never dropped. */
 export function pruneOutbox<T extends { state: OutboxState }>(entries: T[], limit = GOOGLE_OUTBOX_LIMIT) {
@@ -236,9 +358,50 @@ export function pruneOutbox<T extends { state: OutboxState }>(entries: T[], limi
   return entries.filter((entry) => !drop.has(entry))
 }
 
+type GoogleErrorBody = {
+  error?: {
+    status?: string
+    errors?: { reason?: string }[]
+    details?: { reason?: string }[]
+  }
+}
+
+/**
+ * Turns a failed Google API response into an error code the Calendar page can explain.
+ * `reason` is Google's machine-readable reason (never message text), safe to log.
+ */
+export function classifyGoogleError(status: number, url: string, body: string) {
+  const api = new URL(url).hostname === "tasks.googleapis.com" ? "tasks" : "calendar"
+  const parsed = (() => {
+    try {
+      return JSON.parse(body) as GoogleErrorBody
+    } catch {
+      return undefined
+    }
+  })()
+  const reasons = [
+    ...(parsed?.error?.details ?? []).map((item) => item.reason),
+    ...(parsed?.error?.errors ?? []).map((item) => item.reason),
+    parsed?.error?.status,
+  ].filter((item): item is string => typeof item === "string" && /^[A-Za-z_]{1,64}$/.test(item))
+  const reason = reasons[0]
+  const has = (...names: string[]) => reasons.some((item) => names.includes(item))
+  const code = (() => {
+    if (has("SERVICE_DISABLED", "accessNotConfigured")) return `google_api_disabled_${api}`
+    if (has("ACCESS_TOKEN_SCOPE_INSUFFICIENT", "insufficientPermissions")) return "google_scope_missing"
+    if (status === 429 || has("RATE_LIMIT_EXCEEDED", "rateLimitExceeded", "userRateLimitExceeded")) {
+      return "google_rate_limited"
+    }
+    return `google_http_${status}`
+  })()
+  return { code, api, reason }
+}
+
 /** `attempts` counts the attempt that just failed. */
 export function outboxFailureState(message: string, attempts: number): "conflict" | "failed" | "offline" {
   if (message === "google_conflict") return "conflict"
+  // A disabled API or a missing scope needs the user to act; retrying cannot fix it.
+  if (message.startsWith("google_api_disabled_") || message === "google_scope_missing") return "failed"
   const status = Number(message.match(/^google_http_(\d{3})$/)?.[1])
   // Timeouts, rate limits and server errors are retried; any other HTTP error will not succeed later.
   if (status && !transientStatus(status)) return "failed"
@@ -249,28 +412,6 @@ export function outboxFailureState(message: string, attempts: number): "conflict
 
 function transientStatus(status: number) {
   return status === 408 || status === 425 || status === 429 || status >= 500
-}
-
-/**
- * The error code for a failed Google response. Google reports rate limits as 403 with a
- * `rateLimitExceeded` reason, which is reported as 429 so the write stays queued.
- */
-export function googleHttpError(status: number, body: unknown) {
-  if (status === 403 && rateLimited(body)) return "google_http_429"
-  return `google_http_${status}`
-}
-
-function rateLimited(body: unknown) {
-  if (!body || typeof body !== "object" || !("error" in body)) return false
-  const error = body.error
-  if (!error || typeof error !== "object" || !("errors" in error) || !Array.isArray(error.errors)) return false
-  return error.errors.some(
-    (item: unknown) =>
-      !!item &&
-      typeof item === "object" &&
-      "reason" in item &&
-      (item.reason === "rateLimitExceeded" || item.reason === "userRateLimitExceeded"),
-  )
 }
 
 export const GOOGLE_EVENT_LIMIT = 5_000

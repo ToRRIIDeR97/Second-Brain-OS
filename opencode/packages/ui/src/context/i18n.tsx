@@ -12,6 +12,7 @@ export const UI_PLURAL_KEYS = [
   "secondBrain.messagePart.tools.title",
   "secondBrain.messagePart.tools.command",
   "secondBrain.messagePart.tools.other",
+  "secondBrain.fileReference.more",
 ] as const
 export type UiI18nPluralKey = (typeof UI_PLURAL_KEYS)[number]
 export type UiPluralCategory = "zero" | "one" | "two" | "few" | "many" | "other"

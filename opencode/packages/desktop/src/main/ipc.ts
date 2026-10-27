@@ -153,9 +153,6 @@ export function registerIpcHandlers(deps: Deps) {
   trustedHandle("google-calendar-connect", (event, input: Parameters<GoogleCalendarPlatform["connect"]>[0]) =>
     deps.googleCalendar.connect({ ...input, windowId: event.sender.id }),
   )
-  trustedHandle("google-calendar-reconnect", (event, input: Parameters<GoogleCalendarPlatform["reconnect"]>[0]) =>
-    deps.googleCalendar.reconnect({ ...input, windowId: event.sender.id }),
-  )
   trustedHandle("google-calendar-sync", () => deps.googleCalendar.sync())
   trustedHandle("google-calendar-write", (_event, input: Parameters<GoogleCalendarPlatform["write"]>[0]) =>
     deps.googleCalendar.write(input),
@@ -163,7 +160,9 @@ export function registerIpcHandlers(deps: Deps) {
   trustedHandle("google-task-write", (_event, input: Parameters<GoogleCalendarPlatform["writeTask"]>[0]) =>
     deps.googleCalendar.writeTask(input),
   )
-  trustedHandle("google-calendar-disconnect", () => deps.googleCalendar.disconnect())
+  trustedHandle("google-calendar-disconnect", (_event, input: Parameters<GoogleCalendarPlatform["disconnect"]>[0]) =>
+    deps.googleCalendar.disconnect(typeof input?.accountId === "string" ? { accountId: input.accountId } : undefined),
+  )
   trustedHandle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   trustedHandle("export-debug-logs", () => deps.exportDebugLogs())
   trustedHandle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>

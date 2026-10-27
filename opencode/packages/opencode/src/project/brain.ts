@@ -194,6 +194,8 @@ export const get = Effect.fn("BrainProject.get")(function* (id: string) {
 /** `projects` is the caller's already-loaded full list, used for the duplicate-name check. */
 export const create = Effect.fn("BrainProject.create")(function* (input: CreateInput, projects?: ReadonlyArray<Info>) {
   const existing = projects ?? (yield* all())
+  // A Project without a linked folder gets a visible `projects/<name>` folder, where its threads run.
+  const folder = input.location ? undefined : yield* newProjectFolder(input.name.trim(), existing)
   const now = new Date().toISOString()
   const id = `project_${ulid()}`
   const info = yield* Effect.try({
@@ -210,7 +212,7 @@ export const create = Effect.fn("BrainProject.create")(function* (input: CreateI
         nextMilestone: undefined,
         blocker: undefined,
         tags: normalizeTags(input.tags ?? []),
-        location: normalizeLocation(input.location),
+        location: folder ? { displayPath: folder, path: folder } : normalizeLocation(input.location),
         createdAt: now,
         updatedAt: now,
       }),
@@ -235,6 +237,11 @@ export const create = Effect.fn("BrainProject.create")(function* (input: CreateI
       target: timelineTarget,
       content: timelineSource({ version: 2, revision: "", events: [], tasks: [] }),
     })
+    if (folder) {
+      const location = yield* Location.Service
+      const fs = yield* FSUtil.Service
+      yield* fs.ensureDir(path.join(location.directory, folder))
+    }
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
@@ -525,6 +532,45 @@ const projectFolders = Effect.fn("BrainProject.projectFolders")(function* (root:
   )
   return children.flat().sort((a, b) => a.localeCompare(b))
 })
+
+/**
+ * A `projects/<name>` folder for a new Project that no other Project uses. An existing
+ * unclaimed folder of that name is adopted, as a scan would.
+ */
+const newProjectFolder = Effect.fn("BrainProject.newProjectFolder")(function* (
+  name: string,
+  projects: ReadonlyArray<Info>,
+) {
+  const location = yield* Location.Service
+  const fs = yield* FSUtil.Service
+  const entries = yield* fs.readDirectoryEntries(location.directory).pipe(Effect.orElseSucceed(() => []))
+  // Reuse the workspace's projects folder whatever its letter case, as the scan does.
+  const parent =
+    entries.find((entry) => entry.type === "directory" && entry.name.toLowerCase() === "projects")?.name ?? "projects"
+  const claimed = new Set(
+    projects.flatMap((project) =>
+      project.location?.path ? [path.resolve(location.directory, project.location.path).toLowerCase()] : [],
+    ),
+  )
+  const base = folderName(name)
+  for (let index = 1; ; index++) {
+    const folder = `${parent}/${index === 1 ? base : `${base} (${index})`}`
+    if (!claimed.has(path.resolve(location.directory, folder).toLowerCase())) return folder
+  }
+})
+
+/** One safe path segment on every platform; names the scan would skip get a prefix. */
+export function folderName(name: string) {
+  const cleaned = [...name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")]
+    .slice(0, 120)
+    .join("")
+    .trim()
+    .replace(/[. ]+$/, "")
+  if (!cleaned) return "Project"
+  if (cleaned.startsWith(".") || idPattern.test(cleaned) || /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(cleaned))
+    return `Project ${cleaned}`
+  return cleaned
+}
 
 /** Point this workspace's linked folders at it in the shared index; entries of other workspaces stay. */
 const writeLinkIndex = Effect.fn("BrainProject.writeLinkIndex")(function* (

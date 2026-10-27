@@ -68,6 +68,11 @@ A configured local installation and account for a Harness. Multiple instances
 of the same Harness may use different binaries, homes, or accounts.
 _Avoid_: Provider account, runtime as an interchangeable name
 
+**Delegation**:
+An agent in one Harness handing a task to an agent in another Harness. The
+task runs as a child Run of the delegating Run and returns its final reply.
+_Avoid_: Subagent (a Harness's own nested agent)
+
 **Activity**:
 The chronological record of meaningful user, agent, file, Git, planning, and
 provider events.

@@ -47,7 +47,7 @@ const contained = Effect.fnUntraced(function* (candidate: string, base: string) 
  * The workspace root for `start` plus the folders to search for a project AGENTS.md, nearest
  * first: up to (not including) the root, or up to and including a linked project folder.
  */
-const workspaceFor = Effect.fnUntraced(function* (start: string, dataDir: string) {
+export const workspaceFor = Effect.fnUntraced(function* (start: string, dataDir: string) {
   const fs = yield* FSUtil.Service
   const chain = ancestors(start)
   for (const [index, dir] of chain.entries()) {
