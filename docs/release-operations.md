@@ -42,6 +42,19 @@ The local server comes from `opencode/packages/opencode/script/build-node.ts`
 (entry `src/node.ts`). The fork doesn't build or ship its own `opencode` CLI
 binary, and the desktop app has no "Install CLI" action.
 
+Locally on macOS, run `bun run build` and then
+`bun run --cwd opencode/packages/desktop package:mac --publish never`
+(add `--dir` for just the `.app`). Local macOS output goes to
+`~/Library/Caches/tenon-workbench/dist/`, not `dist/`: iCloud and other File
+Provider syncs keep adding Finder metadata to bundle folders under
+`~/Documents`, and `codesign` rejects it. When no Developer ID Application
+identity is in the keychain and neither `CSC_LINK` nor `CSC_NAME` is set, the
+config signs the app ad-hoc and skips notarization. Without a valid
+signature, Apple Silicon kills the app at launch with
+`SIGKILL (Code Signature Invalid)`, because the fuse step changes the Electron
+binary. An ad-hoc build runs only on the machine that built it, or after the
+user opens it through Gatekeeper on another Mac.
+
 The product display name is Tenon Workbench (renamed from Second Brain OS on
 2026-10-15). The application IDs are
 `io.github.torriider97.tenonworkbench[.dev|.beta]` and the URL scheme is
