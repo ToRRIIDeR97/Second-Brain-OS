@@ -37,6 +37,17 @@ export function SidePanel(props: ParentProps<{ open: boolean; view?: string; ref
   )
   const shown = createMemo<JSX.Element>((previous) => live() ?? previous)
 
+  // The content shown during the exit no longer reacts; keep it from taking clicks or focus meanwhile.
+  createEffect(
+    on(
+      open,
+      (value) => {
+        if (!value) panel.aside?.setAttribute("inert", "")
+      },
+      { defer: true },
+    ),
+  )
+
   createEffect(
     on(
       () => (open() ? props.view : undefined),
