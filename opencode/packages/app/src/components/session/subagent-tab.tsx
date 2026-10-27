@@ -11,6 +11,7 @@ import { useSync } from "@/context/sync"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionContextFormatter } from "./session-context-format"
 import { subagentDetail, type SubagentTranscriptEntry } from "./subagent-detail"
+import { ViewSwitch } from "@opencode-ai/ui/v2/view-switch"
 
 type View = "conversation" | "context" | "usage"
 
@@ -168,84 +169,91 @@ export function SubagentTab(props: {
               <SegmentedControlItemV2 value="usage">{language.t("secondBrain.agentTab.usage")}</SegmentedControlItemV2>
             </SegmentedControlV2>
 
-            <Switch>
-              <Match when={view() === "conversation"}>
-                <div data-slot="agent-tab-conversation" class="flex flex-col gap-3">
-                  <Show when={item().prompt}>
-                    {(prompt) => (
-                      <div class="flex flex-col gap-1 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5">
-                        <div class="text-[11px] leading-4 text-v2-text-text-muted">
-                          {language.t("secondBrain.agentTab.prompt")}
+            <ViewSwitch key={view()}>
+              <Switch>
+                <Match when={view() === "conversation"}>
+                  <div data-slot="agent-tab-conversation" class="flex flex-col gap-3">
+                    <Show when={item().prompt}>
+                      {(prompt) => (
+                        <div class="flex flex-col gap-1 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5">
+                          <div class="text-[11px] leading-4 text-v2-text-text-muted">
+                            {language.t("secondBrain.agentTab.prompt")}
+                          </div>
+                          <div class="whitespace-pre-wrap break-words text-[13px] text-v2-text-text-base">
+                            {prompt()}
+                          </div>
                         </div>
-                        <div class="whitespace-pre-wrap break-words text-[13px] text-v2-text-text-base">{prompt()}</div>
+                      )}
+                    </Show>
+                    <For each={item().transcript}>{(entry) => <TranscriptEntry entry={entry} />}</For>
+                    <Show when={item().transcript.length === 0 && !item().prompt}>
+                      <div class="text-[13px] text-v2-text-text-muted">{language.t("secondBrain.agentTab.empty")}</div>
+                    </Show>
+                    <Show when={item().truncated}>
+                      <div class="text-[12px] text-v2-text-text-muted">
+                        {language.t("secondBrain.agentTab.truncated")}
                       </div>
-                    )}
-                  </Show>
-                  <For each={item().transcript}>{(entry) => <TranscriptEntry entry={entry} />}</For>
-                  <Show when={item().transcript.length === 0 && !item().prompt}>
-                    <div class="text-[13px] text-v2-text-text-muted">{language.t("secondBrain.agentTab.empty")}</div>
-                  </Show>
-                  <Show when={item().truncated}>
-                    <div class="text-[12px] text-v2-text-text-muted">
-                      {language.t("secondBrain.agentTab.truncated")}
+                    </Show>
+                  </div>
+                </Match>
+                <Match when={view() === "context"}>
+                  <div class="flex flex-col gap-2 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5">
+                    <div class="flex items-center justify-between gap-3 text-[11px] leading-4 text-v2-text-text-muted">
+                      <span>{language.t("secondBrain.sessionTab.contextWindow")}</span>
+                      <Show when={item().context?.percent !== undefined}>
+                        <span>{formatter().percent(item().context?.percent)}</span>
+                      </Show>
                     </div>
-                  </Show>
-                </div>
-              </Match>
-              <Match when={view() === "context"}>
-                <div class="flex flex-col gap-2 rounded-[16px] bg-v2-background-bg-layer-01 px-3 py-2.5">
-                  <div class="flex items-center justify-between gap-3 text-[11px] leading-4 text-v2-text-text-muted">
-                    <span>{language.t("secondBrain.sessionTab.contextWindow")}</span>
-                    <Show when={item().context?.percent !== undefined}>
-                      <span>{formatter().percent(item().context?.percent)}</span>
+                    <div class="text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">
+                      <Show when={item().context} fallback={notReported()}>
+                        {(context) =>
+                          context().size === undefined
+                            ? language.t("secondBrain.agentTab.contextUsedOnly", {
+                                used: formatter().number(context().used),
+                              })
+                            : language.t("secondBrain.sessionTab.contextUsed", {
+                                used: formatter().number(context().used),
+                                limit: formatter().number(context().size),
+                              })
+                        }
+                      </Show>
+                    </div>
+                    <Show when={item().context?.percent}>
+                      {(value) => (
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-v2-background-bg-layer-02">
+                          <div
+                            class="h-full rounded-full bg-v2-background-bg-accent transition-[width] duration-medium ease-standard motion-reduce:transition-none"
+                            style={{ width: `${Math.min(100, value())}%` }}
+                          />
+                        </div>
+                      )}
                     </Show>
                   </div>
-                  <div class="text-[15px] leading-5 text-v2-text-text-base [font-weight:560]">
-                    <Show when={item().context} fallback={notReported()}>
-                      {(context) =>
-                        context().size === undefined
-                          ? language.t("secondBrain.agentTab.contextUsedOnly", {
-                              used: formatter().number(context().used),
-                            })
-                          : language.t("secondBrain.sessionTab.contextUsed", {
-                              used: formatter().number(context().used),
-                              limit: formatter().number(context().size),
-                            })
+                </Match>
+                <Match when={view() === "usage"}>
+                  <div class="grid grid-cols-2 gap-2">
+                    <Stat label={language.t("secondBrain.sessionTab.input")} value={tokens(item().usage.input)} />
+                    <Stat label={language.t("secondBrain.sessionTab.output")} value={tokens(item().usage.output)} />
+                    <Stat label={language.t("secondBrain.agentTab.reasoning")} value={tokens(item().usage.reasoning)} />
+                    <Stat label={language.t("secondBrain.agentTab.cacheRead")} value={tokens(item().usage.cacheRead)} />
+                    <Stat
+                      label={language.t("secondBrain.agentTab.cacheWrite")}
+                      value={tokens(item().usage.cacheWrite)}
+                    />
+                    <Stat
+                      label={language.t("secondBrain.sessionTab.cacheHit")}
+                      value={
+                        item().usage.cacheHit === undefined ? notReported() : percent().format(item().usage.cacheHit!)
                       }
-                    </Show>
+                    />
+                    <Stat
+                      label={language.t("secondBrain.sessionTab.cost")}
+                      value={item().usage.cost === undefined ? notReported() : usd().format(item().usage.cost!)}
+                    />
                   </div>
-                  <Show when={item().context?.percent}>
-                    {(value) => (
-                      <div class="h-1.5 w-full overflow-hidden rounded-full bg-v2-background-bg-layer-02">
-                        <div
-                          class="h-full rounded-full bg-v2-background-bg-accent"
-                          style={{ width: `${Math.min(100, value())}%` }}
-                        />
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              </Match>
-              <Match when={view() === "usage"}>
-                <div class="grid grid-cols-2 gap-2">
-                  <Stat label={language.t("secondBrain.sessionTab.input")} value={tokens(item().usage.input)} />
-                  <Stat label={language.t("secondBrain.sessionTab.output")} value={tokens(item().usage.output)} />
-                  <Stat label={language.t("secondBrain.agentTab.reasoning")} value={tokens(item().usage.reasoning)} />
-                  <Stat label={language.t("secondBrain.agentTab.cacheRead")} value={tokens(item().usage.cacheRead)} />
-                  <Stat label={language.t("secondBrain.agentTab.cacheWrite")} value={tokens(item().usage.cacheWrite)} />
-                  <Stat
-                    label={language.t("secondBrain.sessionTab.cacheHit")}
-                    value={
-                      item().usage.cacheHit === undefined ? notReported() : percent().format(item().usage.cacheHit!)
-                    }
-                  />
-                  <Stat
-                    label={language.t("secondBrain.sessionTab.cost")}
-                    value={item().usage.cost === undefined ? notReported() : usd().format(item().usage.cost!)}
-                  />
-                </div>
-              </Match>
-            </Switch>
+                </Match>
+              </Switch>
+            </ViewSwitch>
           </div>
         </ScrollView>
       )}
@@ -266,7 +274,7 @@ function TranscriptEntry(props: { entry: SubagentTranscriptEntry }) {
       </Match>
       <Match when={props.entry.type === "reasoning" && props.entry}>
         {(entry) => (
-          <details class="group text-[13px] text-v2-text-text-muted">
+          <details data-slot="subagent-details" class="group text-[13px] text-v2-text-text-muted">
             <summary class={SUMMARY}>
               <Disclosure />
               {language.t("secondBrain.agentTab.reasoning")}
@@ -299,7 +307,7 @@ function TranscriptEntry(props: { entry: SubagentTranscriptEntry }) {
                 }
               >
                 {(output) => (
-                  <details class="group">
+                  <details data-slot="subagent-details" class="group">
                     <summary class={SUMMARY}>
                       <Disclosure />
                       {row()}
@@ -327,7 +335,7 @@ function Disclosure() {
     <Icon
       name="chevron-right"
       size="small"
-      class="size-3 shrink-0 text-v2-icon-icon-muted transition-transform group-open:rotate-90 motion-reduce:transition-none"
+      class="size-3 shrink-0 text-v2-icon-icon-muted transition-transform group-open:rotate-90 rtl:group-open:-rotate-90 motion-reduce:transition-none"
     />
   )
 }

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { fileReferenceRangeLabel, parseFileReference, resolveFileReferencePath } from "./markdown-file-reference"
+import {
+  fileReferenceRangeLabel,
+  parseFileReference,
+  resolveFileReferencePath,
+  settleFileReference,
+} from "./markdown-file-reference"
 
 describe("parseFileReference", () => {
   test("reads a path with an optional line or range", () => {
@@ -21,10 +26,23 @@ describe("parseFileReference", () => {
     expect(parseFileReference("a.ts:0")).toEqual({ path: "a.ts" })
   })
 
-  test("ignores code, directories and URLs", () => {
+  test("reads a trailing slash as a folder and leaves an extensionless path to the listing", () => {
+    expect(parseFileReference("notes/")).toEqual({ path: "notes/", kind: "folder" })
+    expect(parseFileReference("src\\components\\")).toEqual({ path: "src\\components\\", kind: "folder" })
+    expect(parseFileReference("src/components")).toEqual({ path: "src/components", kind: "either" })
+    expect(parseFileReference("packages/desktop-electron")).toEqual({
+      path: "packages/desktop-electron",
+      kind: "either",
+    })
+    // A line range only makes sense for a file.
+    expect(parseFileReference("bin/opencode:12")).toEqual({ path: "bin/opencode", start: 12, end: 12 })
+    expect(parseFileReference("notes/:12")).toBeUndefined()
+  })
+
+  test("ignores code, bare words and URLs", () => {
     expect(parseFileReference("sync.data.session")).toBeUndefined()
-    expect(parseFileReference("packages/desktop-electron")).toBeUndefined()
-    expect(parseFileReference("src/")).toBeUndefined()
+    expect(parseFileReference("notes")).toBeUndefined()
+    expect(parseFileReference("/")).toBeUndefined()
     expect(parseFileReference("https://opencode.ai/docs.html")).toBeUndefined()
     expect(parseFileReference("a.ts:12-x")).toBeUndefined()
     expect(parseFileReference("foo(bar.ts)")).toBeUndefined()
@@ -32,10 +50,47 @@ describe("parseFileReference", () => {
   })
 })
 
+describe("settleFileReference", () => {
+  const settle = (text: string, type?: "file" | "directory") => {
+    const reference = parseFileReference(text)
+    return reference && settleFileReference(reference, type)
+  }
+
+  test("keeps an extensionless path plain until the listing names it", () => {
+    const prose = [
+      "owner/repo",
+      "and/or",
+      "input/output",
+      "application/json",
+      "origin/main",
+      "@types/node",
+      "CI/CD",
+      "1/2",
+      "github.com/a/b",
+      "localhost:3000/api",
+      "owner/repo#12",
+      "x/y,",
+    ]
+    prose.forEach((text) => expect(settle(text)).toBeUndefined())
+  })
+
+  test("turns a listed extensionless path into a file or folder chip", () => {
+    expect(settle("src/components", "directory")).toEqual({ path: "src/components", kind: "folder" })
+    expect(settle("bin/opencode", "file")).toEqual({ path: "bin/opencode" })
+  })
+
+  test("leaves files and trailing-slash folders as parsed", () => {
+    expect(settle("src/app.tsx:3")).toEqual({ path: "src/app.tsx", start: 3, end: 3 })
+    expect(settle("notes/")).toEqual({ path: "notes/", kind: "folder" })
+  })
+})
+
 describe("resolveFileReferencePath", () => {
   test("normalizes paths relative to the thread directory", () => {
     expect(resolveFileReferencePath("core/src/harness.ts", "/repo")).toBe("core/src/harness.ts")
     expect(resolveFileReferencePath("./core//src/./harness.ts", "/repo")).toBe("core/src/harness.ts")
+    expect(resolveFileReferencePath("notes/", "/repo")).toBe("notes")
+    expect(resolveFileReferencePath("src\\components\\", "C:\\repo")).toBe("src/components")
   })
 
   test("turns an absolute path inside the directory into a relative one", () => {
@@ -51,6 +106,10 @@ describe("resolveFileReferencePath", () => {
     expect(resolveFileReferencePath("/etc/passwd", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("/repo", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("~/.bashrc", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("../notes/", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("./", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("/etc/", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("notes\u0007/", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("..\\secret.txt", "C:\\repo")).toBeUndefined()
     expect(resolveFileReferencePath("D:\\repo\\a.ts", "C:\\repo")).toBeUndefined()
     // Drive-relative paths resolve against that drive's current folder, not the thread folder.

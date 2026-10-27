@@ -6,6 +6,7 @@ import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { Harness } from "@opencode-ai/schema/harness"
 import { useQueryClient } from "@tanstack/solid-query"
 import { createStore } from "solid-js/store"
@@ -483,7 +484,7 @@ const HarnessModels: Component<{ entry: Harness.SettingsEntry; models: ReadonlyA
                         aria-expanded={state.open === group.id}
                         onClick={() => setState("open", state.open === group.id ? undefined : group.id)}
                       >
-                        <Icon name={state.open === group.id ? "chevron-down" : "chevron-right"} />
+                        <Icon name="chevron-down" class="settings-v2-harness-group-chevron" />
                         <span class="settings-v2-provider-name truncate">{group.name || group.id}</span>
                         <span class="settings-v2-provider-description">
                           {language.t("harness.settings.models.count", {
@@ -504,11 +505,11 @@ const HarnessModels: Component<{ entry: Harness.SettingsEntry; models: ReadonlyA
                         </Switch>
                       </Show>
                     </div>
-                    <Show when={state.open === group.id}>
+                    <Reveal open={state.open === group.id}>
                       <div class="settings-v2-harness-models settings-v2-harness-group-models">
                         <For each={group.models}>{(model) => modelSwitch(model, true)}</For>
                       </div>
-                    </Show>
+                    </Reveal>
                   </div>
                 )}
               </For>

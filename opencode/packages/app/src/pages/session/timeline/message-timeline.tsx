@@ -39,6 +39,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import type {
   AssistantMessage,
@@ -132,7 +133,12 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
     <div data-slot="session-turn-thinking">
       <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
       <Show when={!props.showReasoningSummaries}>
-        <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
+        <TextReveal
+          text={props.reasoningHeading}
+          class="session-turn-thinking-heading"
+          travel={25}
+          duration="var(--v2-duration-long)"
+        />
       </Show>
     </div>
   )
@@ -242,6 +248,8 @@ export function MessageTimeline(props: {
   onHistoryScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   shouldAnchorBottom: () => boolean
+  /** True while a user toggle settles; the page pauses following the bottom meanwhile (see holdForToggle). */
+  onToggleHold?: (hold: boolean) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   userMessages: UserMessage[]
@@ -268,6 +276,27 @@ export function MessageTimeline(props: {
   const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
+  // Opening or closing something (any control with aria-expanded) holds the thread still while the content
+  // eases, instead of following the bottom: the clicked control stays under the pointer. Streaming growth
+  // follows the bottom again once the hold ends.
+  const [toggleHold, setToggleHold] = createSignal(false)
+  let toggleHoldTimer: ReturnType<typeof setTimeout> | undefined
+  const holdForToggle = () => {
+    clearTimeout(toggleHoldTimer)
+    if (!toggleHold()) {
+      setToggleHold(true)
+      props.onToggleHold?.(true)
+    }
+    toggleHoldTimer = setTimeout(
+      () => {
+        setToggleHold(false)
+        props.onToggleHold?.(false)
+      },
+      motionDuration("medium") + 500,
+    )
+  }
+  onCleanup(() => clearTimeout(toggleHoldTimer))
+  const anchorBottom = () => !toggleHold() && props.shouldAnchorBottom()
   const sessionID = createMemo(() => params.id)
   const sessionStatus = createMemo(() => {
     const id = sessionID()
@@ -332,6 +361,61 @@ export function MessageTimeline(props: {
   // A user toggle wins; otherwise steps open only when one failed. A working turn shows its live ticker instead.
   const turnStepsOpen = (row: TimelineRow.TurnSteps) =>
     toolOpen[`turn:${row.userMessageID}:${row.segment}`] ?? row.failed
+  // Unfolding a turn's steps grows its step rows in (height and opacity, thread.css); folding shrinks them to
+  // nothing before they leave the projection, so the rows below never jump.
+  // Only the toggled rows animate, never the initial history load.
+  const [stepMotion, setStepMotion] = createSignal<{ turn: string; keys: Set<string>; phase: "enter" | "exit" }>()
+  let stepMotionTimer: ReturnType<typeof setTimeout> | undefined
+  // A fold waiting for its fade-out; a toggle that arrives first (on any turn) applies it at once.
+  let pendingFold: (() => void) | undefined
+  onCleanup(() => clearTimeout(stepMotionTimer))
+  const stepRowKeys = (row: TimelineRow.TurnSteps) => {
+    const rows = timelineRows()
+    const header = rows.findIndex(
+      (item) => item._tag === "TurnSteps" && item.userMessageID === row.userMessageID && item.segment === row.segment,
+    )
+    if (header < 0) return new Set<string>()
+    const after = rows.slice(header + 1)
+    const end = after.findIndex((item) => item._tag !== "AssistantPart")
+    return new Set(
+      (end < 0 ? after : after.slice(0, end))
+        .filter((item) => item._tag === "AssistantPart" && item.step)
+        .map((item) => TimelineRow.key(item)),
+    )
+  }
+  const toggleTurnSteps = (row: TimelineRow.TurnSteps, open: boolean, onSizeChange?: () => void) => {
+    const turn = `turn:${row.userMessageID}:${row.segment}`
+    const apply = () => {
+      setToolOpen(turn, open)
+      onSizeChange?.()
+    }
+    clearTimeout(stepMotionTimer)
+    setStepMotion(undefined)
+    const pending = pendingFold
+    pendingFold = undefined
+    pending?.()
+    if (prefersReducedMotion()) return apply()
+    if (open) {
+      apply()
+      setStepMotion({ turn, keys: stepRowKeys(row), phase: "enter" })
+      stepMotionTimer = setTimeout(() => setStepMotion(undefined), motionDuration("medium") + 50)
+      return
+    }
+    setStepMotion({ turn, keys: stepRowKeys(row), phase: "exit" })
+    pendingFold = apply
+    stepMotionTimer = setTimeout(
+      () => {
+        pendingFold = undefined
+        setStepMotion(undefined)
+        apply()
+      },
+      motionDuration("short") + 30,
+    )
+  }
+  const stepFolding = (row: TimelineRow.TurnSteps) => {
+    const motion = stepMotion()
+    return motion?.phase === "exit" && motion.turn === `turn:${row.userMessageID}:${row.segment}`
+  }
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
@@ -442,7 +526,10 @@ export function MessageTimeline(props: {
     },
     anchorTo: "end",
     followOnAppend: true,
-    scrollEndThreshold: 80,
+    // Off during a toggle hold, so a resize near the end doesn't keep the end pinned.
+    get scrollEndThreshold() {
+      return toggleHold() ? -1 : 80
+    },
     get scrollMargin() {
       return showHeader() ? 64 : 0
     },
@@ -465,7 +552,7 @@ export function MessageTimeline(props: {
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
-      if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+      if (!anchorBottom() || props.hasScrollGesture()) return
       virtualizer.scrollToEnd()
     })
   }
@@ -490,10 +577,10 @@ export function MessageTimeline(props: {
       })
     }
     resizeItem(index, size)
-    if (root && props.shouldAnchorBottom()) anchorResizedBottom()
+    if (root && anchorBottom()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-    if (props.shouldAnchorBottom()) return false
+    if (anchorBottom()) return false
     const first = virtualizer.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -525,7 +612,7 @@ export function MessageTimeline(props: {
 
   const maybeAnchorBottom = () => {
     if (timelineRows().length === 0) return
-    if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+    if (!anchorBottom() || props.hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
@@ -568,6 +655,16 @@ export function MessageTimeline(props: {
     setListRoot(root)
     props.setScrollRef(root)
   }
+  createEffect(() => {
+    const root = listRoot()
+    if (!root) return
+    const onToggle = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("[aria-expanded]")) holdForToggle()
+    }
+    // Capture, so the hold starts before the toggle's own click handler changes the content.
+    root.addEventListener("click", onToggle, true)
+    onCleanup(() => root.removeEventListener("click", onToggle, true))
+  })
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
     if (!prependLoading) clearPrependAnchor()
@@ -1109,16 +1206,13 @@ export function MessageTimeline(props: {
                 working={workingTurn(turnStepsRow().userMessageID)}
                 startedAt={userMessageCreated(turnStepsRow().userMessageID)}
                 durationMs={turnDurationMs(turnStepsRow().userMessageID)}
-                open={turnStepsOpen(turnStepsRow())}
+                open={turnStepsOpen(turnStepsRow()) && !stepFolding(turnStepsRow())}
                 onOpenSubagent={
                   data.openSubagent
                     ? (part) => data.openSubagent?.({ sessionID: part.sessionID, partID: part.id })
                     : undefined
                 }
-                onToggle={(open) => {
-                  setToolOpen(`turn:${turnStepsRow().userMessageID}:${turnStepsRow().segment}`, open)
-                  onSizeChange?.()
-                }}
+                onToggle={(open) => toggleTurnSteps(turnStepsRow(), open, onSizeChange)}
               />
             </div>
           </TimelineRowFrame>
@@ -1193,6 +1287,10 @@ export function MessageTimeline(props: {
     }
     const asyncFile = () => ["edit", "write", "apply_patch"].includes(tool()?.tool ?? "")
     const [ready, setReady] = createSignal(initialItem.size <= timelineFallbackItemSize || !asyncFile())
+    const stepPhase = () => {
+      const motion = stepMotion()
+      return motion?.keys.has(props.rowKey) ? motion.phase : undefined
+    }
     let contentMeasureFrame: number | undefined
 
     onMount(() => virtualizer.measureElement(element))
@@ -1230,6 +1328,7 @@ export function MessageTimeline(props: {
             element = value
           }}
           data-index={item().index}
+          data-step-motion={stepPhase()}
           style={{ "min-height": ready() ? undefined : `${initialItem.size}px` }}
         >
           <TimelineRowView
@@ -1248,10 +1347,12 @@ export function MessageTimeline(props: {
   return (
     <div class="relative w-full h-full min-w-0">
       <div
-        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-300 ease-emphasized bottom-8 motion-reduce:transition-none"
+        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-[opacity,translate,scale] bottom-8 motion-reduce:transition-none"
         classList={{
-          "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
-          "opacity-0 translate-y-2 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
+          "opacity-100 translate-y-0 scale-100 duration-medium ease-emphasized-decelerate":
+            props.scroll.overflow && props.scroll.jump,
+          "opacity-0 translate-y-2 pointer-events-none duration-short ease-emphasized-accelerate":
+            !props.scroll.overflow || !props.scroll.jump,
           "scale-[0.8]": !props.scroll.overflow || !props.scroll.jump,
         }}
       >

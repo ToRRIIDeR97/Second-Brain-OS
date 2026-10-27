@@ -592,7 +592,7 @@ function PromptInputV2ModelControl(props: {
           {(providerID) => (
             <ProviderIcon
               id={providerID()}
-              class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+              class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity motion-reduce:transition-none"
               style={{ "will-change": "opacity", transform: "translateZ(0)" }}
             />
           )}
@@ -625,7 +625,7 @@ function PromptInputV2ModelControl(props: {
               variant="ghost-muted"
               size="normal"
               class="prompt-input-responsive-select min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
-              classList={{ "animate-in fade-in": shouldAnimate() }}
+              classList={{ "animate-enter": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
             >
@@ -642,7 +642,7 @@ function PromptInputV2ModelControl(props: {
                 size="normal"
                 style={{ height: "28px" }}
                 class="prompt-input-responsive-select min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
-                classList={{ "animate-in fade-in": shouldAnimate() }}
+                classList={{ "animate-enter": shouldAnimate() }}
                 data-action="prompt-model"
                 data-control-type="popover"
               >

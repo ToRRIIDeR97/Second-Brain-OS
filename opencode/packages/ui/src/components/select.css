@@ -17,7 +17,7 @@
       justify-content: center;
       flex-shrink: 0;
       color: var(--text-weak);
-      transition: transform 0.1s ease-in-out;
+      transition: transform var(--v2-duration-short) var(--v2-ease-standard);
     }
 
     &[data-expanded] {
@@ -74,7 +74,7 @@
         color: var(--text-weak);
         background-color: var(--surface-raised-base);
         border-radius: 4px;
-        transition: transform 0.1s ease-in-out;
+        transition: transform var(--v2-duration-short) var(--v2-ease-standard);
       }
 
       &[data-slot="select-select-trigger"]:hover:not(:disabled),
@@ -103,7 +103,12 @@
   z-index: 60;
 
   &[data-expanded] {
-    animation: select-open 0.15s ease-out;
+    animation: select-open var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
+  }
+
+  /* Its own animation-name, so Kobalte's presence keeps the list mounted until the exit ends. */
+  &[data-closed] {
+    animation: select-close var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
   }
 
   [data-slot="select-select-content-list"] {
@@ -197,5 +202,19 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes select-close {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="select-content"][data-expanded],
+  [data-component="select-content"][data-closed] {
+    animation: none;
   }
 }

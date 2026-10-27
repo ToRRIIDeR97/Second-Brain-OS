@@ -15,6 +15,7 @@ import {
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { motionDuration, prefersReducedMotion } from "../v2/components/motion"
 
 type DialogElement = () => JSX.Element
 
@@ -31,43 +32,55 @@ const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
   const [stack, setStack] = createSignal<Active[]>([])
-  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  // A closing dialog waits out its exit animation before it is disposed and leaves the stack.
+  const pending = {
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+    finish: undefined as (() => void) | undefined,
+  }
   const lock = { value: false }
 
   onCleanup(() => {
-    if (timer.current === undefined) return
-    clearTimeout(timer.current)
-    timer.current = undefined
+    clearTimeout(pending.timer)
+    pending.timer = undefined
+    pending.finish = undefined
   })
+
+  // Finishes a pending close now, so a dialog opened during another's exit stacks above a settled list.
+  const settle = () => {
+    const finish = pending.finish
+    clearTimeout(pending.timer)
+    pending.timer = undefined
+    pending.finish = undefined
+    finish?.()
+  }
 
   const close = (id?: string) => {
     const items = stack()
     const current = id ? items.find((item) => item.id === id) : items.at(-1)
-    if (!current || lock.value) return
+    if (!current || lock.value) return false
     lock.value = true
     current.onClose?.()
     current.setClosing(true)
 
-    const closed = current.id
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
-
-    timer.current = setTimeout(() => {
-      timer.current = undefined
+    settle()
+    pending.finish = () => {
       current.dispose()
-      setStack((items) => items.filter((item) => item.id !== closed))
+      setStack((items) => items.filter((item) => item.id !== current.id))
       lock.value = false
-    }, 100)
+    }
+    pending.timer = setTimeout(settle, exitDelay())
+    return true
   }
 
   createEffect(() => {
     if (stack().length === 0) return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return
-      close()
+      if (event.key !== "Escape") return
+      // Something that used the Escape (a nested menu or select closing) keeps the dialog open. A Kobalte
+      // tab list prevents every Escape without using it, so focus on a tab still closes the dialog.
+      if (event.defaultPrevented && !fromTabList(event)) return
+      if (!close()) return
       event.preventDefault()
       event.stopPropagation()
     }
@@ -128,21 +141,15 @@ function init() {
   }
 
   const push = (element: DialogElement, owner: Owner, onClose?: () => void) => {
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
+    settle()
     lock.value = false
     mount(element, owner, onClose, stack().length)
   }
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+    settle()
     for (const item of stack()) item.dispose()
     setStack([])
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
     lock.value = false
     mount(element, owner, onClose, 0)
   }
@@ -153,6 +160,18 @@ function init() {
     show,
     push,
   }
+}
+
+// The overlay and dialog exits run for --v2-duration-short (dialog-v2.css); dispose one frame after them so
+// the root is not torn down mid-animation. Reduced motion has no exit, so dispose at once.
+function exitDelay() {
+  if (prefersReducedMotion()) return 0
+  return motionDuration("short") + 16
+}
+
+// Kobalte's selectable collection calls preventDefault on Escape for a tab list, where it has nothing to clear.
+function fromTabList(event: KeyboardEvent) {
+  return event.target instanceof Element && event.target.closest('[role="tablist"]') !== null
 }
 
 export function DialogProvider(props: ParentProps) {

@@ -100,7 +100,11 @@
     width: 100%;
     border: 0;
     background: transparent;
-    transition: height var(--v2-duration-short) var(--v2-ease-standard);
+    transition: height var(--v2-duration-medium) var(--v2-ease-standard);
+
+    &[data-enter] {
+      animation: html-window-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+    }
   }
 
   [data-slot="html-window-notice"] {
@@ -123,6 +127,21 @@
   }
 }
 
+/* After the Source toggle, the source or the preview it reveals fades in. */
+[data-component="markdown"] [data-component="markdown-code"][data-html-window-toggled] {
+  &[data-html-window="source"] pre,
+  &[data-html-window="card-source"] pre,
+  &[data-html-window="window"] [data-slot="html-window-frame"] {
+    animation: html-window-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+  }
+}
+
+@keyframes html-window-enter {
+  from {
+    opacity: 0;
+  }
+}
+
 @keyframes html-window-pulse {
   50% {
     opacity: 0.5;
@@ -130,7 +149,19 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-component="markdown"] [data-slot="html-window-notice"][data-streaming] {
+  [data-component="markdown"] [data-slot="html-window-notice"][data-streaming],
+  [data-component="markdown"] [data-slot="html-window-frame"][data-enter] {
     animation: none;
+  }
+
+  [data-component="markdown"] [data-slot="html-window-frame"] {
+    transition: none;
+  }
+
+  [data-component="markdown"] [data-component="markdown-code"][data-html-window-toggled] pre,
+  [data-component="markdown"]
+    [data-component="markdown-code"][data-html-window-toggled]
+    [data-slot="html-window-frame"] {
+    animation: none !important;
   }
 }

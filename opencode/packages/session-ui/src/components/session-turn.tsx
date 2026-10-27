@@ -26,6 +26,7 @@ import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { normalize } from "./session-diff"
+import { AccordionReveal } from "./accordion-reveal"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -427,7 +428,7 @@ export function SessionTurn(
                       text={reasoningHeading()}
                       class="session-turn-thinking-heading"
                       travel={25}
-                      duration={700}
+                      duration="var(--v2-duration-long)"
                     />
                   </Show>
                 </div>
@@ -468,7 +469,7 @@ export function SessionTurn(
                               active,
                               (value) => {
                                 if (!value) {
-                                  setShown(false)
+                                  // The diff stays while the item closes; AccordionReveal's onClosed drops it.
                                   return
                                 }
 
@@ -482,7 +483,7 @@ export function SessionTurn(
                           )
 
                           return (
-                            <Accordion.Item value={diff.file}>
+                            <Accordion.Item value={diff.file} forceMount>
                               <StickyAccordionHeader>
                                 <Accordion.Trigger>
                                   <div data-slot="session-turn-diff-trigger">
@@ -505,13 +506,13 @@ export function SessionTurn(
                                   </div>
                                 </Accordion.Trigger>
                               </StickyAccordionHeader>
-                              <Accordion.Content>
+                              <AccordionReveal open={active()} onClosed={() => setShown(false)}>
                                 <Show when={shown()}>
                                   <div data-slot="session-turn-diff-view" data-scrollable>
                                     <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
                                   </div>
                                 </Show>
-                              </Accordion.Content>
+                              </AccordionReveal>
                             </Accordion.Item>
                           )
                         }}

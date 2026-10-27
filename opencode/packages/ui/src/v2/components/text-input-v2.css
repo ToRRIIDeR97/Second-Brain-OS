@@ -17,9 +17,9 @@
   flex: none;
   align-self: stretch;
   transition:
-    background 85ms ease-out,
-    outline-color 85ms ease-out,
-    box-shadow 85ms ease-out;
+    background var(--v2-duration-short) var(--v2-ease-standard),
+    outline-color var(--v2-duration-short) var(--v2-ease-standard),
+    box-shadow var(--v2-duration-short) var(--v2-ease-standard);
 }
 
 [data-component="text-input-v2"][data-appearance="large"] {

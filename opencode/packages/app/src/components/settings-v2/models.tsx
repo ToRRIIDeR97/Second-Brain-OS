@@ -4,6 +4,7 @@ import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { type Component, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -137,7 +138,7 @@ export const SettingsModelsV2: Component = () => {
                         {group.items[0].provider.name}
                       </Switch>
                     </h3>
-                    <Show when={expanded()}>
+                    <Reveal open={expanded()}>
                       <SettingsListV2>
                         <For each={group.items}>
                           {(item) => {
@@ -161,7 +162,7 @@ export const SettingsModelsV2: Component = () => {
                           }}
                         </For>
                       </SettingsListV2>
-                    </Show>
+                    </Reveal>
                   </div>
                 )
               }}

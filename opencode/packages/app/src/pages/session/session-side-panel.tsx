@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { DragDropProvider as DndKitProvider, PointerSensor } from "@dnd-kit/solid"
@@ -20,6 +20,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { ViewSwitch } from "@opencode-ai/ui/v2/view-switch"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
@@ -56,6 +57,7 @@ import {
 } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { panelSettled } from "@/pages/session/file-reference"
 import { pagePanelClass } from "@/components/page"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 import { SessionCanvasTab } from "@/pages/session/canvas-tab"
@@ -311,7 +313,7 @@ export function SessionSidePanel(props: {
 
   const contextTrigger = () => (
     <Show when={contextOpen()}>
-      <TabsV2.Trigger value="context" onMiddleClick={() => tabs().close("context")}>
+      <TabsV2.Trigger value="context" class={tabEnter()} onMiddleClick={() => tabs().close("context")}>
         <SessionContextUsage variant="indicator" />
         <span>{language.t("secondBrain.sessionTab.title")}</span>
         {closeButton("context")}
@@ -321,17 +323,22 @@ export function SessionSidePanel(props: {
 
   const canvasTrigger = () => (
     <Show when={tabState.canvasOpen()}>
-      <TabsV2.Trigger value={CANVAS_TAB} onMiddleClick={() => tabs().close(CANVAS_TAB)}>
+      <TabsV2.Trigger value={CANVAS_TAB} class={tabEnter()} onMiddleClick={() => tabs().close(CANVAS_TAB)}>
         <span>{language.t("secondBrain.canvas.title")}</span>
         {closeButton(CANVAS_TAB)}
       </TabsV2.Trigger>
     </Show>
   )
 
+  // Tabs opened after the strip has mounted fade and rise in; the tabs it opens with do not.
+  const strip = { ready: false }
+  onMount(() => requestAnimationFrame(() => (strip.ready = true)))
+  const tabEnter = () => (strip.ready ? "animate-enter" : undefined)
+
   const agentTriggers = () => (
     <For each={agentTabs()}>
       {(tab) => (
-        <TabsV2.Trigger value={tab} onMiddleClick={() => tabs().close(tab)}>
+        <TabsV2.Trigger value={tab} class={tabEnter()} onMiddleClick={() => tabs().close(tab)}>
           <SubagentTabLabel found={subagentParts().get(agentTabPartID(tab)!)} />
           {closeButton(tab)}
         </TabsV2.Trigger>
@@ -362,7 +369,11 @@ export function SessionSidePanel(props: {
   )
 
   const openFileTrigger = () => (
-    <TabsV2.Trigger value={SESSION_OPEN_FILE_TAB} onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}>
+    <TabsV2.Trigger
+      value={SESSION_OPEN_FILE_TAB}
+      class={tabEnter()}
+      onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
+    >
       <Icon name="magnifying-glass" size="small" />
       <span class="italic">{language.t("command.file.open")}</span>
       {closeButton(SESSION_OPEN_FILE_TAB)}
@@ -467,14 +478,19 @@ export function SessionSidePanel(props: {
           "h-full shrink-0": !props.stacked,
           "h-full min-h-0": props.stacked,
           "pointer-events-none": !open(),
-          "transition-[width] duration-300 ease-standard will-change-[width] motion-reduce:transition-none":
+          // The same curve as the thread column, so the two edges move together.
+          "transition-[width] duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
           "flex-1": reviewOpen(),
         }}
         style={{ width: panelWidth() }}
       >
         <Show when={open()}>
-          <div class="size-full flex">
+          {/* Mounted at once so files load, but shown only once the sliding panel has arrived. */}
+          <div
+            class="size-full flex transition-opacity duration-medium ease-emphasized-decelerate motion-reduce:transition-none"
+            classList={{ "opacity-0": !panelSettled() }}
+          >
             <Show when={reviewOpen()}>
               <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
                 <div class="size-full min-w-0 h-full bg-v2-background-bg-base">
@@ -630,6 +646,7 @@ export function SessionSidePanel(props: {
                                   fallback={
                                     <SortableTabV2
                                       tab={tab}
+                                      class={tabEnter()}
                                       index={() => tabs().all().indexOf(tab)}
                                       temporary={temporaryTab() === tab}
                                       onTabClose={tabs().close}
@@ -653,17 +670,24 @@ export function SessionSidePanel(props: {
                           {hideButton()}
                         </div>
 
-                        {reviewContent()}
-                        {selectToOpen()}
-                        {contextContent()}
-                        {canvasContent()}
-                        {agentContent()}
+                        {/* Review, Context, Canvas and agent tabs fade through on a switch; the Files view below
+                            stays mounted and fades in on its own. */}
+                        <ViewSwitch
+                          key={fileBrowserVisible() ? "files" : activeTab()}
+                          class={fileBrowserVisible() ? "hidden" : "flex min-h-0 flex-1 flex-col"}
+                        >
+                          {reviewContent()}
+                          {selectToOpen()}
+                          {contextContent()}
+                          {canvasContent()}
+                          {agentContent()}
+                        </ViewSwitch>
 
                         <Show when={fileBrowserMounted()}>
                           <div
                             id={fileBrowserTabPanelID}
                             role="tabpanel"
-                            class="flex-1 min-h-0 overflow-hidden"
+                            class="flex-1 min-h-0 overflow-hidden animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none"
                             classList={{ hidden: !fileBrowserVisible() }}
                             inert={!fileBrowserVisible() || undefined}
                           >
@@ -693,7 +717,7 @@ export function SessionSidePanel(props: {
                 id="file-tree-panel"
                 class="relative min-w-0 h-full shrink-0 overflow-hidden"
                 classList={{
-                  "transition-[width] duration-300 ease-standard will-change-[width] motion-reduce:transition-none":
+                  "transition-[width] duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
                     !props.size.active(),
                 }}
                 style={{ width: treeWidth() }}

@@ -8,11 +8,76 @@
   }
 }
 
+/* Duration comes from --default-transition-duration (short) unless the caller sets duration-*. */
 @utility hover-reveal {
-  @apply opacity-0 transition-opacity;
+  @apply opacity-0 transition-opacity ease-standard;
 
   @media (hover: none) {
     opacity: 1;
+  }
+}
+
+/* Enter: fade + 4px rise, medium + emphasized-decelerate. Exit: fade, short + emphasized-accelerate.
+   Under reduced motion both resolve to `animation: none`, so the end state shows at once and
+   presence-based unmounting (Kobalte, solid-presence) does not wait. */
+@utility animate-enter {
+  animation: v2-motion-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility animate-exit {
+  animation: v2-motion-exit var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* Hand-rolled popups (a dropdown that is not a Kobalte menu): the MenuV2 scale and fade. Set the
+   transform origin (`origin-top-left`) to where the popup opens from. */
+@utility animate-menu-enter {
+  animation: v2-motion-menu-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility animate-menu-exit {
+  animation: v2-motion-menu-exit var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes v2-motion-menu-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes v2-motion-menu-exit {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes v2-motion-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes v2-motion-exit {
+  to {
+    opacity: 0;
   }
 }
 
@@ -34,9 +99,16 @@
   text-align: left;
 }
 
+/* Staggered text reveal (keyframes in animations.css): each child enters 100ms after the previous one,
+   medium + emphasized-decelerate. Under reduced motion the text shows at once. */
 @utility fade-up-text {
-  animation: fadeUp 0.4s ease-out forwards;
+  animation: fadeUp var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) forwards;
   opacity: 0;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    opacity: 1;
+  }
 
   &:nth-child(1) {
     animation-delay: 0.1s;

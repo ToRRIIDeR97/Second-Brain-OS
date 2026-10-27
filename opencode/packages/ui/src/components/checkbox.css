@@ -29,9 +29,9 @@
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-weak-base);
     transition:
-      border-color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)),
-      background-color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)),
-      box-shadow 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+      border-color var(--v2-duration-short) var(--v2-ease-standard),
+      background-color var(--v2-duration-short) var(--v2-ease-standard),
+      box-shadow var(--v2-duration-short) var(--v2-ease-standard);
     /* background-color: var(--surface-weak); */
   }
 
@@ -45,8 +45,8 @@
     opacity: 0;
     transform: scale(0.9);
     transition:
-      opacity 180ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)),
-      transform 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+      opacity var(--v2-duration-short) var(--v2-ease-standard),
+      transform var(--v2-duration-short) var(--v2-ease-standard);
   }
 
   /* [data-slot="checkbox-checkbox-content"] { */

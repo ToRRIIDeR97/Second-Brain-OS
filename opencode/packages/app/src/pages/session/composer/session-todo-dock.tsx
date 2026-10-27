@@ -92,10 +92,10 @@ export function SessionTodoDock(props: {
             class="cursor-default inline-flex items-baseline shrink-0 overflow-visible font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
             aria-label={label()}
             style={{
-              "--tool-motion-odometer-ms": "600ms",
+              "--tool-motion-odometer-ms": "var(--v2-duration-long)",
               "--tool-motion-mask": "18%",
               "--tool-motion-mask-height": "0px",
-              "--tool-motion-spring-ms": "560ms",
+              "--tool-motion-spring-ms": "var(--v2-duration-long)",
               "white-space": "pre",
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}
@@ -123,11 +123,11 @@ export function SessionTodoDock(props: {
             <TextReveal
               class="cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint"
               text={props.collapsed ? preview() : undefined}
-              duration={600}
+              duration="var(--v2-duration-long)"
               travel={25}
               edge={17}
-              spring="cubic-bezier(0.34, 1, 0.64, 1)"
-              springSoft="cubic-bezier(0.34, 1, 0.64, 1)"
+              spring="var(--v2-ease-emphasized-decelerate)"
+              springSoft="var(--v2-ease-emphasized-decelerate)"
               growOnly
               truncate
             />
@@ -194,7 +194,7 @@ function TodoList(props: { todos: Todo[] }) {
               data-in-progress={todo().status === "in_progress" ? "" : undefined}
               data-state={todo().status}
               style={{
-                transition: "opacity 220ms var(--v2-ease-standard)",
+                transition: "opacity var(--v2-duration-short) var(--v2-ease-standard)",
                 opacity: todo().status === "pending" ? "0.94" : "1",
               }}
               label={
@@ -203,7 +203,8 @@ function TodoList(props: { todos: Todo[] }) {
                   text={todo().content}
                   class="min-w-0 break-words text-[13px] leading-5"
                   style={{
-                    transition: "color 220ms var(--v2-ease-standard), opacity 220ms var(--v2-ease-standard)",
+                    transition:
+                      "color var(--v2-duration-short) var(--v2-ease-standard), opacity var(--v2-duration-short) var(--v2-ease-standard)",
                     color:
                       todo().status === "completed" || todo().status === "cancelled"
                         ? "var(--v2-text-text-faint)"
@@ -217,7 +218,7 @@ function TodoList(props: { todos: Todo[] }) {
         </Index>
       </div>
       <div
-        class="pointer-events-none absolute top-0 left-0 right-0 h-4 transition-opacity duration-150"
+        class="pointer-events-none absolute top-0 left-0 right-0 h-4 transition-opacity motion-reduce:transition-none"
         style={{
           background: "linear-gradient(to bottom, var(--v2-background-bg-layer-01), transparent)",
           opacity: store.stuck ? 1 : 0,

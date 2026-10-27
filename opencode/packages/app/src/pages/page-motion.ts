@@ -1,0 +1,28 @@
+import { NEW_THREAD_PATH } from "@/context/drafts"
+
+const pages = new Set(["/", "/notes", "/calendar", "/projects", "/activity"])
+
+/**
+ * The shell section a pathname belongs to. Draft and session routes share one section, the thread view,
+ * and so do the legacy draft and session paths that redirect there (`/new-session`, `/:dir/session/...`).
+ * Every other path redirects to Home (`/brain`, `/workspaces`, unknown paths), so it counts as Home.
+ */
+export function routeSection(pathname: string) {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname
+  if (path === NEW_THREAD_PATH || path === "/new-session" || path.startsWith("/server/")) return "thread"
+  if (path.split("/")[2] === "session") return "thread"
+  return pages.has(path) ? path : "/"
+}
+
+export type PageMotionKey = { section: string; count: number }
+
+/**
+ * Key for the page fade-through in the shell's `<main>`. It changes when the user moves between sections,
+ * except into the thread view: its composer focuses itself right after mounting, which a fade-out would
+ * hold off the page, so that swap is immediate. Query-string changes within a page do not fade.
+ */
+export function nextPageMotionKey(previous: PageMotionKey, pathname: string): PageMotionKey {
+  const section = routeSection(pathname)
+  if (section === previous.section) return previous
+  return { section, count: section === "thread" ? previous.count : previous.count + 1 }
+}

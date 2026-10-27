@@ -81,7 +81,7 @@
   width: 14px;
   height: 14px;
   color: var(--accordion-v2-icon);
-  transition: transform 150ms ease;
+  transition: transform var(--v2-duration-short) var(--v2-ease-standard);
 }
 
 [data-component="accordion-v2-trigger"][data-expanded] [data-slot="accordion-v2-chevron"] {
@@ -105,11 +105,11 @@
 }
 
 [data-component="accordion-v2-content"][data-expanded] {
-  animation: accordion-v2-down 180ms ease-out;
+  animation: accordion-v2-down var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
 }
 
 [data-component="accordion-v2-content"][data-closed] {
-  animation: accordion-v2-up 180ms ease-out;
+  animation: accordion-v2-up var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
 }
 
 [data-component="accordion-v2-content"] [data-slot="accordion-v2-content-inner"] {
@@ -140,4 +140,15 @@
 
 [data-component="accordion-v2"] {
   border-radius: var(--v2-radius-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="accordion-v2-content"][data-expanded],
+  [data-component="accordion-v2-content"][data-closed] {
+    animation: none;
+  }
+
+  [data-component="accordion-v2-trigger"] [data-slot="accordion-v2-chevron"] {
+    transition: none;
+  }
 }

@@ -6,6 +6,8 @@ import {
   createMemo,
   createSignal,
   For,
+  on,
+  onCleanup,
   Show,
   splitProps,
   type ComponentProps,
@@ -14,6 +16,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/components/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import {
@@ -125,6 +128,11 @@ function GuideLines(props: { level: number }) {
 
 export default function FileTreeV2(props: {
   active?: string
+  /**
+   * A folder opened from a reply: its row glides into view, flashes, keeps an accent, and expands.
+   * Each new object replays that, even for the same path.
+   */
+  revealed?: { path: string }
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
@@ -170,24 +178,34 @@ export default function FileTreeV2(props: {
     void file.tree.list("")
   })
 
+  const revealed = () => normalizeFileTreeV2Path(props.revealed?.path ?? "")
+  // The folder whose row is flashing; cleared once the reveal has played, so rows the virtualizer
+  // mounts again later do not replay it.
+  const [flash, setFlash] = createSignal<string>()
+
   // Only scroll when the active path changes (or first appears in the tree).
   // Do not re-scroll when expand/collapse reshuffles `rows()`.
   let scrolledActive: string | undefined
+  let scrolledReveal: { path: string } | undefined
   createEffect(() => {
     const path = active()
+    const reveal = props.revealed
     if (!path) {
       scrolledActive = undefined
       return
     }
     const index = rows().findIndex((row) => row.node.path === path)
     if (index < 0) return
-    if (scrolledActive === path) return
+    if (scrolledActive === path && scrolledReveal === reveal) return
     scrolledActive = path
+    scrolledReveal = reveal
     queueMicrotask(() => {
       const next = rows().findIndex((row) => row.node.path === path)
       if (next < 0) return
       if (virtualizer.range && next >= virtualizer.range.startIndex && next <= virtualizer.range.endIndex) return
-      virtualizer.scrollToIndex(next, { align: "auto" })
+      if (path === revealed() && !prefersReducedMotion())
+        virtualizer.scrollToIndex(next, { align: "center", behavior: "smooth" })
+      else virtualizer.scrollToIndex(next, { align: "auto" })
     })
   })
 
@@ -205,6 +223,41 @@ export default function FileTreeV2(props: {
       return
     }
     file.tree.expand(originalPath, live() ? undefined : { list: false })
+  }
+
+  // Each reveal flashes the row and, once it has glided into view, opens the folder, so its chevron
+  // turns and its children fade in where the eye already is. A newer reveal cancels the pending one.
+  createEffect(
+    on(
+      () => props.revealed,
+      (reveal) => {
+        setFlash(undefined)
+        if (!reveal) return
+        const path = normalizeFileTreeV2Path(reveal.path)
+        const motion = !prefersReducedMotion()
+        // A frame apart, so a repeat reveal of the same row restarts its animation.
+        const frame = motion ? requestAnimationFrame(() => setFlash(path)) : undefined
+        const expand = setTimeout(
+          () => {
+            const row = rows().find((item) => item.node.path === path)
+            if (!expanded(path)) file.tree.expand(row?.node.originalPath ?? path, live() ? undefined : { list: false })
+          },
+          // Roughly how long the smooth scroll to the folder takes (file-tree-v2.css times the wash to it).
+          motion ? motionDuration("medium") : 0,
+        )
+        // The row's wash (twice long) and its children's fade-in have played by then.
+        const settle = motion ? setTimeout(() => setFlash(undefined), motionDuration("long") * 2) : undefined
+        onCleanup(() => {
+          if (frame !== undefined) cancelAnimationFrame(frame)
+          clearTimeout(expand)
+          clearTimeout(settle)
+        })
+      },
+    ),
+  )
+  const revealChild = (path: string) => {
+    const parent = flash()
+    return !!parent && path.startsWith(`${parent}/`) && !path.slice(parent.length + 1).includes("/")
   }
 
   const rowByKey = createMemo(() => new Map(rows().map((row) => [row.node.path, row] as const)))
@@ -249,6 +302,7 @@ export default function FileTreeV2(props: {
                           as="button"
                           type="button"
                           class="relative"
+                          data-reveal-child={revealChild(row().node.path) ? "" : undefined}
                           onFocus={() => setFocused(row().node.path)}
                           onBlur={() => setFocused(undefined)}
                           onClick={() => selectFile(row().node, props.onFileClick)}
@@ -274,6 +328,9 @@ export default function FileTreeV2(props: {
                         as="button"
                         type="button"
                         class="relative"
+                        data-revealed={row().node.path === revealed() ? "" : undefined}
+                        data-reveal-flash={row().node.path === flash() ? "" : undefined}
+                        data-reveal-child={revealChild(row().node.path) ? "" : undefined}
                         onFocus={() => setFocused(row().node.path)}
                         onBlur={() => setFocused(undefined)}
                         aria-expanded={expanded(row().node.path)}

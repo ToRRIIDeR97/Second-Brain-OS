@@ -96,6 +96,8 @@ function mount(
   options: Options,
   streaming: boolean,
 ) {
+  // A design that finished streaming fades its frame in where the notice was; one from history appears as is.
+  const finished = !streaming && !!wrapper.querySelector(':scope > [data-slot="html-window-notice"][data-streaming]')
   unmount(wrapper)
   listen()
   const title = design.title ?? labels.title
@@ -109,6 +111,8 @@ function mount(
     const el = button(labels.source, () => {
       const showing = wrapper.dataset.htmlWindow === shown
       wrapper.dataset.htmlWindow = showing ? hidden : shown
+      // The view the toggle reveals fades in (html-window.css); views shown on mount do not.
+      wrapper.dataset.htmlWindowToggled = ""
       el.textContent = showing ? labels.source : back
       if (pressable) el.setAttribute("aria-pressed", String(!showing))
     })
@@ -154,7 +158,9 @@ function mount(
   }
 
   bar.append(sourceToggle("window", "source", labels.preview))
-  wrapper.insertBefore(frame(design.source, title), pre)
+  const view = frame(design.source, title)
+  if (finished) view.dataset.enter = ""
+  wrapper.insertBefore(view, pre)
   const footer = element("div", "html-window-footer")
   if (options.space?.use) footer.append(button(labels.use, () => options.space?.use?.(design)))
   if (options.space?.open) footer.append(button(labels.open, () => options.space?.open?.(design)))
@@ -181,6 +187,7 @@ function unmount(wrapper: HTMLElement) {
     )
     .forEach((el) => el.remove())
   delete wrapper.dataset.htmlWindow
+  delete wrapper.dataset.htmlWindowToggled
   mounted.delete(wrapper)
 }
 

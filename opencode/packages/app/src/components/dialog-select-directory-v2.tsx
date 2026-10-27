@@ -324,7 +324,11 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
             </ButtonV2>
           </div>
           <Show when={suggestionsOpen() && currentSuggestions().length > 0}>
-            <div id="directory-picker-v2-suggestions" role="listbox" class="directory-picker-v2-suggestions">
+            <div
+              id="directory-picker-v2-suggestions"
+              role="listbox"
+              class="directory-picker-v2-suggestions origin-top animate-menu-enter"
+            >
               <For each={currentSuggestions()}>
                 {(suggestion, index) => (
                   <button

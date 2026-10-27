@@ -42,7 +42,7 @@ export function PromptWorkspaceSelector(props: {
     <>
       <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
       <MenuV2 placement="bottom" gutter={4} onOpenChange={onOpenChange}>
-        <MenuV2.Trigger class="flex h-8 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full px-2.5 transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted motion-reduce:transition-none">
+        <MenuV2.Trigger class="flex h-8 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full px-2.5 transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted motion-reduce:transition-none">
           <Icon name={icon()} class="shrink-0 text-v2-icon-icon-muted" />
           <span class="min-w-0 truncate">{label()}</span>
           <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />

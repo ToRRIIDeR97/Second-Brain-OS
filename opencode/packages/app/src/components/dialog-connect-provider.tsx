@@ -9,6 +9,8 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { ViewSwitch } from "@opencode-ai/ui/v2/view-switch"
+import { focusWhenConnected } from "@/utils/focus-when-connected"
 import { showToast } from "@/utils/toast"
 import {
   type Accessor,
@@ -65,26 +67,31 @@ export const DialogConnectProvider: Component<{
     controller.select(provider)
   }
 
+  // The picker, a provider's connection and the custom form fade through, as do a connection's steps.
   function Content() {
     return (
-      <Switch>
-        <Match when={controller.selected() === CUSTOM_ID}>
-          <CustomProviderForm autofocus={false} />
-        </Match>
-        <Match when={controller.selected() && controller.selected() !== CUSTOM_ID ? controller.selected() : undefined}>
-          {(provider) => (
-            <ProviderConnection
-              provider={provider()}
-              directory={props.directory}
-              onBack={reset}
-              setBack={(handler) => (back.current = handler)}
-            />
-          )}
-        </Match>
-        <Match when={true}>
-          <ProviderPickerV2 directory={props.directory} onSelect={select} onPrepare={holdFocus} />
-        </Match>
-      </Switch>
+      <ViewSwitch key={controller.selected() ?? ""} class="flex min-h-0 flex-1 flex-col">
+        <Switch>
+          <Match when={controller.selected() === CUSTOM_ID}>
+            <CustomProviderForm autofocus={false} />
+          </Match>
+          <Match
+            when={controller.selected() && controller.selected() !== CUSTOM_ID ? controller.selected() : undefined}
+          >
+            {(provider) => (
+              <ProviderConnection
+                provider={provider()}
+                directory={props.directory}
+                onBack={reset}
+                setBack={(handler) => (back.current = handler)}
+              />
+            )}
+          </Match>
+          <Match when={true}>
+            <ProviderPickerV2 directory={props.directory} onSelect={select} onPrepare={holdFocus} />
+          </Match>
+        </Switch>
+      </ViewSwitch>
     )
   }
 
@@ -156,7 +163,7 @@ function ProviderPickerV2(props: {
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
 
-  onMount(() => search?.focus({ preventScroll: true }))
+  onMount(() => search && focusWhenConnected(search))
 
   const connect = (provider: string) => {
     props.onPrepare?.()
@@ -217,7 +224,7 @@ function ProviderPickerV2(props: {
                       <button
                         type="button"
                         data-provider-id={provider.id}
-                        class="flex min-h-10 w-full items-center gap-2 rounded-[16px] px-4 py-2.5 text-left text-[13px] leading-none tracking-[-0.04px] transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none active:rounded-[12px] motion-reduce:transition-none"
+                        class="flex min-h-10 w-full items-center gap-2 rounded-[16px] px-4 py-2.5 text-left text-[13px] leading-none tracking-[-0.04px] transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none active:rounded-[12px] motion-reduce:transition-none"
                         classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                         onMouseEnter={() => setStore("active", provider.id)}
                         disabled={store.connecting !== undefined}
@@ -373,6 +380,14 @@ function ProviderConnection(props: {
   }
 
   const method = createMemo(() => (store.methodIndex !== undefined ? methods().at(store.methodIndex!) : undefined))
+  // Mirrors the step Switch below, so each step fades in as its own view.
+  const step = () => {
+    if (loading()) return "loading"
+    if (store.methodIndex === undefined) return "method"
+    if (store.state === "pending" || store.state === "prompt" || store.state === "error") return store.state
+    if (method()?.type === "key") return "key"
+    return `oauth:${store.authorization?.mode ?? ""}`
+  }
 
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""
@@ -615,7 +630,7 @@ function ProviderConnection(props: {
               <button
                 type="button"
                 aria-pressed={selected()}
-                class="flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] leading-5 tracking-[-0.04px] transition-[background-color,color,border-radius] duration-150 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus active:rounded-[8px] motion-reduce:transition-none"
+                class="flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] leading-5 tracking-[-0.04px] transition-[background-color,color,border-radius] duration-short ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus active:rounded-[8px] motion-reduce:transition-none"
                 classList={{
                   "bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container": selected(),
                   "bg-v2-background-bg-layer-02 text-v2-text-text-base hover:bg-v2-background-bg-layer-03": !selected(),
@@ -649,7 +664,7 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      apiKey?.focus({ preventScroll: true })
+      if (apiKey) focusWhenConnected(apiKey)
     })
 
     async function handleSubmit(e: SubmitEvent) {
@@ -717,7 +732,7 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      codeInput?.focus({ preventScroll: true })
+      if (codeInput) focusWhenConnected(codeInput)
     })
 
     async function handleSubmit(e: SubmitEvent) {
@@ -877,7 +892,7 @@ function ProviderConnection(props: {
         <Show when={!loading() && methods().length > 1}>
           <MethodChoice />
         </Show>
-        <div>
+        <ViewSwitch key={step()}>
           <Switch>
             <Match when={loading()}>
               <div class="flex items-center gap-x-2 px-3 text-[13px] text-v2-text-text-base">
@@ -917,7 +932,7 @@ function ProviderConnection(props: {
               </Switch>
             </Match>
           </Switch>
-        </div>
+        </ViewSwitch>
       </div>
     </div>
   )

@@ -361,7 +361,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
       </Show>
       <Show when={loading()}>
         <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-v2-background-bg-deep">
-          <Splash class="size-16 opacity-50 animate-pulse" />
+          <Splash class="size-16 opacity-50 animate-pulse motion-reduce:animate-none" />
         </div>
       </Show>
     </>
@@ -425,7 +425,7 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
                   return (
                     <button
                       type="button"
-                      class="flex min-h-14 w-full items-center gap-3 bg-v2-background-bg-layer-01 px-5 py-2 text-left transition-[background-color,border-radius] duration-300 ease-standard hover:bg-v2-background-bg-layer-02 active:rounded-[16px] focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
+                      class="flex min-h-14 w-full items-center gap-3 bg-v2-background-bg-layer-01 px-5 py-2 text-left transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-background-bg-layer-02 active:rounded-[16px] focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
                       onClick={() => props.onServerSelected?.(key)}
                     >
                       <span class="min-w-0 flex-1 truncate text-[13px] text-v2-text-text-base [font-weight:530]">

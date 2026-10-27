@@ -41,7 +41,7 @@ export function PageSection(
           <Show when={props.onTitle} fallback={props.title}>
             <button
               type="button"
-              class="rounded-full text-left transition-colors duration-150 ease-standard hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
+              class="rounded-full text-left transition-colors duration-short ease-standard hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
               onClick={() => props.onTitle?.()}
             >
               {props.title}
@@ -69,4 +69,4 @@ export function PageEmpty(props: ParentProps<{ action?: JSX.Element; class?: str
 
 /** Shared list-row look: a pill-shaped hover target. */
 export const pageRowClass =
-  "flex w-full min-w-0 items-center gap-3 rounded-[16px] px-3 py-2.5 text-left transition-[background-color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+  "flex w-full min-w-0 items-center gap-3 rounded-[16px] px-3 py-2.5 text-left transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"

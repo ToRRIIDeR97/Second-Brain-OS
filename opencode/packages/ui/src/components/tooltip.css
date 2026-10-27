@@ -27,9 +27,7 @@
 
   box-shadow: var(--shadow-md);
   pointer-events: none !important;
-  /* transition: all 150ms ease-out; */
-  /* transform: translate3d(0, 0, 0); */
-  /* transform-origin: var(--kb-tooltip-content-transform-origin); */
+  transform-origin: var(--kb-tooltip-content-transform-origin);
 
   /* text-12-medium */
   font-family: var(--font-family-sans);
@@ -39,13 +37,15 @@
   line-height: var(--line-height-large); /* 166.667% */
   letter-spacing: var(--letter-spacing-normal);
 
+  /* Same motion as tooltip-v2: short scale-fade in (decelerate) and out (accelerate). */
   &[data-expanded] {
     opacity: 1;
-    /* transform: translate3d(0, 0, 0); */
+    animation: tooltip-in var(--v2-duration-short) var(--v2-ease-emphasized-decelerate);
   }
 
   &[data-closed]:not([data-force-open="true"]) {
     opacity: 0;
+    animation: tooltip-out var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
   }
 
   /* &[data-placement="top"] { */
@@ -71,4 +71,33 @@
   /*     transform: translate3d(-4px, 0, 0); */
   /*   } */
   /* } */
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tooltip-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tooltip"][data-expanded],
+  [data-component="tooltip"][data-closed] {
+    animation: none;
+  }
 }

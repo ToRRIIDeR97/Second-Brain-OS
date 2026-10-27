@@ -16,7 +16,7 @@
     outline: none;
   }
 
-  animation: contextMenuContentHide var(--transition-duration) var(--transition-easing) forwards;
+  animation: contextMenuContentHide var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
 
   @starting-style {
     animation: none;
@@ -24,7 +24,7 @@
 
   &[data-expanded] {
     pointer-events: auto;
-    animation: contextMenuContentShow var(--transition-duration) var(--transition-easing) forwards;
+    animation: contextMenuContentShow var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) forwards;
   }
 }
 
@@ -130,5 +130,14 @@
   to {
     opacity: 0;
     transform: scaleY(0.95);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="context-menu-content"],
+  [data-component="context-menu-sub-content"],
+  [data-component="context-menu-content"][data-expanded],
+  [data-component="context-menu-sub-content"][data-expanded] {
+    animation: none;
   }
 }

@@ -55,8 +55,65 @@ collapsible Projects panel). Pages sit on one rounded panel built from
 easing and duration tokens (`--v2-radius-*`, `--v2-ease-*`,
 `--v2-duration-*`) and the accent-container colors live in
 `packages/ui/src/v2/styles/theme.css` and `packages/ui/src/theme/v2/mapping.ts`,
-and the v2 components (pill buttons, circular icon buttons) use them. The sidebar's
-controller (`components/sidebar/sidebar-controller.ts`) reads
+and the v2 components (pill buttons, circular icon buttons) use them.
+
+Motion rules: an element entering uses `--v2-duration-medium` with
+`--v2-ease-emphasized-decelerate`; one leaving uses `--v2-duration-short` with
+`--v2-ease-emphasized-accelerate`; small state changes (colour, hover) use
+`--v2-duration-short` with `--v2-ease-standard`. Every non-trivial motion turns
+off under `prefers-reduced-motion`, which shows the end state at once. Tailwind
+maps the tokens to `ease-standard`, `ease-emphasized-decelerate` (alias
+`ease-emphasized`), `ease-emphasized-accelerate`, `ease-spring`,
+`duration-short|medium|long`, a bare `transition*` default of short + standard,
+and `animate-enter` (fade and 4px rise) / `animate-exit` (fade)
+(`packages/ui/src/styles/tailwind/`). Kobalte overlays (dialogs, menus, selects,
+tooltips, popovers) keep their content mounted for an exit only when the
+`[data-closed]` rule sets a different `animation-name`, so each has its own exit
+keyframes; `context/dialog.tsx` disposes a closed dialog after the short exit.
+Three helpers in `packages/ui/src/v2/components/` cover in-page motion:
+`Reveal` (`@opencode-ai/ui/v2/reveal`; `open`, `class`, `onTransitionEnd`)
+expands and collapses through grid rows and opacity, keeps its children while
+closing and unmounts them once closed (`inert` and `aria-hidden` meanwhile);
+`Presence` (`@opencode-ai/ui/v2/presence`; `when`, `enterClass`, `exitClass`,
+`class`) keeps a wrapper `div` mounted through its exit animation with
+`solid-presence`, defaulting to `animate-enter` / `animate-exit`; `ViewSwitch`
+(`@opencode-ai/ui/v2/view-switch`; `key`, `class`) fades the outgoing view out
+and the incoming one in when `key` changes, rendering one view at a time.
+`@opencode-ai/ui/v2/motion` exposes `prefersReducedMotion()` and
+`motionDuration()` for JS that times work against these animations, and
+`useSpring` (`@opencode-ai/ui/motion-spring`) jumps to its target under reduced
+motion. Hand-rolled popups (not Kobalte) use `animate-menu-enter` /
+`animate-menu-exit` (the MenuV2 scale and fade) inside a `Presence`. The pill and
+settings `TabsV2` variants slide one selection indicator between tabs; the
+normal variant keeps a static underline because its tabs can be dragged.
+
+In the app shell, `pages/layout-new.tsx` fades pages through a `ViewSwitch`
+keyed by section (`pages/page-motion.ts`): query-string changes do not fade,
+and moving into the thread view (draft or session) swaps at once so its
+composer can focus on mount. Project detail, Activity, Calendar views and the
+connect-provider steps use `ViewSwitch` too, so a field that focuses on mount
+uses `utils/focus-when-connected.ts`, which waits for the view to be attached.
+Sidebar groups, child threads, settings model groups and Home's "Running now"
+expand through `Reveal`; the Projects panel keeps its content while its width
+collapses. Calendar and Tasks share `features/second-brain/side-panel.tsx`,
+whose grid column eases with the panel and whose panel keeps its last content
+(inert) through the exit; Esc closes a peek, while the editor form keeps its own
+Escape. Live lists (sidebar threads, running sessions) animate only
+rows that join after the first render (`utils/fresh-items.ts`), never the
+initial list or a reorder.
+
+In the thread, tool rows and diff accordions open through `Reveal`
+(`session-ui` `AccordionReveal` force-mounts the Kobalte item so its
+measured-height keyframes stay off), the question and permission docks grow in
+as the composer folds away, and the queued and rolled-back docks keep removed
+rows closing in place with `createExitList`
+(`pages/session/composer/exit-list.ts`). Animation stays off for streaming text
+and the initial history load; only rows a toggle adds or removes animate. A click
+on any control with `aria-expanded` in the thread holds the scroll position while
+the content eases (`MessageTimeline` stops following the bottom and `session.tsx`
+pauses auto-scroll), then following resumes if the view is still at the bottom.
+
+The sidebar's controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with
 `serverSync().project.loadSessions(threadDirectory)` (kept live by
 `session.created/updated/deleted` events), adds the recent-session index for
@@ -852,23 +909,54 @@ note preview keep `html` blocks as highlighted code.
 
 ### File references in chat
 
-Inline code that names a file relative to the thread folder, optionally with
-`:N`, `:N-M`, `:N:col`, `#LN` or `#LN-LM`, becomes a link chip in assistant
-text (`session-ui/src/components/markdown-file-reference.ts`, marked and
-wired by `markdown-file-reference-peek.tsx`). The classifier must call it a
-path and its last segment must have a known extension or file name. Paths
-with `..`, `~`, control characters, a Windows drive-relative path (`D:x.ts`),
-or an absolute path outside the thread folder stay plain code; absolute paths
-inside it become relative.
+Inline code that names a file or folder relative to the thread folder becomes
+a link chip in assistant text (`session-ui/src/components/markdown-file-reference.ts`,
+marked and wired by `markdown-file-reference-peek.tsx`). The classifier must
+call it a path. A last segment with a known extension or file name marks a
+file, optionally with `:N`, `:N-M`, `:N:col`, `#LN` or `#LN-LM`; a trailing
+`/` marks a folder (with a folder icon, and no line range). Any other path
+the classifier accepts has a slash and no extension, so it may be either
+(`either`; a line range makes it a file). It stays plain code, because prose
+such as `owner/repo`, `and/or` or `application/json` looks the same, until
+the app's `entryType` finds it: the first segment must be a top-level folder
+(the root listing is read once per thread folder), then the parent's
+`file.list` names it a file or folder chip (cached per path). Paths with `..`, `~`, control
+characters, a Windows drive-relative path (`D:x.ts`), or an absolute path
+outside the thread folder stay plain code; absolute paths inside it become
+relative.
 
 - Hover or focus shows a peek with up to 12 lines, read through the Files
-  tab's own APIs (cached `file.get`, else `file.read`; existence checked with
-  `file.list` on the parent, because `/file/content` returns empty text for a
-  missing file).
-- Click or "Open in Files" opens the right panel, expands the ancestor
-  folders, opens the file as a preview tab, sets the selected lines (steady
-  tint) and scrolls the start line into view with a short flash
-  (`file-tabs.tsx`, `data-file-reference` in the file viewer).
+  tab's own APIs (cached `file.get`, else `file.read`; existence and kind
+  checked with `file.list` on the parent, because `/file/content` returns
+  empty text for a missing file). A folder's peek shows its name and item
+  count instead.
+- Click or "Open in Files" on a file opens the right panel, expands the
+  ancestor folders and opens the file as a preview tab. Opening a fully closed
+  side panel slides it in (300 ms, emphasized decelerate) while the thread column
+  eases left; the panel's content is mounted at once but shown only after the
+  slide (`panelSettled` in `app/src/pages/session/file-reference.tsx`, set by
+  the open edge in `session.tsx`). Other openings still snap: switching
+  sessions, or adding Review beside a file tree that is already showing.
+  The tab bar and code then fade in, a skeleton covers loading, and
+  `file-tabs.tsx` glides the viewer to the start line (350 ms ease-in-out),
+  started after the fade-in, then sets the selected lines and marks them (`data-file-reference`): the
+  stronger tint wipes in from the left and settles to the selected-line tint,
+  with a gutter accent bar. A tab switch fades the Files view in. A second
+  click replaces the reveal and stops the glide in flight; scrolling,
+  clicking or typing in the viewer stops it too and only selects the lines,
+  and the saved-scroll restore waits while it runs. A pending reveal is
+  dropped when the panel closes, so it never replays on a later mount.
+- Click on a folder opens the right panel on the Files tree (beside the
+  active file tab, else the Open file tab), expands its ancestors, and, once
+  the panel has arrived, selects the folder row, scrolls it smoothly to the
+  centre, flashes it (accent wash settling to the selected style with a 2px
+  accent inset), expands it (chevron turns, children fade in) and adds the
+  folder to the tree's breadcrumb (`file-tree-v2.tsx`,
+  `session-file-browser-tab.tsx`). The wash and fade-in play once per reveal
+  (`data-reveal-flash` is cleared afterwards), and clicking the same folder
+  again replays them. It stays selected, with the inset, until a file is. A
+  missing folder shows the not-found toast.
+- With reduced motion every step shows its end state at once.
 - A bare file name is tried at the thread folder, then through
   `file.searchFiles`; it is used only when exactly one file matches.
 - The app supplies `FileReferenceProvider` (`session-ui/src/context/file-reference.tsx`)
@@ -935,23 +1023,44 @@ files, so the compatibility layer rejects `files: false` for them.
 
 `ComposerContextStrip` (`app/src/components/prompt-input/context-strip.tsx`)
 sits on the top edge of a thread's composer through `PromptInputV2`'s
-`header` prop. It replaces the composer's own context ring. One button shows:
+`header` prop. It shows:
 
-- the Project, from the sidebar's project-threads query and its
-  `projectForDirectory` matching (General inside the workspace, else the
-  workspace or folder name), with a status dot;
-- the git branch (`sync().data.vcs.branch`);
-- the harness and, for the built-in loop, the agent;
-- the changed-file count: the Review panel's count while it is open, else the
-  length of the git status list (`vcs.status`), which loads without patches;
-- the context ring and percent from `getSessionContext`.
+- the thread folder's name. When the folder is one of the project's
+  `sandboxes` (`sync().project`; the Git worktrees beside the main checkout)
+  it is labelled "Worktree"; the main checkout and folders outside Git show
+  the folder name alone. This reads data the app already has, so a project
+  first opened from a linked worktree counts that worktree as its main
+  checkout;
+- the git branch (`sync().data.vcs.branch`).
 
-Hover (400 ms) or click opens a popover with tokens used of the limit, the
-last response's token breakdown and session cost, the Project's status,
-progress, next milestone and blocker, and the instructions file in effect
-(read with `GET /second-brain/instructions` while the popover is open). Items
-without data are hidden; as the composer narrows, files, then branch, then
-harness are hidden. There is no strip in drafts.
+Ahead/behind counts are not shown: no VCS route reports them. There is no
+strip in drafts.
+
+`ComposerContextRing` sits in the composer toolbar before the stash menu,
+through the `trailing` prop. It fills with the context percentage from
+`getSessionContext` and is labelled "Context: N% used" ("Context: N tokens
+used" when the model's limit is unknown); it is hidden until a response has
+reported tokens. Clicking it (`aria-expanded`, `aria-controls` the sheet)
+unfolds the strip upward behind the composer into a sheet; clicking it again,
+Esc while focus is in the ring or sheet, a click outside both, or focus moving
+outside both folds it back. Opening it from the keyboard moves focus to the
+sheet's first control (the sheet sits before the composer in the DOM); folding
+from inside the sheet returns focus to the ring, and a pointer open leaves
+focus where it is. The sheet's body row
+animates from `0fr` to `1fr` in 300 ms (emphasized decelerate), the details
+fade and slide in, and the gauge arc and bars fill after it; with
+`prefers-reduced-motion` nothing animates. The worktree and branch row stays
+on the bottom edge. `createComposerContext` holds the shared open state and
+context metrics, and closes the sheet when the thread changes.
+
+The sheet shows a half-circle gauge with the percentage, tokens used of the
+limit and tokens left, then one row per token kind the last response reported
+(cache read, cache write, input, output, reasoning; zero kinds are left out),
+each with a bar against the whole context window, its count and its share.
+Below them are the model, the session cost (hidden when no response reported a
+cost) and "View context usage" (`openSessionContext`). When the limit is
+unknown the gauge shows the token total without a percentage and the rows show
+counts without bars or shares.
 
 ### Composer delivery, background send and stash
 

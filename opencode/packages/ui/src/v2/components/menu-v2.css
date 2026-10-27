@@ -24,7 +24,6 @@
   text-rendering: geometricPrecision;
 
   transform-origin: var(--kb-menu-content-transform-origin);
-  animation: menu-v2-in 120ms ease-out;
 
   &:focus-visible {
     outline: none;
@@ -186,22 +185,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-@keyframes menu-v2-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 /* Material 3 shape and motion: rounded menu surface that scales in from its anchor. */
 [data-component="menu-v2-content"] {
   border-radius: var(--v2-radius-md);
   transform-origin: var(--kb-menu-content-transform-origin, top left);
   animation: menu-v2-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
+}
+
+/* Exit uses its own animation-name so Kobalte's presence keeps the menu mounted until it ends. */
+[data-component="menu-v2-content"][data-closed] {
+  animation: menu-v2-exit var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
 }
 
 @keyframes menu-v2-enter {
@@ -215,12 +208,21 @@
   }
 }
 
+@keyframes menu-v2-exit {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  [data-component="menu-v2-content"] {
+  [data-component="menu-v2-content"],
+  [data-component="menu-v2-content"][data-closed] {
     animation: none;
   }
 }
 
 [data-component="menu-v2-item"] {
   border-radius: var(--v2-radius-sm);
+  transition: background-color var(--v2-duration-short) var(--v2-ease-standard);
 }

@@ -83,7 +83,8 @@ import {
   sidePanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
-import { SessionFileReferences } from "@/pages/session/file-reference"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
+import { SessionFileReferences, panelSettled, slidePanelOpen } from "@/pages/session/file-reference"
 import { DesignCanvasProvider } from "@/pages/session/design-canvas"
 import { SESSION_SIDE_RAIL_SPACE, SessionSideRail } from "@/pages/session/session-side-rail"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
@@ -109,7 +110,11 @@ import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 import { pagePanelClass } from "@/components/page"
-import { ComposerContextStrip } from "@/components/prompt-input/context-strip"
+import {
+  ComposerContextRing,
+  ComposerContextStrip,
+  createComposerContext,
+} from "@/components/prompt-input/context-strip"
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -425,7 +430,6 @@ export default function Page() {
   const desktopV2ReviewOpen = createMemo(() => desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
-  const desktopInlineTerminalOnlyOpen = createMemo(() => desktopTerminalOpen() && !desktopV2ReviewOpen())
   const desktopFileTreeOpen = createMemo(
     () =>
       isDesktop() &&
@@ -639,18 +643,36 @@ export default function Page() {
   let diffFrame: number | undefined
   let diffTimer: number | undefined
 
-  createComputed((prev) => {
-    const open = desktopReviewOpen()
-    if (prev === undefined || prev === open) return open
+  const panelState = () => ({
+    open: desktopReviewOpen(),
+    terminal: desktopTerminalOpen(),
+    shown: desktopReviewOpen() || desktopFileTreeOpen(),
+    key: sessionKey(),
+  })
+  createComputed((prev: ReturnType<typeof panelState>) => {
+    const next = panelState()
+    // The terminal alone counts like Review: it opens the right column from nothing.
+    const terminalOnly = !prev.open && !next.open && prev.terminal !== next.terminal
+    if (prev.open === next.open && !terminalOnly) return next
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+    // Opening a closed side panel (Review or the terminal alone) slides it in while the thread column eases
+    // left; its content follows once it has arrived. Everything else snaps: closing (so the column never
+    // sweeps across an emptied panel), switching sessions, and adding Review beside a file tree that is
+    // already showing.
+    const opening = terminalOnly ? next.terminal : next.open
+    if (opening && !prev.shown && prev.key === next.key) {
+      setUi("reviewSnap", false)
+      slidePanelOpen()
+      return next
+    }
     setUi("reviewSnap", true)
     reviewFrame = requestAnimationFrame(() => {
       reviewFrame = undefined
       setUi("reviewSnap", false)
     })
-    return open
-  }, desktopReviewOpen())
+    return next
+  }, panelState())
 
   const legacyTurnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => {
@@ -718,15 +740,6 @@ export default function Page() {
         : skipToken,
     }
   })
-  // The composer's context strip counts changed files with the panel closed: git status, without patches.
-  const statusQuery = createQuery(() => ({
-    queryKey: [...vcsKey(), "status"] as const,
-    enabled: !wantsReview() && !!params.id && vcsMode() === "git" && sync().project?.vcs === "git",
-    queryFn: () =>
-      sdk()
-        .api.vcs.status({ location: { directory: sdk().directory } })
-        .then((result) => result.data.length),
-  }))
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
     if (reviewMode() === "git" || reviewMode() === "branch")
@@ -741,13 +754,6 @@ export default function Page() {
     return diffs[0]?.file
   }
   const reviewCount = () => reviewDiffs().length
-  // For the composer's context strip. Turn diffs load only with the Review panel open, and reading them
-  // before they arrive would suspend the composer, so the strip shows a turn count only once it is loaded.
-  // With the panel closed it shows the git status count instead.
-  const loadedReviewCount = () => {
-    if (!wantsReview()) return statusQuery.isSuccess ? statusQuery.data : undefined
-    return vcsMode() || serverSDK().protocolKind() !== "v2" || turnQuery.isSuccess ? reviewCount() : undefined
-  }
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
@@ -1598,6 +1604,23 @@ export default function Page() {
     scrollMark += 1
   }
 
+  // A toggle in the thread pauses following the bottom while its content eases (MessageTimeline holds the
+  // virtual list too). Afterwards following resumes only if the view is still at the bottom; a toggle that
+  // pushed the bottom out of view leaves the reader where they are, as a scroll up would.
+  let followHeld = false
+  const holdFollow = (hold: boolean) => {
+    if (hold) {
+      if (autoScroll.userScrolled()) return
+      followHeld = true
+      autoScroll.pause()
+      return
+    }
+    if (!followHeld) return
+    followHeld = false
+    const el = scroller
+    if (el && el.scrollHeight - el.clientHeight - el.scrollTop <= 10) autoScroll.resume()
+  }
+
   createResizeObserver(
     () => content,
     () => {
@@ -2006,6 +2029,7 @@ export default function Page() {
                   shouldAnchorBottom={() =>
                     !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
                   }
+                  onToggleHold={holdFollow}
                   centered={centered()}
                   setContentRef={(el) => {
                     content = el
@@ -2087,6 +2111,7 @@ export default function Page() {
               promptDock = el
             },
           })
+          const composerContext = createComposerContext()
           const promptController = usePromptInputV2Controller({
             get controls() {
               return inputController()
@@ -2117,17 +2142,8 @@ export default function Page() {
                   controller={promptController}
                   harness={sessionHarness}
                   borderUnderlay
-                  header={
-                    <ComposerContextStrip
-                      harness={sessionHarness.instance()?.name}
-                      agent={
-                        sessionHarness.driver() === Harness.OpenCodeDriver
-                          ? inputController().agents.current || undefined
-                          : undefined
-                      }
-                      files={loadedReviewCount()}
-                    />
-                  }
+                  header={<ComposerContextStrip context={composerContext} />}
+                  trailing={<ComposerContextRing context={composerContext} />}
                 />
               }
             />
@@ -2145,8 +2161,8 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-            "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-              !size.active() && !ui.reviewSnap && !desktopInlineTerminalOnlyOpen(),
+            "duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
+              !size.active() && !ui.reviewSnap,
           }}
           style={{
             width: sessionPanelWidth(),
@@ -2233,9 +2249,32 @@ export default function Page() {
             </Show>
             <Show when={terminalOpen()}>
               <div
+                ref={(el) => {
+                  // Stacked under Review, the terminal grows up from the bottom edge (medium + emphasized-
+                  // decelerate) once it is in the DOM; closing snaps, like the side panel.
+                  if (!desktopV2PanelLayout().stacked || prefersReducedMotion()) return
+                  queueMicrotask(() => {
+                    const height = el.getBoundingClientRect().height
+                    if (!el.isConnected || !height) return
+                    el.animate(
+                      [
+                        { height: "0px", overflow: "hidden" },
+                        { height: `${height}px`, overflow: "hidden" },
+                      ],
+                      {
+                        duration: motionDuration("medium"),
+                        easing:
+                          getComputedStyle(el).getPropertyValue("--v2-ease-emphasized-decelerate").trim() || "ease",
+                      },
+                    )
+                  })
+                }}
                 classList={{
                   "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
                   "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                  // Like the side panel's content, the terminal shows once the sliding column has arrived.
+                  "transition-opacity duration-medium ease-emphasized-decelerate motion-reduce:transition-none": true,
+                  "opacity-0": !panelSettled(),
                 }}
               >
                 <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />

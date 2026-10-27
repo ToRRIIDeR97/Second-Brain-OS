@@ -62,9 +62,21 @@
   --radius-lg: 0.5rem;
   --radius-xl: 0.625rem;
 
+  /* Motion (Material 3 tokens from v2/styles/theme.css). Enter: medium + emphasized-decelerate;
+     exit: short + emphasized-accelerate; small state changes: short + standard. */
   --ease-standard: var(--v2-ease-standard);
   --ease-emphasized: var(--v2-ease-emphasized-decelerate);
+  --ease-emphasized-decelerate: var(--v2-ease-emphasized-decelerate);
+  --ease-emphasized-accelerate: var(--v2-ease-emphasized-accelerate);
   --ease-spring: var(--v2-ease-spring);
+
+  --transition-duration-short: var(--v2-duration-short);
+  --transition-duration-medium: var(--v2-duration-medium);
+  --transition-duration-long: var(--v2-duration-long);
+
+  /* A bare `transition*` class animates with these instead of Tailwind's 0s fallback. */
+  --default-transition-duration: var(--v2-duration-short);
+  --default-transition-timing-function: var(--v2-ease-standard);
 
   --shadow-xs: var(--shadow-xs);
   --shadow-md: var(--shadow-md);

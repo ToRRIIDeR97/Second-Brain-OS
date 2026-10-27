@@ -151,6 +151,14 @@
     --v2-duration-short: 150ms;
     --v2-duration-medium: 300ms;
     --v2-duration-long: 450ms;
+    /* Defaults for older motion variables, mapped onto the tokens above. Components may still override
+       them locally (the session todo dock sets its own --tool-motion-* values). */
+    --transition-duration: var(--v2-duration-short);
+    --transition-easing: var(--v2-ease-standard);
+    --tool-motion-ease: var(--v2-ease-emphasized-decelerate);
+    --tool-motion-spring-ms: var(--v2-duration-long);
+    --tool-motion-fade-ms: var(--v2-duration-medium);
+    --tool-motion-odometer-ms: var(--v2-duration-long);
 
     --font-family-text: "Inter", sans-serif;
     --v2-font-family-sans: "Inter", sans-serif;

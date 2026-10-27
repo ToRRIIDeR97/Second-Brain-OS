@@ -1,7 +1,7 @@
 /* Live activity card: the ticker line slides in when the step changes; subagent lanes show an
    indeterminate bar while they run because an agent's step count isn't known in advance. */
 [data-slot="turn-steps-ticker-step"] {
-  animation: turn-steps-enter 220ms ease-out both;
+  animation: turn-steps-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
 }
 
 [data-slot="turn-steps-lane-bar"] {

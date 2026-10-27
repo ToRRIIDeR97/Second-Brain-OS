@@ -1,0 +1,135 @@
+import { Presence } from "@opencode-ai/ui/v2/presence"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
+import { createComputed, createEffect, createMemo, on, onCleanup, untrack, type JSX, type ParentProps } from "solid-js"
+import { replayAnimation } from "@/utils/replay-animation"
+
+/**
+ * The Calendar and Tasks layout: the main view and, at lg widths, a 340px side panel column. The column
+ * eases open (medium + emphasized-decelerate) and shut (short + emphasized-accelerate) with the panel.
+ */
+export const sidePanelGridClass = (open: boolean) =>
+  open
+    ? "grid flex-1 items-start gap-y-3 px-3 pb-3 transition-[grid-template-columns,column-gap] duration-medium ease-emphasized-decelerate motion-reduce:transition-none lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-x-3"
+    : "grid flex-1 items-start gap-y-3 px-3 pb-3 transition-[grid-template-columns,column-gap] duration-short ease-emphasized-accelerate motion-reduce:transition-none lg:grid-cols-[minmax(0,1fr)_0px] lg:gap-x-0"
+
+/**
+ * The side panel of `sidePanelGridClass`. It fades in and out with its column, and while closing it shows
+ * the content it last rendered (no longer reactive), so it never empties before it has gone. A change of
+ * `view` while open (peek to editor, one event to another) fades the new content in. With `onEscape`, Esc
+ * closes it from anywhere on the page, unless something else used the key first (a form's own Escape, an
+ * open menu or select) or a dialog has focus.
+ */
+export function SidePanel(
+  props: ParentProps<{
+    open: boolean
+    view?: string
+    ref?: (element: HTMLElement) => void
+    onEscape?: () => void
+  }>,
+) {
+  const open = createMemo(() => props.open)
+  const panel = {
+    aside: undefined as HTMLElement | undefined,
+    height: undefined as Animation | undefined,
+    from: 0,
+  }
+  const live = createMemo(() =>
+    open()
+      ? untrack(() => (
+          <aside
+            data-component="side-panel"
+            ref={(element) => {
+              panel.aside = element
+              props.ref?.(element)
+            }}
+            class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:w-[340px]"
+          >
+            {props.children}
+          </aside>
+        ))
+      : undefined,
+  )
+  const shown = createMemo<JSX.Element>((previous) => live() ?? previous)
+
+  createEffect(() => {
+    if (!open() || !props.onEscape) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return
+      if (event.target instanceof Element && event.target.closest('[role="dialog"]')) return
+      event.preventDefault()
+      props.onEscape?.()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown))
+  })
+
+  // The content shown during the exit no longer reacts; keep it from taking clicks or focus meanwhile.
+  createEffect(
+    on(
+      open,
+      (value) => {
+        if (!value) panel.aside?.setAttribute("inert", "")
+      },
+      { defer: true },
+    ),
+  )
+
+  // A change of view inside the open panel (peek to peek, peek to editor) is one transition: the new
+  // content fades in while the panel's height eases from its old size. The old height is read here, before
+  // the content's DOM updates (computations run ahead of render effects).
+  const view = () => (open() ? props.view : undefined)
+  createComputed(
+    on(
+      view,
+      (next, previous) => {
+        panel.from = next !== undefined && previous !== undefined ? (panel.aside?.offsetHeight ?? 0) : 0
+      },
+      { defer: true },
+    ),
+  )
+  createEffect(
+    on(
+      view,
+      (next, previous) => {
+        if (next === undefined || previous === undefined) return
+        replayAnimation(panel.aside)
+        easeHeight()
+      },
+      { defer: true },
+    ),
+  )
+
+  const easeHeight = () => {
+    const aside = panel.aside
+    panel.height?.cancel()
+    panel.height = undefined
+    if (!aside || !panel.from || prefersReducedMotion()) return
+    const to = aside.offsetHeight
+    if (Math.abs(to - panel.from) < 1) return
+    // Clipped while it eases, so no scrollbar flashes.
+    panel.height = aside.animate(
+      [
+        { height: `${panel.from}px`, overflow: "hidden" },
+        { height: `${to}px`, overflow: "hidden" },
+      ],
+      {
+        duration: motionDuration("medium"),
+        easing: getComputedStyle(aside).getPropertyValue("--v2-ease-emphasized-decelerate").trim() || "ease-out",
+      },
+    )
+  }
+
+  return (
+    <Presence when={open()} class="min-w-0 overflow-hidden lg:sticky lg:top-3">
+      {shown()}
+    </Presence>
+  )
+}
+
+/** Below the two-column layout the panel opens under the main view; bring it into view. */
+export function revealSidePanel(element: HTMLElement) {
+  queueMicrotask(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) return
+    element.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" })
+  })
+}

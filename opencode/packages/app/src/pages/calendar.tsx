@@ -7,6 +7,7 @@ import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { ViewSwitch } from "@opencode-ai/ui/v2/view-switch"
 import { createEffect, createMemo, createResource, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { PageEmpty, PageFrame, PageHeader, pageRowClass } from "@/components/page"
@@ -36,6 +37,8 @@ import {
 import { CalendarGrid, type CalendarGridDay } from "@/features/second-brain/calendar-grid"
 import { CalendarPeek, TaskCheck } from "@/features/second-brain/calendar-peek"
 import { CalendarTasks, type CalendarTaskFilter } from "@/features/second-brain/calendar-tasks"
+import { revealSidePanel, SidePanel, sidePanelGridClass } from "@/features/second-brain/side-panel"
+import { focusWhenConnected } from "@/utils/focus-when-connected"
 import {
   listProjects,
   readCalendar,
@@ -711,6 +714,9 @@ export default function CalendarPage() {
     })
   })
 
+  const panelOpen = () => state.googlePanel || state.editing || Boolean(peekView())
+  const panelView = () => (state.googlePanel ? "google" : state.editing ? "edit" : `peek:${state.peek}`)
+
   const peekView = createMemo(() => {
     const date = new Intl.DateTimeFormat(language.locale(), { weekday: "short", month: "short", day: "numeric" })
     const day = (value: string) => date.format(new Date(`${value}T12:00:00`))
@@ -1065,7 +1071,7 @@ export default function CalendarPage() {
             <span
               role="alert"
               title={state.googleError}
-              class="max-w-48 truncate text-[11px] text-v2-text-text-critical"
+              class="max-w-48 animate-enter truncate text-[11px] text-v2-text-text-critical"
             >
               {state.googleError}
             </span>
@@ -1092,199 +1098,209 @@ export default function CalendarPage() {
           </Show>
         </div>
 
-        <Show when={taskView()} keyed>
-          {(filter) => (
-            <CalendarTasks
-              tasks={snapshot()?.tasks ?? []}
-              projects={brainProjects.latest ?? []}
-              onSave={persistTasks}
-              onToggle={toggleTask}
-              filter={filter}
-              selectedId={state.selectedTask}
-              googleAccounts={googleWriteAccounts()}
-              onFilterChange={(next) => setState("view", viewForTaskFilter(next))}
-            />
-          )}
-        </Show>
-        <Show when={!taskView()}>
-          <div
-            classList={{
-              "grid flex-1 items-start gap-3 px-3 pb-3": true,
-              "lg:grid-cols-[minmax(0,1fr)_340px]": state.googlePanel || state.editing || Boolean(peekView()),
-            }}
-          >
-            <div class="flex min-h-[560px] min-w-0 flex-col">
-              <Show
-                when={!events.error}
-                fallback={
-                  <PageEmpty
-                    action={
-                      <ButtonV2 variant="outline" onClick={() => void eventActions.refetch()}>
-                        {language.t("secondBrain.calendar.retry")}
-                      </ButtonV2>
-                    }
-                  >
-                    <span role="alert">{language.t("secondBrain.calendar.loadFailed")}</span>
-                  </PageEmpty>
-                }
-              >
+        {/* Tasks and the calendar fade through; inside the calendar, month, day/week and agenda do. */}
+        <ViewSwitch key={taskView() ? `tasks:${taskView()}` : "calendar"} class="flex flex-1 flex-col">
+          <Show when={taskView()} keyed>
+            {(filter) => (
+              <CalendarTasks
+                tasks={snapshot()?.tasks ?? []}
+                projects={brainProjects.latest ?? []}
+                onSave={persistTasks}
+                onToggle={toggleTask}
+                filter={filter}
+                selectedId={state.selectedTask}
+                googleAccounts={googleWriteAccounts()}
+                onFilterChange={(next) => setState("view", viewForTaskFilter(next))}
+              />
+            )}
+          </Show>
+          <Show when={!taskView()}>
+            <div class={sidePanelGridClass(panelOpen())}>
+              <div class="flex min-h-[560px] min-w-0 flex-col">
                 <Show
-                  when={!events.loading}
+                  when={!events.error}
                   fallback={
-                    <div class="flex flex-1 items-center justify-center text-[13px] text-v2-text-text-faint">
-                      {language.t("common.loading")}
-                    </div>
+                    <PageEmpty
+                      action={
+                        <ButtonV2 variant="outline" onClick={() => void eventActions.refetch()}>
+                          {language.t("secondBrain.calendar.retry")}
+                        </ButtonV2>
+                      }
+                    >
+                      <span role="alert">{language.t("secondBrain.calendar.loadFailed")}</span>
+                    </PageEmpty>
                   }
                 >
                   <Show
-                    when={state.view === "month"}
+                    when={!events.loading}
                     fallback={
-                      <Show
-                        when={state.view === "today" || state.view === "week"}
-                        fallback={
-                          <div class="flex flex-col">
-                            <Show
-                              when={schedule().length > 0}
-                              fallback={<PageEmpty>{language.t("secondBrain.calendar.empty")}</PageEmpty>}
-                            >
-                              <For each={scheduleDays()}>
-                                {(day) => (
-                                  <section class="flex gap-2 py-2 shadow-[inset_0_0.5px_0_var(--v2-border-border-muted)] first:shadow-none [content-visibility:auto] [contain-intrinsic-size:auto_96px]">
-                                    <div class="flex w-16 shrink-0 flex-col items-center pt-1.5">
-                                      <span class="text-[11px] uppercase tracking-[0.04em] text-v2-text-text-muted [font-weight:560]">
-                                        {day.weekday}
-                                      </span>
-                                      <span
-                                        classList={{
-                                          "mt-1 flex size-9 items-center justify-center rounded-full text-[17px]": true,
-                                          "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:600]":
-                                            day.today,
-                                          "text-v2-text-text-base [font-weight:500]": !day.today,
-                                        }}
-                                      >
-                                        {day.day}
-                                      </span>
-                                    </div>
-                                    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                                      <For each={day.items}>
-                                        {(item) => (
-                                          <ScheduleRow
-                                            item={item}
-                                            projects={brainProjects.latest ?? []}
-                                            selected={
-                                              state.peek ===
-                                              (item.kind === "event" ? item.event.id : `task:${item.task.id}`)
-                                            }
-                                            onOpen={() =>
-                                              item.kind === "event" ? peekEvent(item.event) : peekTask(item.task)
-                                            }
-                                            onToggle={toggleTask}
-                                            allDay={language.t("secondBrain.calendar.allDay")}
-                                            eventSource={sourceLabel}
-                                          />
-                                        )}
-                                      </For>
-                                    </div>
-                                  </section>
-                                )}
-                              </For>
-                            </Show>
-                          </div>
-                        }
-                      >
-                        <CalendarGrid
-                          days={gridDays()}
-                          selected={state.peek}
-                          onOpenEvent={peekEvent}
-                          onOpenTask={peekTask}
-                          onToggle={toggleTask}
-                          onOpenDay={(date) => setState({ view: "today", cursor: new Date(`${date}T12:00:00`) })}
-                        />
-                      </Show>
+                      <div class="flex flex-1 items-center justify-center text-[13px] text-v2-text-text-faint">
+                        {language.t("common.loading")}
+                      </div>
                     }
                   >
-                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
-                      <div class="grid h-8 shrink-0 grid-cols-7 bg-v2-background-bg-layer-01">
-                        <For each={weekdays()}>
-                          {(weekday) => (
-                            <div class="flex items-center justify-center text-[12px] text-v2-text-text-muted [font-weight:530]">
-                              {weekday}
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                      <div class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
-                        <For each={days()}>
-                          {(day) => (
-                            <div
-                              classList={{
-                                "group/day flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-v2-border-border-muted p-1 [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0": true,
-                                "bg-v2-background-bg-layer-01": !day.inMonth,
-                              }}
-                            >
-                              <button
-                                type="button"
-                                classList={{
-                                  "mx-auto mb-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[12px] transition-colors duration-150 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
-                                  "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:560]": day.today,
-                                  "hover:bg-v2-overlay-simple-overlay-hover": !day.today,
-                                  "text-v2-text-text-faint": !day.inMonth && !day.today,
-                                  "text-v2-text-text-muted": day.inMonth && !day.today,
-                                }}
-                                aria-label={language.t("secondBrain.calendar.newOnDate", {
-                                  date: longDayFormat().format(new Date(`${day.date}T12:00:00`)),
-                                })}
-                                aria-current={day.today ? "date" : undefined}
-                                onClick={() => openNew(day.date)}
-                              >
-                                {day.day}
-                              </button>
-                              <div class="flex min-h-0 flex-col gap-0.5 overflow-hidden">
-                                <For each={eventsFor(day.date)}>
-                                  {(event) => (
-                                    <button
-                                      type="button"
-                                      class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] bg-v2-background-bg-accent-container px-2 text-left text-[11px] text-v2-text-text-on-accent-container transition-[filter,border-radius] duration-300 ease-standard hover:brightness-95 active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                                      title={event.title}
-                                      onClick={() => peekEvent(event)}
-                                    >
-                                      <Show when={event.start && event.date === day.date}>
-                                        <span class="mr-1 opacity-70">{event.start}</span>
-                                      </Show>
-                                      {event.title}
-                                    </button>
-                                  )}
-                                </For>
-                                <For each={tasksFor(day.date)}>
-                                  {(task) => (
-                                    <button
-                                      type="button"
-                                      class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] px-2 text-left text-[11px] text-v2-text-text-muted shadow-[inset_0_0_0_1px_var(--v2-border-border-base)] transition-[background-color,border-radius] duration-300 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                                      title={task.title}
-                                      onClick={() => peekTask(task)}
-                                    >
-                                      <Show when={task.start}>
-                                        <span class="mr-1 text-v2-text-text-faint">{task.start}</span>
-                                      </Show>
-                                      {task.title}
-                                    </button>
-                                  )}
-                                </For>
+                    <ViewSwitch
+                      key={
+                        state.view === "month"
+                          ? "month"
+                          : state.view === "today" || state.view === "week"
+                            ? "grid"
+                            : "agenda"
+                      }
+                      class="flex min-h-0 flex-1 flex-col"
+                    >
+                      <Show
+                        when={state.view === "month"}
+                        fallback={
+                          <Show
+                            when={state.view === "today" || state.view === "week"}
+                            fallback={
+                              <div class="flex flex-col">
+                                <Show
+                                  when={schedule().length > 0}
+                                  fallback={<PageEmpty>{language.t("secondBrain.calendar.empty")}</PageEmpty>}
+                                >
+                                  <For each={scheduleDays()}>
+                                    {(day) => (
+                                      <section class="flex gap-2 py-2 shadow-[inset_0_0.5px_0_var(--v2-border-border-muted)] first:shadow-none [content-visibility:auto] [contain-intrinsic-size:auto_96px]">
+                                        <div class="flex w-16 shrink-0 flex-col items-center pt-1.5">
+                                          <span class="text-[11px] uppercase tracking-[0.04em] text-v2-text-text-muted [font-weight:560]">
+                                            {day.weekday}
+                                          </span>
+                                          <span
+                                            classList={{
+                                              "mt-1 flex size-9 items-center justify-center rounded-full text-[17px]": true,
+                                              "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:600]":
+                                                day.today,
+                                              "text-v2-text-text-base [font-weight:500]": !day.today,
+                                            }}
+                                          >
+                                            {day.day}
+                                          </span>
+                                        </div>
+                                        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                          <For each={day.items}>
+                                            {(item) => (
+                                              <ScheduleRow
+                                                item={item}
+                                                projects={brainProjects.latest ?? []}
+                                                selected={
+                                                  state.peek ===
+                                                  (item.kind === "event" ? item.event.id : `task:${item.task.id}`)
+                                                }
+                                                onOpen={() =>
+                                                  item.kind === "event" ? peekEvent(item.event) : peekTask(item.task)
+                                                }
+                                                onToggle={toggleTask}
+                                                allDay={language.t("secondBrain.calendar.allDay")}
+                                                eventSource={sourceLabel}
+                                              />
+                                            )}
+                                          </For>
+                                        </div>
+                                      </section>
+                                    )}
+                                  </For>
+                                </Show>
                               </div>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </div>
+                            }
+                          >
+                            <CalendarGrid
+                              days={gridDays()}
+                              selected={state.peek}
+                              onOpenEvent={peekEvent}
+                              onOpenTask={peekTask}
+                              onToggle={toggleTask}
+                              onOpenDay={(date) => setState({ view: "today", cursor: new Date(`${date}T12:00:00`) })}
+                            />
+                          </Show>
+                        }
+                      >
+                        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
+                          <div class="grid h-8 shrink-0 grid-cols-7 bg-v2-background-bg-layer-01">
+                            <For each={weekdays()}>
+                              {(weekday) => (
+                                <div class="flex items-center justify-center text-[12px] text-v2-text-text-muted [font-weight:530]">
+                                  {weekday}
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                          <div class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
+                            <For each={days()}>
+                              {(day) => (
+                                <div
+                                  classList={{
+                                    "group/day flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-v2-border-border-muted p-1 [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0": true,
+                                    "bg-v2-background-bg-layer-01": !day.inMonth,
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    classList={{
+                                      "mx-auto mb-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[12px] transition-colors duration-short ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
+                                      "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:560]": day.today,
+                                      "hover:bg-v2-overlay-simple-overlay-hover": !day.today,
+                                      "text-v2-text-text-faint": !day.inMonth && !day.today,
+                                      "text-v2-text-text-muted": day.inMonth && !day.today,
+                                    }}
+                                    aria-label={language.t("secondBrain.calendar.newOnDate", {
+                                      date: longDayFormat().format(new Date(`${day.date}T12:00:00`)),
+                                    })}
+                                    aria-current={day.today ? "date" : undefined}
+                                    onClick={() => openNew(day.date)}
+                                  >
+                                    {day.day}
+                                  </button>
+                                  <div class="flex min-h-0 flex-col gap-0.5 overflow-hidden">
+                                    <For each={eventsFor(day.date)}>
+                                      {(event) => (
+                                        <button
+                                          type="button"
+                                          class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] bg-v2-background-bg-accent-container px-2 text-left text-[11px] text-v2-text-text-on-accent-container transition-[filter,border-radius] duration-short ease-standard hover:brightness-95 active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                                          title={event.title}
+                                          onClick={() => peekEvent(event)}
+                                        >
+                                          <Show when={event.start && event.date === day.date}>
+                                            <span class="mr-1 opacity-70">{event.start}</span>
+                                          </Show>
+                                          {event.title}
+                                        </button>
+                                      )}
+                                    </For>
+                                    <For each={tasksFor(day.date)}>
+                                      {(task) => (
+                                        <button
+                                          type="button"
+                                          class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] px-2 text-left text-[11px] text-v2-text-text-muted shadow-[inset_0_0_0_1px_var(--v2-border-border-base)] transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                                          title={task.title}
+                                          onClick={() => peekTask(task)}
+                                        >
+                                          <Show when={task.start}>
+                                            <span class="mr-1 text-v2-text-text-faint">{task.start}</span>
+                                          </Show>
+                                          {task.title}
+                                        </button>
+                                      )}
+                                    </For>
+                                  </div>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </div>
+                      </Show>
+                    </ViewSwitch>
                   </Show>
                 </Show>
-              </Show>
-            </div>
+              </div>
 
-            <Show when={state.googlePanel || state.editing || peekView()}>
-              <aside
-                ref={(element) => revealEditor(element)}
-                class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3"
+              {/* The editor form handles its own Escape (it keeps the draft); Esc closes the peek or Google panel. */}
+              <SidePanel
+                open={panelOpen()}
+                view={panelView()}
+                ref={revealSidePanel}
+                onEscape={state.editing ? undefined : () => setState({ peek: "", googlePanel: false })}
               >
                 <Show when={!state.googlePanel && !state.editing && peekView()}>
                   {(item) => (
@@ -1564,7 +1580,7 @@ export default function CalendarPage() {
                       <TextInputV2
                         id="calendar-event-title"
                         appearance="large"
-                        ref={(element) => queueMicrotask(() => element.focus())}
+                        ref={focusWhenConnected}
                         invalid={state.errorField === "title"}
                         aria-describedby={state.errorField === "title" ? "calendar-event-error" : undefined}
                         value={state.draft.title}
@@ -1765,10 +1781,10 @@ export default function CalendarPage() {
                     </div>
                   </form>
                 </Show>
-              </aside>
-            </Show>
-          </div>
-        </Show>
+              </SidePanel>
+            </div>
+          </Show>
+        </ViewSwitch>
       </Show>
     </PageFrame>
   )
@@ -1781,15 +1797,7 @@ const fieldClass = "flex flex-col gap-1.5 text-[12px] text-v2-text-text-muted"
 const noteClass = "rounded-[12px] bg-v2-background-bg-base px-3 py-2 text-[12px] leading-5 text-v2-text-text-muted"
 
 const dateInputClass =
-  "h-9 w-full min-w-0 rounded-[12px] border-0 bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-shadow duration-150 ease-standard focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
-
-/** Below the two-column layout the editor opens under the calendar; bring it into view. */
-function revealEditor(element: HTMLElement) {
-  queueMicrotask(() => {
-    if (window.matchMedia("(min-width: 1024px)").matches) return
-    element.scrollIntoView({ block: "nearest", behavior: "smooth" })
-  })
-}
+  "h-9 w-full min-w-0 rounded-[12px] border-0 bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-shadow duration-short ease-standard focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
 
 function calendarView(value?: string): CalendarView {
   if (
@@ -1851,7 +1859,7 @@ function ScheduleRow(props: {
   return (
     <div
       classList={{
-        "flex min-h-11 items-center gap-1.5 rounded-[16px] pr-3 transition-colors duration-150 ease-standard motion-reduce:transition-none": true,
+        "flex min-h-11 items-center gap-1.5 rounded-[16px] pr-3 transition-colors duration-short ease-standard motion-reduce:transition-none": true,
         "bg-v2-background-bg-accent-container": props.selected,
         "hover:bg-v2-overlay-simple-overlay-hover": !props.selected,
       }}

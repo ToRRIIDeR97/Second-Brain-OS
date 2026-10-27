@@ -3,7 +3,9 @@ import { createStore } from "solid-js/store"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { useLanguage } from "@/context/language"
+import { createExitList } from "./exit-list"
 
 export function SessionRevertDock(props: {
   items: { id: string; text: string }[]
@@ -26,6 +28,10 @@ export function SessionRevertDock(props: {
   const total = createMemo(() => props.items.length)
   const label = createMemo(() => language.plural("session.revertDock.summary", total()))
   const preview = createMemo(() => props.items[0]?.text ?? "")
+  const entries = createExitList(
+    () => props.items,
+    (item) => item.id,
+  )
 
   const onHeaderKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Enter" && event.key !== " ") return
@@ -56,7 +62,7 @@ export function SessionRevertDock(props: {
           {label()}
         </span>
         <Show when={store.collapsed && preview()}>
-          <span class="min-w-0 flex-1 truncate cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
+          <span class="min-w-0 flex-1 truncate cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint animate-enter">
             {preview()}
           </span>
         </Show>
@@ -65,7 +71,7 @@ export function SessionRevertDock(props: {
             icon={<IconV2 name="outline-chevron-down" size="small" />}
             size="large"
             variant="ghost-muted"
-            class="transition-transform duration-300 ease-standard motion-reduce:transition-none"
+            class="transition-transform motion-reduce:transition-none"
             style={{ transform: `rotate(${store.collapsed ? 180 : 0}deg)` }}
             onMouseDown={(event) => {
               event.preventDefault()
@@ -82,35 +88,34 @@ export function SessionRevertDock(props: {
         </div>
       </div>
 
-      {/* Sacrificial space the composer overlaps via its negative lift (18px), so the header stays fully visible */}
-      <Show when={store.collapsed}>
-        <div class="h-[18px]" aria-hidden="true" />
-      </Show>
-
-      <Show when={!store.collapsed}>
-        {/* Scroll viewport ends above the composer; the 18px sacrificial below is what the composer overlaps */}
-        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-5 pt-px pb-3 no-scrollbar">
-          <For each={props.items}>
-            {(item) => (
-              <div class="flex h-6 min-w-0 items-center gap-2">
-                <span class="min-w-0 flex-1 truncate text-[13px] font-[400] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-                  {item.text}
-                </span>
-                <ButtonV2
-                  size="small"
-                  variant="neutral"
-                  class="shrink-0"
-                  disabled={props.disabled || !!props.restoring}
-                  onClick={() => props.onRestore(item.id)}
-                >
-                  {language.t("session.revertDock.restore")}
-                </ButtonV2>
-              </div>
+      {/* The list folds through Reveal and rows expand in and collapse out (createExitList). The 18px below is
+          sacrificial space the composer overlaps via its negative lift, so the header stays fully visible. */}
+      <Reveal open={!store.collapsed}>
+        {/* Scroll viewport ends above the composer */}
+        <div class="flex max-h-42 flex-col overflow-y-auto px-5 pt-px pb-3 no-scrollbar">
+          <For each={entries()}>
+            {(entry, index) => (
+              <Reveal open={entry.open}>
+                <div classList={{ "flex h-6 min-w-0 items-center gap-2": true, "mt-2": index() > 0 }}>
+                  <span class="min-w-0 flex-1 truncate text-[13px] font-[400] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+                    {entry.item.text}
+                  </span>
+                  <ButtonV2
+                    size="small"
+                    variant="neutral"
+                    class="shrink-0"
+                    disabled={props.disabled || !!props.restoring}
+                    onClick={() => props.onRestore(entry.key)}
+                  >
+                    {language.t("session.revertDock.restore")}
+                  </ButtonV2>
+                </div>
+              </Reveal>
             )}
           </For>
         </div>
-        <div class="h-[18px]" aria-hidden="true" />
-      </Show>
+      </Reveal>
+      <div class="h-[18px]" aria-hidden="true" />
     </div>
   )
 }

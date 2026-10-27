@@ -3,7 +3,9 @@ import { createStore } from "solid-js/store"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { useLanguage } from "@/context/language"
+import { createExitList } from "./exit-list"
 
 // Lists messages the server holds with queue delivery. Items leave when the runner promotes them, or
 // when the user removes one or sends it now (steer). Actions are absent when the server cannot do either.
@@ -24,6 +26,10 @@ export function SessionFollowupDock(props: {
   const total = createMemo(() => props.items.length)
   const label = createMemo(() => language.plural("session.followupDock.summary", total()))
   const preview = createMemo(() => props.items[0]?.text ?? "")
+  const entries = createExitList(
+    () => props.items,
+    (item) => item.id,
+  )
 
   return (
     <div
@@ -46,7 +52,7 @@ export function SessionFollowupDock(props: {
           {label()}
         </span>
         <Show when={store.collapsed && preview()}>
-          <span class="min-w-0 flex-1 truncate cursor-default text-[13px] leading-5 text-v2-text-text-faint">
+          <span class="min-w-0 flex-1 truncate cursor-default text-[13px] leading-5 text-v2-text-text-faint animate-enter">
             {preview()}
           </span>
         </Show>
@@ -56,7 +62,7 @@ export function SessionFollowupDock(props: {
             icon={<Icon name="outline-chevron-down" size="small" />}
             size="large"
             variant="ghost-muted"
-            class="transition-transform duration-300 ease-standard motion-reduce:transition-none"
+            class="transition-transform motion-reduce:transition-none"
             style={{ transform: `rotate(${store.collapsed ? 180 : 0}deg)` }}
             onMouseDown={(event) => {
               event.preventDefault()
@@ -73,46 +79,52 @@ export function SessionFollowupDock(props: {
         </div>
       </div>
 
-      <Show when={store.collapsed}>
-        <div class="h-5" aria-hidden="true" />
-      </Show>
-
-      <Show when={!store.collapsed}>
-        <div class="px-5 pb-7 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
-          <For each={props.items}>
-            {(item) => (
-              <div class="flex items-center gap-2 min-w-0 py-1" data-queued-id={item.id}>
-                <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-v2-text-text-base">{item.text}</span>
-                <Show when={props.actions}>
-                  {(actions) => (
-                    <>
-                      <ButtonV2
-                        size="small"
-                        variant="neutral"
-                        class="shrink-0"
-                        disabled={!!props.pending}
-                        data-pending={props.pending === item.id ? "true" : undefined}
-                        onClick={() => actions().onSend(item.id)}
-                      >
-                        {language.t("session.followupDock.sendNow")}
-                      </ButtonV2>
-                      <ButtonV2
-                        size="small"
-                        variant="ghost"
-                        class="shrink-0"
-                        disabled={!!props.pending}
-                        onClick={() => actions().onRemove(item.id)}
-                      >
-                        {language.t("secondBrain.followupDock.remove")}
-                      </ButtonV2>
-                    </>
-                  )}
-                </Show>
-              </div>
+      {/* The list folds through Reveal; the spacer below stays, so collapsed and open share the bottom edge
+          the composer overlaps. Rows expand in and collapse out (createExitList). */}
+      <Reveal open={!store.collapsed}>
+        <div class="px-5 pb-2 flex flex-col max-h-42 overflow-y-auto no-scrollbar">
+          <For each={entries()}>
+            {(entry, index) => (
+              <Reveal open={entry.open}>
+                <div
+                  classList={{ "flex items-center gap-2 min-w-0 py-1": true, "mt-1.5": index() > 0 }}
+                  data-queued-id={entry.key}
+                >
+                  <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-v2-text-text-base">
+                    {entry.item.text}
+                  </span>
+                  <Show when={props.actions}>
+                    {(actions) => (
+                      <>
+                        <ButtonV2
+                          size="small"
+                          variant="neutral"
+                          class="shrink-0"
+                          disabled={!!props.pending}
+                          data-pending={props.pending === entry.key ? "true" : undefined}
+                          onClick={() => actions().onSend(entry.key)}
+                        >
+                          {language.t("session.followupDock.sendNow")}
+                        </ButtonV2>
+                        <ButtonV2
+                          size="small"
+                          variant="ghost"
+                          class="shrink-0"
+                          disabled={!!props.pending}
+                          onClick={() => actions().onRemove(entry.key)}
+                        >
+                          {language.t("secondBrain.followupDock.remove")}
+                        </ButtonV2>
+                      </>
+                    )}
+                  </Show>
+                </div>
+              </Reveal>
             )}
           </For>
         </div>
-      </Show>
+      </Reveal>
+      <div class="h-5" aria-hidden="true" />
     </div>
   )
 }

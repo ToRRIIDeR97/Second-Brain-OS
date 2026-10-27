@@ -269,6 +269,26 @@ export const lineCommentStyles = `
   opacity: 0.5;
   pointer-events: none;
 }
+
+/* The comment editor and a popover opened from a comment button fade and rise in (medium +
+   emphasized-decelerate); saved comments shown inline with the file appear as they are. */
+[data-component="line-comment"][data-variant="editor"] [data-slot="line-comment-popover"],
+[data-component="line-comment"] [data-slot="line-comment-popover"]:not([data-inline-body]) {
+  animation: line-comment-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+}
+
+@keyframes line-comment-enter {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="line-comment"] [data-slot="line-comment-popover"] {
+    animation: none !important;
+  }
+}
 `
 
 let installed = false

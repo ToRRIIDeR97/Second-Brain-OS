@@ -1,12 +1,14 @@
-import { createEffect, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { render } from "solid-js/web"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Presence } from "@opencode-ai/ui/v2/presence"
 import type { UiI18n } from "@opencode-ai/ui/context/i18n"
 import type { FileReferenceActions } from "../context/file-reference"
 import {
   fileReferenceRangeLabel,
   parseFileReference,
   resolveFileReferencePath,
+  settleFileReference,
   type FileReference,
 } from "./markdown-file-reference"
 
@@ -16,9 +18,11 @@ export type FileReferenceLabels = {
   copied: string
   loading: string
   missing: string
+  folderMissing: string
   binary: string
   empty: string
   more: (count: number) => string
+  items: (count: number) => string
 }
 
 export function fileReferenceLabels(i18n: UiI18n): FileReferenceLabels {
@@ -28,9 +32,11 @@ export function fileReferenceLabels(i18n: UiI18n): FileReferenceLabels {
     copied: i18n.t("ui.message.copied"),
     loading: i18n.t("secondBrain.fileReference.loading"),
     missing: i18n.t("secondBrain.fileReference.missing"),
+    folderMissing: i18n.t("secondBrain.fileReference.folderMissing"),
     binary: i18n.t("secondBrain.fileReference.binary"),
     empty: i18n.t("secondBrain.fileReference.empty"),
     more: (count) => i18n.plural("secondBrain.fileReference.more", count, { count }),
+    items: (count) => i18n.plural("secondBrain.fileReference.items", count, { count }),
   }
 }
 
@@ -43,18 +49,30 @@ const chipAttributes = [
   "data-file-reference",
   "data-file-reference-start",
   "data-file-reference-end",
+  "data-file-reference-kind",
   "role",
   "tabindex",
 ]
 
+/** Whether a path in the thread folder is a file or a folder, from its parent's listing. */
+export type FileReferenceEntryLookup = (path: string) => Promise<"file" | "directory" | undefined>
+
+// Listing results for extensionless paths, by thread folder and path. Rendering re-marks often, so each
+// path is listed once; `pending` holds its place while the lookup runs.
+const entries = new Map<string, "file" | "directory" | "missing" | "pending">()
+
 /**
- * Marks inline code that cites a file inside `directory` as a focusable link chip. The resolved
- * relative path and range live in data attributes so the delegated handlers never re-parse.
+ * Marks inline code that cites a file or folder inside `directory` as a focusable link chip. The
+ * resolved relative path, range and kind live in data attributes so the delegated handlers never
+ * re-parse. An extensionless path (`src/components`, but also `owner/repo` or `and/or`) stays plain
+ * code until `lookup` finds it in the thread folder; `root` is then marked again.
  */
-export function markFileReferences(root: Element, directory: string | undefined) {
+export function markFileReferences(root: Element, directory: string | undefined, lookup?: FileReferenceEntryLookup) {
   root.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((code) => {
-    const reference = directory && !code.closest("a") ? parseFileReference(code.textContent ?? "") : undefined
-    const path = reference && resolveFileReferencePath(reference.path, directory!)
+    const parsed = directory && !code.closest("a") ? parseFileReference(code.textContent ?? "") : undefined
+    const path = parsed && resolveFileReferencePath(parsed.path, directory!)
+    const reference =
+      parsed && path ? settleFileReference(parsed, listedEntry(root, directory!, path, lookup)) : undefined
     if (!reference || !path) {
       if (!code.hasAttribute("data-file-reference")) return
       chipAttributes.forEach((name) => code.removeAttribute(name))
@@ -63,16 +81,40 @@ export function markFileReferences(root: Element, directory: string | undefined)
     code.dataset.fileReference = path
     code.setAttribute("role", "button")
     code.tabIndex = 0
-    if (!reference.start || !reference.end) return
+    if (reference.kind === "folder") code.dataset.fileReferenceKind = "folder"
+    else code.removeAttribute("data-file-reference-kind")
+    if (!reference.start || !reference.end) {
+      code.removeAttribute("data-file-reference-start")
+      code.removeAttribute("data-file-reference-end")
+      return
+    }
     code.dataset.fileReferenceStart = String(reference.start)
     code.dataset.fileReferenceEnd = String(reference.end)
   })
 }
 
+function listedEntry(root: Element, directory: string, path: string, lookup?: FileReferenceEntryLookup) {
+  const key = `${directory}\n${path}`
+  const known = entries.get(key)
+  if (known === "file" || known === "directory") return known
+  if (known || !lookup) return
+  entries.set(key, "pending")
+  void lookup(path)
+    .then(
+      (type) => type ?? "missing",
+      () => "missing" as const,
+    )
+    .then((type) => {
+      entries.set(key, type)
+      if (type !== "missing" && root.isConnected) markFileReferences(root, directory, lookup)
+    })
+}
+
 function chipReference(chip: HTMLElement): FileReference {
   const start = Number(chip.dataset.fileReferenceStart) || undefined
   const end = Number(chip.dataset.fileReferenceEnd) || start
-  return { path: chip.dataset.fileReference!, start, end }
+  const kind = chip.dataset.fileReferenceKind === "folder" ? "folder" : undefined
+  return { path: chip.dataset.fileReference!, start, end, kind }
 }
 
 /** Delegated hover peek and open handling for the chips under `root`. Returns its cleanup. */
@@ -243,8 +285,10 @@ function FileReferencePeek(props: {
   onLeave: () => void
   onDismiss: () => void
 }) {
+  // The peek fades out after it is dismissed; until then it keeps showing the reference it had.
+  const shown = createMemo<typeof props.target>((last) => props.target ?? last)
   const [preview] = createResource(
-    () => props.target?.reference,
+    () => shown()?.reference,
     (reference) => {
       const actions = props.actions()
       if (!actions) return { status: "missing" as const, path: reference.path }
@@ -255,14 +299,20 @@ function FileReferencePeek(props: {
   )
   const [copied, setCopied] = createSignal(false)
   let element: HTMLDivElement | undefined
+  let body: HTMLDivElement | undefined
+  let inner: HTMLDivElement | undefined
   let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
-  const reference = () => props.target?.reference
+  const reference = () => shown()?.reference
   // While the next reference loads, `latest` still holds the previous one's result.
   const result = () => (preview.loading ? undefined : preview.latest)
   const found = () => {
     const value = result()
     if (value?.status === "found") return value
+  }
+  const folderCount = () => {
+    const value = result()
+    if (value?.status === "folder") return value.count
   }
   // A bare file name shows its full path once the app has found it.
   const path = () => result()?.path ?? reference()?.path ?? ""
@@ -275,29 +325,46 @@ function FileReferencePeek(props: {
     return Math.max(0, current.end - value.start + 1 - value.lines.length)
   }
 
-  // Below the chip, or above it when the viewport has no room; re-placed when the content settles or
-  // the page scrolls. A new chip hides the peek until measured, so it never shows at the old spot.
-  let placedChip: HTMLElement | undefined
+  // Below the chip, or above it (anchored by its bottom edge) when the viewport has no room; re-placed when
+  // the content settles or the page scrolls. The first placement lands before the peek fades in; moving to
+  // another chip glides there (top/left transitions once placed), so it never flashes at the old spot.
   createEffect(() => {
     const target = props.target
     void props.placement
     void preview.state
     if (!target || !element) return
-    if (placedChip !== target.chip) delete element.dataset.placed
     const frame = requestAnimationFrame(() => {
       if (!element) return
       const anchor = target.chip.getBoundingClientRect()
       const box = element.getBoundingClientRect()
-      const below = anchor.bottom + 6
-      const top = below + box.height > window.innerHeight - 8 ? Math.max(8, anchor.top - 6 - box.height) : below
+      // The body eases to its content's height, so place against the height it is heading for.
+      const height = box.height - (body?.offsetHeight ?? 0) + (inner?.offsetHeight ?? 0)
+      const above = anchor.bottom + 6 + height > window.innerHeight - 8 && anchor.top - 6 - height >= 8
       const left = Math.max(8, Math.min(anchor.left, window.innerWidth - box.width - 8))
-      element.style.top = `${top}px`
+      element.style.top = above ? "auto" : `${anchor.bottom + 6}px`
+      element.style.bottom = above ? `${window.innerHeight - anchor.top + 6}px` : "auto"
       element.style.left = `${left}px`
+      if (element.dataset.placed !== undefined) return
+      // Commit the position before the placed state turns its transitions on.
+      void element.offsetWidth
       element.dataset.placed = ""
-      placedChip = target.chip
     })
     onCleanup(() => cancelAnimationFrame(frame))
   })
+
+  // The body follows its content's height (loading line, then the lines); it eases once first sized.
+  const observeBody = (el: HTMLDivElement) => {
+    inner = el
+    const observer = new ResizeObserver(() => {
+      if (!body) return
+      body.style.height = `${el.offsetHeight}px`
+      if (body.dataset.sized !== undefined) return
+      void body.offsetWidth
+      body.dataset.sized = ""
+    })
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
+  }
 
   onCleanup(() => clearTimeout(copiedTimer))
 
@@ -311,84 +378,93 @@ function FileReferencePeek(props: {
   }
 
   return (
-    <Show when={reference()}>
-      {(current) => (
-        <div
-          ref={element}
-          data-component="file-reference-peek"
-          role="dialog"
-          aria-label={path()}
-          onPointerEnter={props.onEnter}
-          onPointerLeave={props.onLeave}
-          onFocusOut={(event) => {
-            const next = event.relatedTarget
-            if (next instanceof Node && (element?.contains(next) || props.target?.chip.contains(next))) return
-            props.onLeave()
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return
-            event.stopPropagation()
-            props.onDismiss()
-          }}
-        >
-          <div data-slot="file-reference-peek-header">
-            <span data-slot="file-reference-peek-name">{name()}</span>
-            <Show when={folder()}>
-              <span data-slot="file-reference-peek-folder">{folder()}</span>
-            </Show>
-            <Show when={fileReferenceRangeLabel(current())}>
-              {(label) => <span data-slot="file-reference-peek-range">{label()}</span>}
-            </Show>
-          </div>
-          <Switch>
-            <Match when={found()}>
-              {(value) => (
-                <Show
-                  when={value().lines.length > 0}
-                  fallback={<div data-slot="file-reference-peek-status">{props.labels().empty}</div>}
-                >
-                  <div data-slot="file-reference-peek-lines">
-                    <For each={value().lines}>
-                      {(line, index) => (
-                        <div data-slot="file-reference-peek-line">
-                          <span data-slot="file-reference-peek-number">{value().start + index()}</span>
-                          <span data-slot="file-reference-peek-text">{line.slice(0, LINE_CHARS)}</span>
+    <Presence when={!!props.target} enterClass="" exitClass="animate-exit pointer-events-none">
+      <Show when={reference()}>
+        {(current) => (
+          <div
+            ref={element}
+            data-component="file-reference-peek"
+            role="dialog"
+            aria-label={path()}
+            onPointerEnter={props.onEnter}
+            onPointerLeave={props.onLeave}
+            onFocusOut={(event) => {
+              const next = event.relatedTarget
+              if (next instanceof Node && (element?.contains(next) || props.target?.chip.contains(next))) return
+              props.onLeave()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return
+              event.stopPropagation()
+              props.onDismiss()
+            }}
+          >
+            <div data-slot="file-reference-peek-header">
+              <span data-slot="file-reference-peek-name">{name()}</span>
+              <Show when={folder()}>
+                <span data-slot="file-reference-peek-folder">{folder()}</span>
+              </Show>
+              <Show when={fileReferenceRangeLabel(current())}>
+                {(label) => <span data-slot="file-reference-peek-range">{label()}</span>}
+              </Show>
+            </div>
+            <div ref={body} data-slot="file-reference-peek-body">
+              <div ref={observeBody}>
+                <Switch>
+                  <Match when={found()}>
+                    {(value) => (
+                      <Show
+                        when={value().lines.length > 0}
+                        fallback={<div data-slot="file-reference-peek-status">{props.labels().empty}</div>}
+                      >
+                        <div data-slot="file-reference-peek-lines">
+                          <For each={value().lines}>
+                            {(line, index) => (
+                              <div data-slot="file-reference-peek-line">
+                                <span data-slot="file-reference-peek-number">{value().start + index()}</span>
+                                <span data-slot="file-reference-peek-text">{line.slice(0, LINE_CHARS)}</span>
+                              </div>
+                            )}
+                          </For>
                         </div>
-                      )}
-                    </For>
-                  </div>
-                  <Show when={hidden() > 0}>
-                    <div data-slot="file-reference-peek-more">{props.labels().more(hidden())}</div>
-                  </Show>
-                </Show>
-              )}
-            </Match>
-            <Match when={preview.loading}>
-              <div data-slot="file-reference-peek-status" role="status">
-                {props.labels().loading}
+                        <Show when={hidden() > 0}>
+                          <div data-slot="file-reference-peek-more">{props.labels().more(hidden())}</div>
+                        </Show>
+                      </Show>
+                    )}
+                  </Match>
+                  <Match when={folderCount() !== undefined}>
+                    <div data-slot="file-reference-peek-status">{props.labels().items(folderCount()!)}</div>
+                  </Match>
+                  <Match when={preview.loading}>
+                    <div data-slot="file-reference-peek-status" role="status">
+                      {props.labels().loading}
+                    </div>
+                  </Match>
+                  <Match when={result()?.status === "binary"}>
+                    <div data-slot="file-reference-peek-status">{props.labels().binary}</div>
+                  </Match>
+                  <Match when={true}>
+                    <div data-slot="file-reference-peek-status" data-missing="">
+                      {current().kind === "folder" ? props.labels().folderMissing : props.labels().missing}
+                    </div>
+                  </Match>
+                </Switch>
               </div>
-            </Match>
-            <Match when={result()?.status === "binary"}>
-              <div data-slot="file-reference-peek-status">{props.labels().binary}</div>
-            </Match>
-            <Match when={true}>
-              <div data-slot="file-reference-peek-status" data-missing="">
-                {props.labels().missing}
-              </div>
-            </Match>
-          </Switch>
-          <div data-slot="file-reference-peek-actions">
-            <Show when={result()?.status !== "missing"}>
-              <ButtonV2 size="small" variant="ghost" icon="filetree" onClick={() => props.onOpen(current())}>
-                {props.labels().open}
+            </div>
+            <div data-slot="file-reference-peek-actions">
+              <Show when={result()?.status !== "missing"}>
+                <ButtonV2 size="small" variant="ghost" icon="filetree" onClick={() => props.onOpen(current())}>
+                  {props.labels().open}
+                </ButtonV2>
+              </Show>
+              <ButtonV2 size="small" variant="ghost" icon={copied() ? "check" : "outline-copy"} onClick={copy}>
+                {copied() ? props.labels().copied : props.labels().copy}
               </ButtonV2>
-            </Show>
-            <ButtonV2 size="small" variant="ghost" icon={copied() ? "check" : "outline-copy"} onClick={copy}>
-              {copied() ? props.labels().copied : props.labels().copy}
-            </ButtonV2>
+            </div>
           </div>
-        </div>
-      )}
-    </Show>
+        )}
+      </Show>
+    </Presence>
   )
 }

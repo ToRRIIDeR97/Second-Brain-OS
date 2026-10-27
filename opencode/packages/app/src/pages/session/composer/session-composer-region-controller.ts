@@ -1,5 +1,6 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { motionDuration } from "@opencode-ai/ui/v2/motion"
 import { type Accessor, createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PromptInputState } from "@/components/prompt-input/contracts"
@@ -74,7 +75,7 @@ export function createSessionComposerRegionController(input: {
       timer = window.setTimeout(() => {
         setStore("ready", true)
         timer = undefined
-      }, 140)
+      }, motionDuration("short"))
     })
   })
 
@@ -139,7 +140,9 @@ export function createSessionComposerRegionController(input: {
     dock: () => (store.ready && input.state.dock()) || value() > 0.001,
     dockProgress: value,
     dockHeight: () => Math.max(78, store.height),
-    lift: () => (input.revert()?.items.length ? 18 : 36 * value()),
+    // How far the composer overlaps the revert dock above it. The todo dock's 36px overlap is applied by the
+    // region whether or not the revert dock shows, so this only depends on the revert dock.
+    lift: () => (input.revert()?.items.length ? 18 : 0),
     setDockBodyRef: (el: HTMLDivElement) => setStore("body", el),
   }
 }

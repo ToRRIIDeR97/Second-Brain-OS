@@ -3,8 +3,9 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
+import { Presence } from "@opencode-ai/ui/v2/presence"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from "solid-js"
 import {
   applyNoteEditorCommand,
   applySlashCommand,
@@ -16,6 +17,7 @@ import {
 } from "./note-editor-commands"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { replayAnimation } from "@/utils/replay-animation"
 
 type EditorMode = "write" | "split" | "preview"
 type SplitOrientation = "side-by-side" | "stacked"
@@ -114,6 +116,8 @@ export function NoteEditor(props: NoteEditorProps) {
   const [fullscreen, setFullscreen] = createSignal(false)
   const [insertOpen, setInsertOpen] = createSignal(false)
   const [slash, setSlash] = createSignal<SlashCommandRange>()
+  // The slash menu keeps its last query while it fades out.
+  const menuSlash = createMemo<SlashCommandRange | undefined>((previous) => slash() ?? previous)
   const [activeCommand, setActiveCommand] = createSignal(0)
   let editor: HTMLTextAreaElement | undefined
   let panes: HTMLDivElement | undefined
@@ -121,7 +125,7 @@ export function NoteEditor(props: NoteEditorProps) {
   let previousValue = props.value
 
   const commands = createMemo(() => {
-    const query = slash()?.query.trim().toLowerCase() ?? ""
+    const query = menuSlash()?.query.trim().toLowerCase() ?? ""
     if (!query) return noteEditorCommands
     return noteEditorCommands.filter((command) =>
       `${commandLabel(command)} ${command.keywords} ${command.id}`.toLowerCase().includes(query),
@@ -189,8 +193,16 @@ export function NoteEditor(props: NoteEditorProps) {
     }),
   )
 
+  // A pane or the toolbar that a mode change shows fades in; one shown by loading a note does not.
+  const switching = { current: false }
+  const enterOnSwitch = (element: HTMLElement) => {
+    if (switching.current) replayAnimation(element)
+  }
+
   const changeMode = (value: EditorMode) => {
+    switching.current = true
     setMode(value)
+    switching.current = false
     if (value !== "preview") queueMicrotask(() => editor?.focus())
   }
 
@@ -270,8 +282,13 @@ export function NoteEditor(props: NoteEditorProps) {
     setSplit((value) => Math.max(20, Math.min(80, value + direction * 5)))
   }
 
+  let surface: HTMLElement | undefined
+  // Entering and leaving fullscreen fades the editor in at its new size.
+  createEffect(on(fullscreen, () => replayAnimation(surface), { defer: true }))
+
   return (
     <section
+      ref={surface}
       classList={{
         "flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-v2-background-bg-base shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]": true,
         relative: !fullscreen(),
@@ -296,7 +313,12 @@ export function NoteEditor(props: NoteEditorProps) {
           <SegmentedControlItemV2 value="preview">{label("preview")}</SegmentedControlItemV2>
         </SegmentedControlV2>
         <Show when={mode() !== "preview"}>
-          <div class="flex min-w-0 flex-wrap items-center gap-0.5 pl-1" role="toolbar" aria-label={label("toolbar")}>
+          <div
+            ref={enterOnSwitch}
+            class="flex min-w-0 flex-wrap items-center gap-0.5 pl-1"
+            role="toolbar"
+            aria-label={label("toolbar")}
+          >
             <For each={toolbarCommands}>
               {(command) => (
                 <TooltipV2
@@ -372,17 +394,22 @@ export function NoteEditor(props: NoteEditorProps) {
             />
           </TooltipV2>
         </div>
-        <Show when={insertOpen() && mode() !== "preview"}>
+        <Presence
+          when={insertOpen() && mode() !== "preview"}
+          class="absolute right-2 top-11 z-30 origin-top-right"
+          enterClass="animate-menu-enter"
+          exitClass="animate-menu-exit"
+        >
           <div
             role="menu"
-            class="absolute right-2 top-11 z-30 w-56 rounded-[16px] bg-v2-background-bg-layer-02 p-1.5 shadow-[var(--v2-elevation-raised)]"
+            class="w-56 rounded-[16px] bg-v2-background-bg-layer-02 p-1.5 shadow-[var(--v2-elevation-raised)]"
           >
             <For each={insertCommands}>
               {(command) => (
                 <button
                   type="button"
                   role="menuitem"
-                  class="flex h-9 w-full items-center justify-between rounded-[12px] px-3 text-left text-[12px] text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                  class="flex h-9 w-full items-center justify-between rounded-[12px] px-3 text-left text-[12px] text-v2-text-text-muted transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => run(command.id)}
                 >
@@ -392,7 +419,7 @@ export function NoteEditor(props: NoteEditorProps) {
               )}
             </For>
           </div>
-        </Show>
+        </Presence>
       </div>
 
       <Show
@@ -413,6 +440,7 @@ export function NoteEditor(props: NoteEditorProps) {
         >
           <Show when={mode() !== "preview"}>
             <div
+              ref={enterOnSwitch}
               classList={{
                 "relative min-h-0 min-w-0": true,
                 "flex-1": mode() !== "split",
@@ -438,12 +466,17 @@ export function NoteEditor(props: NoteEditorProps) {
                 }}
                 onKeyDown={onEditorKeyDown}
               />
-              <Show when={slash()}>
+              <Presence
+                when={Boolean(slash())}
+                class="absolute left-5 top-12 z-20 origin-top-left"
+                enterClass="animate-menu-enter"
+                exitClass="animate-menu-exit"
+              >
                 <div
                   id="note-editor-slash-menu"
                   role="listbox"
                   aria-label={label("slashMenu")}
-                  class="absolute left-5 top-12 z-20 max-h-64 w-64 overflow-y-auto rounded-[16px] bg-v2-background-bg-layer-02 p-1.5 shadow-[var(--v2-elevation-raised)]"
+                  class="max-h-64 w-64 overflow-y-auto rounded-[16px] bg-v2-background-bg-layer-02 p-1.5 shadow-[var(--v2-elevation-raised)]"
                 >
                   <Show
                     when={commands().length}
@@ -459,7 +492,10 @@ export function NoteEditor(props: NoteEditorProps) {
                           class="flex h-9 w-full items-center justify-between rounded-[12px] px-3 text-left text-[12px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base aria-selected:bg-v2-background-bg-accent-container aria-selected:text-v2-text-text-on-accent-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
                           onMouseEnter={() => setActiveCommand(index())}
                           onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => run(command.id, slash())}
+                          onClick={() => {
+                            const range = slash()
+                            if (range) run(command.id, range)
+                          }}
                         >
                           <span>{commandLabel(command)}</span>
                           <span class="text-[10px] text-v2-text-text-faint">{command.shortLabel}</span>
@@ -468,7 +504,7 @@ export function NoteEditor(props: NoteEditorProps) {
                     </For>
                   </Show>
                 </div>
-              </Show>
+              </Presence>
             </div>
           </Show>
 
@@ -500,6 +536,7 @@ export function NoteEditor(props: NoteEditorProps) {
 
           <Show when={mode() !== "write"}>
             <div
+              ref={enterOnSwitch}
               classList={{
                 "min-h-0 min-w-0 overflow-auto px-5 py-4": true,
                 "flex-1": mode() !== "split",

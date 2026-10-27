@@ -45,7 +45,7 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
               <button
                 type="button"
                 aria-label={language.t("dialog.project.edit.icon.alt")}
-                class="relative size-16 shrink-0 cursor-pointer overflow-hidden rounded-[20px] outline outline-2 outline-offset-2 outline-transparent transition-[background-color,outline-color,border-radius] duration-200 ease-standard active:rounded-[16px] focus-visible:outline-v2-border-border-focus motion-reduce:transition-none"
+                class="relative size-16 shrink-0 cursor-pointer overflow-hidden rounded-[20px] outline outline-2 outline-offset-2 outline-transparent transition-[background-color,outline-color,border-radius] duration-short ease-standard active:rounded-[16px] focus-visible:outline-v2-border-border-focus motion-reduce:transition-none"
                 classList={{
                   "bg-v2-overlay-simple-overlay-hover outline-v2-border-border-focus": model.store.dragOver,
                 }}
@@ -67,7 +67,7 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
                   class="!size-16 [&_[data-slot=project-avatar-surface]]:!rounded-[20px] [&_[data-slot=project-avatar-surface]]:!text-[32px]"
                 />
                 <span
-                  class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[20px] bg-v2-background-bg-contrast/80 text-v2-icon-icon-contrast backdrop-blur-[2px] transition-opacity duration-150 ease-standard motion-reduce:transition-none"
+                  class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[20px] bg-v2-background-bg-contrast/80 text-v2-icon-icon-contrast backdrop-blur-[2px] transition-opacity duration-short ease-standard motion-reduce:transition-none"
                   classList={{
                     "opacity-100": model.store.iconHover,
                     "opacity-0": !model.store.iconHover,
@@ -104,7 +104,7 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
                       type="button"
                       aria-label={language.t("dialog.project.edit.color.select", { color })}
                       aria-pressed={getProjectAvatarVariant(model.store.color) === color}
-                      class="flex size-8 items-center justify-center rounded-full p-1 outline outline-2 outline-transparent transition-[background-color,outline-color] duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-v2-border-border-focus motion-reduce:transition-none"
+                      class="flex size-8 items-center justify-center rounded-full p-1 outline outline-2 outline-transparent transition-[background-color,outline-color] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-v2-border-border-focus motion-reduce:transition-none"
                       classList={{
                         "bg-v2-overlay-simple-overlay-hover [box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)]":
                           getProjectAvatarVariant(model.store.color) === color,
