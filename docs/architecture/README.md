@@ -97,7 +97,8 @@ Sidebar groups, child threads, settings model groups and Home's "Running now"
 expand through `Reveal`; the Projects panel keeps its content while its width
 collapses. Calendar and Tasks share `features/second-brain/side-panel.tsx`,
 whose grid column eases with the panel and whose panel keeps its last content
-through the exit. Live lists (sidebar threads, running sessions) animate only
+(inert) through the exit; Esc closes a peek, while the editor form keeps its own
+Escape. Live lists (sidebar threads, running sessions) animate only
 rows that join after the first render (`utils/fresh-items.ts`), never the
 initial list or a reorder.
 

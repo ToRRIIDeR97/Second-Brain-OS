@@ -1,6 +1,6 @@
 import { Presence } from "@opencode-ai/ui/v2/presence"
 import { prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
-import { createEffect, createMemo, on, untrack, type JSX, type ParentProps } from "solid-js"
+import { createEffect, createMemo, on, onCleanup, untrack, type JSX, type ParentProps } from "solid-js"
 import { replayAnimation } from "@/utils/replay-animation"
 
 /**
@@ -15,9 +15,18 @@ export const sidePanelGridClass = (open: boolean) =>
 /**
  * The side panel of `sidePanelGridClass`. It fades in and out with its column, and while closing it shows
  * the content it last rendered (no longer reactive), so it never empties before it has gone. A change of
- * `view` while open (peek to editor, one event to another) fades the new content in.
+ * `view` while open (peek to editor, one event to another) fades the new content in. With `onEscape`, Esc
+ * closes it from anywhere on the page, unless something else used the key first (a form's own Escape, an
+ * open menu or select) or a dialog has focus.
  */
-export function SidePanel(props: ParentProps<{ open: boolean; view?: string; ref?: (element: HTMLElement) => void }>) {
+export function SidePanel(
+  props: ParentProps<{
+    open: boolean
+    view?: string
+    ref?: (element: HTMLElement) => void
+    onEscape?: () => void
+  }>,
+) {
   const open = createMemo(() => props.open)
   const panel = { aside: undefined as HTMLElement | undefined }
   const live = createMemo(() =>
@@ -36,6 +45,18 @@ export function SidePanel(props: ParentProps<{ open: boolean; view?: string; ref
       : undefined,
   )
   const shown = createMemo<JSX.Element>((previous) => live() ?? previous)
+
+  createEffect(() => {
+    if (!open() || !props.onEscape) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return
+      if (event.target instanceof Element && event.target.closest('[role="dialog"]')) return
+      event.preventDefault()
+      props.onEscape?.()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown))
+  })
 
   // The content shown during the exit no longer reacts; keep it from taking clicks or focus meanwhile.
   createEffect(

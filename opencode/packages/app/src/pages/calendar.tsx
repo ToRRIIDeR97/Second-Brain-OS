@@ -1295,7 +1295,13 @@ export default function CalendarPage() {
                 </Show>
               </div>
 
-              <SidePanel open={panelOpen()} view={panelView()} ref={revealSidePanel}>
+              {/* The editor form handles its own Escape (it keeps the draft); Esc closes the peek or Google panel. */}
+              <SidePanel
+                open={panelOpen()}
+                view={panelView()}
+                ref={revealSidePanel}
+                onEscape={state.editing ? undefined : () => setState({ peek: "", googlePanel: false })}
+              >
                 <Show when={!state.googlePanel && !state.editing && peekView()}>
                   {(item) => (
                     <CalendarPeek
