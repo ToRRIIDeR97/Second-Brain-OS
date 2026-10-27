@@ -80,15 +80,16 @@ export function SessionFileBrowserTab(props: {
 
   // A file reference opened from a reply shows the tree beside the file, so its row can be revealed.
   // A folder reference is the tree's to finish: it is selected, glided to and expanded once the panel
-  // has arrived, and stays selected until a file is.
-  const [folder, setFolder] = createSignal<string>()
+  // has arrived, and stays selected until a file is. Each reveal is a new object, so clicking the same
+  // folder again glides, flashes and expands it again.
+  const [folder, setFolder] = createSignal<{ path: string }>()
   const revealed = () => (panelSettled() ? folder() : undefined)
   createEffect(
     on(fileReveal, (reveal) => {
       if (reveal?.directory !== sdk().directory) return
       setFilter("")
       if (!props.state.sidebarOpened()) props.state.toggleSidebar()
-      setFolder(reveal.folder ? reveal.path : undefined)
+      setFolder(reveal.folder ? { path: reveal.path } : undefined)
       if (reveal.folder) clearFileReveal()
     }),
   )
@@ -131,7 +132,7 @@ export function SessionFileBrowserTab(props: {
                 {(path) => (
                   <span class="animate-in fade-in duration-200 motion-reduce:animate-none">
                     {" / "}
-                    <span class="text-v2-text-text-base">{path()}</span>
+                    <span class="text-v2-text-text-base">{path().path}</span>
                   </span>
                 )}
               </Show>
@@ -152,7 +153,7 @@ export function SessionFileBrowserTab(props: {
             when={query()}
             fallback={
               <FileTreeV2
-                active={revealed() ?? props.active}
+                active={revealed()?.path ?? props.active}
                 revealed={revealed()}
                 kinds={props.kinds}
                 onFileClick={(node) => props.onSelect(node.path)}

@@ -142,14 +142,15 @@
 
 /*
  * A folder opened from a reply: an accent wash that settles to the selected style, keeping a 2px
- * accent inset; its chevron turns as it expands and its children fade in. Reduced motion shows the end state.
+ * accent inset; its chevron turns as it expands and its children fade in. The wash and fade-in play once
+ * per reveal (`data-reveal-flash` is cleared afterwards). Reduced motion shows the end state.
  */
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-revealed] {
   box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-revealed] {
+  [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-reveal-flash] {
     animation: file-tree-v2-reveal 900ms ease-out;
   }
 

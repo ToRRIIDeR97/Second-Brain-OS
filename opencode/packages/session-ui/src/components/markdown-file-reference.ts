@@ -35,6 +35,20 @@ export function parseFileReference(text: string): FileReference | undefined {
 }
 
 /**
+ * The chip a parsed reference becomes. Files and trailing-slash folders are chips at once; an `either`
+ * path only once the thread folder's listing names it (`type`), so `owner/repo`, `and/or` or
+ * `application/json` stay plain code.
+ */
+export function settleFileReference(
+  reference: FileReference,
+  type: "file" | "directory" | undefined,
+): FileReference | undefined {
+  if (reference.kind !== "either") return reference
+  if (type === "directory") return { path: reference.path, kind: "folder" }
+  if (type === "file") return { path: reference.path }
+}
+
+/**
  * Returns `input` as a normalized path relative to `directory`, or undefined when it can leave it:
  * any `..` segment, a home-relative or Windows drive-relative path (`D:x.ts`, which resolves against
  * that drive's current folder), or an absolute path outside the directory.

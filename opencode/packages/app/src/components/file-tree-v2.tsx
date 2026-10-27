@@ -32,6 +32,8 @@ export type { Kind } from "@/components/file-tree"
 const INDENT_STEP = 16
 // Roughly how long the smooth scroll to a revealed folder takes before it expands.
 const REVEAL_EXPAND_MS = 300
+// The row's wash and its children's fade-in have played by then.
+const REVEAL_FLASH_MS = 1200
 
 function rowPaddingStart(level: number, type: FileNode["type"]) {
   if (type === "directory") return 8 + level * INDENT_STEP
@@ -129,8 +131,11 @@ function GuideLines(props: { level: number }) {
 
 export default function FileTreeV2(props: {
   active?: string
-  /** A folder opened from a reply: its row glides into view, flashes, keeps an accent, and expands. */
-  revealed?: string
+  /**
+   * A folder opened from a reply: its row glides into view, flashes, keeps an accent, and expands.
+   * Each new object replays that, even for the same path.
+   */
+  revealed?: { path: string }
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
@@ -176,22 +181,28 @@ export default function FileTreeV2(props: {
     void file.tree.list("")
   })
 
-  const revealed = () => normalizeFileTreeV2Path(props.revealed ?? "")
+  const revealed = () => normalizeFileTreeV2Path(props.revealed?.path ?? "")
   const still = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  // The folder whose row is flashing; cleared once the reveal has played, so rows the virtualizer
+  // mounts again later do not replay it.
+  const [flash, setFlash] = createSignal<string>()
 
   // Only scroll when the active path changes (or first appears in the tree).
   // Do not re-scroll when expand/collapse reshuffles `rows()`.
   let scrolledActive: string | undefined
+  let scrolledReveal: { path: string } | undefined
   createEffect(() => {
     const path = active()
+    const reveal = props.revealed
     if (!path) {
       scrolledActive = undefined
       return
     }
     const index = rows().findIndex((row) => row.node.path === path)
     if (index < 0) return
-    if (scrolledActive === path) return
+    if (scrolledActive === path && scrolledReveal === reveal) return
     scrolledActive = path
+    scrolledReveal = reveal
     queueMicrotask(() => {
       const next = rows().findIndex((row) => row.node.path === path)
       if (next < 0) return
@@ -217,23 +228,36 @@ export default function FileTreeV2(props: {
     file.tree.expand(originalPath, live() ? undefined : { list: false })
   }
 
-  // The revealed folder opens once its row has glided into view, so its chevron turns and its
-  // children fade in where the eye already is. A newer reveal cancels the pending one.
+  // Each reveal flashes the row and, once it has glided into view, opens the folder, so its chevron
+  // turns and its children fade in where the eye already is. A newer reveal cancels the pending one.
   createEffect(
-    on(revealed, (path) => {
-      if (!path) return
-      const timer = setTimeout(
-        () => {
-          const row = rows().find((item) => item.node.path === path)
-          if (!expanded(path)) file.tree.expand(row?.node.originalPath ?? path, live() ? undefined : { list: false })
-        },
-        still() ? 0 : REVEAL_EXPAND_MS,
-      )
-      onCleanup(() => clearTimeout(timer))
-    }),
+    on(
+      () => props.revealed,
+      (reveal) => {
+        setFlash(undefined)
+        if (!reveal) return
+        const path = normalizeFileTreeV2Path(reveal.path)
+        const motion = !still()
+        // A frame apart, so a repeat reveal of the same row restarts its animation.
+        const frame = motion ? requestAnimationFrame(() => setFlash(path)) : undefined
+        const expand = setTimeout(
+          () => {
+            const row = rows().find((item) => item.node.path === path)
+            if (!expanded(path)) file.tree.expand(row?.node.originalPath ?? path, live() ? undefined : { list: false })
+          },
+          motion ? REVEAL_EXPAND_MS : 0,
+        )
+        const settle = motion ? setTimeout(() => setFlash(undefined), REVEAL_FLASH_MS) : undefined
+        onCleanup(() => {
+          if (frame !== undefined) cancelAnimationFrame(frame)
+          clearTimeout(expand)
+          clearTimeout(settle)
+        })
+      },
+    ),
   )
   const revealChild = (path: string) => {
-    const parent = revealed()
+    const parent = flash()
     return !!parent && path.startsWith(`${parent}/`) && !path.slice(parent.length + 1).includes("/")
   }
 
@@ -306,6 +330,7 @@ export default function FileTreeV2(props: {
                         type="button"
                         class="relative"
                         data-revealed={row().node.path === revealed() ? "" : undefined}
+                        data-reveal-flash={row().node.path === flash() ? "" : undefined}
                         data-reveal-child={revealChild(row().node.path) ? "" : undefined}
                         onFocus={() => setFocused(row().node.path)}
                         onBlur={() => setFocused(undefined)}

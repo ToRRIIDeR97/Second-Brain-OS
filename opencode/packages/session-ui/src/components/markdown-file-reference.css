@@ -17,7 +17,7 @@
   }
 
   /* Folder chips lead with a folder glyph in the chip's own color. */
-  &[data-file-reference-folder]::before {
+  &[data-file-reference-kind="folder"]::before {
     content: "";
     display: inline-block;
     width: 0.95em;
