@@ -518,7 +518,15 @@ longer saves them when adding a harness.
 all, then lists again. Settings → Harnesses → Refresh models calls it. The
 composer has no refresh button: its harness list revalidates in the background
 when the window regains focus or the harness picker opens, at most once a
-minute, and keeps showing the last list until the answer arrives. Settings → Harnesses shows a harness list beside
+minute, and keeps showing the last list until the answer arrives. The renderer
+also remembers the last good list per server and folder
+(`listHarnessesRemembered` in `app/src/utils/server.ts`). A composer that opens
+shows it at once and checks in the background, and Brain Home uses it as
+placeholder data after its query is collected. A failed check shows the fallback
+list but never replaces the remembered one. The composer never suspends on the
+list, so opening a thread or a new thread doesn't wait for every harness CLI to
+answer. Brain Home lets you send with the Default agent before the list has
+loaded. Settings → Harnesses shows a harness list beside
 the selected harness's details. Models are grouped by their provider prefix
 (the part of the ID before `/`, such as `openrouter` in OpenCode's
 `openrouter/anthropic/...`), with one switch per provider and one per model.
@@ -549,7 +557,8 @@ resolving its command on `PATH` to a real path:
 Other installs, such as a standalone binary or a curl-script copy, show their
 version only and are updated outside the app. The latest version comes from
 the npm registry configured in the user's `.npmrc` (`/<pkg>/latest`) or from
-`brew info --json=v2`. Results are cached for six hours per executable.
+`brew info --json=v2`. Results are cached for six hours per executable, or
+ten minutes when the latest version couldn't be read.
 
 `GET /api/harness/updates` lists installed and latest versions for enabled
 Codex and ACP harnesses. The renderer's `HarnessUpdateNotifier` (mounted in the

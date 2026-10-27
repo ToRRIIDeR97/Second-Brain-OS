@@ -43,8 +43,9 @@ function createHarnessSetup(directory: string) {
   })
 
   // A sign-in in the browser or a terminal finishes outside the app, so check again while setup is open.
+  // A check still running is not restarted: each one can start every harness CLI on the server.
   const poll = setInterval(() => {
-    if (!state.busy) void refetch()
+    if (!state.busy && !statuses.loading) void refetch()
   }, 5_000)
   onCleanup(() => clearInterval(poll))
 

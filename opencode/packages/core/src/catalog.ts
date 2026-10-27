@@ -170,6 +170,17 @@ const layer = Layer.effect(
         yield* events.publish(Event.Updated, {})
       }),
     })
+    const projectModels = (include: (providerID: ProviderV2.ID, model: ModelV2.MutableInfo) => boolean) =>
+      pipe(
+        Array.fromIterable(state.get().providers),
+        Array.flatMap(([providerID, record]) =>
+          Array.fromIterable(record.models.values())
+            .filter((model) => include(providerID, model))
+            .map((model) => projectModel(model, record.provider)),
+        ),
+        Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
+      )
+
     const result: Interface = {
       transform: state.transform,
       reload: state.reload,
@@ -200,18 +211,13 @@ const layer = Layer.effect(
         }),
 
         all: Effect.fn("CatalogV2.model.all")(function* () {
-          return pipe(
-            Array.fromIterable(state.get().providers.values()),
-            Array.flatMap((record) => {
-              return Array.fromIterable(record.models.values()).map((model) => projectModel(model, record.provider))
-            }),
-            Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
-          )
+          return projectModels(() => true)
         }),
 
         available: Effect.fn("CatalogV2.model.available")(function* () {
           const providers = new Set((yield* result.provider.available()).map((provider) => provider.id))
-          return (yield* result.model.all()).filter((model) => providers.has(model.providerID) && model.enabled)
+          // Filter before projecting: projecting every catalog model costs hundreds of ms per call.
+          return projectModels((providerID, model) => providers.has(providerID) && model.enabled)
         }),
 
         getAvailable: Effect.fn("CatalogV2.model.getAvailable")(function* (providerID, modelID) {

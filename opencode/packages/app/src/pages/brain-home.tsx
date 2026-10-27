@@ -21,7 +21,12 @@ import { listProjects, readCalendar, type CalendarEvent, type PlannerTask } from
 import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeSessionsController } from "@/pages/home/home-sessions-controller"
 import { Harness } from "@opencode-ai/schema/harness"
-import { fallbackHarnesses, harnessAssistantDirectory, listHarnessSetup, listHarnessesForServer } from "@/utils/server"
+import {
+  harnessAssistantDirectory,
+  listHarnessSetup,
+  listHarnessesRemembered,
+  rememberedHarnesses,
+} from "@/utils/server"
 import {
   PromptInputHarnessControls,
   type PromptInputHarnessController,
@@ -85,10 +90,9 @@ export default function BrainHomePage() {
   const harnessQuery = useQuery(() => ({
     queryKey: ["home", "harnesses", server.key, directory()],
     enabled: !!directory(),
-    queryFn: () =>
-      listHarnessesForServer({ server: serverSDK().server.http, fetch: platform.fetch }, directory()).catch(
-        fallbackHarnesses,
-      ),
+    queryFn: () => listHarnessesRemembered({ server: serverSDK().server.http, fetch: platform.fetch }, directory()),
+    // After the cached query is collected, the last good list keeps the picker usable while it reloads.
+    placeholderData: () => rememberedHarnesses(serverSDK().server.http.url, directory()),
     staleTime: 30_000,
     refetchOnMount: true,
     retry: false,
@@ -121,7 +125,7 @@ export default function BrainHomePage() {
     instances: harnesses,
     // Only the first load blocks the picker; a stale list stays usable while it refreshes.
     loading: () => harnessQuery.isPending,
-    // Window focus already refetches through the query; opening the picker does too once stale.
+    // Opening the picker refetches once stale; the app's queries don't refetch on window focus.
     revalidate: () => void (harnessQuery.isStale && harnessQuery.refetch()),
     current: () => state.harnessInstanceID,
     select: selectHarness,
@@ -168,9 +172,12 @@ export default function BrainHomePage() {
     })
   })
 
+  // The built-in agent needs no check, so only another harness waits for the list. The thread page
+  // sends once its own list has loaded, and keeps the prompt if the harness turns out unavailable.
+  const waitingForHarness = () => harnessQuery.isPending && state.harnessInstanceID !== Harness.OpenCode
   const startSession = async () => {
     const prompt = state.prompt.trim()
-    if (!prompt || !directory() || state.starting || harnessQuery.isPending) return
+    if (!prompt || !directory() || state.starting || waitingForHarness()) return
     setState("starting", true)
     try {
       // The draft page sends the prompt as soon as its composer is ready.
@@ -259,7 +266,7 @@ export default function BrainHomePage() {
                 class="!size-10"
                 aria-label={language.t("secondBrain.home.start")}
                 icon={<Icon name="arrow-up" />}
-                disabled={!state.prompt.trim() || state.starting || harnessQuery.isPending}
+                disabled={!state.prompt.trim() || state.starting || waitingForHarness()}
               />
             </div>
           </form>

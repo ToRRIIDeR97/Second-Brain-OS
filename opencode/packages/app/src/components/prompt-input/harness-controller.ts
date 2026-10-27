@@ -4,7 +4,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSettings, withVisibleModels } from "@/context/settings"
-import { fallbackHarnesses, listHarnessesForServer } from "@/utils/server"
+import { listHarnessesRemembered, rememberedHarnesses } from "@/utils/server"
 import type { PromptInputHarnessController } from "./harness-controls"
 
 type HarnessSelection = {
@@ -41,15 +41,21 @@ export function createPromptHarnessController(selection: HarnessSelection) {
   const serverSDK = useServerSDK()
   const settings = useSettings()
   const server = () => ({ server: serverSDK().server.http, fetch: platform.fetch })
+  // A list another composer or Home already loaded shows at once; this composer still checks.
+  const remembered = rememberedHarnesses(server().server.url, sdk().directory)
   const [loaded, { refetch }] = createResource(
     () => ({ directory: sdk().directory, version: settingsVersion() }),
-    ({ directory }) => listHarnessesForServer(server(), directory).catch(fallbackHarnesses),
+    ({ directory }) => listHarnessesRemembered(server(), directory),
+    // Only a present `initialValue` counts as resolved, so the key is left out when nothing is remembered.
+    (remembered ? { initialValue: remembered } : {}) as { initialValue: ReadonlyArray<Harness.Instance> },
   )
-  // `latest` keeps the last list during a refetch; reading `loaded()` would suspend the page's
-  // <Suspense> boundary and blank the screen on every refresh. Models hidden in Settings never
-  // reach the picker or the default-model choice.
+  // Never suspend: before the first answer, `latest` reads like `loaded()`, and a suspended read holds
+  // the route transition that opened this composer until every harness CLI has answered. `latest`
+  // also keeps the last list during a refetch. Models hidden in Settings never reach the picker or the
+  // default-model choice.
+  const list = () => (loaded.state === "ready" || loaded.state === "refreshing" ? loaded.latest : undefined)
   const instances = createMemo(() =>
-    loaded.latest?.map((item) =>
+    list()?.map((item) =>
       withVisibleModels(item, settings.harnesses.hiddenModels(item.id), settings.harnesses.hiddenProviders(item.id)),
     ),
   )
@@ -94,7 +100,7 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     instance,
     driver: () => instance()?.driver,
     // Only the first load blocks the picker; a stale list stays usable while it refreshes.
-    loading: () => loaded.loading && !loaded.latest,
+    loading: () => loaded.loading && !list(),
     disabled: selection.disabled,
     revalidate,
     current: selection.current,
