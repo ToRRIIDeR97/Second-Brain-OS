@@ -55,6 +55,18 @@ describe("WorkspaceInstructions.resolve", () => {
     expect(await run(linked, tmp.path)).toEqual([path.join(root, "AGENTS.md")])
   })
 
+  test("an AGENTS.md symlinked outside the workspace is ignored", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "Brain")
+    const project = path.join(root, "Projects", "Quant")
+    await write(path.join(root, WorkspaceInstructions.manifestPath), "{}")
+    await write(path.join(tmp.path, "secret.txt"), "outside")
+    await fs.mkdir(project, { recursive: true })
+    await fs.symlink(path.join(tmp.path, "secret.txt"), path.join(project, "AGENTS.md"))
+    await fs.symlink(path.join(tmp.path, "secret.txt"), path.join(root, "AGENTS.md"))
+    expect(await run(project, tmp.path)).toEqual([])
+  })
+
   test("returns undefined outside any workspace", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, "plain"), { recursive: true })

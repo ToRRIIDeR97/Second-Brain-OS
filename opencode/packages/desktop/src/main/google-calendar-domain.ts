@@ -78,9 +78,15 @@ export function googleEventId(idempotencyKey: string) {
   return createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 32)
 }
 
+/**
+ * `timeZone` is the zone events.list was asked to render times in. Timed events keep their
+ * wall-clock start and end in that zone, so it is the zone a later write must send back;
+ * the event's own creation zone could name a different offset for the same wall time.
+ */
 export function normalizeGoogleEvent(
   input: GoogleEventResponse,
   accountId: string,
+  timeZone?: string,
 ): GoogleCalendarProviderEvent | undefined {
   if (!input.id || input.status === "cancelled" || !input.start || !input.end) return
   const allDay = typeof input.start.date === "string"
@@ -99,12 +105,19 @@ export function normalizeGoogleEvent(
     ...(start ? { start: start.slice(11, 16) } : {}),
     ...(end ? { end: end.slice(11, 16) } : {}),
     ...(input.description ? { details: input.description } : {}),
-    ...(input.start.timeZone || input.end.timeZone ? { timezone: input.start.timeZone ?? input.end.timeZone } : {}),
+    ...eventTimeZone(input, allDay, timeZone),
     allDay,
     ...(input.recurringEventId ? { recurringSeriesId: input.recurringEventId } : {}),
     participantCount: input.attendees?.length ?? 0,
     ...(input.etag ? { etag: input.etag } : {}),
   }
+}
+
+function eventTimeZone(input: GoogleEventResponse, allDay: boolean, requested: string | undefined) {
+  const timezone = allDay
+    ? (input.start?.timeZone ?? input.end?.timeZone)
+    : (requested ?? input.start?.timeZone ?? input.end?.timeZone)
+  return timezone ? { timezone } : {}
 }
 
 export function googleEventPayload(event: GoogleCalendarProviderEvent) {
@@ -387,8 +400,74 @@ export function classifyGoogleError(status: number, url: string, body: string) {
 /** `attempts` counts the attempt that just failed. */
 export function outboxFailureState(message: string, attempts: number): "conflict" | "failed" | "offline" {
   if (message === "google_conflict") return "conflict"
-  if (message.startsWith("google_http_")) return "failed"
+  // A disabled API or a missing scope needs the user to act; retrying cannot fix it.
+  if (message.startsWith("google_api_disabled_") || message === "google_scope_missing") return "failed"
+  const status = Number(message.match(/^google_http_(\d{3})$/)?.[1])
+  // Timeouts, rate limits and server errors are retried; any other HTTP error will not succeed later.
+  if (status && !transientStatus(status)) return "failed"
   // The write waits for the user to reconnect; sync stops at the token exchange until then.
   if (message === "google_reconnect_required") return "offline"
   return attempts >= GOOGLE_OUTBOX_MAX_ATTEMPTS ? "failed" : "offline"
+}
+
+function transientStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+export const GOOGLE_EVENT_LIMIT = 5_000
+const titleLimit = 300
+const detailsLimit = 20_000
+
+/**
+ * Fit a Google event to the planner's schema so one odd event cannot make the whole sync
+ * fail: long titles and descriptions are cut, and a same-day event that ends at or before
+ * its start gets a one-minute duration.
+ */
+export function sanitizeProviderEvent(event: GoogleCalendarProviderEvent): GoogleCalendarProviderEvent {
+  const title = truncate(event.title.trim(), titleLimit) || "Untitled event"
+  const details = event.details?.trim() ? truncate(event.details.trim(), detailsLimit) : undefined
+  const { details: _details, ...rest } = event
+  const sameDay = !event.endDate || event.endDate === event.date
+  const times = event.start && event.end && sameDay && event.end <= event.start ? minuteAfter(event.start) : undefined
+  return { ...rest, title, ...(details ? { details } : {}), ...times }
+}
+
+export function sanitizeProviderTask(task: GoogleTaskProviderTask): GoogleTaskProviderTask {
+  const notes = task.notes?.trim() ? truncate(task.notes.trim(), detailsLimit) : undefined
+  const { notes: _notes, ...rest } = task
+  return {
+    ...rest,
+    title: truncate(task.title.trim(), titleLimit) || "Untitled task",
+    taskListTitle: truncate(task.taskListTitle.trim(), titleLimit) || "Google Tasks",
+    ...(notes ? { notes } : {}),
+  }
+}
+
+/** At most `limit` events, keeping those whose start date is closest to `today` (YYYY-MM-DD). */
+export function nearestEvents<T extends { date: string }>(
+  events: ReadonlyArray<T>,
+  today: string,
+  limit = GOOGLE_EVENT_LIMIT,
+) {
+  if (events.length <= limit) return [...events]
+  const origin = Date.parse(`${today}T00:00:00Z`)
+  const distance = (event: T) => Math.abs(Date.parse(`${event.date}T00:00:00Z`) - origin)
+  const kept = new Set(events.toSorted((left, right) => distance(left) - distance(right)).slice(0, limit))
+  return events.filter((event) => kept.has(event))
+}
+
+function minuteAfter(start: string) {
+  const [hours, minutes] = start.split(":").map(Number)
+  const total = Math.min(hours * 60 + minutes + 1, 23 * 60 + 59)
+  const begin = total === hours * 60 + minutes ? total - 1 : hours * 60 + minutes
+  return { start: clock(begin), end: clock(total) }
+}
+
+function clock(total: number) {
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+}
+
+function truncate(value: string, limit: number) {
+  const characters = [...value]
+  return characters.length > limit ? characters.slice(0, limit).join("").trim() : value
 }

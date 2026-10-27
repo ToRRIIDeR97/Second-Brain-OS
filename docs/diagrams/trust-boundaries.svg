@@ -77,12 +77,12 @@
 <rect class="sub" x="40" y="360" width="190" height="84" rx="6"/>
 <text x="50" y="378" text-anchor="start" class="t">IPC handlers</text>
 <text x="50" y="394" text-anchor="start" class="s">allowlisted channels</text>
-<text x="50" y="410" text-anchor="start" class="s">session export: basename,</text>
-<text x="50" y="426" text-anchor="start" class="s">≤32 MiB, native dialog</text>
+<text x="50" y="410" text-anchor="start" class="s">export ≤32 MiB, dialog</text>
+<text x="50" y="426" text-anchor="start" class="s">deep links: confirmed</text>
 <rect class="sub" x="40" y="456" width="190" height="66" rx="6"/>
 <text x="50" y="474" text-anchor="start" class="t">Google service</text>
 <text x="50" y="490" text-anchor="start" class="s">PKCE loopback OAuth, N accounts</text>
-<text x="50" y="506" text-anchor="start" class="s">safeStorage-encrypted secrets</text>
+<text x="50" y="506" text-anchor="start" class="s">state-checked, safeStorage</text>
 <rect class="store" x="40" y="534" width="190" height="70" rx="6"/>
 <text x="50" y="552" text-anchor="start" class="t">Profile data</text>
 <text x="50" y="568" text-anchor="start" class="s">drafts.sqlite (plaintext)</text>

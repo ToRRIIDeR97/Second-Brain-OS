@@ -10,6 +10,7 @@
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
     "lint": "oxlint",
+    "format:check": "prettier --check packages/opencode/src/knowledge packages/opencode/src/planner packages/opencode/src/project/brain.ts packages/opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts packages/opencode/test/knowledge packages/opencode/test/planner packages/opencode/test/project/brain.test.ts packages/app/src/features/second-brain packages/app/src/pages/calendar.tsx packages/desktop/src/main/google-calendar.ts packages/desktop/src/main/google-calendar-domain.ts packages/desktop/src/main/google-calendar-domain.test.ts packages/desktop/src/main/deep-links.ts packages/desktop/src/main/deep-links.test.ts packages/core/src/frontmatter.ts packages/core/src/workspace-instructions.ts",
     "typecheck": "bun turbo typecheck",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
     "prepare": "cd .. && husky opencode/.husky",

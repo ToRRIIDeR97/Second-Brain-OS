@@ -25,10 +25,22 @@ export const resolve = Effect.fn("WorkspaceInstructions.resolve")(function* (dir
   const found = yield* workspaceFor(start, dataDir)
   if (!found) return undefined
   for (const dir of found.search) {
-    if (yield* fs.isFile(path.join(dir, file))) return [path.join(dir, file)]
+    if (yield* contained(path.join(dir, file), found.base)) return [path.join(dir, file)]
   }
   const fallback = path.join(found.root, file)
-  return (yield* fs.isFile(fallback)) ? [fallback] : []
+  return (yield* contained(fallback, found.root)) ? [fallback] : []
+})
+
+/**
+ * Whether `candidate` is a file whose real path stays inside the real `base` folder. A symlinked
+ * AGENTS.md pointing elsewhere would otherwise inject an arbitrary file into every session.
+ */
+const contained = Effect.fnUntraced(function* (candidate: string, base: string) {
+  const fs = yield* FSUtil.Service
+  if (!(yield* fs.isFile(candidate))) return false
+  const real = yield* fs.realPath(candidate).pipe(Effect.orElseSucceed(() => undefined))
+  const root = yield* fs.realPath(base).pipe(Effect.orElseSucceed(() => undefined))
+  return real !== undefined && root !== undefined && FSUtil.contains(root, real)
 })
 
 /**
@@ -39,7 +51,7 @@ export const workspaceFor = Effect.fnUntraced(function* (start: string, dataDir:
   const fs = yield* FSUtil.Service
   const chain = ancestors(start)
   for (const [index, dir] of chain.entries()) {
-    if (yield* fs.isFile(path.join(dir, manifestPath))) return { root: dir, search: chain.slice(0, index) }
+    if (yield* fs.isFile(path.join(dir, manifestPath))) return { root: dir, base: dir, search: chain.slice(0, index) }
   }
   const index = yield* fs.readJson(path.join(dataDir, linkIndexFile)).pipe(Effect.orElseSucceed(() => undefined))
   if (typeof index !== "object" || index === null) return undefined
@@ -50,7 +62,7 @@ export const workspaceFor = Effect.fnUntraced(function* (start: string, dataDir:
     .sort((a, b) => b[0].length - a[0].length)[0]
   if (!match) return undefined
   const folder = path.resolve(match[0])
-  return { root: path.resolve(match[1]), search: chain.slice(0, chain.indexOf(folder) + 1) }
+  return { root: path.resolve(match[1]), base: folder, search: chain.slice(0, chain.indexOf(folder) + 1) }
 })
 
 /** `start` and its ancestors, nearest first. */

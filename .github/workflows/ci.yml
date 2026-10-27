@@ -26,6 +26,7 @@ jobs:
         working-directory: opencode
       - run: bun run typecheck
       - run: bun run lint
+      - run: bun run check:generated
       - run: bun run test
       - if: runner.os == 'Linux'
         run: bun run --cwd opencode/packages/app playwright install --with-deps chromium

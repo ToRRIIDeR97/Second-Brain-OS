@@ -22,6 +22,7 @@ import {
   googleTaskPayload,
   GOOGLE_LEGACY_KEYS,
   migrateLegacyGoogleStore,
+  nearestEvents,
   normalizeGoogleEvent,
   normalizeGoogleTask,
   outboxFailureState,
@@ -29,6 +30,8 @@ import {
   pruneOutbox,
   requestGoogleToken,
   resolveGoogleClient,
+  sanitizeProviderEvent,
+  sanitizeProviderTask,
   type GoogleEventResponse,
   type GoogleTaskResponse,
 } from "./google-calendar-domain"
@@ -42,6 +45,7 @@ const eventsEndpoint = `${calendarEndpoint}/events`
 const taskListsEndpoint = "https://tasks.googleapis.com/tasks/v1/users/@me/lists"
 const tasksEndpoint = "https://tasks.googleapis.com/tasks/v1/lists"
 const oauthTimeoutMs = 5 * 60 * 1_000
+const taskLimit = 5_000
 // Set at build time from desktop/.env.local; Google treats a desktop client secret as non-confidential.
 const builtInClient = builtInGoogleClient({
   clientId: import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID,
@@ -305,14 +309,19 @@ async function syncAccount(account: Account) {
   await accessTokens.get(credentials)
   await retryOutbox(account)
   await retryTaskOutbox(account)
-  return accessTokens.with(credentials, async (accessToken) => ({
-    events: await fetchGoogleEvents(accessToken, account.id),
-    tasks: await fetchGoogleTasks(accessToken, account.id),
-  }))
+  return accessTokens.with(credentials, async (accessToken) => {
+    const [events, tasks] = await Promise.all([
+      fetchGoogleEvents(accessToken, account.id),
+      fetchGoogleTasks(accessToken, account.id),
+    ])
+    return { events, tasks }
+  })
 }
 
 async function fetchGoogleEvents(accessToken: string, accountId: string) {
   const events: GoogleCalendarProviderEvent[] = []
+  // Times come back as wall-clock times in the device's zone, which is how the planner shows them.
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   let pageToken: string | undefined
   do {
     const url = new URL(eventsEndpoint)
@@ -321,6 +330,7 @@ async function fetchGoogleEvents(accessToken: string, accountId: string) {
     url.searchParams.set("maxResults", "2500")
     url.searchParams.set("timeMin", rangeDate(-365))
     url.searchParams.set("timeMax", rangeDate(730))
+    if (timeZone) url.searchParams.set("timeZone", timeZone)
     if (pageToken) url.searchParams.set("pageToken", pageToken)
     const page = await providerJson<{ items?: GoogleEventResponse[]; nextPageToken?: string }>(
       url,
@@ -329,12 +339,13 @@ async function fetchGoogleEvents(accessToken: string, accountId: string) {
       accountId,
     )
     for (const item of page.items ?? []) {
-      const event = normalizeGoogleEvent(item, accountId)
-      if (event) events.push(event)
+      const event = normalizeGoogleEvent(item, accountId, timeZone)
+      if (event) events.push(sanitizeProviderEvent(event))
     }
     pageToken = page.nextPageToken
   } while (pageToken)
-  return events
+  // The planner holds at most 5,000 events; keep the ones nearest to today.
+  return nearestEvents(events, new Date().toISOString().slice(0, 10))
 }
 
 async function fetchGoogleTasks(accessToken: string, accountId: string) {
@@ -357,30 +368,44 @@ async function fetchGoogleTasks(accessToken: string, accountId: string) {
     listPageToken = taskLists.length < 2_000 ? page.nextPageToken : undefined
   } while (listPageToken)
 
-  const tasks: GoogleTaskProviderTask[] = []
-  for (const taskList of taskLists) {
-    let taskPageToken: string | undefined
-    do {
-      const url = new URL(`${tasksEndpoint}/${encodeURIComponent(taskList.id)}/tasks`)
-      url.searchParams.set("maxResults", "100")
-      url.searchParams.set("showCompleted", "true")
-      url.searchParams.set("showHidden", "true")
-      url.searchParams.set("showDeleted", "false")
-      if (taskPageToken) url.searchParams.set("pageToken", taskPageToken)
-      const page = await providerJson<{ items?: GoogleTaskResponse[]; nextPageToken?: string }>(
-        url,
-        accessToken,
-        undefined,
-        accountId,
-      )
-      for (const item of page.items ?? []) {
-        const task = normalizeGoogleTask(item, taskList, accountId)
-        if (task) tasks.push(task)
-        if (tasks.length >= 5_000) return tasks
-      }
-      taskPageToken = page.nextPageToken
-    } while (taskPageToken)
+  // Three lists at a time; results are joined in list order before the cap, so the cap is stable.
+  const perList: GoogleTaskProviderTask[][] = []
+  const queue = taskLists.map((taskList, index) => ({ taskList, index }))
+  const worker = async () => {
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      perList[next.index] = await fetchTaskList(accessToken, accountId, next.taskList)
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker))
+  return perList.flat().slice(0, taskLimit)
+}
+
+async function fetchTaskList(accessToken: string, accountId: string, taskList: { id: string; title: string }) {
+  const tasks: GoogleTaskProviderTask[] = []
+  const completedSince = rangeDate(-365)
+  let taskPageToken: string | undefined
+  do {
+    const url = new URL(`${tasksEndpoint}/${encodeURIComponent(taskList.id)}/tasks`)
+    url.searchParams.set("maxResults", "100")
+    url.searchParams.set("showCompleted", "true")
+    url.searchParams.set("showHidden", "true")
+    url.searchParams.set("showDeleted", "false")
+    if (taskPageToken) url.searchParams.set("pageToken", taskPageToken)
+    const page = await providerJson<{ items?: GoogleTaskResponse[]; nextPageToken?: string }>(
+      url,
+      accessToken,
+      undefined,
+      accountId,
+    )
+    for (const item of page.items ?? []) {
+      const task = normalizeGoogleTask(item, taskList, accountId)
+      // Tasks completed over a year ago would only crowd out current ones under the cap. Filtered
+      // here rather than with `completedMin`, whose effect on open tasks the API leaves unspecified.
+      if (task && (!task.completedAt || task.completedAt >= completedSince)) tasks.push(sanitizeProviderTask(task))
+      if (tasks.length >= taskLimit) return tasks
+    }
+    taskPageToken = page.nextPageToken
+  } while (taskPageToken)
   return tasks
 }
 
@@ -404,9 +429,15 @@ async function authorize(input: {
     const error = url.searchParams.get("error")
     response.setHeader("Content-Type", "text/html; charset=utf-8")
     response.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-    if (error || returnedState !== state || !code) {
+    // Any local process or web page can hit this port. A request without our state is refused
+    // but does not end the sign-in, so it cannot cancel the user's real callback.
+    if (returnedState !== state) {
       response.writeHead(400).end("<p>Google sign-in could not be completed. You can close this window.</p>")
-      callback.reject(new Error(error ? "google_oauth_denied" : "google_oauth_state_mismatch"))
+      return
+    }
+    if (error || !code) {
+      response.writeHead(400).end("<p>Google sign-in could not be completed. You can close this window.</p>")
+      callback.reject(new Error(error ? "google_oauth_denied" : "google_oauth_code_missing"))
       return
     }
     response.writeHead(200).end("<p>Google Calendar is connected. You can close this window.</p>")

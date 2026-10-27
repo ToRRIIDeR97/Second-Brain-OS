@@ -325,6 +325,16 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.picker.error.notSelected": "File was not selected by the picker",
   "desktop.picker.error.sizeLimit": "Selected attachments exceed the {{limit}} MB limit",
+
+  // Appended last: some locales map translations to these keys by position.
+  "secondBrain.desktop.deepLink.openProject": "Open this folder as a workspace?",
+  "secondBrain.desktop.deepLink.openProject.detail":
+    "A link asked Tenon Workbench to open:\n{{path}}\n\nContinue only if you opened this link yourself from a source you trust.",
+  "secondBrain.desktop.deepLink.newSession": "Start a new session in this folder?",
+  "secondBrain.desktop.deepLink.newSession.detail":
+    "A link asked Tenon Workbench to start a session in:\n{{path}}\n\nAny prompt from the link is placed in the composer and is not sent. Continue only if you opened this link yourself from a source you trust.",
+  "secondBrain.desktop.deepLink.open": "Open",
+  "secondBrain.desktop.deepLink.cancel": "Cancel",
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH

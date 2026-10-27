@@ -50,10 +50,7 @@ export const trustedHandle = <A extends unknown[]>(
   })
 }
 
-const trustedOn = <A extends unknown[]>(
-  channel: string,
-  listener: (event: IpcMainEvent, ...args: A) => unknown,
-) => {
+const trustedOn = <A extends unknown[]>(channel: string, listener: (event: IpcMainEvent, ...args: A) => unknown) => {
   ipcMain.on(channel, (event, ...args: A) => {
     assertTrustedSender(event)
     listener(event, ...args)
@@ -153,10 +150,8 @@ export function registerIpcHandlers(deps: Deps) {
   trustedHandle("updater-check", () => deps.updater.check())
   trustedHandle("updater-install", () => deps.updater.install())
   trustedHandle("google-calendar-status", () => deps.googleCalendar.status())
-  trustedHandle(
-    "google-calendar-connect",
-    (event, input: Parameters<GoogleCalendarPlatform["connect"]>[0]) =>
-      deps.googleCalendar.connect({ ...input, windowId: event.sender.id }),
+  trustedHandle("google-calendar-connect", (event, input: Parameters<GoogleCalendarPlatform["connect"]>[0]) =>
+    deps.googleCalendar.connect({ ...input, windowId: event.sender.id }),
   )
   trustedHandle("google-calendar-sync", () => deps.googleCalendar.sync())
   trustedHandle("google-calendar-write", (_event, input: Parameters<GoogleCalendarPlatform["write"]>[0]) =>

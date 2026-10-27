@@ -10,6 +10,7 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createEffect, createMemo, createResource, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { PageEmpty, PageFrame, PageHeader, pageRowClass } from "@/components/page"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import {
@@ -20,7 +21,18 @@ import {
 } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
-import { localDateKey, monthGrid, shiftDate, shiftMonth, weekRange } from "@/features/second-brain/calendar-domain"
+import {
+  dateKeys,
+  eventCoversDay,
+  eventLastDay,
+  localDateKey,
+  mergeProviderEvents,
+  monthGrid,
+  providerEvent,
+  shiftDate,
+  shiftMonth,
+  weekRange,
+} from "@/features/second-brain/calendar-domain"
 import { CalendarGrid, type CalendarGridDay } from "@/features/second-brain/calendar-grid"
 import { CalendarPeek, TaskCheck } from "@/features/second-brain/calendar-peek"
 import { CalendarTasks, type CalendarTaskFilter } from "@/features/second-brain/calendar-tasks"
@@ -73,6 +85,8 @@ type CalendarState = {
   draft: CalendarDraft
   saving: boolean
   error: string
+  errorField: "" | "title" | "date" | "endDate" | "time"
+  confirmingDelete: boolean
   googlePanel: boolean
   /** Shows the sign-in form while accounts are connected, to add another account. */
   googleAdding: boolean
@@ -119,27 +133,6 @@ const unavailableGoogle: GoogleCalendarConnection = {
   accounts: [],
 }
 
-const providerEvent = (event: GoogleCalendarProviderEvent, projectId?: string): CalendarEvent => ({
-  id: `google:${event.accountId}:${event.calendarId}:${event.providerId}`,
-  title: event.title,
-  date: event.date,
-  ...(event.endDate ? { endDate: event.endDate } : {}),
-  ...(event.start ? { start: event.start } : {}),
-  ...(event.end ? { end: event.end } : {}),
-  ...(event.details ? { details: event.details } : {}),
-  ...(projectId ? { projectId } : {}),
-  accountId: event.accountId,
-  providerId: event.providerId,
-  calendarId: event.calendarId,
-  ...(event.etag ? { etag: event.etag } : {}),
-  ...(event.timezone ? { timezone: event.timezone } : {}),
-  allDay: event.allDay,
-  ...(event.recurringSeriesId ? { recurringSeriesId: event.recurringSeriesId } : {}),
-  participantCount: event.participantCount,
-  source: "google",
-  syncState: "synced",
-})
-
 const providerTask = (task: GoogleTaskProviderTask, local?: PlannerTask): PlannerTask => ({
   id: `google-task:${task.accountId}:${task.taskListId}:${task.providerId}`,
   title: task.title,
@@ -164,6 +157,7 @@ export default function CalendarPage() {
   const language = useLanguage()
   const layout = useLayout()
   const platform = usePlatform()
+  const command = useCommand()
   const serverSDK = useServerSDK()
   const [search] = useSearchParams<{
     view?: string
@@ -182,6 +176,8 @@ export default function CalendarPage() {
     draft: emptyDraft(),
     saving: false,
     error: "",
+    errorField: "",
+    confirmingDelete: false,
     googlePanel: search.google === "connect",
     googleAdding: false,
     googleClientId: "",
@@ -209,6 +205,8 @@ export default function CalendarPage() {
     () => directory() || undefined,
     (directory) => readCalendar(client(directory)),
   )
+  // A failed load is shown inline with a retry; reading the resource directly would throw it.
+  const snapshot = () => (events.error ? undefined : events.latest)
   const [brainProjects] = createResource(
     () => directory() || undefined,
     (directory) => listProjects(client(directory)),
@@ -251,23 +249,51 @@ export default function CalendarPage() {
       new Intl.DateTimeFormat(language.locale(), { weekday: "short" }).format(new Date(2024, 0, 7 + index, 12)),
     ),
   )
+  // One pass over the calendar for the visible grid, rather than filtering every item per day.
+  const byDay = createMemo(() => {
+    const grid = days()
+    const first = grid[0]?.date ?? ""
+    const last = grid.at(-1)?.date ?? ""
+    const map = new Map<string, { events: CalendarEvent[]; tasks: PlannerTask[] }>(
+      grid.map((day) => [day.date, { events: [], tasks: [] }]),
+    )
+    for (const event of snapshot()?.events ?? []) {
+      if (state.projectFilter && event.projectId !== state.projectFilter) continue
+      const end = eventLastDay(event)
+      if (event.date > last || end < first) continue
+      for (const date of dateKeys(event.date < first ? first : event.date, end > last ? last : end))
+        map.get(date)?.events.push(event)
+    }
+    for (const task of snapshot()?.tasks ?? []) {
+      if (!task.completedAt && task.scheduledDate) map.get(task.scheduledDate)?.tasks.push(task)
+    }
+    const byTime = (left: { start?: string; title: string }, right: { start?: string; title: string }) =>
+      (left.start ?? "").localeCompare(right.start ?? "") || left.title.localeCompare(right.title)
+    for (const entry of map.values()) {
+      entry.events.sort(byTime)
+      entry.tasks.sort(byTime)
+    }
+    return map
+  })
+  // Day and Week can show a date outside the month grid; filter for those directly.
   const eventsFor = (date: string) =>
-    (events.latest?.events ?? [])
+    byDay().get(date)?.events ??
+    (snapshot()?.events ?? [])
       .filter(
-        (event) =>
-          event.date <= date &&
-          (event.endDate ?? event.date) >= date &&
-          (!state.projectFilter || event.projectId === state.projectFilter),
+        (event) => eventCoversDay(event, date) && (!state.projectFilter || event.projectId === state.projectFilter),
       )
       .sort(
         (left, right) => (left.start ?? "").localeCompare(right.start ?? "") || left.title.localeCompare(right.title),
       )
-  const tasksFor = (date: string) =>
-    (events.latest?.tasks ?? [])
-      .filter((task) => !task.completedAt && task.scheduledDate === date)
-      .sort(
-        (left, right) => (left.start ?? "").localeCompare(right.start ?? "") || left.title.localeCompare(right.title),
-      )
+  const tasksFor = (date: string) => byDay().get(date)?.tasks ?? []
+  const dayFormat = createMemo(
+    () => new Intl.DateTimeFormat(language.locale(), { weekday: "short", month: "short", day: "numeric" }),
+  )
+  const longDayFormat = createMemo(
+    () =>
+      new Intl.DateTimeFormat(language.locale(), { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
+  )
+  const formatDay = (date: string) => dayFormat().format(new Date(`${date}T12:00:00`))
   const sourceLabel = (source: CalendarEvent["source"]) =>
     source === "google"
       ? language.t("secondBrain.calendar.source.google")
@@ -291,10 +317,9 @@ export default function CalendarPage() {
           ? range()
           : { start: "", end: "9999-12-31" }
     const projectMatch = (projectId?: string) => !state.projectFilter || projectId === state.projectFilter
-    const providerEvents = (events.latest?.events ?? [])
+    const providerEvents = (snapshot()?.events ?? [])
       .filter(
-        (event) =>
-          projectMatch(event.projectId) && event.date <= bounds.end && (event.endDate ?? event.date) >= bounds.start,
+        (event) => projectMatch(event.projectId) && event.date <= bounds.end && eventLastDay(event) >= bounds.start,
       )
       .map(
         (event): ScheduleItem => ({
@@ -305,7 +330,7 @@ export default function CalendarPage() {
           event,
         }),
       )
-    const tasks = (events.latest?.tasks ?? [])
+    const tasks = (snapshot()?.tasks ?? [])
       .filter((task) => {
         if (task.completedAt || !projectMatch(task.projectId)) return false
         const date = task.scheduledDate ?? task.dueDate
@@ -363,6 +388,8 @@ export default function CalendarPage() {
       peek: "",
       draft: emptyDraft(date, state.projectFilter),
       error: "",
+      errorField: "",
+      confirmingDelete: false,
       googleConfirm: "",
       googleWriteKey: "",
     })
@@ -373,6 +400,8 @@ export default function CalendarPage() {
       editing: true,
       peek: "",
       error: "",
+      errorField: "",
+      confirmingDelete: false,
       draft: {
         id: event.id,
         title: event.title,
@@ -402,7 +431,7 @@ export default function CalendarPage() {
   let openedEvent: string | undefined
   createEffect(
     on(
-      () => [search.event, events()] as const,
+      () => [search.event, snapshot()] as const,
       ([id, snapshot]) => {
         if (!id) openedEvent = undefined
         const event = snapshot?.events.find((item) => item.id === id)
@@ -434,6 +463,8 @@ export default function CalendarPage() {
       message.includes("client_secret_invalid")
     )
       return language.t("secondBrain.calendar.google.error.credentials")
+    if (error instanceof SecondBrainRequestError && error.reason)
+      return language.t("secondBrain.calendar.google.error.rejected", { reason: error.reason })
     return language.t("secondBrain.calendar.google.error.request")
   }
 
@@ -474,29 +505,20 @@ export default function CalendarPage() {
     setState({ googleBusy: true, googleError: "" })
     try {
       const result = await google.sync()
-      // A sidebar workspace switch during the call leaves events.latest pointing at another calendar.
+      // A sidebar workspace switch during the call leaves snapshot() pointing at another calendar.
       if (directory() !== target) return
       const accountOf = (accountId: string | undefined) => itemAccount(accountId, result.connection)
       const synced = new Set(result.syncedAccounts)
       const connected = new Set(result.connection.accounts.map((account) => account.id))
       // A connected account that failed this sync keeps its items; disconnected accounts lose theirs.
-      const kept = (accountId: string | undefined) => {
-        const account = accountOf(accountId)
-        return Boolean(account && connected.has(account) && !synced.has(account))
-      }
-      const current = events.latest?.events ?? []
-      const projectByProvider = new Map(
-        current
-          .filter((event) => event.source === "google" && event.providerId && event.projectId)
-          .map((event) => [`${accountOf(event.accountId)}:${event.providerId}`, event.projectId!]),
-      )
-      const merged = [
-        ...current.filter((event) => event.source === "local" || kept(event.accountId)),
-        ...result.events.map((event) =>
-          providerEvent(event, projectByProvider.get(`${event.accountId}:${event.providerId}`)),
-        ),
-      ]
-      const currentTasks = events.latest?.tasks ?? []
+      const failed = (account: string | undefined) => Boolean(account && connected.has(account) && !synced.has(account))
+      const kept = (accountId: string | undefined) => failed(accountOf(accountId))
+      const merged = mergeProviderEvents(snapshot()?.events ?? [], result.events, {
+        accountOf,
+        failed,
+        synced: (account) => Boolean(account && synced.has(account)),
+      })
+      const currentTasks = snapshot()?.tasks ?? []
       const taskKey = (task: { accountId?: string; taskListId?: string; providerId?: string }) =>
         `${accountOf(task.accountId)}:${task.taskListId}:${task.providerId}`
       const localByProvider = new Map(
@@ -516,11 +538,13 @@ export default function CalendarPage() {
         ),
         ...result.tasks.map((task) => providerTask(task, localByProvider.get(taskKey(task)))),
       ]
-      const saved = await writeCalendar(client(target), merged, events.latest?.revision, mergedTasks)
+      const saved = await writeCalendar(client(target), merged, snapshot()?.revision, mergedTasks)
       eventActions.mutate(saved)
       googleActions.mutate(result.connection)
     } catch (error) {
       setState("googleError", googleMessage(error))
+      // The service records an expired grant; refresh so the Reconnect action appears.
+      void googleActions.refetch()
     } finally {
       setState("googleBusy", false)
     }
@@ -540,9 +564,9 @@ export default function CalendarPage() {
         item.source === "local" || itemAccount(item.accountId, before) !== accountId
       const saved = await writeCalendar(
         client(target),
-        (events.latest?.events ?? []).filter(keep),
-        events.latest?.revision,
-        (events.latest?.tasks ?? []).filter(keep),
+        (snapshot()?.events ?? []).filter(keep),
+        snapshot()?.revision,
+        (snapshot()?.tasks ?? []).filter(keep),
       )
       eventActions.mutate(saved)
       setState({ editing: false, ...(connection.connected ? {} : { googlePanel: false }) })
@@ -557,7 +581,7 @@ export default function CalendarPage() {
     if (!directory()) return
     setState({ saving: true, error: "" })
     try {
-      const saved = await writeCalendar(client(directory()), next, events.latest?.revision, events.latest?.tasks)
+      const saved = await writeCalendar(client(directory()), next, snapshot()?.revision, snapshot()?.tasks)
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft() })
     } catch (error) {
@@ -574,7 +598,7 @@ export default function CalendarPage() {
 
   const persistTasks = async (tasks: ReadonlyArray<PlannerTask>) => {
     if (!directory()) return
-    const current = events.latest?.tasks ?? []
+    const current = snapshot()?.tasks ?? []
     const removed = current.find((task) => task.source === "google" && !tasks.some((next) => next.id === task.id))
     const changed = tasks.find((task) => {
       if (task.source !== "google") return false
@@ -584,7 +608,9 @@ export default function CalendarPage() {
     if (removed && changed) throw new Error("google_multiple_task_writes")
 
     let next = [...tasks]
-    const target = removed ?? changed
+    const connected = googleConnection.latest?.connected && googleConnection.latest?.access === "write"
+    // Without a Google connection a removed Google task is only dropped from the planner.
+    const target = removed && !connected ? changed : (removed ?? changed)
     if (target) {
       const google = platform.googleCalendar
       const accountId = itemAccount(target.accountId)
@@ -624,7 +650,7 @@ export default function CalendarPage() {
       }
       await googleActions.refetch()
     }
-    const saved = await writeCalendar(client(directory()), events.latest?.events ?? [], events.latest?.revision, next)
+    const saved = await writeCalendar(client(directory()), snapshot()?.events ?? [], snapshot()?.revision, next)
     eventActions.mutate(saved)
   }
 
@@ -633,7 +659,7 @@ export default function CalendarPage() {
     const completedAt = task.completedAt ? undefined : now
     try {
       await persistTasks(
-        (events.latest?.tasks ?? []).map((item) =>
+        (snapshot()?.tasks ?? []).map((item) =>
           item.id === task.id ? { ...item, completedAt, updatedAt: now } : item,
         ),
       )
@@ -648,7 +674,7 @@ export default function CalendarPage() {
         {
           label: language.t("secondBrain.sidebar.undo"),
           onClick: () => {
-            const current = events.latest?.tasks.find((item) => item.id === task.id)
+            const current = snapshot()?.tasks.find((item) => item.id === task.id)
             if (current?.completedAt) void toggleTask(current)
           },
         },
@@ -667,7 +693,7 @@ export default function CalendarPage() {
     return Array.from({ length: state.view === "week" ? 7 : 1 }, (_, index) => {
       const date = localDateKey(shiftDate(new Date(`${first}T12:00:00`), index))
       const timed = (event: CalendarEvent) =>
-        Boolean(event.start && event.end && event.date === date && (event.endDate ?? date) === date)
+        Boolean(event.start && event.end && event.date === date && eventLastDay(event) === date)
       return {
         date,
         today: date === today,
@@ -676,7 +702,7 @@ export default function CalendarPage() {
         timed: eventsFor(date).filter(timed),
         allDay: eventsFor(date).filter((event) => !timed(event)),
         // Today's column also carries overdue tasks, as the list view did.
-        tasks: (events.latest?.tasks ?? []).filter((task) => {
+        tasks: (snapshot()?.tasks ?? []).filter((task) => {
           const due = task.scheduledDate ?? task.dueDate
           if (task.completedAt || !due || (state.projectFilter && task.projectId !== state.projectFilter)) return false
           return due === date || (date === today && due < today)
@@ -689,7 +715,7 @@ export default function CalendarPage() {
     const date = new Intl.DateTimeFormat(language.locale(), { weekday: "short", month: "short", day: "numeric" })
     const day = (value: string) => date.format(new Date(`${value}T12:00:00`))
     if (state.peek.startsWith("task:")) {
-      const task = events.latest?.tasks.find((item) => item.id === state.peek.slice(5))
+      const task = snapshot()?.tasks.find((item) => item.id === state.peek.slice(5))
       if (!task) return
       const when = task.scheduledDate ?? task.dueDate
       return {
@@ -704,7 +730,7 @@ export default function CalendarPage() {
         edit: () => openTask(task.id),
       }
     }
-    const event = events.latest?.events.find((item) => item.id === state.peek)
+    const event = snapshot()?.events.find((item) => item.id === state.peek)
     if (!event) return
     return {
       task: undefined,
@@ -737,18 +763,18 @@ export default function CalendarPage() {
   const save = async () => {
     const title = state.draft.title.trim()
     if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(state.draft.date)) {
-      setState("error", language.t("secondBrain.calendar.error.required"))
+      setState({ error: language.t("secondBrain.calendar.error.required"), errorField: title ? "date" : "title" })
       return
     }
     if (
       state.draft.endDate &&
       (!/^\d{4}-\d{2}-\d{2}$/.test(state.draft.endDate) || state.draft.endDate < state.draft.date)
     ) {
-      setState("error", language.t("secondBrain.calendar.error.dateRange"))
+      setState({ error: language.t("secondBrain.calendar.error.dateRange"), errorField: "endDate" })
       return
     }
     if (Boolean(state.draft.start) !== Boolean(state.draft.end)) {
-      setState("error", language.t("secondBrain.calendar.error.exactTime"))
+      setState({ error: language.t("secondBrain.calendar.error.exactTime"), errorField: "time" })
       return
     }
     if (
@@ -757,9 +783,10 @@ export default function CalendarPage() {
       (!state.draft.endDate || state.draft.endDate === state.draft.date) &&
       state.draft.end <= state.draft.start
     ) {
-      setState("error", language.t("secondBrain.calendar.error.time"))
+      setState({ error: language.t("secondBrain.calendar.error.time"), errorField: "time" })
       return
     }
+    setState("errorField", "")
     const item: CalendarEvent = {
       id: state.draft.id || crypto.randomUUID(),
       title,
@@ -772,7 +799,7 @@ export default function CalendarPage() {
       source: "local",
       syncState: "local",
     }
-    const current = events.latest?.events ?? []
+    const current = snapshot()?.events ?? []
     if (state.draft.source === "google") {
       const original = current.find((event) => event.id === state.draft.id)
       const providerUnchanged =
@@ -813,14 +840,19 @@ export default function CalendarPage() {
 
   const remove = async () => {
     if (!state.draft.id) return
-    if (state.draft.source === "google") {
+    if (state.draft.source === "google" && googleConnection.latest?.connected) {
       setState({
         googleConfirm: "delete",
         googleWriteKey: state.draft.outboxKey || state.googleWriteKey || crypto.randomUUID(),
       })
       return
     }
-    await persist((events.latest?.events ?? []).filter((event) => event.id !== state.draft.id))
+    if (!state.confirmingDelete) {
+      setState("confirmingDelete", true)
+      return
+    }
+    setState("confirmingDelete", false)
+    await persist((snapshot()?.events ?? []).filter((event) => event.id !== state.draft.id))
   }
 
   const googleDraft = (): GoogleCalendarProviderEvent => ({
@@ -856,7 +888,7 @@ export default function CalendarPage() {
         event: googleDraft(),
       })
       if (directory() !== target) return
-      const current = events.latest?.events ?? []
+      const current = snapshot()?.events ?? []
       const next = deleting
         ? result.state === "synced"
           ? current.filter((event) => event.id !== state.draft.id)
@@ -881,7 +913,7 @@ export default function CalendarPage() {
               ? current.map((event) => (event.id === state.draft.id ? savedEvent : event))
               : [...current, savedEvent]
           })()
-      const saved = await writeCalendar(client(target), next, events.latest?.revision, events.latest?.tasks)
+      const saved = await writeCalendar(client(target), next, snapshot()?.revision, snapshot()?.tasks)
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft(), googleConfirm: "", googleWriteKey: "" })
       await googleActions.refetch()
@@ -939,7 +971,20 @@ export default function CalendarPage() {
         }
       />
 
-      <Show when={directory()} fallback={<PageEmpty>{language.t("secondBrain.empty.workspace")}</PageEmpty>}>
+      <Show
+        when={directory()}
+        fallback={
+          <PageEmpty
+            action={
+              <ButtonV2 variant="contrast" onClick={() => command.trigger("project.open")}>
+                {language.t("secondBrain.calendar.openFolder")}
+              </ButtonV2>
+            }
+          >
+            {language.t("secondBrain.empty.workspace")}
+          </PageEmpty>
+        }
+      >
         <div class="flex shrink-0 flex-wrap items-center gap-1 px-5 pb-3 pt-1">
           <Show when={!taskView() && state.view !== "agenda"}>
             <ButtonV2
@@ -1017,7 +1062,11 @@ export default function CalendarPage() {
             />
           </Show>
           <Show when={state.googleError}>
-            <span role="alert" class="max-w-48 truncate text-[11px] text-v2-text-text-critical">
+            <span
+              role="alert"
+              title={state.googleError}
+              class="max-w-48 truncate text-[11px] text-v2-text-text-critical"
+            >
               {state.googleError}
             </span>
           </Show>
@@ -1046,7 +1095,7 @@ export default function CalendarPage() {
         <Show when={taskView()} keyed>
           {(filter) => (
             <CalendarTasks
-              tasks={events.latest?.tasks ?? []}
+              tasks={snapshot()?.tasks ?? []}
               projects={brainProjects.latest ?? []}
               onSave={persistTasks}
               onToggle={toggleTask}
@@ -1066,157 +1115,177 @@ export default function CalendarPage() {
           >
             <div class="flex min-h-[560px] min-w-0 flex-col">
               <Show
-                when={!events.loading}
+                when={!events.error}
                 fallback={
-                  <div class="flex flex-1 items-center justify-center text-[13px] text-v2-text-text-faint">
-                    {language.t("common.loading")}
-                  </div>
+                  <PageEmpty
+                    action={
+                      <ButtonV2 variant="outline" onClick={() => void eventActions.refetch()}>
+                        {language.t("secondBrain.calendar.retry")}
+                      </ButtonV2>
+                    }
+                  >
+                    <span role="alert">{language.t("secondBrain.calendar.loadFailed")}</span>
+                  </PageEmpty>
                 }
               >
                 <Show
-                  when={state.view === "month"}
+                  when={!events.loading}
                   fallback={
-                    <Show
-                      when={state.view === "today" || state.view === "week"}
-                      fallback={
-                        <div class="flex flex-col">
-                          <Show
-                            when={schedule().length > 0}
-                            fallback={<PageEmpty>{language.t("secondBrain.calendar.empty")}</PageEmpty>}
-                          >
-                            <For each={scheduleDays()}>
-                              {(day) => (
-                                <section class="flex gap-2 py-2 shadow-[inset_0_0.5px_0_var(--v2-border-border-muted)] first:shadow-none">
-                                  <div class="flex w-16 shrink-0 flex-col items-center pt-1.5">
-                                    <span class="text-[11px] uppercase tracking-[0.04em] text-v2-text-text-muted [font-weight:560]">
-                                      {day.weekday}
-                                    </span>
-                                    <span
-                                      classList={{
-                                        "mt-1 flex size-9 items-center justify-center rounded-full text-[17px]": true,
-                                        "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:600]":
-                                          day.today,
-                                        "text-v2-text-text-base [font-weight:500]": !day.today,
-                                      }}
-                                    >
-                                      {day.day}
-                                    </span>
-                                  </div>
-                                  <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                                    <For each={day.items}>
-                                      {(item) => (
-                                        <ScheduleRow
-                                          item={item}
-                                          projects={brainProjects.latest ?? []}
-                                          selected={
-                                            state.peek ===
-                                            (item.kind === "event" ? item.event.id : `task:${item.task.id}`)
-                                          }
-                                          onOpen={() =>
-                                            item.kind === "event" ? peekEvent(item.event) : peekTask(item.task)
-                                          }
-                                          onToggle={toggleTask}
-                                          allDay={language.t("secondBrain.calendar.allDay")}
-                                          eventSource={sourceLabel}
-                                        />
-                                      )}
-                                    </For>
-                                  </div>
-                                </section>
-                              )}
-                            </For>
-                          </Show>
-                        </div>
-                      }
-                    >
-                      <CalendarGrid
-                        days={gridDays()}
-                        selected={state.peek}
-                        onOpenEvent={peekEvent}
-                        onOpenTask={peekTask}
-                        onToggle={toggleTask}
-                        onOpenDay={(date) => setState({ view: "today", cursor: new Date(`${date}T12:00:00`) })}
-                      />
-                    </Show>
+                    <div class="flex flex-1 items-center justify-center text-[13px] text-v2-text-text-faint">
+                      {language.t("common.loading")}
+                    </div>
                   }
                 >
-                  <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
-                    <div class="grid h-8 shrink-0 grid-cols-7 bg-v2-background-bg-layer-01">
-                      <For each={weekdays()}>
-                        {(weekday) => (
-                          <div class="flex items-center justify-center text-[12px] text-v2-text-text-muted [font-weight:530]">
-                            {weekday}
-                          </div>
-                        )}
-                      </For>
-                    </div>
-                    <div class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
-                      <For each={days()}>
-                        {(day) => (
-                          <div
-                            classList={{
-                              "group/day flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-v2-border-border-muted p-1 [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0": true,
-                              "bg-v2-background-bg-layer-01": !day.inMonth,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              classList={{
-                                "mx-auto mb-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[12px] transition-colors duration-150 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
-                                "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:560]": day.today,
-                                "hover:bg-v2-overlay-simple-overlay-hover": !day.today,
-                                "text-v2-text-text-faint": !day.inMonth && !day.today,
-                                "text-v2-text-text-muted": day.inMonth && !day.today,
-                              }}
-                              aria-label={`${language.t("secondBrain.calendar.newOn")} ${day.date}`}
-                              aria-current={day.today ? "date" : undefined}
-                              onClick={() => openNew(day.date)}
+                  <Show
+                    when={state.view === "month"}
+                    fallback={
+                      <Show
+                        when={state.view === "today" || state.view === "week"}
+                        fallback={
+                          <div class="flex flex-col">
+                            <Show
+                              when={schedule().length > 0}
+                              fallback={<PageEmpty>{language.t("secondBrain.calendar.empty")}</PageEmpty>}
                             >
-                              {day.day}
-                            </button>
-                            <div class="flex min-h-0 flex-col gap-0.5 overflow-hidden">
-                              <For each={eventsFor(day.date)}>
-                                {(event) => (
-                                  <button
-                                    type="button"
-                                    class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] bg-v2-background-bg-accent-container px-2 text-left text-[11px] text-v2-text-text-on-accent-container transition-[filter,border-radius] duration-300 ease-standard hover:brightness-95 active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                                    title={event.title}
-                                    onClick={() => peekEvent(event)}
-                                  >
-                                    <Show when={event.start && event.date === day.date}>
-                                      <span class="mr-1 opacity-70">{event.start}</span>
-                                    </Show>
-                                    {event.title}
-                                  </button>
+                              <For each={scheduleDays()}>
+                                {(day) => (
+                                  <section class="flex gap-2 py-2 shadow-[inset_0_0.5px_0_var(--v2-border-border-muted)] first:shadow-none [content-visibility:auto] [contain-intrinsic-size:auto_96px]">
+                                    <div class="flex w-16 shrink-0 flex-col items-center pt-1.5">
+                                      <span class="text-[11px] uppercase tracking-[0.04em] text-v2-text-text-muted [font-weight:560]">
+                                        {day.weekday}
+                                      </span>
+                                      <span
+                                        classList={{
+                                          "mt-1 flex size-9 items-center justify-center rounded-full text-[17px]": true,
+                                          "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:600]":
+                                            day.today,
+                                          "text-v2-text-text-base [font-weight:500]": !day.today,
+                                        }}
+                                      >
+                                        {day.day}
+                                      </span>
+                                    </div>
+                                    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                      <For each={day.items}>
+                                        {(item) => (
+                                          <ScheduleRow
+                                            item={item}
+                                            projects={brainProjects.latest ?? []}
+                                            selected={
+                                              state.peek ===
+                                              (item.kind === "event" ? item.event.id : `task:${item.task.id}`)
+                                            }
+                                            onOpen={() =>
+                                              item.kind === "event" ? peekEvent(item.event) : peekTask(item.task)
+                                            }
+                                            onToggle={toggleTask}
+                                            allDay={language.t("secondBrain.calendar.allDay")}
+                                            eventSource={sourceLabel}
+                                          />
+                                        )}
+                                      </For>
+                                    </div>
+                                  </section>
                                 )}
                               </For>
-                              <For each={tasksFor(day.date)}>
-                                {(task) => (
-                                  <button
-                                    type="button"
-                                    class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] px-2 text-left text-[11px] text-v2-text-text-muted shadow-[inset_0_0_0_1px_var(--v2-border-border-base)] transition-[background-color,border-radius] duration-300 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                                    title={task.title}
-                                    onClick={() => peekTask(task)}
-                                  >
-                                    <Show when={task.start}>
-                                      <span class="mr-1 text-v2-text-text-faint">{task.start}</span>
-                                    </Show>
-                                    {task.title}
-                                  </button>
-                                )}
-                              </For>
-                            </div>
+                            </Show>
                           </div>
-                        )}
-                      </For>
+                        }
+                      >
+                        <CalendarGrid
+                          days={gridDays()}
+                          selected={state.peek}
+                          onOpenEvent={peekEvent}
+                          onOpenTask={peekTask}
+                          onToggle={toggleTask}
+                          onOpenDay={(date) => setState({ view: "today", cursor: new Date(`${date}T12:00:00`) })}
+                        />
+                      </Show>
+                    }
+                  >
+                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] shadow-[0_0_0_0.5px_var(--v2-border-border-muted)]">
+                      <div class="grid h-8 shrink-0 grid-cols-7 bg-v2-background-bg-layer-01">
+                        <For each={weekdays()}>
+                          {(weekday) => (
+                            <div class="flex items-center justify-center text-[12px] text-v2-text-text-muted [font-weight:530]">
+                              {weekday}
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                      <div class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
+                        <For each={days()}>
+                          {(day) => (
+                            <div
+                              classList={{
+                                "group/day flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-v2-border-border-muted p-1 [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0": true,
+                                "bg-v2-background-bg-layer-01": !day.inMonth,
+                              }}
+                            >
+                              <button
+                                type="button"
+                                classList={{
+                                  "mx-auto mb-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[12px] transition-colors duration-150 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
+                                  "bg-v2-icon-icon-accent text-v2-icon-icon-contrast [font-weight:560]": day.today,
+                                  "hover:bg-v2-overlay-simple-overlay-hover": !day.today,
+                                  "text-v2-text-text-faint": !day.inMonth && !day.today,
+                                  "text-v2-text-text-muted": day.inMonth && !day.today,
+                                }}
+                                aria-label={language.t("secondBrain.calendar.newOnDate", {
+                                  date: longDayFormat().format(new Date(`${day.date}T12:00:00`)),
+                                })}
+                                aria-current={day.today ? "date" : undefined}
+                                onClick={() => openNew(day.date)}
+                              >
+                                {day.day}
+                              </button>
+                              <div class="flex min-h-0 flex-col gap-0.5 overflow-hidden">
+                                <For each={eventsFor(day.date)}>
+                                  {(event) => (
+                                    <button
+                                      type="button"
+                                      class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] bg-v2-background-bg-accent-container px-2 text-left text-[11px] text-v2-text-text-on-accent-container transition-[filter,border-radius] duration-300 ease-standard hover:brightness-95 active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                                      title={event.title}
+                                      onClick={() => peekEvent(event)}
+                                    >
+                                      <Show when={event.start && event.date === day.date}>
+                                        <span class="mr-1 opacity-70">{event.start}</span>
+                                      </Show>
+                                      {event.title}
+                                    </button>
+                                  )}
+                                </For>
+                                <For each={tasksFor(day.date)}>
+                                  {(task) => (
+                                    <button
+                                      type="button"
+                                      class="min-h-6 shrink-0 cursor-pointer truncate rounded-[8px] px-2 text-left text-[11px] text-v2-text-text-muted shadow-[inset_0_0_0_1px_var(--v2-border-border-base)] transition-[background-color,border-radius] duration-300 ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                                      title={task.title}
+                                      onClick={() => peekTask(task)}
+                                    >
+                                      <Show when={task.start}>
+                                        <span class="mr-1 text-v2-text-text-faint">{task.start}</span>
+                                      </Show>
+                                      {task.title}
+                                    </button>
+                                  )}
+                                </For>
+                              </div>
+                            </div>
+                          )}
+                        </For>
+                      </div>
                     </div>
-                  </div>
+                  </Show>
                 </Show>
               </Show>
             </div>
 
             <Show when={state.googlePanel || state.editing || peekView()}>
-              <aside class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3">
+              <aside
+                ref={(element) => revealEditor(element)}
+                class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3"
+              >
                 <Show when={!state.googlePanel && !state.editing && peekView()}>
                   {(item) => (
                     <CalendarPeek
@@ -1462,6 +1531,11 @@ export default function CalendarPage() {
                       event.preventDefault()
                       void save()
                     }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Escape" || event.defaultPrevented) return
+                      event.preventDefault()
+                      setState({ editing: false, confirmingDelete: false, googleConfirm: "", googleWriteKey: "" })
+                    }}
                   >
                     <div class="flex items-center gap-2">
                       <h2 class="min-w-0 flex-1 text-[14px] text-v2-text-text-base [font-weight:530]">
@@ -1490,7 +1564,9 @@ export default function CalendarPage() {
                       <TextInputV2
                         id="calendar-event-title"
                         appearance="large"
-                        autofocus
+                        ref={(element) => queueMicrotask(() => element.focus())}
+                        invalid={state.errorField === "title"}
+                        aria-describedby={state.errorField === "title" ? "calendar-event-error" : undefined}
                         value={state.draft.title}
                         onInput={(event) => setState("draft", "title", event.currentTarget.value)}
                       />
@@ -1548,6 +1624,8 @@ export default function CalendarPage() {
                           id="calendar-event-date"
                           type="date"
                           class={dateInputClass}
+                          aria-invalid={state.errorField === "date" ? true : undefined}
+                          aria-describedby={state.errorField === "date" ? "calendar-event-error" : undefined}
                           value={state.draft.date}
                           onInput={(event) => setState("draft", "date", event.currentTarget.value)}
                         />
@@ -1559,6 +1637,8 @@ export default function CalendarPage() {
                           type="date"
                           min={state.draft.date}
                           class={dateInputClass}
+                          aria-invalid={state.errorField === "endDate" ? true : undefined}
+                          aria-describedby={state.errorField === "endDate" ? "calendar-event-error" : undefined}
                           value={state.draft.endDate}
                           onInput={(event) => setState("draft", "endDate", event.currentTarget.value)}
                         />
@@ -1571,6 +1651,8 @@ export default function CalendarPage() {
                           id="calendar-event-start"
                           type="time"
                           class={dateInputClass}
+                          aria-invalid={state.errorField === "time" ? true : undefined}
+                          aria-describedby={state.errorField === "time" ? "calendar-event-error" : undefined}
                           value={state.draft.start}
                           onInput={(event) => setState("draft", "start", event.currentTarget.value)}
                         />
@@ -1581,6 +1663,8 @@ export default function CalendarPage() {
                           id="calendar-event-end"
                           type="time"
                           class={dateInputClass}
+                          aria-invalid={state.errorField === "time" ? true : undefined}
+                          aria-describedby={state.errorField === "time" ? "calendar-event-error" : undefined}
                           value={state.draft.end}
                           onInput={(event) => setState("draft", "end", event.currentTarget.value)}
                         />
@@ -1622,7 +1706,7 @@ export default function CalendarPage() {
                             : language.t("secondBrain.calendar.google.confirm.save")}
                         </p>
                         <p class="mt-1 text-[11px] leading-4 text-v2-text-text-faint">
-                          {state.draft.date}
+                          {formatDay(state.draft.date)}
                           <Show when={state.draft.start && state.draft.end}>
                             {` · ${state.draft.start}–${state.draft.end} · ${state.draft.timezone}`}
                           </Show>
@@ -1652,7 +1736,7 @@ export default function CalendarPage() {
                       </div>
                     </Show>
                     <Show when={state.error}>
-                      <p role="alert" class="text-[12px] text-v2-text-text-critical">
+                      <p id="calendar-event-error" role="alert" class="text-[12px] text-v2-text-text-critical">
                         {state.error}
                       </p>
                     </Show>
@@ -1665,7 +1749,9 @@ export default function CalendarPage() {
                           disabled={state.saving || Boolean(state.googleConfirm)}
                           onClick={() => void remove()}
                         >
-                          {language.t("common.delete")}
+                          {state.confirmingDelete
+                            ? language.t("secondBrain.calendar.confirmDelete")
+                            : language.t("common.delete")}
                         </ButtonV2>
                       </Show>
                       <ButtonV2
@@ -1696,6 +1782,14 @@ const noteClass = "rounded-[12px] bg-v2-background-bg-base px-3 py-2 text-[12px]
 
 const dateInputClass =
   "h-9 w-full min-w-0 rounded-[12px] border-0 bg-v2-background-bg-base px-3 text-[12px] text-v2-text-text-base outline-none transition-shadow duration-150 ease-standard focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
+
+/** Below the two-column layout the editor opens under the calendar; bring it into view. */
+function revealEditor(element: HTMLElement) {
+  queueMicrotask(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) return
+    element.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  })
+}
 
 function calendarView(value?: string): CalendarView {
   if (

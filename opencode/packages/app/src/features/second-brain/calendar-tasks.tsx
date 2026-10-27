@@ -15,6 +15,11 @@ import { CalendarPeek, TaskCheck } from "./calendar-peek"
 import type { PlannerTask, ProjectRecord } from "./client"
 
 export type CalendarTaskFilter = "today" | "upcoming" | "unscheduled" | "completed"
+type TaskErrorKey =
+  | "secondBrain.tasks.error.title"
+  | "secondBrain.tasks.error.schedule"
+  | "secondBrain.tasks.error.scheduledDate"
+  | "secondBrain.tasks.error.time"
 type Draft = {
   id: string
   title: string
@@ -82,25 +87,28 @@ export function CalendarTasks(props: {
     confirmingDelete: false,
     googleConfirm: false,
     error: "",
+    errorField: "" as "" | "title" | "time" | "scheduled",
   })
   createEffect(() => {
     if (props.filter && props.filter !== state.filter) setState("filter", props.filter)
   })
   const today = () => localDateKey(new Date())
   const peeked = createMemo(() => props.tasks.find((task) => task.id === state.peek))
-  const visible = createMemo(() =>
-    props.tasks
+  const visible = createMemo(() => {
+    // One date for the whole pass instead of one per task and comparison.
+    const now = today()
+    return props.tasks
       .filter((task) => {
         if (task.id === props.selectedId) return true
         if (state.filter === "completed") return Boolean(task.completedAt)
         if (task.completedAt) return false
         if (state.filter === "today") {
-          return task.scheduledDate === today() || Boolean(task.dueDate && task.dueDate <= today())
+          return task.scheduledDate === now || Boolean(task.dueDate && task.dueDate <= now)
         }
         if (state.filter === "upcoming") {
           return Boolean(
-            (task.scheduledDate && task.scheduledDate > today()) ||
-              (!task.scheduledDate && task.dueDate && task.dueDate > today()),
+            (task.scheduledDate && task.scheduledDate > now) ||
+              (!task.scheduledDate && task.dueDate && task.dueDate > now),
           )
         }
         return !task.scheduledDate
@@ -110,8 +118,12 @@ export function CalendarTasks(props: {
           (left.scheduledDate ?? left.dueDate ?? "9999").localeCompare(
             right.scheduledDate ?? right.dueDate ?? "9999",
           ) || left.title.localeCompare(right.title),
-      ),
+      )
+  })
+  const dateFormat = createMemo(
+    () => new Intl.DateTimeFormat(language.locale(), { weekday: "short", month: "short", day: "numeric" }),
   )
+  const formatDate = (date: string) => dateFormat().format(new Date(`${date}T12:00:00`))
 
   const openTask = (task: PlannerTask) =>
     setState({
@@ -120,6 +132,7 @@ export function CalendarTasks(props: {
       confirmingDelete: false,
       googleConfirm: false,
       error: "",
+      errorField: "",
       draft: {
         id: task.id,
         title: task.title,
@@ -170,20 +183,17 @@ export function CalendarTasks(props: {
     }
   }
 
+  const fail = (field: "title" | "time" | "scheduled", key: TaskErrorKey) =>
+    setState({ error: language.t(key), errorField: field })
+
   const save = async () => {
     const title = state.draft.title.trim()
-    if (!title) {
-      setState("error", language.t("secondBrain.tasks.error.title"))
-      return
-    }
-    if (Boolean(state.draft.start) !== Boolean(state.draft.end) || (state.draft.start && !state.draft.scheduledDate)) {
-      setState("error", language.t("secondBrain.tasks.error.schedule"))
-      return
-    }
-    if (state.draft.start && state.draft.end <= state.draft.start) {
-      setState("error", language.t("secondBrain.tasks.error.time"))
-      return
-    }
+    if (!title) return fail("title", "secondBrain.tasks.error.title")
+    if (Boolean(state.draft.start) !== Boolean(state.draft.end)) return fail("time", "secondBrain.tasks.error.schedule")
+    if (state.draft.start && !state.draft.scheduledDate)
+      return fail("scheduled", "secondBrain.tasks.error.scheduledDate")
+    if (state.draft.start && state.draft.end <= state.draft.start) return fail("time", "secondBrain.tasks.error.time")
+    setState("errorField", "")
     const now = new Date().toISOString()
     const id = state.draft.id || crypto.randomUUID()
     const task: PlannerTask = {
@@ -267,6 +277,7 @@ export function CalendarTasks(props: {
                 peek: "",
                 draft: emptyDraft(),
                 error: "",
+                errorField: "",
                 confirmingDelete: false,
                 googleConfirm: false,
               })
@@ -281,7 +292,7 @@ export function CalendarTasks(props: {
               {(task) => (
                 <div
                   classList={{
-                    [`${pageRowClass} min-h-12 py-1.5`]: true,
+                    [`${pageRowClass} min-h-12 py-1.5 [content-visibility:auto] [contain-intrinsic-size:auto_48px]`]: true,
                     "bg-v2-background-bg-accent-container": state.peek === task.id,
                   }}
                 >
@@ -302,7 +313,9 @@ export function CalendarTasks(props: {
                       {task.title}
                     </span>
                     <span class="block truncate text-[11px] text-v2-text-text-faint">
-                      {task.scheduledDate ?? task.dueDate ?? language.t("secondBrain.tasks.unscheduled")}
+                      {(task.scheduledDate ?? task.dueDate)
+                        ? formatDate((task.scheduledDate ?? task.dueDate)!)
+                        : language.t("secondBrain.tasks.unscheduled")}
                       <Show when={task.start}> {task.start}</Show>
                       <Show when={task.projectId}>
                         {(id) =>
@@ -355,12 +368,20 @@ export function CalendarTasks(props: {
         )}
       </Show>
       <Show when={state.editing}>
-        <aside class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3">
+        <aside
+          ref={(element) => revealEditor(element)}
+          class="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto rounded-[24px] bg-v2-background-bg-layer-01 lg:sticky lg:top-3"
+        >
           <form
             class="flex flex-col gap-3 p-4"
             onSubmit={(event) => {
               event.preventDefault()
               void save()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || event.defaultPrevented) return
+              event.preventDefault()
+              setState({ editing: false, confirmingDelete: false, googleConfirm: false })
             }}
           >
             <div class="flex items-center gap-2">
@@ -382,8 +403,10 @@ export function CalendarTasks(props: {
               {language.t("secondBrain.tasks.name")}
               <TextInputV2
                 id="task-title"
-                autofocus
+                ref={(element) => queueMicrotask(() => element.focus())}
                 value={state.draft.title}
+                invalid={state.errorField === "title"}
+                aria-describedby={state.errorField === "title" ? "task-error" : undefined}
                 onInput={(event) => setState("draft", "title", event.currentTarget.value)}
               />
             </label>
@@ -459,6 +482,8 @@ export function CalendarTasks(props: {
                 id="task-scheduled"
                 type="date"
                 class={dateInputClass}
+                aria-invalid={state.errorField === "scheduled" ? true : undefined}
+                aria-describedby={state.errorField === "scheduled" ? "task-error" : undefined}
                 value={state.draft.scheduledDate}
                 onInput={(event) => setState("draft", "scheduledDate", event.currentTarget.value)}
               />
@@ -470,6 +495,8 @@ export function CalendarTasks(props: {
                   id="task-start"
                   type="time"
                   class={dateInputClass}
+                  aria-invalid={state.errorField === "time" ? true : undefined}
+                  aria-describedby={state.errorField === "time" ? "task-error" : undefined}
                   value={state.draft.start}
                   onInput={(event) => setState("draft", "start", event.currentTarget.value)}
                 />
@@ -480,6 +507,8 @@ export function CalendarTasks(props: {
                   id="task-end"
                   type="time"
                   class={dateInputClass}
+                  aria-invalid={state.errorField === "time" ? true : undefined}
+                  aria-describedby={state.errorField === "time" ? "task-error" : undefined}
                   value={state.draft.end}
                   onInput={(event) => setState("draft", "end", event.currentTarget.value)}
                 />
@@ -505,7 +534,7 @@ export function CalendarTasks(props: {
               />
             </label>
             <Show when={state.error}>
-              <p role="alert" class="text-[12px] text-v2-text-text-critical">
+              <p id="task-error" role="alert" class="text-[12px] text-v2-text-text-critical">
                 {state.error}
               </p>
             </Show>
@@ -542,6 +571,14 @@ export function CalendarTasks(props: {
       </Show>
     </div>
   )
+}
+
+/** Below the two-column layout the editor opens under the list; bring it into view. */
+function revealEditor(element: HTMLElement) {
+  queueMicrotask(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) return
+    element.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  })
 }
 
 const dateInputClass =

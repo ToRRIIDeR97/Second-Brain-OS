@@ -8,6 +8,7 @@ import {
   googleEventPayload,
   googleScopes,
   googleTaskPayload,
+  nearestEvents,
   normalizeGoogleEvent,
   normalizeGoogleTask,
   outboxFailureState,
@@ -15,6 +16,8 @@ import {
   pkceChallenge,
   pruneOutbox,
   requestGoogleToken,
+  sanitizeProviderEvent,
+  sanitizeProviderTask,
 } from "./google-calendar-domain"
 
 function tokenFetch(...responses: { status?: number; body: Record<string, unknown> }[]) {
@@ -234,6 +237,98 @@ describe("Google access tokens", () => {
   })
 })
 
+describe("Google items the planner accepts", () => {
+  const base = {
+    accountId: "account-1",
+    providerId: "p1",
+    calendarId: "primary",
+    title: "Review",
+    date: "2026-08-25",
+    allDay: false,
+    participantCount: 0,
+  }
+
+  test("cuts long titles and details and repairs same-day times that end before they start", () => {
+    const event = sanitizeProviderEvent({
+      ...base,
+      title: ` ${"t".repeat(400)} `,
+      details: "d".repeat(25_000),
+      start: "10:00",
+      end: "09:00",
+    })
+    expect([...event.title]).toHaveLength(300)
+    expect([...(event.details ?? "")]).toHaveLength(20_000)
+    expect(event).toMatchObject({ start: "10:00", end: "10:01" })
+    expect(sanitizeProviderEvent({ ...base, start: "23:59", end: "23:59" })).toMatchObject({
+      start: "23:58",
+      end: "23:59",
+    })
+    // Across midnight is a valid range and stays as it is.
+    expect(sanitizeProviderEvent({ ...base, endDate: "2026-08-26", start: "22:00", end: "00:00" })).toMatchObject({
+      start: "22:00",
+      end: "00:00",
+    })
+    expect(sanitizeProviderEvent({ ...base, title: "  " }).title).toBe("Untitled event")
+  })
+
+  test("cuts long task titles and notes", () => {
+    const task = sanitizeProviderTask({
+      accountId: "account-1",
+      providerId: "t1",
+      taskListId: "l1",
+      taskListTitle: "List",
+      title: "x".repeat(500),
+      notes: "n".repeat(30_000),
+      updatedAt: "2026-08-25T00:00:00.000Z",
+    })
+    expect(task.title).toHaveLength(300)
+    expect(task.notes).toHaveLength(20_000)
+  })
+
+  test("keeps the events nearest to today when there are too many", () => {
+    const events = ["2020-01-01", "2026-08-24", "2026-08-26", "2030-01-01"].map((date) => ({ date }))
+    expect(nearestEvents(events, "2026-08-25", 2).map((event) => event.date)).toEqual(["2026-08-24", "2026-08-26"])
+    expect(nearestEvents(events, "2026-08-25", 10)).toHaveLength(4)
+  })
+
+  test("a timed event keeps its instant through normalize and payload", () => {
+    const source = {
+      id: "provider-tz",
+      summary: "Call",
+      // Created in New York, rendered by Google in the requested Berlin zone.
+      start: { dateTime: "2026-03-02T15:00:00+01:00", timeZone: "America/New_York" },
+      end: { dateTime: "2026-03-02T16:00:00+01:00", timeZone: "America/New_York" },
+    }
+    const event = normalizeGoogleEvent(source, "account-1", "Europe/Berlin")!
+    expect(event.timezone).toBe("Europe/Berlin")
+    const payload = googleEventPayload(event) as { start: { dateTime: string; timeZone: string } }
+    expect(instant(payload.start.dateTime, payload.start.timeZone)).toBe(Date.parse(source.start.dateTime))
+    // Without a requested zone the event's own zone is still used.
+    expect(normalizeGoogleEvent(source, "account-1")?.timezone).toBe("America/New_York")
+  })
+})
+
+/** The UTC instant of a wall-clock `YYYY-MM-DDTHH:mm:ss` time in an IANA zone. */
+function instant(wall: string, timeZone: string) {
+  const guess = Date.parse(`${wall}Z`)
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .formatToParts(guess)
+      .map((part) => [part.type, part.value]),
+  )
+  const local = Date.parse(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`)
+  return guess - (local - guess)
+}
+
 describe("Google accounts", () => {
   test("moves a single-account store into one account and tags its queued writes", () => {
     const legacy: Record<string, unknown> = {
@@ -313,6 +408,26 @@ describe("Google outbox", () => {
     expect(pruneOutbox(entries, 2).map((item) => item.id)).toEqual(["p1", "o1"])
     expect(pruneOutbox(entries, 1).map((item) => item.id)).toEqual(["p1", "o1"])
     expect(pruneOutbox(entries, 4)).toBe(entries)
+  })
+
+  test("keeps timeouts, rate limits and server errors queued until the attempt cap", () => {
+    for (const status of [408, 425, 429, 500, 502, 503]) {
+      expect(outboxFailureState(`google_http_${status}`, 1)).toBe("offline")
+      expect(outboxFailureState(`google_http_${status}`, GOOGLE_OUTBOX_MAX_ATTEMPTS)).toBe("failed")
+    }
+    for (const status of [400, 403, 404, 410]) expect(outboxFailureState(`google_http_${status}`, 1)).toBe("failed")
+  })
+
+  test("retries rate limits and fails at once when the user has to act", () => {
+    const limited = JSON.stringify({ error: { code: 403, errors: [{ reason: "rateLimitExceeded" }] } })
+    const code = classifyGoogleError(
+      403,
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      limited,
+    ).code
+    expect(outboxFailureState(code, 1)).toBe("offline")
+    expect(outboxFailureState("google_api_disabled_calendar", 1)).toBe("failed")
+    expect(outboxFailureState("google_scope_missing", 1)).toBe("failed")
   })
 
   test("keeps transient failures queued until the attempt cap", () => {

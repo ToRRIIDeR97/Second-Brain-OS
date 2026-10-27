@@ -91,6 +91,8 @@ export function decode(source: string | undefined): Snapshot {
   }
   if (!parsed || typeof parsed !== "object") throw new InvalidError({ reason: "invalid_document" })
   const input = parsed as { version?: unknown; revision?: unknown; events?: unknown; tasks?: unknown }
+  // A calendar from a newer build must not be read as v1 (or moved aside as damaged).
+  if (typeof input.version === "number" && input.version > 2) throw new InvalidError({ reason: "unsupported_version" })
   const events = Array.isArray(input.events)
     ? input.events.map((event) => migrateEvent(event, input.version === 2))
     : []

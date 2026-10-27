@@ -143,9 +143,10 @@ export function spawnLocalServer(hostname: string, port: number, password: strin
     void exit.promise.then(() => gone.abort())
     const stop = AbortSignal.any([signal, gone.signal])
     const url = `http://${hostname}:${port}`
+    // Probe first: a fast sidecar is often healthy by the time it reports ready.
     while (!stop.aborted) {
-      await delay(100)
       if (await checkHealth(url, password, stop)) return
+      await delay(100)
     }
     if (exited) throw new Error(`Sidecar exited before health check passed with code ${await exit.promise}`)
     throw new Error("Sidecar health check aborted")

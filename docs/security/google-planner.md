@@ -25,7 +25,14 @@ actual effect. Every write is persisted to the outbox before a provider call,
 uses an idempotency key and base ETag, and preserves local enrichment outside
 provider-owned fields.
 
-The current checkpoint supplies adapter seams and deterministic fake-provider
-tests. A production browser, credential-store, and Google HTTP adapter remains
-disabled until platform-specific credential handling and recorded API
-compatibility tests are added.
+The Electron adapter in `opencode/packages/desktop/src/main/google-calendar.ts`
+is live: it uses the system browser, PKCE and a loopback redirect whose state
+check ignores (400) any request without the expected state instead of ending
+the sign-in. It keeps any number of accounts. Writes go through an outbox;
+timeouts, rate limits and server errors stay queued until the attempt cap,
+while a disabled API or a missing scope fails at once. When Google rejects an
+account's grant, that account reports `google_reconnect_required`; signing in
+again to the same address renews the account and keeps its outbox.
+Disconnecting an account revokes its token and removes its items from the
+planner. Recorded API compatibility tests are still missing; domain logic is
+covered by `google-calendar-domain.test.ts`.

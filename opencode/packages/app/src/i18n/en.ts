@@ -1022,6 +1022,11 @@ export const dict = {
   "harness.assistant.startFailed": "Could not start the assistant session.",
   "harness.assistant.working": "Working…",
   "harness.assistant.testing": "Testing: ACP handshake, models, and one short prompt…",
+  "harness.assistant.review":
+    "The assistant proposed this command. Check it before Second Brain runs it on this computer.",
+  "harness.assistant.testCommand": "Test this command",
+  "harness.assistant.refused":
+    "Second Brain does not run a shell, script interpreter or download tool as a harness. Ask the assistant for the agent's own command.",
   "harness.assistant.passed": 'Test passed. {{agent}} answered "{{reply}}" and offers {{count}} models.',
   "harness.settings.add.id": "ID",
   "harness.settings.add.name": "Name",
@@ -1263,10 +1268,18 @@ export const dict = {
   "secondBrain.calendar.google.error.scopeMissing":
     "Google didn't grant all the access this needs. Disconnect Google, then sign in again and allow every permission.",
   "secondBrain.calendar.google.error.rateLimited": "Google is limiting requests right now. Try again in a minute.",
-  "secondBrain.calendar.google.error.reconnect": "Google sign-in has expired. Disconnect Google and sign in again.",
+  "secondBrain.calendar.google.error.reconnect":
+    "Google sign-in has expired. Choose Add account and sign in to the same account again; its queued changes are kept.",
   "secondBrain.calendar.google.error.exactTime": "Google events need both a start and an end time, or neither.",
   "secondBrain.calendar.google.error.restricted":
     "Participant and recurring-series changes must be made in Google Calendar.",
+  "secondBrain.calendar.google.error.rejected": "The planner could not store the Google items ({{reason}}).",
+  "secondBrain.calendar.newOnDate": "New event on {{date}}",
+  "secondBrain.calendar.confirmDelete": "Confirm delete",
+  "secondBrain.calendar.loadFailed": "The calendar could not be loaded.",
+  "secondBrain.calendar.retry": "Try again",
+  "secondBrain.calendar.openFolder": "Open folder",
+  "secondBrain.tasks.error.scheduledDate": "Add a scheduled date to give the task a time.",
   "secondBrain.tasks.title": "Tasks",
   "secondBrain.tasks.filter.today": "Today",
   "secondBrain.tasks.filter.upcoming": "Upcoming",

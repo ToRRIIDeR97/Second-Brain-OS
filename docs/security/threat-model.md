@@ -13,10 +13,10 @@ Detailed permission and request flows are in
 
 | Boundary                   | Current control and location                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Renderer to native process | The main window uses `contextIsolation`, `sandbox`, and disabled `nodeIntegration`. `opencode/packages/desktop/src/preload/index.ts` exposes specific IPC methods implemented in `opencode/packages/desktop/src/main/ipc.ts`.                                                                                                                                          |
+| Renderer to native process | The main window uses `contextIsolation`, `sandbox`, and disabled `nodeIntegration`. `opencode/packages/desktop/src/preload/index.ts` exposes specific IPC methods implemented in `opencode/packages/desktop/src/main/ipc.ts`. Packaged builds ignore `ELECTRON_RENDERER_URL`; see Renderer content policy for remote media.                                     |
 | Renderer to managed server | Electron starts the OpenCode server on `127.0.0.1` with a generated password. Server authorization checks credentials for protected routes. See `opencode/packages/desktop/src/main/index.ts` and `opencode/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts`.                                                                         |
 | Server to workspace files  | Second Brain handlers run in an instance location context. Note and project code resolves targets through `LocationMutation` before reading or writing files. See `opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/second-brain.ts`, `opencode/packages/opencode/src/knowledge/note.ts`, and `opencode/packages/opencode/src/project/brain.ts`. |
-| Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service keeps any number of accounts, encrypts each account's client secret and refresh token with Electron `safeStorage`, and disables connection when secure storage is unavailable. Access tokens are cached per account, and writes are routed to the account named by the item. See `opencode/packages/desktop/src/main/google-calendar.ts`. |
+| Desktop to Google          | Calendar and Tasks integration uses OAuth in the Electron main process. The service keeps any number of accounts, encrypts each account's client secret and refresh token with Electron `safeStorage`, and disables connection when secure storage is unavailable. Access tokens are cached per account, writes are routed to the account named by the item, and the loopback callback ignores requests without the expected state. See `opencode/packages/desktop/src/main/google-calendar.ts`. |
 
 `POST /second-brain/projects/workspace` takes only an OpenCode project id. The
 server looks the id up in its own project table and rejects `global` and the
@@ -28,17 +28,28 @@ Workspace Projects add three file surfaces:
 - `POST /second-brain/projects/scan` writes only under the workspace's
   `.tenon/` (cards and `workspace.json`) through `LocationMutation`, lists
   folders without reading their content, and refuses to overwrite a manifest it
-  cannot parse. It also writes `workspace-links.json` (linked folder ->
-  workspace) in the server data folder; that file is a rebuildable cache.
+  cannot parse or read (only a missing manifest is created). It also writes
+  `workspace-links.json` (linked folder -> workspace) in the server data
+  folder; that file is a rebuildable cache. Folders named in a hand-edited
+  manifest get the same checks as `link` below before they reach the cards or
+  the index, and a folder another workspace already indexes keeps that entry,
+  so one workspace's manifest cannot claim `/`, the home folder or another
+  workspace's folders for its `AGENTS.md`. A card's `location.path` must stay
+  inside the workspace (relative) or be one of those checked linked folders
+  (absolute) before threads run there; otherwise threads use the card folder.
 - `POST /second-brain/projects/link` is the one Second Brain route that takes
   an absolute renderer path. The server requires an existing directory that
-  neither contains nor sits inside the workspace, and only records it in the
-  manifest; it never reads, moves or writes files in that folder. The renderer
+  neither contains nor sits inside the workspace and is not, and does not
+  contain, the home or app data folder, and only records it in the manifest; it never reads, moves or writes files in that folder. The renderer
   sends a folder the user picked in the folder dialog. Sessions can already run
   in any directory the renderer names, so this adds no new reach.
 - `GET`/`PUT`/`DELETE /second-brain/instructions` read, write (64 KiB cap) and
   remove `AGENTS.md` in the request's directory only, through
-  `LocationMutation`. `AGENTS.md` is agent instructions: the app injects it
+  `LocationMutation`. A read refuses an `AGENTS.md` whose real path leaves the
+  folder (a symlink) or that is larger than 256 KiB. Session instruction
+  lookup applies the same rule: a discovered `AGENTS.md` must really live in
+  the workspace, linked folder or project it was found in, and files over
+  256 KiB are not injected. `AGENTS.md` is agent instructions: the app injects it
   into sessions in that workspace, and with the link index into linked folders
   too. A workspace's `AGENTS.md` therefore steers agents working in its linked
   folders. The app calls this route only from the Instructions dialog; an
@@ -48,13 +59,25 @@ stores that Workspace's worktree as `location.displayPath`, and
 `GET /second-brain/project-threads` returns absolute thread directories the
 same way session responses already return `directory`.
 
-`tenon://open-project` and `tenon://new-session` deep links are handled
-by the app shell's sidebar controller
-(`opencode/packages/app/src/components/sidebar/sidebar-controller.ts`) and
-only on a local server. A deep link can open a folder as a workspace (and
+`tenon://open-project` and `tenon://new-session` deep links are validated
+first in the Electron main process (`opencode/packages/desktop/src/main/deep-links.ts`):
+only those two hosts are accepted, the `directory` must be an existing local
+absolute folder (UNC `\\host\share`, protocol-relative `//host`, `file:`,
+relative and `..` paths are refused before any filesystem call), and the user
+confirms a native dialog that shows the folder. The renderer receives a link
+rebuilt from the checked values, and the log records only `tenon://<host>`,
+never the query string with its prompt. The app shell's sidebar controller
+(`opencode/packages/app/src/components/sidebar/sidebar-controller.ts`) then
+handles it, only on a local server. A deep link can open a folder as a workspace (and
 select it) and start an unsent draft (a `new-session` prompt is placed in the composer,
 never sent). It never runs `git init`; only a folder the user picks in the
 folder dialog is initialized when empty.
+
+Markdown front matter in notes, Project cards, skills and agent configs is
+parsed through `Frontmatter.parse` (`opencode/packages/core/src/frontmatter.ts`),
+which refuses gray-matter's `---js` engine (it would `eval` the block) and any
+front matter over 64 KiB. Cards and the manifest over 1 MiB, notes over 5 MiB
+and the calendar over 16 MiB are refused after a `stat`, before they are read.
 
 Workspace notes, projects, calendar files, session data, provider tokens, and
 agent tool permissions are sensitive. Treat note contents, provider responses,
@@ -108,7 +131,35 @@ that denies all actions resolves to deny, as in V1. The runner returns the
 user's rejection feedback or the deny rule to the model. Destructive recovery
 must preserve both canonical workspace files and session/draft profile state.
 
+## Renderer content policy
+
+Rendered Markdown drops every image and media source that is not `data:` or
+`blob:` before it reaches the DOM (`session-ui/src/components/markdown-media.ts`),
+so a note or model reply cannot beacon to a remote host.
+
+The packaged renderer has no page-wide Content-Security-Policy yet. Design
+previews run their own inline scripts in sandboxed `srcdoc` frames, and a
+`srcdoc` frame inherits its parent's policy, so a `script-src 'self'` policy on
+`index.html` would block them. Adding one needs the previews served from their
+own origin first.
+
+`file://` links (terminal output, Markdown) open with the default app only for
+documents. Executables (Windows `PATHEXT` plus `.lnk`, `.hta`, `.msi`, `.scr`;
+macOS `.app`, `.command`, `.terminal`, `.workflow`; any POSIX file with an
+execute bit) and anything that cannot be inspected are revealed in the file
+manager instead (`desktop/src/main/local-file-policy.ts`).
+
+Packaged builds set Electron fuses in `desktop/electron-builder.config.ts`:
+RunAsNode, `NODE_OPTIONS` and the `--inspect` flags are off, the app loads only
+from `app.asar` with embedded integrity validation, and `file://` gets no extra
+privileges. The sidecar runs through `utilityProcess`, so nothing needs
+RunAsNode.
+
 ## Managed server controls
+
+- **Bind guard.** `Server.listen` refuses a non-loopback hostname unless
+  `OPENCODE_SERVER_PASSWORD` is set (`server/network-guard.ts`). The WSL
+  sidecar listens on `127.0.0.1` inside the distro.
 
 - **Child processes.** Terminals, agent shell commands, MCP stdio servers and
   LSP servers don't inherit `OPENCODE_SERVER_PASSWORD` or
@@ -247,9 +298,13 @@ launch does the same once per harness.
 The setup assistant's functional test (`/api/harness/verify`) also sends one
 short prompt to the proposed agent. That costs one model call on the agent's
 own credentials, and the test refuses every tool permission request. The
-assistant's proposal is model output: Second Brain runs a proposed command
-only through the verify route's limits above, and saving still needs the
-user's Save click. Save runs the ACP `initialize` handshake again.
+assistant's proposal is model output, possibly steered by text the assistant
+read: the dialog shows the exact command and arguments and runs it only after
+the user clicks "Test this command". Only a command the user already approved
+is retested on its own. Shells, script interpreters, `env`, `sudo` and download
+tools are refused outright (`harness-assistant-behavior.ts`). Second Brain runs
+an approved command only through the verify route's limits above, and saving
+still needs the user's Save click. Save runs the ACP `initialize` handshake again.
 It writes `harnesses.json` (mode `0600`, atomic rename, serialized within the
 process) only when the handshake succeeds. Enable/disable and remove change
 only `harnesses.json` entries under the same lock. A malformed file is
