@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process"
+import { execFile, execFileSync } from "node:child_process"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -11,6 +12,27 @@ const rootDir = path.resolve(packageDir, "../..")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 const metainfoFpm = (appId: string) =>
   `${path.join(packageDir, "resources", `${appId}.metainfo.xml`)}=/usr/share/metainfo/${appId}.metainfo.xml`
+
+// Without a Developer ID identity, electron-builder skips signing, but the fuse step has already broken
+// Electron's own ad-hoc signature, and Apple Silicon kills the app at launch. Sign ad-hoc instead.
+const hasMacIdentity = (() => {
+  if (process.platform !== "darwin") return true
+  if (process.env.CSC_LINK || process.env.CSC_NAME) return true
+  try {
+    return execFileSync("security", ["find-identity", "-v", "-p", "codesigning"], { encoding: "utf8" }).includes(
+      "Developer ID Application",
+    )
+  } catch {
+    return false
+  }
+})()
+
+// codesign rejects the Finder metadata that iCloud and other File Provider syncs keep re-adding to bundle
+// folders under ~/Documents, so local macOS builds package outside the repository.
+const outputDir =
+  process.platform === "darwin" && process.env.GITHUB_ACTIONS !== "true"
+    ? path.join(os.homedir(), "Library", "Caches", "tenon-workbench", "dist")
+    : "dist"
 
 async function signWindows(configuration: { path: string }) {
   if (process.platform !== "win32") return
@@ -50,7 +72,7 @@ const getBase = (appId: string): Configuration => ({
   // Release candidates are uploaded as artifacts. No automatic publishing or upstream update feed.
   publish: null,
   directories: {
-    output: "dist",
+    output: outputDir,
     buildResources: "resources",
   },
   // Linux launchers are .desktop files, so this is the desktop file name,
@@ -97,7 +119,7 @@ const getBase = (appId: string): Configuration => ({
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
-    notarize: true,
+    ...(hasMacIdentity ? { notarize: true } : { identity: "-", notarize: false }),
     target: ["dmg", "zip"],
   },
   dmg: {
