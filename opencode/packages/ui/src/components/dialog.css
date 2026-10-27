@@ -135,11 +135,31 @@
   }
 }
 
-[data-component="dialog"][data-transition] [data-slot="dialog-content"] {
-  animation: contentHide 100ms ease-in forwards;
-
+/* Same timing as the v2 dialog: enter medium + emphasized-decelerate, exit short + emphasized-accelerate. */
+[data-component="dialog"] [data-slot="dialog-content"] {
   &[data-expanded] {
-    animation: contentShow 150ms ease-out;
+    animation: contentShow var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
+  }
+
+  &[data-closed] {
+    animation: contentHide var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
+  }
+}
+
+[data-component="dialog-overlay"][data-expanded] {
+  animation: overlayShow var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
+}
+
+[data-component="dialog-overlay"][data-closed] {
+  animation: overlayHide var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="dialog"] [data-slot="dialog-content"][data-expanded],
+  [data-component="dialog"] [data-slot="dialog-content"][data-closed],
+  [data-component="dialog-overlay"][data-expanded],
+  [data-component="dialog-overlay"][data-closed] {
+    animation: none;
   }
 }
 
@@ -180,7 +200,7 @@
   }
 }
 
-/* Material 3 shape, shared with the v2 dialog. Show/hide motion stays with the transition rules above. */
+/* Material 3 shape, shared with the v2 dialog. Show/hide motion is defined above. */
 [data-component="dialog"] [data-slot="dialog-container"] [data-slot="dialog-content"] {
   border-radius: var(--v2-radius-xxl);
 }

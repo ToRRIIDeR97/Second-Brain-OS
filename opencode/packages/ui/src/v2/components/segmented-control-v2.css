@@ -42,10 +42,6 @@
   font-variant-numeric: tabular-nums;
   font-variation-settings: "slnt" 0;
   color: var(--v2-text-text-muted);
-  transition:
-    background-color 0.12s ease,
-    color 0.12s ease,
-    box-shadow 0.12s ease;
 }
 
 [data-slot="segmented-control-v2-item"]:where(:disabled) {
@@ -88,7 +84,8 @@
 [data-slot="segmented-control-v2-item"] {
   transition:
     background-color var(--v2-duration-short) var(--v2-ease-standard),
-    color var(--v2-duration-short) var(--v2-ease-standard);
+    color var(--v2-duration-short) var(--v2-ease-standard),
+    box-shadow var(--v2-duration-short) var(--v2-ease-standard);
 }
 
 /* Size to content so pill segments fit any label count; full-width stays opt-in. */

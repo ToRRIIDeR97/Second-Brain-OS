@@ -11,6 +11,7 @@ export interface DialogProps extends ParentProps {
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
+  /** Unused: the dialog always animates (dialog.css). Kept for existing callers. */
   transition?: boolean
 }
 

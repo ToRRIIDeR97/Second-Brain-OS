@@ -92,9 +92,9 @@
     background:
       linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
     transition:
-      background 170ms ease-out,
-      opacity 170ms ease-out,
-      outline-color 170ms ease-out;
+      background var(--v2-duration-short) var(--v2-ease-standard),
+      opacity var(--v2-duration-short) var(--v2-ease-standard),
+      outline-color var(--v2-duration-short) var(--v2-ease-standard);
   }
 
   &:where(:not([data-readonly]))

@@ -228,3 +228,12 @@
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-trigger-wrapper"] {
   border-radius: var(--v2-radius-full);
 }
+
+/* Small state changes (hover, selection, underline): short + standard. */
+[data-component="tabs-v2"] [data-slot="tabs-v2-trigger-wrapper"],
+[data-component="tabs-v2"] [data-slot="tabs-v2-trigger"] {
+  transition:
+    color var(--v2-duration-short) var(--v2-ease-standard),
+    background-color var(--v2-duration-short) var(--v2-ease-standard),
+    border-color var(--v2-duration-short) var(--v2-ease-standard);
+}

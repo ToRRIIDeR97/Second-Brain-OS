@@ -5,7 +5,8 @@
   z-index: 60;
 }
 
-/* Dropdown surface (Type=menu) — overrides shared menu-v2 defaults for selects only. */
+/* Dropdown surface (Type=menu): overrides shared menu-v2 layout for selects only. Radius, enter/exit
+   motion and the reduced-motion guard come from menu-v2.css so selects and menus move the same way. */
 [data-component="menu-v2-content"][data-slot="select-v2-content"] {
   padding: 0;
   min-width: 160px;
@@ -14,36 +15,8 @@
   z-index: 60;
   pointer-events: auto;
   background: var(--v2-background-bg-layer-01);
-  border-radius: 6px;
   box-shadow: var(--v2-elevation-floating);
-  transform-origin: top center;
-  animation: select-v2-content-in 120ms ease-out;
-}
-
-[data-component="menu-v2-content"][data-slot="select-v2-content"][data-closed] {
-  animation: select-v2-content-out 80ms ease-in forwards;
-}
-
-@keyframes select-v2-content-in {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes select-v2-content-out {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
+  transform-origin: var(--kb-select-content-transform-origin, top center);
 }
 
 /* Trigger shell — aligned with text-input-v2 */
@@ -67,9 +40,9 @@
   align-self: stretch;
   user-select: none;
   transition:
-    background 85ms ease-out,
-    outline-color 85ms ease-out,
-    box-shadow 85ms ease-out;
+    background var(--v2-duration-short) var(--v2-ease-standard),
+    outline-color var(--v2-duration-short) var(--v2-ease-standard),
+    box-shadow var(--v2-duration-short) var(--v2-ease-standard);
 }
 
 [data-component="select-v2"][data-appearance="large"] {
@@ -179,6 +152,13 @@
   flex: none;
   transform: rotate(180deg);
   transform-origin: 50% 50%;
+  transition: transform var(--v2-duration-short) var(--v2-ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="select-v2"] [data-slot="select-v2-chevron"] svg {
+    transition: none;
+  }
 }
 
 [data-component="select-v2"][data-expanded] [data-slot="select-v2-chevron"] svg {

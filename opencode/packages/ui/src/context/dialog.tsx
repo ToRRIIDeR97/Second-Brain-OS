@@ -15,6 +15,7 @@ import {
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { motionDuration, prefersReducedMotion } from "../v2/components/motion"
 
 type DialogElement = () => JSX.Element
 
@@ -59,7 +60,7 @@ function init() {
       current.dispose()
       setStack((items) => items.filter((item) => item.id !== closed))
       lock.value = false
-    }, 100)
+    }, exitDelay())
   }
 
   createEffect(() => {
@@ -153,6 +154,13 @@ function init() {
     show,
     push,
   }
+}
+
+// The overlay and dialog exits run for --v2-duration-short (dialog-v2.css); dispose one frame after them so
+// the root is not torn down mid-animation. Reduced motion has no exit, so dispose at once.
+function exitDelay() {
+  if (prefersReducedMotion()) return 0
+  return motionDuration("short") + 16
 }
 
 export function DialogProvider(props: ParentProps) {

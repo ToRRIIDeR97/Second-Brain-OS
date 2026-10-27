@@ -8,11 +8,44 @@
   }
 }
 
+/* Duration comes from --default-transition-duration (short) unless the caller sets duration-*. */
 @utility hover-reveal {
-  @apply opacity-0 transition-opacity;
+  @apply opacity-0 transition-opacity ease-standard;
 
   @media (hover: none) {
     opacity: 1;
+  }
+}
+
+/* Enter: fade + 4px rise, medium + emphasized-decelerate. Exit: fade, short + emphasized-accelerate.
+   Under reduced motion both resolve to `animation: none`, so the end state shows at once and
+   presence-based unmounting (Kobalte, solid-presence) does not wait. */
+@utility animate-enter {
+  animation: v2-motion-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility animate-exit {
+  animation: v2-motion-exit var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes v2-motion-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes v2-motion-exit {
+  to {
+    opacity: 0;
   }
 }
 

@@ -24,11 +24,11 @@
   }
 
   &[data-closed] {
-    animation: hover-card-close 0.15s ease-out;
+    animation: hover-card-close var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
   }
 
   &[data-expanded] {
-    animation: hover-card-open 0.15s ease-out;
+    animation: hover-card-open var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
   }
 
   [data-slot="hover-card-body"] {
@@ -57,5 +57,12 @@
   to {
     opacity: 0;
     transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="hover-card-content"][data-closed],
+  [data-component="hover-card-content"][data-expanded] {
+    animation: none;
   }
 }

@@ -4,6 +4,7 @@ import type { ComponentProps, JSX } from "solid-js"
 import { createContext, onCleanup, onMount, splitProps, useContext } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useI18n } from "../../context/i18n"
+import { motionDuration, prefersReducedMotion } from "./motion"
 import "./button-v2.css"
 import "./toast-v2.css"
 
@@ -263,8 +264,11 @@ function pulseToastV2(toastId: number) {
   if (typeof document === "undefined" || typeof requestAnimationFrame === "undefined") return
   requestAnimationFrame(() => {
     const element = document.querySelector<HTMLElement>(`[data-testid="toast-v2-${toastId}"]`)
-    if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    element.animate([{ scale: 1 }, { scale: 1.025 }, { scale: 1 }], { duration: 160, easing: "ease-out" })
+    if (!element || prefersReducedMotion()) return
+    element.animate([{ scale: 1 }, { scale: 1.025 }, { scale: 1 }], {
+      duration: motionDuration("short", element),
+      easing: getComputedStyle(element).getPropertyValue("--v2-ease-standard").trim() || "ease-out",
+    })
   })
 }
 
