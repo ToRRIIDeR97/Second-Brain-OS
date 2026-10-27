@@ -71,6 +71,25 @@ describe("createReveal", () => {
       dispose()
     })
   })
+
+  test("reports each finished open and close once, also from the fallback timer", async () => {
+    const settled: string[] = []
+    const { setOpen, dispose } = createRoot((dispose) => {
+      const [open, setOpen] = createSignal(false)
+      const reveal = createReveal(open, (phase) => settled.push(phase))
+      return { setOpen, reveal, dispose }
+    })
+    setOpen(true)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(settled).toEqual(["open"])
+    setOpen(false)
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(settled).toEqual(["open", "closed"])
+    device().prefersReducedMotion = "reduce"
+    setOpen(true)
+    expect(settled).toEqual(["open", "closed", "open"])
+    dispose()
+  })
 })
 
 describe("createViewSwitch", () => {

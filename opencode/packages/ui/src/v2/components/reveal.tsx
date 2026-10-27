@@ -1,4 +1,4 @@
-import { type Accessor, type ParentProps, Show, createComputed, createSignal, on, onCleanup } from "solid-js"
+import { type Accessor, type ParentProps, Show, createComputed, createSignal, on, onCleanup, untrack } from "solid-js"
 import { motionDuration, prefersReducedMotion } from "./motion"
 import "./reveal-v2.css"
 
@@ -6,6 +6,8 @@ export interface RevealProps extends ParentProps {
   open: boolean
   class?: string
   onTransitionEnd?: (event: TransitionEvent) => void
+  /** Runs when an open or a close has finished, from `transitionend` or the fallback timer (once per phase). */
+  onSettled?: (phase: "open" | "closed") => void
 }
 
 /**
@@ -14,7 +16,10 @@ export interface RevealProps extends ParentProps {
  * unmount once closed; reduced motion opens and closes at once.
  */
 export function Reveal(props: RevealProps) {
-  const reveal = createReveal(() => props.open)
+  const reveal = createReveal(
+    () => props.open,
+    (phase) => props.onSettled?.(phase),
+  )
 
   return (
     <div
@@ -41,16 +46,21 @@ export type RevealPhase = "closed" | "opening" | "open" | "closing"
 /**
  * Reveal's phase machine, separate from the DOM so it can be tested. `settle` ends a running phase; the
  * component calls it on `transitionend`, and a timer calls it when no transition event arrives (hidden
- * element, interrupted style change).
+ * element, interrupted style change). `onSettled` hears each finished open or close, including the
+ * immediate ones under reduced motion.
  */
-export function createReveal(open: Accessor<boolean>) {
+export function createReveal(open: Accessor<boolean>, onSettled?: (phase: "open" | "closed") => void) {
   const [phase, setPhase] = createSignal<RevealPhase>(open() ? "open" : "closed")
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
 
   const settle = () => {
     clearTimeout(timer.current)
     timer.current = undefined
-    setPhase((current) => (current === "opening" ? "open" : current === "closing" ? "closed" : current))
+    const current = untrack(phase)
+    if (current !== "opening" && current !== "closing") return
+    const next = current === "opening" ? "open" : "closed"
+    setPhase(next)
+    onSettled?.(next)
   }
 
   createComputed(
@@ -60,6 +70,7 @@ export function createReveal(open: Accessor<boolean>) {
         clearTimeout(timer.current)
         if (prefersReducedMotion()) {
           setPhase(next ? "open" : "closed")
+          onSettled?.(next ? "open" : "closed")
           return
         }
         setPhase(next ? "opening" : "closing")

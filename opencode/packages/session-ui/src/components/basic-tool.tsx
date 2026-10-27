@@ -16,7 +16,6 @@ import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import type { IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { useData } from "../context"
 import { Markdown } from "./markdown"
@@ -148,8 +147,7 @@ export function BasicTool(props: BasicToolProps) {
         if (!props.defer) return
         if (!value) {
           cancel()
-          // The body stays mounted while Reveal closes it; it unmounts in onTransitionEnd below.
-          if (prefersReducedMotion()) setState("ready", false)
+          // The body stays mounted while Reveal closes it; it unmounts once the close has settled (below).
           return
         }
 
@@ -267,9 +265,8 @@ export function BasicTool(props: BasicToolProps) {
       <Show when={hasChildren() && !props.hideDetails}>
         <Reveal
           open={open()}
-          onTransitionEnd={(event) => {
-            if (event.target !== event.currentTarget || open() || !props.defer) return
-            setState("ready", false)
+          onSettled={(phase) => {
+            if (phase === "closed" && props.defer) setState("ready", false)
           }}
         >
           <Collapsible.Content>

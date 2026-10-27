@@ -12,8 +12,8 @@ export function AccordionReveal(props: ParentProps<{ open: boolean; onClosed?: (
   return (
     <Reveal
       open={props.open}
-      onTransitionEnd={(event) => {
-        if (event.target === event.currentTarget && !props.open) props.onClosed?.()
+      onSettled={(phase) => {
+        if (phase === "closed") props.onClosed?.()
       }}
     >
       <Accordion.Content>{props.children}</Accordion.Content>

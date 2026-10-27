@@ -2540,7 +2540,6 @@ ToolRegistry.register({
                       createEffect(() => {
                         if (!active()) {
                           // The diff stays while the item closes; AccordionReveal's onClosed drops it.
-                          if (prefersReducedMotion()) setVisible(false)
                           return
                         }
 
