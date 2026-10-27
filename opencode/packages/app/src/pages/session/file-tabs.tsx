@@ -9,6 +9,7 @@ import { createLineCommentControllerV2 } from "@opencode-ai/session-ui/v2/line-c
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
 import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@/utils/toast"
@@ -28,9 +29,20 @@ type SessionFileViewProps = {
 
 const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
-// A file reference's code fades in for this long before it glides to the cited lines.
-const REFERENCE_FADE_MS = 200
-const REFERENCE_SCROLL_MS = 350
+// A file reference's code fades in (medium, as its fade-in class) before it glides to the cited lines over
+// the long duration on the standard curve.
+const referenceFadeMs = () => motionDuration("medium")
+
+/** `--v2-ease-standard`, cubic-bezier(0.2, 0, 0, 1): solves x(u) = t by bisection and returns y(u). */
+function easeStandard(t: number) {
+  const bezier = (u: number, a: number, b: number) => 3 * a * u * (1 - u) ** 2 + 3 * b * u ** 2 * (1 - u) + u ** 3
+  const search = (low: number, high: number, depth: number): number => {
+    const mid = (low + high) / 2
+    if (depth === 0) return mid
+    return bezier(mid, 0.2, 0) < t ? search(mid, high, depth - 1) : search(low, mid, depth - 1)
+  }
+  return bezier(search(0, 1, 20), 0, 1)
+}
 
 function FileCommentMenuV2(props: {
   moreLabel: string
@@ -429,10 +441,11 @@ function SessionFileViewV2(props: { tab: string }) {
     }
     setNote("selected", null)
     clearReferenceMarks()
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const still = prefersReducedMotion()
+    const duration = motionDuration("long")
     let frame: number | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
-    // Ease-in-out scroll that starts once the code has faded in; reduced motion lands on the end state.
+    // Standard-curve scroll that starts once the code has faded in; reduced motion lands on the end state.
     const glide = (el: HTMLDivElement, to: number, delay: number, done: () => void) => {
       const run = () => {
         timer = undefined
@@ -440,8 +453,8 @@ function SessionFileViewV2(props: { tab: string }) {
         const from = el.scrollTop
         const begin = performance.now()
         const step = (now: number) => {
-          const t = still ? 1 : Math.min(1, Math.max(0, (now - begin) / REFERENCE_SCROLL_MS))
-          el.scrollTop = from + (to - from) * (t < 0.5 ? 2 * t * t : 1 - (2 - 2 * t) ** 2 / 2)
+          const t = still ? 1 : Math.min(1, Math.max(0, (now - begin) / duration))
+          el.scrollTop = from + (to - from) * easeStandard(t)
           frame = t < 1 ? requestAnimationFrame(step) : undefined
           if (t < 1) return
           gliding = false
@@ -490,7 +503,7 @@ function SessionFileViewV2(props: { tab: string }) {
       if (!viewport || !root || !(line instanceof HTMLElement)) {
         // Large files render lazily; glide near the line so the virtualizer renders it, then look again.
         if (count === 10 && viewport && root?.querySelector("[data-line]")) {
-          glide(viewport, (start - 1) * 24, REFERENCE_FADE_MS, () => attempt(11))
+          glide(viewport, (start - 1) * 24, referenceFadeMs(), () => attempt(11))
           return
         }
         if (count < 120) frame = requestAnimationFrame(() => attempt(count + 1))
@@ -504,7 +517,7 @@ function SessionFileViewV2(props: { tab: string }) {
           viewport.scrollTop -
           viewport.clientHeight / 3,
       )
-      glide(viewport, top, count > 10 ? 0 : REFERENCE_FADE_MS, () => mark(root))
+      glide(viewport, top, count > 10 ? 0 : referenceFadeMs(), () => mark(root))
     }
     frame = requestAnimationFrame(() => attempt(0))
     onCleanup(stop)
@@ -521,7 +534,7 @@ function SessionFileViewV2(props: { tab: string }) {
   })
 
   const renderFile = (source: string) => (
-    <div class="relative overflow-hidden pb-40 animate-in fade-in duration-200 motion-reduce:animate-none">
+    <div class="relative overflow-hidden pb-40 animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none">
       <Dynamic
         component={fileComponent}
         mode="text"
@@ -589,7 +602,7 @@ function SessionFileViewV2(props: { tab: string }) {
           <Match when={state()?.loading}>
             <div
               role="status"
-              class="flex flex-col gap-2.5 px-6 py-4 animate-in fade-in duration-200 motion-reduce:animate-none"
+              class="flex flex-col gap-2.5 px-6 py-4 animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none"
             >
               <span class="sr-only">{language.t("common.loading")}...</span>
               {[72, 54, 64, 38, 58].map((width) => (

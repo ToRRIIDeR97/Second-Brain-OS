@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, type ParentProps } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import {
   FileReferenceProvider,
   type FileReference,
@@ -23,9 +24,6 @@ const [fileReveal, setFileReveal] = createSignal<FileReveal | undefined>(undefin
 export { fileReveal }
 export const clearFileReveal = () => setFileReveal(undefined)
 
-/** How long the right panel takes to slide open; the thread column's width transition uses the same. */
-const PANEL_SLIDE_MS = 300
-
 // False while the right panel slides open: its content fades in, and a reveal starts, once it is true.
 const [panelSettled, setPanelSettled] = createSignal(true)
 export { panelSettled }
@@ -34,10 +32,11 @@ let slideTimer: ReturnType<typeof setTimeout> | undefined
 /** Called as the right panel starts opening. With reduced motion there is no slide to wait for. */
 export function slidePanelOpen() {
   clearTimeout(slideTimer)
-  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  const still = prefersReducedMotion()
   setPanelSettled(still)
   if (still) return
-  slideTimer = setTimeout(() => setPanelSettled(true), PANEL_SLIDE_MS)
+  // The panel and the thread column slide over the medium duration (duration-medium in session.tsx).
+  slideTimer = setTimeout(() => setPanelSettled(true), motionDuration("medium"))
 }
 
 /**

@@ -83,7 +83,7 @@ import {
   sidePanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
-import { SessionFileReferences, slidePanelOpen } from "@/pages/session/file-reference"
+import { SessionFileReferences, panelSettled, slidePanelOpen } from "@/pages/session/file-reference"
 import { DesignCanvasProvider } from "@/pages/session/design-canvas"
 import { SESSION_SIDE_RAIL_SPACE, SessionSideRail } from "@/pages/session/session-side-rail"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
@@ -429,7 +429,6 @@ export default function Page() {
   const desktopV2ReviewOpen = createMemo(() => desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
-  const desktopInlineTerminalOnlyOpen = createMemo(() => desktopTerminalOpen() && !desktopV2ReviewOpen())
   const desktopFileTreeOpen = createMemo(
     () =>
       isDesktop() &&
@@ -645,18 +644,23 @@ export default function Page() {
 
   const panelState = () => ({
     open: desktopReviewOpen(),
+    terminal: desktopTerminalOpen(),
     shown: desktopReviewOpen() || desktopFileTreeOpen(),
     key: sessionKey(),
   })
   createComputed((prev: ReturnType<typeof panelState>) => {
     const next = panelState()
-    if (prev.open === next.open) return next
+    // The terminal alone counts like Review: it opens the right column from nothing.
+    const terminalOnly = !prev.open && !next.open && prev.terminal !== next.terminal
+    if (prev.open === next.open && !terminalOnly) return next
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
-    // Opening a closed side panel slides it in while the thread column eases left; its content follows
-    // once it has arrived. Everything else snaps: closing (so the column never sweeps across an emptied
-    // panel), switching sessions, and adding Review beside a file tree that is already showing.
-    if (next.open && !prev.shown && prev.key === next.key) {
+    // Opening a closed side panel (Review or the terminal alone) slides it in while the thread column eases
+    // left; its content follows once it has arrived. Everything else snaps: closing (so the column never
+    // sweeps across an emptied panel), switching sessions, and adding Review beside a file tree that is
+    // already showing.
+    const opening = terminalOnly ? next.terminal : next.open
+    if (opening && !prev.shown && prev.key === next.key) {
       setUi("reviewSnap", false)
       slidePanelOpen()
       return next
@@ -2138,8 +2142,8 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-            "duration-300 ease-emphasized will-change-[width] motion-reduce:transition-none":
-              !size.active() && !ui.reviewSnap && !desktopInlineTerminalOnlyOpen(),
+            "duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
+              !size.active() && !ui.reviewSnap,
           }}
           style={{
             width: sessionPanelWidth(),
@@ -2229,6 +2233,9 @@ export default function Page() {
                 classList={{
                   "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
                   "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                  // Like the side panel's content, the terminal shows once the sliding column has arrived.
+                  "transition-opacity duration-medium ease-emphasized-decelerate motion-reduce:transition-none": true,
+                  "opacity-0": !panelSettled(),
                 }}
               >
                 <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />

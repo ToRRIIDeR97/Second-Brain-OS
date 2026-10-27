@@ -20,6 +20,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { ViewSwitch } from "@opencode-ai/ui/v2/view-switch"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
@@ -468,7 +469,8 @@ export function SessionSidePanel(props: {
           "h-full shrink-0": !props.stacked,
           "h-full min-h-0": props.stacked,
           "pointer-events-none": !open(),
-          "transition-[width] duration-300 ease-standard will-change-[width] motion-reduce:transition-none":
+          // The same curve as the thread column, so the two edges move together.
+          "transition-[width] duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
           "flex-1": reviewOpen(),
         }}
@@ -477,7 +479,7 @@ export function SessionSidePanel(props: {
         <Show when={open()}>
           {/* Mounted at once so files load, but shown only once the sliding panel has arrived. */}
           <div
-            class="size-full flex transition-opacity duration-200 ease-out motion-reduce:transition-none"
+            class="size-full flex transition-opacity duration-medium ease-emphasized-decelerate motion-reduce:transition-none"
             classList={{ "opacity-0": !panelSettled() }}
           >
             <Show when={reviewOpen()}>
@@ -658,17 +660,24 @@ export function SessionSidePanel(props: {
                           {hideButton()}
                         </div>
 
-                        {reviewContent()}
-                        {selectToOpen()}
-                        {contextContent()}
-                        {canvasContent()}
-                        {agentContent()}
+                        {/* Review, Context, Canvas and agent tabs fade through on a switch; the Files view below
+                            stays mounted and fades in on its own. */}
+                        <ViewSwitch
+                          key={fileBrowserVisible() ? "files" : activeTab()}
+                          class={fileBrowserVisible() ? "hidden" : "flex min-h-0 flex-1 flex-col"}
+                        >
+                          {reviewContent()}
+                          {selectToOpen()}
+                          {contextContent()}
+                          {canvasContent()}
+                          {agentContent()}
+                        </ViewSwitch>
 
                         <Show when={fileBrowserMounted()}>
                           <div
                             id={fileBrowserTabPanelID}
                             role="tabpanel"
-                            class="flex-1 min-h-0 overflow-hidden animate-in fade-in duration-200 motion-reduce:animate-none"
+                            class="flex-1 min-h-0 overflow-hidden animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none"
                             classList={{ hidden: !fileBrowserVisible() }}
                             inert={!fileBrowserVisible() || undefined}
                           >
@@ -698,7 +707,7 @@ export function SessionSidePanel(props: {
                 id="file-tree-panel"
                 class="relative min-w-0 h-full shrink-0 overflow-hidden"
                 classList={{
-                  "transition-[width] duration-300 ease-standard will-change-[width] motion-reduce:transition-none":
+                  "transition-[width] duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
                     !props.size.active(),
                 }}
                 style={{ width: treeWidth() }}

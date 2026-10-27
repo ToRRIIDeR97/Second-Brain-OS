@@ -10,6 +10,8 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Presence } from "@opencode-ai/ui/v2/presence"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { AttachmentCardV2 } from "../attachment-card-v2"
 import { CommentCardV2 } from "../comment-card-v2"
 import { typeLabel } from "../../../components/message-file"
@@ -22,7 +24,7 @@ import type {
   PromptInputV2Suggestion,
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
-import { promptInputV2KeyIntent } from "./machine"
+import { promptInputV2KeyIntent, type PromptInputV2InteractionState } from "./machine"
 import "./attachments.css"
 import "./responsive-controls.css"
 
@@ -53,6 +55,8 @@ export type PromptInputV2Props = {
   attachShortcut?: string
 }
 
+type OpenPopover = Exclude<PromptInputV2InteractionState["popover"], { type: "closed" }>
+
 export function PromptInputV2(props: PromptInputV2Props) {
   const i18n = useI18n()
   const state = props.controller.state
@@ -64,10 +68,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
     props.controller.onCursor(promptInputV2Cursor(editor))
   }
   const mode = createMemo(() => state.mode)
+  // The open popover and its items, held through the popover's exit so it doesn't empty while fading out.
+  const popover = createMemo<{ popover: OpenPopover; items: PromptInputV2Suggestion[] } | undefined>((last) =>
+    state.popover.type === "closed" ? last : { popover: state.popover, items: props.controller.suggestions() },
+  )
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
     "pointer-events": mode() === "normal" ? ("auto" as const) : ("none" as const),
-    transition: "opacity 200ms ease",
+    transition: "opacity var(--v2-duration-short) var(--v2-ease-standard)",
   }))
 
   createEffect(() => {
@@ -94,26 +102,31 @@ export function PromptInputV2(props: PromptInputV2Props) {
           event.currentTarget.value = ""
         }}
       />
-      <Show when={state.popover.type !== "closed"}>
-        <PromptInputV2Popover
-          emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
-          items={props.controller.suggestions()}
-          activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
-          search={
-            state.popover.type === "command-menu"
-              ? {
-                  value: state.popover.query,
-                  label: i18n.t("ui.promptInput.commands"),
-                  placeholder: "/",
-                  onValueChange: props.controller.setQuery,
-                  onKeyDown: props.controller.onKeyDown,
-                }
-              : undefined
-          }
-          onActiveChange={(item) => props.controller.dispatch({ type: "popover.active", id: item.id })}
-          onSelect={(item) => props.controller.dispatch({ type: "popover.select", item })}
-        />
-      </Show>
+      {/* Enters and exits like the other menus; while it fades out it keeps the list it last showed. */}
+      <Presence when={state.popover.type !== "closed"} class="relative z-40">
+        <Show when={popover()}>
+          {(open) => (
+            <PromptInputV2Popover
+              emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
+              items={open().items}
+              activeID={open().popover.activeID}
+              search={
+                open().popover.type === "command-menu"
+                  ? {
+                      value: open().popover.query,
+                      label: i18n.t("ui.promptInput.commands"),
+                      placeholder: "/",
+                      onValueChange: props.controller.setQuery,
+                      onKeyDown: props.controller.onKeyDown,
+                    }
+                  : undefined
+              }
+              onActiveChange={(item) => props.controller.dispatch({ type: "popover.active", id: item.id })}
+              onSelect={(item) => props.controller.dispatch({ type: "popover.select", item })}
+            />
+          )}
+        </Show>
+      </Presence>
       <form
         data-component="prompt-input-v2"
         data-dock-border-underlay={props.borderUnderlay ? "v2" : undefined}
@@ -134,11 +147,15 @@ export function PromptInputV2(props: PromptInputV2Props) {
         onDragLeave={props.controller.onDragLeave}
         onDrop={props.controller.onDrop}
       >
-        <Show when={state.drag === "active"}>
-          <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[28px] bg-v2-background-bg-base/90 text-v2-text-text-base">
+        <Presence
+          when={state.drag === "active"}
+          class="pointer-events-none absolute inset-0 z-20"
+          enterClass="animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none"
+        >
+          <div class="grid size-full place-items-center rounded-[28px] bg-v2-background-bg-base/90 text-v2-text-text-base">
             {i18n.t("ui.promptInput.dropFiles")}
           </div>
-        </Show>
+        </Presence>
 
         <Show when={state.mode === "normal"}>
           <PromptInputV2Attachments
@@ -404,14 +421,20 @@ export function PromptInputV2Attachments(props: {
   onCommentRemove?: (comment: PromptInputV2Comment) => void
 }) {
   const i18n = useI18n()
+  const filled = () => props.attachments.length > 0 || (props.comments?.length ?? 0) > 0
+  // The strip folds through Reveal once the last card goes, and keeps showing the last cards while it does.
+  const shown = createMemo<{ attachments: PromptInputV2Attachment[]; comments: PromptInputV2Comment[] }>(
+    (last) => (filled() ? { attachments: props.attachments, comments: props.comments ?? [] } : last),
+    { attachments: [], comments: [] },
+  )
   return (
-    <Show when={props.attachments.length > 0 || (props.comments?.length ?? 0) > 0}>
+    <Reveal open={filled()}>
       <div data-component="prompt-input-v2-attachments" data-slot="prompt-attachments" class="relative">
         <div
           data-slot="prompt-attachments-scroll"
           class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar px-3.5 pt-3 pb-1"
         >
-          <For each={props.comments ?? []}>
+          <For each={shown().comments}>
             {(comment) => (
               <div class="relative group shrink-0">
                 <TooltipV2
@@ -431,7 +454,7 @@ export function PromptInputV2Attachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onCommentRemove?.(comment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity motion-reduce:transition-none"
                   aria-label={props.removeLabel}
                 >
                   <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -439,7 +462,7 @@ export function PromptInputV2Attachments(props: {
               </div>
             )}
           </For>
-          <For each={props.attachments}>
+          <For each={shown().attachments}>
             {(attachment) => (
               <div class="relative group shrink-0">
                 <TooltipV2 value={attachment.filename} placement="top" contentClass="break-all">
@@ -463,7 +486,7 @@ export function PromptInputV2Attachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onAttachmentRemove(attachment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity motion-reduce:transition-none"
                   aria-label={props.removeLabel}
                 >
                   <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -481,7 +504,7 @@ export function PromptInputV2Attachments(props: {
           class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]"
         />
       </div>
-    </Show>
+    </Reveal>
   )
 }
 
@@ -753,7 +776,7 @@ export function PromptInputV2SubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
         variant="primary"
-        class="size-9 rounded-full p-[9px] !bg-v2-background-bg-accent [&_[data-slot=icon-svg]]:!text-white transition-[border-radius,opacity] duration-200 ease-standard enabled:hover:opacity-90 active:rounded-[12px] disabled:opacity-40 motion-reduce:transition-none"
+        class="size-9 rounded-full p-[9px] !bg-v2-background-bg-accent [&_[data-slot=icon-svg]]:!text-white transition-[border-radius,opacity] duration-short ease-standard enabled:hover:opacity-90 active:rounded-[12px] disabled:opacity-40 motion-reduce:transition-none"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {
           event.preventDefault()

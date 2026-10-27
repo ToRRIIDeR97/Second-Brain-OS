@@ -2,6 +2,7 @@ import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
+import { motionDuration } from "@opencode-ai/ui/v2/motion"
 import { showToast } from "@/utils/toast"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -99,7 +100,8 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     const value = options?.closeMs
     if (typeof value === "function") return Math.max(0, value())
     if (typeof value === "number") return Math.max(0, value)
-    return 400
+    // Long enough for the dock's 0.3s close spring to finish.
+    return motionDuration("long")
   }
 
   const scheduleClose = () => {

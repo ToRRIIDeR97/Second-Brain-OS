@@ -52,7 +52,7 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
 
   return (
     <Show when={retry() && (props.show ?? true)}>
-      <div data-slot="session-turn-retry">
+      <div data-slot="session-turn-retry" class="animate-enter">
         <Card variant="error" class="error-card">
           <div class="flex items-start gap-2">
             <Spinner class="size-4 mt-0.5" />

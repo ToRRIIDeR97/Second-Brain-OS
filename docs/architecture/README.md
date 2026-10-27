@@ -101,6 +101,14 @@ through the exit. Live lists (sidebar threads, running sessions) animate only
 rows that join after the first render (`utils/fresh-items.ts`), never the
 initial list or a reorder.
 
+In the thread, tool rows and diff accordions open through `Reveal`
+(`session-ui` `AccordionReveal` force-mounts the Kobalte item so its
+measured-height keyframes stay off), the question and permission docks grow in
+as the composer folds away, and the queued and rolled-back docks keep removed
+rows closing in place with `createExitList`
+(`pages/session/composer/exit-list.ts`). Animation stays off for streaming text
+and the initial history load; only rows a toggle adds or removes animate.
+
 The sidebar's controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with
 `serverSync().project.loadSessions(threadDirectory)` (kept live by

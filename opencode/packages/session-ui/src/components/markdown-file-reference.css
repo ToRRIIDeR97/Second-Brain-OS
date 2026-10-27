@@ -41,7 +41,11 @@
   flex-direction: column;
   width: min(480px, calc(100vw - 16px));
   padding: 8px 0 4px;
-  visibility: hidden;
+  /* Unplaced (first frame, at the corner): invisible and inert. Placed: fades and rises in (medium +
+     emphasized-decelerate), then glides to another chip (short + standard). The exit is Presence's fade. */
+  opacity: 0;
+  translate: 0 2px;
+  pointer-events: none;
   background: var(--v2-background-bg-layer-01);
   border-radius: 8px;
   box-shadow: var(--v2-elevation-floating);
@@ -49,7 +53,24 @@
   font-size: 12px;
 
   &[data-placed] {
-    visibility: visible;
+    opacity: 1;
+    translate: none;
+    pointer-events: auto;
+    transition:
+      opacity var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate),
+      translate var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate),
+      top var(--v2-duration-short) var(--v2-ease-standard),
+      bottom var(--v2-duration-short) var(--v2-ease-standard),
+      left var(--v2-duration-short) var(--v2-ease-standard);
+  }
+
+  /* Eases to the content's height (set from a ResizeObserver) once it has been sized the first time. */
+  [data-slot="file-reference-peek-body"] {
+    overflow: hidden;
+
+    &[data-sized] {
+      transition: height var(--v2-duration-medium) var(--v2-ease-standard);
+    }
   }
 
   [data-slot="file-reference-peek-header"] {
@@ -124,5 +145,16 @@
     display: flex;
     gap: 4px;
     padding: 4px 8px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="file-reference-peek"] {
+    translate: none;
+
+    &[data-placed],
+    [data-slot="file-reference-peek-body"][data-sized] {
+      transition: none;
+    }
   }
 }

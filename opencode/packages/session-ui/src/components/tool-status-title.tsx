@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { motionDuration } from "@opencode-ai/ui/v2/motion"
 
 function common(active: string, done: string) {
   const a = Array.from(active)
@@ -74,7 +75,8 @@ export function ToolStatusTitle(props: {
         return
       }
       if (first !== last) setState("width", last)
-      finishTimer = setTimeout(finish, 600)
+      // The width eases over --tool-motion-spring-ms (the long duration); finish just after it.
+      finishTimer = setTimeout(finish, motionDuration("long", widthRef) + 150)
     })
   }
 

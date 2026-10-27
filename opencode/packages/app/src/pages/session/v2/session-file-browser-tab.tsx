@@ -130,7 +130,7 @@ export function SessionFileBrowserTab(props: {
               {title()}
               <Show when={revealed()}>
                 {(path) => (
-                  <span class="animate-in fade-in duration-200 motion-reduce:animate-none">
+                  <span class="animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none">
                     {" / "}
                     <span class="text-v2-text-text-base">{path().path}</span>
                   </span>
