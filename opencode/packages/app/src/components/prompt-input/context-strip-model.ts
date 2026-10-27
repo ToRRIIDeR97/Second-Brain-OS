@@ -1,58 +1,49 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2/client"
-import type { ProjectThreads } from "@/features/second-brain/client"
-import { isWithinDirectory, projectForDirectory } from "@/features/second-brain/sidebar-threads"
 import { pathKey } from "@/utils/path-key"
 
-export type ThreadProject =
-  | { kind: "project"; entry: ProjectThreads }
-  /** Inside the selected workspace but outside every Project: the sidebar's General group. */
-  | { kind: "general" }
-  /** Outside the selected workspace, named after the open workspace (or folder) that holds it. */
-  | { kind: "folder"; name: string }
-
 /**
- * The Project a thread runs in, matched as the sidebar groups threads: the deepest active Project folder
- * holding the thread directory, else General when the thread runs inside the selected workspace.
+ * The folder a thread runs in, named after its last path segment. It is a linked worktree when the project
+ * lists it among its sandboxes (the Git worktrees beside the main checkout); the main checkout and folders
+ * outside Git are plain folders.
  */
-export function threadProject(input: {
-  entries: readonly ProjectThreads[]
-  workspaceDirectory: string | undefined
-  workspaces: readonly { worktree: string; name?: string }[]
+export function threadWorktree(input: {
   directory: string | undefined
-}): ThreadProject | undefined {
+  project: { worktree: string; sandboxes?: readonly string[] } | undefined
+}) {
   const directory = input.directory
-  if (!directory) return
-  const project = projectForDirectory(
-    input.entries
-      .filter((entry) => entry.project.status === "active")
-      .map((entry) => ({ id: entry.project.id, threadDirectory: entry.threadDirectory, entry })),
-    directory,
-  )
-  if (project) return { kind: "project", entry: project.entry }
-  if (input.workspaceDirectory && isWithinDirectory(input.workspaceDirectory, directory)) return { kind: "general" }
-  const workspace = input.workspaces
-    .filter((item) => isWithinDirectory(item.worktree, directory))
-    .sort((a, b) => pathKey(b.worktree).length - pathKey(a.worktree).length)[0]
-  return { kind: "folder", name: workspace?.name || folderName(workspace?.worktree ?? directory) }
+  if (!directory) return undefined
+  const key = pathKey(directory)
+  const linked =
+    !!input.project &&
+    pathKey(input.project.worktree) !== key &&
+    !!input.project.sandboxes?.some((sandbox) => pathKey(sandbox) === key)
+  return { name: folderName(directory), linked }
 }
 
-/** The last response's tokens that make up the context total; parts the harness did not report are left out. */
+/**
+ * The last response's tokens that make up the context total, largest first as the harness reports them;
+ * parts the harness did not report are left out.
+ */
 export function contextTokenRows(tokens: AssistantMessage["tokens"]) {
   return (
     [
-      { key: "input", value: tokens.input },
       { key: "cacheRead", value: tokens.cache.read },
       { key: "cacheWrite", value: tokens.cache.write },
+      { key: "input", value: tokens.input },
       { key: "output", value: tokens.output },
       { key: "reasoning", value: tokens.reasoning },
     ] as const
   ).filter((row) => row.value > 0)
 }
 
-/** An instructions file path as shown in the strip: relative to the workspace folder when inside it. */
-export function instructionsLabel(path: string, workspaceDirectory: string | undefined) {
-  if (!workspaceDirectory || !isWithinDirectory(workspaceDirectory, path)) return path
-  return pathKey(path).slice(pathKey(workspaceDirectory).length).replace(/^\//, "")
+/** A token count's share of the context window: whole percents, one decimal under 1%, and "<0.1%" below that. */
+export function formatShare(value: number, limit: number, locale: string) {
+  const ratio = value / limit
+  if (ratio > 0 && ratio < 0.001) return `<${percent(locale, 1).format(0.001)}`
+  return percent(locale, ratio < 0.01 ? 1 : 0).format(ratio)
 }
+
+const percent = (locale: string, digits: number) =>
+  new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: digits })
 
 const folderName = (directory: string) => directory.split(/[\\/]/).filter(Boolean).pop() || directory

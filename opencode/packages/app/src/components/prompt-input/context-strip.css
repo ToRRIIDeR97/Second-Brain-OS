@@ -3,48 +3,96 @@
   container-type: inline-size;
 }
 
-/* Items give way in priority order as the composer narrows: files, then branch, then the harness. */
-@container context-strip (max-width: 520px) {
-  [data-slot="context-strip-files"] {
-    display: none;
+/*
+ * The sheet grows upward from the strip, behind the composer: its body row runs from 0fr to 1fr, so the height
+ * follows the content without measuring it. The worktree and branch row stays on the bottom edge.
+ */
+[data-slot="context-sheet"] {
+  grid-template-rows: 0fr auto;
+  transition:
+    grid-template-rows 200ms var(--v2-ease-standard),
+    box-shadow 200ms var(--v2-ease-standard);
+
+  &[data-open] {
+    grid-template-rows: 1fr auto;
+    box-shadow: 0 0 0 0.5px var(--v2-border-border-muted);
+    transition:
+      grid-template-rows var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate),
+      box-shadow var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
   }
 }
 
-@container context-strip (max-width: 420px) {
-  [data-slot="context-strip-branch"] {
-    display: none;
+[data-slot="context-sheet-details"] {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity var(--v2-duration-short) var(--v2-ease-standard),
+    transform var(--v2-duration-short) var(--v2-ease-standard);
+
+  [data-slot="context-sheet"][data-open] & {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 240ms var(--v2-ease-emphasized-decelerate) 60ms,
+      transform 240ms var(--v2-ease-emphasized-decelerate) 60ms;
   }
 }
 
-@container context-strip (max-width: 320px) {
-  [data-slot="context-strip-harness"] {
-    display: none;
+[data-slot="context-sheet-gauge-track"] {
+  stroke: var(--v2-background-bg-layer-04);
+}
+
+/*
+ * The fills grow once the sheet is open. Folding back empties them only after the fold has finished, so the
+ * next open grows them from empty again without a visible jump.
+ */
+[data-slot="context-sheet-gauge-fill"] {
+  stroke: var(--v2-icon-icon-accent);
+  transition: stroke-dashoffset 0s linear 200ms;
+
+  [data-slot="context-sheet"][data-open] & {
+    transition: stroke-dashoffset 450ms var(--v2-ease-emphasized-decelerate) 150ms;
   }
 }
 
-/* Above the session composer, which sits at z-index 70. */
-[data-popper-positioner]:has([data-component="context-strip-popover"]) {
-  z-index: 80;
+[data-slot="context-sheet-bar-track"] {
+  background: var(--v2-background-bg-layer-04);
 }
 
-[data-component="context-strip-popover"] {
-  transform-origin: var(--kb-popover-content-transform-origin);
-  animation: context-strip-popover-in var(--v2-duration-short) var(--v2-ease-emphasized-decelerate);
+[data-slot="context-sheet-bar"] {
+  background: var(--v2-icon-icon-accent);
+  transform-origin: left center;
+  transition: transform 0s linear 200ms;
 
-  &:focus-visible {
-    outline: none;
+  [dir="rtl"] & {
+    transform-origin: right center;
+  }
+
+  [data-slot="context-sheet"][data-open] & {
+    transition: transform 450ms var(--v2-ease-emphasized-decelerate) 150ms;
   }
 }
 
-@keyframes context-strip-popover-in {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
+/* A narrow composer stacks the gauge above the rows. */
+@container context-strip (max-width: 440px) {
+  [data-slot="context-sheet-details"] {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-component="context-strip-popover"] {
-    animation: none;
+  [data-slot="context-sheet"],
+  [data-slot="context-sheet"][data-open],
+  [data-slot="context-sheet-details"],
+  [data-slot="context-sheet"][data-open] [data-slot="context-sheet-details"],
+  [data-slot="context-sheet-gauge-fill"],
+  [data-slot="context-sheet"][data-open] [data-slot="context-sheet-gauge-fill"],
+  [data-slot="context-sheet-bar"],
+  [data-slot="context-sheet"][data-open] [data-slot="context-sheet-bar"] {
+    transition: none;
+  }
+
+  [data-slot="context-sheet-details"] {
+    transform: none;
   }
 }
