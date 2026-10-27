@@ -935,23 +935,40 @@ files, so the compatibility layer rejects `files: false` for them.
 
 `ComposerContextStrip` (`app/src/components/prompt-input/context-strip.tsx`)
 sits on the top edge of a thread's composer through `PromptInputV2`'s
-`header` prop. It replaces the composer's own context ring. One button shows:
+`header` prop. It shows:
 
-- the Project, from the sidebar's project-threads query and its
-  `projectForDirectory` matching (General inside the workspace, else the
-  workspace or folder name), with a status dot;
-- the git branch (`sync().data.vcs.branch`);
-- the harness and, for the built-in loop, the agent;
-- the changed-file count: the Review panel's count while it is open, else the
-  length of the git status list (`vcs.status`), which loads without patches;
-- the context ring and percent from `getSessionContext`.
+- the thread folder's name. When the folder is one of the project's
+  `sandboxes` (`sync().project`; the Git worktrees beside the main checkout)
+  it is labelled "Worktree"; the main checkout and folders outside Git show
+  the folder name alone. This reads data the app already has, so a project
+  first opened from a linked worktree counts that worktree as its main
+  checkout;
+- the git branch (`sync().data.vcs.branch`).
 
-Hover (400 ms) or click opens a popover with tokens used of the limit, the
-last response's token breakdown and session cost, the Project's status,
-progress, next milestone and blocker, and the instructions file in effect
-(read with `GET /second-brain/instructions` while the popover is open). Items
-without data are hidden; as the composer narrows, files, then branch, then
-harness are hidden. There is no strip in drafts.
+Ahead/behind counts are not shown: no VCS route reports them. There is no
+strip in drafts.
+
+`ComposerContextRing` sits in the composer toolbar before the stash menu,
+through the `trailing` prop. It fills with the context percentage from
+`getSessionContext` and is labelled "Context: N% used" ("Context: N tokens
+used" when the model's limit is unknown); it is hidden until a response has
+reported tokens. Clicking it (`aria-expanded`, `aria-controls` the sheet)
+unfolds the strip upward behind the composer into a sheet; clicking it again,
+Esc, or a click outside the sheet and ring folds it back. The sheet's body row
+animates from `0fr` to `1fr` in 300 ms (emphasized decelerate), the details
+fade and slide in, and the gauge arc and bars fill after it; with
+`prefers-reduced-motion` nothing animates. The worktree and branch row stays
+on the bottom edge. `createComposerContext` holds the shared open state and
+context metrics, and closes the sheet when the thread changes.
+
+The sheet shows a half-circle gauge with the percentage, tokens used of the
+limit and tokens left, then one row per token kind the last response reported
+(cache read, cache write, input, output, reasoning; zero kinds are left out),
+each with a bar against the whole context window, its count and its share.
+Below them are the model, the session cost (hidden when no response reported a
+cost) and "View context usage" (`openSessionContext`). When the limit is
+unknown the gauge shows the token total without a percentage and the rows show
+counts without bars or shares.
 
 ### Composer delivery, background send and stash
 

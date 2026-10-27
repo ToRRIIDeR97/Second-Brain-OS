@@ -109,7 +109,11 @@ import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 import { pagePanelClass } from "@/components/page"
-import { ComposerContextStrip } from "@/components/prompt-input/context-strip"
+import {
+  ComposerContextRing,
+  ComposerContextStrip,
+  createComposerContext,
+} from "@/components/prompt-input/context-strip"
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -718,15 +722,6 @@ export default function Page() {
         : skipToken,
     }
   })
-  // The composer's context strip counts changed files with the panel closed: git status, without patches.
-  const statusQuery = createQuery(() => ({
-    queryKey: [...vcsKey(), "status"] as const,
-    enabled: !wantsReview() && !!params.id && vcsMode() === "git" && sync().project?.vcs === "git",
-    queryFn: () =>
-      sdk()
-        .api.vcs.status({ location: { directory: sdk().directory } })
-        .then((result) => result.data.length),
-  }))
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
     if (reviewMode() === "git" || reviewMode() === "branch")
@@ -741,13 +736,6 @@ export default function Page() {
     return diffs[0]?.file
   }
   const reviewCount = () => reviewDiffs().length
-  // For the composer's context strip. Turn diffs load only with the Review panel open, and reading them
-  // before they arrive would suspend the composer, so the strip shows a turn count only once it is loaded.
-  // With the panel closed it shows the git status count instead.
-  const loadedReviewCount = () => {
-    if (!wantsReview()) return statusQuery.isSuccess ? statusQuery.data : undefined
-    return vcsMode() || serverSDK().protocolKind() !== "v2" || turnQuery.isSuccess ? reviewCount() : undefined
-  }
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
@@ -2087,6 +2075,7 @@ export default function Page() {
               promptDock = el
             },
           })
+          const composerContext = createComposerContext()
           const promptController = usePromptInputV2Controller({
             get controls() {
               return inputController()
@@ -2117,17 +2106,8 @@ export default function Page() {
                   controller={promptController}
                   harness={sessionHarness}
                   borderUnderlay
-                  header={
-                    <ComposerContextStrip
-                      harness={sessionHarness.instance()?.name}
-                      agent={
-                        sessionHarness.driver() === Harness.OpenCodeDriver
-                          ? inputController().agents.current || undefined
-                          : undefined
-                      }
-                      files={loadedReviewCount()}
-                    />
-                  }
+                  header={<ComposerContextStrip context={composerContext} />}
+                  trailing={<ComposerContextRing context={composerContext} />}
                 />
               }
             />
