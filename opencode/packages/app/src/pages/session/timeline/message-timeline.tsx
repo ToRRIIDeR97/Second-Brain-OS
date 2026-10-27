@@ -137,7 +137,7 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
           text={props.reasoningHeading}
           class="session-turn-thinking-heading"
           travel={25}
-          duration={motionDuration("long")}
+          duration="var(--v2-duration-long)"
         />
       </Show>
     </div>

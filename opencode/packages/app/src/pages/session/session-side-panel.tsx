@@ -707,7 +707,7 @@ export function SessionSidePanel(props: {
                 id="file-tree-panel"
                 class="relative min-w-0 h-full shrink-0 overflow-hidden"
                 classList={{
-                  "transition-[width] duration-300 ease-standard will-change-[width] motion-reduce:transition-none":
+                  "transition-[width] duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
                     !props.size.active(),
                 }}
                 style={{ width: treeWidth() }}

@@ -429,7 +429,7 @@ export function SessionTurn(
                       text={reasoningHeading()}
                       class="session-turn-thinking-heading"
                       travel={25}
-                      duration={700}
+                      duration="var(--v2-duration-long)"
                     />
                   </Show>
                 </div>

@@ -82,7 +82,13 @@ and the incoming one in when `key` changes, rendering one view at a time.
 `@opencode-ai/ui/v2/motion` exposes `prefersReducedMotion()` and
 `motionDuration()` for JS that times work against these animations, and
 `useSpring` (`@opencode-ai/ui/motion-spring`) jumps to its target under reduced
-motion.
+motion. In the thread, tool rows and diff accordions open through `Reveal`
+(`session-ui` `AccordionReveal` force-mounts the Kobalte item so its
+measured-height keyframes stay off), the question and permission docks grow in
+as the composer folds away, and the queued and rolled-back docks keep removed
+rows closing in place with `createExitList`
+(`pages/session/composer/exit-list.ts`). Animation stays off for streaming text
+and the initial history load; only rows a toggle adds or removes animate.
 
 The sidebar's controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with

@@ -176,7 +176,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
         "min-w-0 h-full flex-1": isDesktop() && opened() && !stacked(),
         "w-0 h-full pointer-events-none": isDesktop() && !opened(),
         [pagePanelClass]: isDesktop(),
-        "transition-[height] duration-300 ease-standard will-change-[height] motion-reduce:transition-none":
+        "transition-[height] duration-medium ease-standard will-change-[height] motion-reduce:transition-none":
           !isDesktop() && !size.active(),
       }}
       style={{ height: panelHeight() }}

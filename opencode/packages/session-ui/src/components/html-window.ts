@@ -96,6 +96,8 @@ function mount(
   options: Options,
   streaming: boolean,
 ) {
+  // A design that finished streaming fades its frame in where the notice was; one from history appears as is.
+  const finished = !streaming && !!wrapper.querySelector(':scope > [data-slot="html-window-notice"][data-streaming]')
   unmount(wrapper)
   listen()
   const title = design.title ?? labels.title
@@ -154,7 +156,9 @@ function mount(
   }
 
   bar.append(sourceToggle("window", "source", labels.preview))
-  wrapper.insertBefore(frame(design.source, title), pre)
+  const view = frame(design.source, title)
+  if (finished) view.dataset.enter = ""
+  wrapper.insertBefore(view, pre)
   const footer = element("div", "html-window-footer")
   if (options.space?.use) footer.append(button(labels.use, () => options.space?.use?.(design)))
   if (options.space?.open) footer.append(button(labels.open, () => options.space?.open?.(design)))
