@@ -22,12 +22,12 @@ export function DialogInstructions(props: { workspaceDirectory: string; project?
   const client = (directory: string) => ({ server: serverSDK().server, fetch: platform.fetch, target: { directory } })
   const directory = () => props.project?.threadDirectory ?? props.workspaceDirectory
   const [state, setState] = createStore({ draft: "", editing: false, busy: false, confirmRemove: false })
-  const [own, { mutate }] = createResource(async () => {
+  const [own, ownActions] = createResource(async () => {
     const result = await readInstructions(client(directory()))
     setState({ draft: result.content ?? "", editing: result.content !== null })
     return result
   })
-  const [fallback] = createResource(
+  const [fallback, fallbackActions] = createResource(
     () => (props.project ? props.workspaceDirectory : undefined),
     (workspace) => readInstructions(client(workspace)),
   )
@@ -42,7 +42,7 @@ export function DialogInstructions(props: { workspaceDirectory: string; project?
     setState("busy", true)
     void writeInstructions(client(directory()), state.draft)
       .then((result) => {
-        mutate(result)
+        ownActions.mutate(result)
         showToast({ title: language.t("secondBrain.instructions.saved"), description: result.path })
       })
       .catch(failed)
@@ -54,11 +54,20 @@ export function DialogInstructions(props: { workspaceDirectory: string; project?
     setState({ busy: true, confirmRemove: false })
     void removeInstructions(client(directory()))
       .then((result) => {
-        mutate(result)
+        ownActions.mutate(result)
         setState({ draft: "", editing: false })
       })
       .catch(failed)
       .finally(() => setState("busy", false))
+  }
+
+  // Reading a failed resource throws, so read through these and show the failure with a retry.
+  const ownFile = () => (own.error ? undefined : own())
+  const fallbackFile = () => (fallback.error ? undefined : fallback())
+  const loadFailed = () => !!own.error || !!fallback.error
+  const retry = () => {
+    if (own.error) void ownActions.refetch()
+    if (fallback.error) void fallbackActions.refetch()
   }
 
   return (
@@ -78,21 +87,34 @@ export function DialogInstructions(props: { workspaceDirectory: string; project?
               )
             : language.t("secondBrain.instructions.workspaceHint")}
         </p>
-        <Show when={own()}>
+        <Show when={ownFile()}>
           {(file) => <code class="truncate text-[12px] text-v2-text-text-faint">{file().path}</code>}
+        </Show>
+        <Show when={loadFailed()}>
+          <div class="flex flex-wrap items-center gap-2">
+            <p role="alert" class="text-[12px] text-v2-text-text-critical">
+              {language.t("secondBrain.error.request")}
+            </p>
+            <ButtonV2 size="small" variant="outline" onClick={retry}>
+              {language.t("secondBrain.error.retry")}
+            </ButtonV2>
+          </div>
+        </Show>
+        <Show when={state.confirmRemove}>
+          <p class="text-[13px] text-v2-text-text-base">{language.t("secondBrain.instructions.confirmUseDefault")}</p>
         </Show>
         <Show
           when={state.editing || !props.project}
           fallback={
             <div class="flex flex-col gap-2">
               <pre class="max-h-60 overflow-auto whitespace-pre-wrap rounded-[12px] bg-v2-background-bg-layer-01 p-3 text-[12px] text-v2-text-text-muted">
-                {fallback()?.content ?? ""}
+                {fallbackFile()?.content ?? ""}
               </pre>
               <div>
                 <ButtonV2
                   size="small"
                   variant="neutral"
-                  onClick={() => setState({ editing: true, draft: fallback()?.content ?? "" })}
+                  onClick={() => setState({ editing: true, draft: fallbackFile()?.content ?? "" })}
                 >
                   {language.t("secondBrain.instructions.customize")}
                 </ButtonV2>
@@ -104,23 +126,34 @@ export function DialogInstructions(props: { workspaceDirectory: string; project?
             rows={14}
             value={state.draft}
             placeholder={language.t("secondBrain.instructions.placeholder")}
-            disabled={own.loading}
+            disabled={own.loading || !!own.error}
             onInput={(event) => setState("draft", event.currentTarget.value)}
           />
         </Show>
       </DialogBody>
       <DialogFooter>
-        <Show when={props.project && own()?.content !== null && own()?.content !== undefined}>
-          <ButtonV2 size="small" variant="ghost" disabled={state.busy} onClick={useDefault}>
-            {language.t(
-              state.confirmRemove
-                ? "secondBrain.instructions.confirmUseDefault"
-                : "secondBrain.instructions.useDefault",
-            )}
+        <Show when={props.project && ownFile()?.content !== null && ownFile()?.content !== undefined}>
+          <Show when={state.confirmRemove}>
+            <ButtonV2
+              size="small"
+              variant="ghost"
+              disabled={state.busy}
+              onClick={() => setState("confirmRemove", false)}
+            >
+              {language.t("common.cancel")}
+            </ButtonV2>
+          </Show>
+          <ButtonV2
+            size="small"
+            variant={state.confirmRemove ? "danger" : "ghost"}
+            disabled={state.busy}
+            onClick={useDefault}
+          >
+            {language.t(state.confirmRemove ? "common.delete" : "secondBrain.instructions.useDefault")}
           </ButtonV2>
         </Show>
         <Show when={state.editing || !props.project}>
-          <ButtonV2 size="small" variant="contrast" disabled={state.busy || own.loading} onClick={save}>
+          <ButtonV2 size="small" variant="contrast" disabled={state.busy || own.loading || !!own.error} onClick={save}>
             {language.t("common.save")}
           </ButtonV2>
         </Show>

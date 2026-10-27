@@ -3,7 +3,7 @@
 - Status: implemented (sidebar-only navigation, roadmap Phase 4)
 - Companion: [`PRODUCT-BRIEF-V1.md`](./PRODUCT-BRIEF-V1.md)
 - Roadmap: [`t3-parity-roadmap`](../../implementations/t3-parity-roadmap/implementation.md)
-- Updated: 2026-10-20
+- Updated: 2026-10-24
 
 ## Navigation model
 
@@ -35,10 +35,12 @@ flowchart LR
 
 ## Sidebar
 
-The sidebar has two columns: a navigation rail that is always shown and a
-Projects panel beside it.
+The sidebar has two columns: a navigation rail that is always shown, at every
+window width, and a Projects panel beside it. Below 768 px the Projects panel
+is hidden and the rail remains.
 
-1. **Rail**, from top to bottom: a **New thread** button (same as `mod+n`),
+1. **Rail**, from top to bottom: a **New thread** button (same as `mod+n`; with
+   no workspace open it asks for a folder first),
    then **Home**, **Notes** (labelled Knowledge), **Calendar** and
    **Activity** as icons with a label underneath (the current page gets a
    pill highlight), and **Settings** at the bottom.
@@ -47,7 +49,9 @@ Projects panel beside it.
    **Link a folder as a project**, **Workspace instructions** (the workspace's
    default `AGENTS.md`) and **Manage projects** (`/projects`). The button next
    to it scans again. Each workspace is also scanned once per app session when
-   it is first shown.
+   it is first shown; if that scan fails, a toast says so and it runs again the
+   next time the workspace is shown. If the Project list cannot load, the
+   panel shows **Request failed** with **Retry**.
    - One row per active Project, sorted by name, expandable. Expanding shows
      **New thread** and the Project's root threads: pinned threads first (most
      recently pinned first, with a pin icon), then the rest newest first. A
@@ -66,7 +70,7 @@ Row actions:
 
 | Row | Actions |
 |---|---|
-| Project | New thread, open project card (`/projects?project=<id>`), archived threads, instructions, archive project (unlink folder for a linked folder) |
+| Project | New thread, open project card (`/projects?project=<id>`), archived threads, instructions, archive project (**Unlink folder and archive project** for a linked folder) |
 | Thread | Rename (also double-click), pin / unpin, fork, archive, delete |
 
 Pins are stored on the thread (`metadata.pinned`, the pin time) so they survive
@@ -79,12 +83,14 @@ with **Unarchive**.
 
 ### Undo
 
-Archive thread, rename thread, delete thread and archive Project show a toast
-with **Undo** for 5 seconds. While such a toast is open, `mod+z` undoes the most
+Archive thread, rename thread, delete thread, archive Project and unlink
+folder show a toast with **Undo** for 5 seconds. While such a toast is open, `mod+z` undoes the most
 recent one, unless focus is in a text field or editor, which keeps its own undo.
 
 - Archive and rename happen at once; undo unarchives the thread or restores
   the previous title. Archive Project undo restores the previous status.
+  Unlink folder undo links the folder again and restores the card's status.
+  Archiving from the Projects page also shows a toast with **Undo**.
 - Delete is deferred: the row (and its child threads) hides at once, and the
   hard delete (`session.remove`) runs only when the toast expires. If the app
   closes before then, the thread is not deleted.
@@ -134,8 +140,12 @@ deleted.
 | `alt+up` / `alt+down` | Previous / next visible thread in the sidebar |
 | `mod+shift+[` / `mod+shift+]` | Previous / next Project |
 | `mod+[` / `mod+]` | Back / forward |
-| `mod+k` | Command palette |
+| `mod+k` | Command palette (also lists Go to Home, Knowledge, Calendar and Activity) |
 | `mod+z` | Undo the last sidebar action while its undo toast is open (not in text fields) |
+
+On the Notes page `mod+s` saves the open note from anywhere on the page,
+including the preview and fullscreen. In the note editor `mod+b` and `mod+i`
+format bold and italic instead of their global meaning.
 
 Composer keys (handled inside the prompt editor, listed read-only in Settings →
 Shortcuts):
@@ -163,7 +173,8 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
 ## Pages
 
 - **Home** is a dashboard: start a Run, today's events and tasks, active
-  Projects, resume and running threads. Sending from Home's composer opens
+  Projects, resume and running threads. With no Projects, **Create Project**
+  opens the Projects page's create form (`/projects?new=1`). Sending from Home's composer opens
   the new thread and sends the message in one step.
 - **Projects** lists Project cards by status and opens a card with Overview,
   Plan, Work, Files, Activity and Map views.
@@ -183,9 +194,12 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   again, and Google lets the user pick a different account. **Sync now** syncs
   every account. A new event or task's **Save to** offers Local and each
   account with read and write access.
-- **Notes** holds global notes and Project notes.
-- **Activity** lists threads needing attention, agent runs, changes and
-  history. Agent runs shows recent threads with active runs first and a
+- **Notes** holds global notes and Project notes. A note's file name keeps
+  the title's letters and digits in any script. If a save finds the note
+  changed on disk, **Reload from disk** replaces the edits with the saved copy.
+- **Activity** lists threads needing attention (waiting for an approval or
+  an answer; plain running threads are under Agent runs), agent runs, changes
+  and history. Agent runs shows recent threads with active runs first and a
   Running, Waiting for approval or Retrying status; finished and failed runs
   both read as idle, so they carry no status. History is the full searchable
   thread list.

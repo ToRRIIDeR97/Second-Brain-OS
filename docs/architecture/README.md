@@ -69,9 +69,14 @@ header is the workspace dropdown (`layout.home.selection`, resolved by
 `layout.home.workspace` to the selected or first open folder). Home, Notes,
 Calendar and Projects read `layout.home.workspace` and have no picker of their
 own; Notes keeps an open note with unsaved edits in its workspace until it is
-saved or discarded. The controller
+saved or discarded. Home, Notes and the Projects page's thread folders read the
+same cached project-threads query as the sidebar (`useProjectThreads` and
+`useBrainProjects` in `sidebar-controller.ts`, 30 seconds of freshness); the
+Projects page keeps its own card list for editing. The controller
 scans each workspace once per app session (`POST /second-brain/projects/scan`)
-and on **Scan for projects**. Sidebar actions (archive, unarchive, pin through `PATCH /session/:id`;
+and on **Scan for projects**. The automatic scan reloads the Project list only
+when it created cards, and a failed one shows a toast and runs again the next
+time the workspace is shown. Sidebar actions (archive, unarchive, pin through `PATCH /session/:id`;
 rename; delete through `session.remove`, which also deletes child threads, so
 the sidebar drops the subtree and treats a 404 as already deleted) apply the server's reply to every
 loaded directory list and to the recent-session index at once, then offer a
@@ -79,9 +84,12 @@ loaded directory list and to the recent-session index at once, then offer a
 that has not run when the app closes is dropped). The renderer has one
 QueryClient (from `AppBaseProviders`); the router shell does not create its
 own. `serverSync().homeSessions` applies every session event to the
-recent-session index in that client, and both the sidebar and Home read it,
+recent-session index in that client, and the sidebar, Home and Activity read it
+through one set of query options (`homeSessionIndexQueryOptions`, never stale),
 so a thread created, archived, unarchived or pinned anywhere, including in a
-Project that is not open, updates both lists without a reload. A directory
+Project that is not open, updates every list without a reload, and revisiting
+Home or Activity does not re-read the session table. The index is fetched again
+only on a reconnect, `global.disposed` or `session.next.moved`. A directory
 list contributes only threads that run in that directory, because events
 reach only their own directory's list. The global event stream reconnects with
 exponential backoff and jitter (up to 20 s, reset by any event after
@@ -209,7 +217,15 @@ Open Workspace buttons run the sidebar's open-folder flow. Home renders its shel
 metrics, and the harness selector have local loading boundaries. Harness
 availability uses the renderer query cache, keyed by server and workspace
 directory, with 30 seconds of freshness and background refresh on stale
-re-entry. Projects and calendar data still reload on each visit.
+re-entry. Project cards come from the shared project-threads query; calendar
+data still reloads on each visit. The Projects page loads notes and the
+calendar only when its Map or Plan view first opens.
+
+Page content renders inside an error boundary in `pages/layout-new.tsx`: a page
+that throws shows a retryable message in the page area while the sidebar stays
+usable, and the boundary resets when the route changes. Notes, Projects, Home,
+Activity and the instructions dialog show request failures inline with
+**Retry** instead of throwing.
 
 Home's composer starts a Run in one step. It renders the thread composer's
 `PromptInputHarnessControls`, so an external harness offers its model, effort

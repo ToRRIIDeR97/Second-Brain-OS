@@ -3,9 +3,11 @@ import { useNavigate } from "@solidjs/router"
 import { createSignal, For, Show } from "solid-js"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettingsDialog } from "@/components/settings-dialog"
@@ -29,6 +31,7 @@ export function SecondBrainSidebar() {
   const layout = useLayout()
   const navigate = useNavigate()
   const openSettings = useSettingsDialog()
+  const command = useCommand()
   const ctrl = createSidebarController()
   const path = () => ctrl.location.pathname
   const items = () => [
@@ -42,13 +45,21 @@ export function SecondBrainSidebar() {
     <div
       data-component="second-brain-sidebar"
       data-expanded={layout.sidebar.opened() ? "" : undefined}
-      class="hidden min-h-0 shrink-0 md:flex"
+      class="flex min-h-0 shrink-0"
     >
       <nav
         class="flex w-20 shrink-0 flex-col items-center gap-3 pb-4 pt-2"
         aria-label={language.t("secondBrain.sidebar.title")}
       >
-        <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.newThread")}>
+        <TooltipV2
+          placement="right"
+          value={
+            <>
+              {language.t("secondBrain.sidebar.newThread")}
+              <KeybindV2 keys={command.keybindParts("session.new")} variant="neutral" />
+            </>
+          }
+        >
           <button
             type="button"
             data-sidebar-item="new-thread"
@@ -87,7 +98,8 @@ export function SecondBrainSidebar() {
       <aside
         aria-label={language.t("secondBrain.sidebar.projectsSection")}
         classList={{
-          "flex min-h-0 flex-col overflow-hidden transition-[width,opacity] duration-300 ease-emphasized will-change-[width] motion-reduce:transition-none": true,
+          // The rail stays at every width; the Projects panel needs the room of a md window.
+          "hidden min-h-0 flex-col overflow-hidden transition-[width,opacity] duration-300 ease-emphasized will-change-[width] motion-reduce:transition-none md:flex": true,
           "w-[248px] opacity-100": layout.sidebar.opened(),
           "w-0 opacity-0": !layout.sidebar.opened(),
         }}
@@ -109,14 +121,24 @@ export function SecondBrainSidebar() {
               {/* Keyed by the Project, not its group: a group is rebuilt on every thread change. */}
               <For each={ctrl.projects()}>
                 {(project) => (
-                  <ProjectGroup
-                    ctrl={ctrl}
-                    project={project}
-                    threads={ctrl.groups().projects.find((group) => group.project.id === project.id)?.threads ?? []}
-                  />
+                  <ProjectGroup ctrl={ctrl} project={project} threads={ctrl.projectThreads().get(project.id) ?? []} />
                 )}
               </For>
-              <Show when={!ctrl.loading() && ctrl.projects().length === 0}>
+              <Show when={ctrl.failed()}>
+                <div class="flex items-center gap-1 px-3 py-1">
+                  <p role="alert" class="min-w-0 flex-1 text-[12px] text-v2-text-text-critical">
+                    {language.t("common.requestFailed")}
+                  </p>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded-full px-2 py-0.5 text-[12px] text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                    onClick={ctrl.retryProjects}
+                  >
+                    {language.t("secondBrain.error.retry")}
+                  </button>
+                </div>
+              </Show>
+              <Show when={!ctrl.loading() && !ctrl.failed() && ctrl.projects().length === 0}>
                 <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">
                   {language.t("secondBrain.sidebar.noProjectFolders")}
                 </p>
