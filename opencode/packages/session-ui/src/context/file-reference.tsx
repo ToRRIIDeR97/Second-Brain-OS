@@ -3,9 +3,13 @@ import type { FileReference } from "../components/markdown-file-reference"
 
 export type { FileReference }
 
-/** Lines of a cited file for the hover peek. `start` is the 1-based number of `lines[0]`. */
+/**
+ * Lines of a cited file for the hover peek. `start` is the 1-based number of `lines[0]`. A folder
+ * reports how many entries it lists instead.
+ */
 export type FileReferencePreview =
   | { status: "found"; path: string; start: number; lines: string[] }
+  | { status: "folder"; path: string; count: number }
   | { status: "binary"; path: string }
   | { status: "missing"; path: string }
 
@@ -18,7 +22,7 @@ export type FileReferenceActions = {
   directory: string
   /** Reads at most `limit` lines from the start of the reference (or of the file). */
   readFileRange: (reference: FileReference, limit: number) => Promise<FileReferencePreview>
-  /** Reveals the reference in the right panel's Files view. */
+  /** Reveals the reference in the right panel's Files view: a file in its viewer, a folder in the tree. */
   onFileReference: (reference: FileReference) => void
 }
 

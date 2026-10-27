@@ -11,7 +11,7 @@ import { useSDK } from "@/context/sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
-import { fileReveal } from "@/pages/session/file-reference"
+import { clearFileReveal, fileReveal, panelSettled } from "@/pages/session/file-reference"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 import { pathKey } from "@/utils/path-key"
 
@@ -79,12 +79,27 @@ export function SessionFileBrowserTab(props: {
   const optionID = (path: string) => `${resultsID}-option-${files().indexOf(path)}`
 
   // A file reference opened from a reply shows the tree beside the file, so its row can be revealed.
+  // A folder reference is the tree's to finish: it is selected, glided to and expanded once the panel
+  // has arrived, and stays selected until a file is.
+  const [folder, setFolder] = createSignal<string>()
+  const revealed = () => (panelSettled() ? folder() : undefined)
   createEffect(
     on(fileReveal, (reveal) => {
       if (reveal?.directory !== sdk().directory) return
       setFilter("")
       if (!props.state.sidebarOpened()) props.state.toggleSidebar()
+      setFolder(reveal.folder ? reveal.path : undefined)
+      if (reveal.folder) clearFileReveal()
     }),
+  )
+  createEffect(
+    on(
+      () => props.active,
+      (active) => {
+        if (active) setFolder(undefined)
+      },
+      { defer: true },
+    ),
   )
 
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
@@ -109,7 +124,19 @@ export function SessionFileBrowserTab(props: {
         <SessionReviewV2Sidebar
           open={sidebarOpened()}
           transition={props.state.sidebarTransition()}
-          title={<span class="truncate">{title()}</span>}
+          title={
+            <span class="truncate">
+              {title()}
+              <Show when={revealed()}>
+                {(path) => (
+                  <span class="animate-in fade-in duration-200 motion-reduce:animate-none">
+                    {" / "}
+                    <span class="text-v2-text-text-base">{path()}</span>
+                  </span>
+                )}
+              </Show>
+            </span>
+          }
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}
@@ -125,7 +152,8 @@ export function SessionFileBrowserTab(props: {
             when={query()}
             fallback={
               <FileTreeV2
-                active={props.active}
+                active={revealed() ?? props.active}
+                revealed={revealed()}
                 kinds={props.kinds}
                 onFileClick={(node) => props.onSelect(node.path)}
                 onFileDoubleClick={(node) => props.onSelectPermanent(node.path)}

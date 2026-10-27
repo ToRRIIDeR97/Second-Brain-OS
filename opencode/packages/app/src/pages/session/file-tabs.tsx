@@ -17,7 +17,7 @@ import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
-import { clearFileReveal, fileReveal } from "@/pages/session/file-reference"
+import { clearFileReveal, fileReveal, panelSettled } from "@/pages/session/file-reference"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -27,6 +27,10 @@ type SessionFileViewProps = {
 }
 
 const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
+
+// A file reference's code fades in for this long before it glides to the cited lines.
+const REFERENCE_FADE_MS = 200
+const REFERENCE_SCROLL_MS = 350
 
 function FileCommentMenuV2(props: {
   moreLabel: string
@@ -394,8 +398,10 @@ function SessionFileViewV2(props: { tab: string }) {
     active: false,
   }
 
-  // A file reference from a reply: once its lines render, scroll them into view and mark them. The
-  // persisted selection gives the steady tint; the mark adds a gutter accent and a one-off flash.
+  // A file reference from a reply, once the panel has arrived and the lines render: the code fades in
+  // where it is, glides to the lines, then selects and marks them. The selection gives the steady tint;
+  // the mark adds the gutter accent and the wipe-in highlight. A newer reveal re-runs this effect, and
+  // its cleanup cancels the frame in flight, so a second click retargets from wherever the glide is.
   let viewport: HTMLDivElement | undefined
   const referenceRoot = () => viewport?.querySelector("diffs-container")?.shadowRoot
   const clearReferenceMarks = () =>
@@ -407,6 +413,7 @@ function SessionFileViewV2(props: { tab: string }) {
     const reveal = fileReveal()
     const p = path()
     if (!reveal || reveal.directory !== sdk().directory || reveal.path !== p || !state()?.loaded) return
+    if (!panelSettled()) return
     const start = reveal.start
     const end = reveal.end ?? start
     if (!start || !end) {
@@ -414,14 +421,44 @@ function SessionFileViewV2(props: { tab: string }) {
       return
     }
     setNote("selected", null)
+    clearReferenceMarks()
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     let frame: number | undefined
+    // Ease-in-out scroll, after the code's fade-in; reduced motion lands on the end state at once.
+    const glide = (el: HTMLDivElement, to: number, delay: number, done: () => void) => {
+      const from = el.scrollTop
+      const begin = performance.now() + (still ? 0 : delay)
+      const step = (now: number) => {
+        const t = still ? 1 : Math.min(1, Math.max(0, (now - begin) / REFERENCE_SCROLL_MS))
+        el.scrollTop = from + (to - from) * (t < 0.5 ? 2 * t * t : 1 - (2 - 2 * t) ** 2 / 2)
+        frame = t < 1 ? requestAnimationFrame(step) : undefined
+        if (t === 1) done()
+      }
+      frame = requestAnimationFrame(step)
+    }
+    const mark = (root: ShadowRoot) => {
+      view().setScroll(props.tab, { x: 0, y: viewport?.scrollTop ?? 0 })
+      // Selecting notifies the viewer's selection handler, which clears marks, so mark a frame later.
+      file.setSelectedLines(p, { start, end })
+      frame = requestAnimationFrame(() => {
+        Array.from({ length: end - start + 1 }, (_, index) => start + index).forEach((number) =>
+          root
+            .querySelectorAll(`[data-line="${number}"], [data-column-number="${number}"]`)
+            .forEach((node) => node.setAttribute("data-file-reference", "")),
+        )
+        clearFileReveal()
+      })
+    }
     const attempt = (count: number) => {
       frame = undefined
       const root = referenceRoot()
       const line = root?.querySelector(`[data-line="${start}"]`)
       if (!viewport || !root || !(line instanceof HTMLElement)) {
-        // Large files render lazily; jump near the line so the virtualizer renders it.
-        if (count === 10 && viewport && root?.querySelector("[data-line]")) viewport.scrollTop = (start - 1) * 24
+        // Large files render lazily; glide near the line so the virtualizer renders it, then look again.
+        if (count === 10 && viewport && root?.querySelector("[data-line]")) {
+          glide(viewport, (start - 1) * 24, REFERENCE_FADE_MS, () => attempt(11))
+          return
+        }
         if (count < 120) frame = requestAnimationFrame(() => attempt(count + 1))
         else clearFileReveal()
         return
@@ -433,15 +470,7 @@ function SessionFileViewV2(props: { tab: string }) {
           viewport.scrollTop -
           viewport.clientHeight / 3,
       )
-      viewport.scrollTop = top
-      view().setScroll(props.tab, { x: 0, y: top })
-      clearReferenceMarks()
-      Array.from({ length: end - start + 1 }, (_, index) => start + index).forEach((number) =>
-        root
-          .querySelectorAll(`[data-line="${number}"], [data-column-number="${number}"]`)
-          .forEach((node) => node.setAttribute("data-file-reference", "")),
-      )
-      clearFileReveal()
+      glide(viewport, top, count > 10 ? 0 : REFERENCE_FADE_MS, () => mark(root))
     }
     frame = requestAnimationFrame(() => attempt(0))
     onCleanup(() => {
@@ -460,7 +489,7 @@ function SessionFileViewV2(props: { tab: string }) {
   })
 
   const renderFile = (source: string) => (
-    <div class="relative overflow-hidden pb-40">
+    <div class="relative overflow-hidden pb-40 animate-in fade-in duration-200 motion-reduce:animate-none">
       <Dynamic
         component={fileComponent}
         mode="text"
@@ -526,8 +555,18 @@ function SessionFileViewV2(props: { tab: string }) {
         <Switch>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
-            <div role="status" class="px-6 py-4 text-[13px] text-v2-text-text-muted">
-              {language.t("common.loading")}...
+            <div
+              role="status"
+              class="flex flex-col gap-2.5 px-6 py-4 animate-in fade-in duration-200 motion-reduce:animate-none"
+            >
+              <span class="sr-only">{language.t("common.loading")}...</span>
+              {[72, 54, 64, 38, 58].map((width) => (
+                <div
+                  aria-hidden="true"
+                  class="h-2.5 rounded-full bg-v2-background-bg-layer-01 animate-pulse motion-reduce:animate-none"
+                  style={{ width: `${width}%` }}
+                />
+              ))}
             </div>
           </Match>
           <Match when={state()?.error}>

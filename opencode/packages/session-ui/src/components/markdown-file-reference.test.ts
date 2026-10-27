@@ -21,10 +21,23 @@ describe("parseFileReference", () => {
     expect(parseFileReference("a.ts:0")).toEqual({ path: "a.ts" })
   })
 
-  test("ignores code, directories and URLs", () => {
+  test("reads a trailing slash as a folder and leaves an extensionless path to the listing", () => {
+    expect(parseFileReference("notes/")).toEqual({ path: "notes/", kind: "folder" })
+    expect(parseFileReference("src\\components\\")).toEqual({ path: "src\\components\\", kind: "folder" })
+    expect(parseFileReference("src/components")).toEqual({ path: "src/components", kind: "either" })
+    expect(parseFileReference("packages/desktop-electron")).toEqual({
+      path: "packages/desktop-electron",
+      kind: "either",
+    })
+    // A line range only makes sense for a file.
+    expect(parseFileReference("bin/opencode:12")).toEqual({ path: "bin/opencode", start: 12, end: 12 })
+    expect(parseFileReference("notes/:12")).toBeUndefined()
+  })
+
+  test("ignores code, bare words and URLs", () => {
     expect(parseFileReference("sync.data.session")).toBeUndefined()
-    expect(parseFileReference("packages/desktop-electron")).toBeUndefined()
-    expect(parseFileReference("src/")).toBeUndefined()
+    expect(parseFileReference("notes")).toBeUndefined()
+    expect(parseFileReference("/")).toBeUndefined()
     expect(parseFileReference("https://opencode.ai/docs.html")).toBeUndefined()
     expect(parseFileReference("a.ts:12-x")).toBeUndefined()
     expect(parseFileReference("foo(bar.ts)")).toBeUndefined()
@@ -36,6 +49,8 @@ describe("resolveFileReferencePath", () => {
   test("normalizes paths relative to the thread directory", () => {
     expect(resolveFileReferencePath("core/src/harness.ts", "/repo")).toBe("core/src/harness.ts")
     expect(resolveFileReferencePath("./core//src/./harness.ts", "/repo")).toBe("core/src/harness.ts")
+    expect(resolveFileReferencePath("notes/", "/repo")).toBe("notes")
+    expect(resolveFileReferencePath("src\\components\\", "C:\\repo")).toBe("src/components")
   })
 
   test("turns an absolute path inside the directory into a relative one", () => {
@@ -51,6 +66,10 @@ describe("resolveFileReferencePath", () => {
     expect(resolveFileReferencePath("/etc/passwd", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("/repo", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("~/.bashrc", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("../notes/", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("./", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("/etc/", "/repo")).toBeUndefined()
+    expect(resolveFileReferencePath("notes\u0007/", "/repo")).toBeUndefined()
     expect(resolveFileReferencePath("..\\secret.txt", "C:\\repo")).toBeUndefined()
     expect(resolveFileReferencePath("D:\\repo\\a.ts", "C:\\repo")).toBeUndefined()
     // Drive-relative paths resolve against that drive's current folder, not the thread folder.

@@ -852,23 +852,45 @@ note preview keep `html` blocks as highlighted code.
 
 ### File references in chat
 
-Inline code that names a file relative to the thread folder, optionally with
-`:N`, `:N-M`, `:N:col`, `#LN` or `#LN-LM`, becomes a link chip in assistant
-text (`session-ui/src/components/markdown-file-reference.ts`, marked and
-wired by `markdown-file-reference-peek.tsx`). The classifier must call it a
-path and its last segment must have a known extension or file name. Paths
-with `..`, `~`, control characters, a Windows drive-relative path (`D:x.ts`),
-or an absolute path outside the thread folder stay plain code; absolute paths
-inside it become relative.
+Inline code that names a file or folder relative to the thread folder becomes
+a link chip in assistant text (`session-ui/src/components/markdown-file-reference.ts`,
+marked and wired by `markdown-file-reference-peek.tsx`). The classifier must
+call it a path. A last segment with a known extension or file name marks a
+file, optionally with `:N`, `:N-M`, `:N:col`, `#LN` or `#LN-LM`; a trailing
+`/` marks a folder (with a folder icon, and no line range). Any other path
+the classifier accepts has a slash and no extension, so it may be either: the
+chip is marked as `either`, and the parent folder's listing decides at hover
+or click time (a line range makes it a file). Paths with `..`, `~`, control
+characters, a Windows drive-relative path (`D:x.ts`), or an absolute path
+outside the thread folder stay plain code; absolute paths inside it become
+relative.
 
 - Hover or focus shows a peek with up to 12 lines, read through the Files
-  tab's own APIs (cached `file.get`, else `file.read`; existence checked with
-  `file.list` on the parent, because `/file/content` returns empty text for a
-  missing file).
-- Click or "Open in Files" opens the right panel, expands the ancestor
-  folders, opens the file as a preview tab, sets the selected lines (steady
-  tint) and scrolls the start line into view with a short flash
-  (`file-tabs.tsx`, `data-file-reference` in the file viewer).
+  tab's own APIs (cached `file.get`, else `file.read`; existence and kind
+  checked with `file.list` on the parent, because `/file/content` returns
+  empty text for a missing file). A folder's peek shows its name and item
+  count instead, and gives an `either` chip its folder icon.
+- Click or "Open in Files" on a file opens the right panel, expands the
+  ancestor folders and opens the file as a preview tab. Opening a closed
+  panel slides it in (300 ms, emphasized decelerate) while the thread column
+  eases left; the panel's content is mounted at once but shown only after the
+  slide (`panelSettled` in `app/src/pages/session/file-reference.tsx`, set by
+  the open edge in `session.tsx`, which no longer snaps the width on open).
+  The tab bar and code then fade in, a skeleton covers loading, and
+  `file-tabs.tsx` glides the viewer to the start line (350 ms ease-in-out),
+  then sets the selected lines and marks them (`data-file-reference`): the
+  stronger tint wipes in from the left and settles to the selected-line tint,
+  with a gutter accent bar. A tab switch fades the Files view in. A second
+  click replaces the reveal and cancels the glide in flight.
+- Click on a folder opens the right panel on the Files tree (beside the
+  active file tab, else the Open file tab), expands its ancestors, and, once
+  the panel has arrived, selects the folder row, scrolls it smoothly to the
+  centre, flashes it (accent wash settling to the selected style with a 2px
+  accent inset), expands it (chevron turns, children fade in) and adds the
+  folder to the tree's breadcrumb (`file-tree-v2.tsx`,
+  `session-file-browser-tab.tsx`). It stays selected until a file is. A
+  missing folder shows the not-found toast.
+- With reduced motion every step shows its end state at once.
 - A bare file name is tried at the thread folder, then through
   `file.searchFiles`; it is used only when exactly one file matches.
 - The app supplies `FileReferenceProvider` (`session-ui/src/context/file-reference.tsx`)

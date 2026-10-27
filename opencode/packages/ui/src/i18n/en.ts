@@ -73,7 +73,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 
-
   "ui.sessionTurn.status.delegating": "Delegating work",
   "ui.sessionTurn.status.planning": "Planning next steps",
   "ui.sessionTurn.status.gatheringContext": "Exploring",
@@ -222,10 +221,13 @@ export const dict: Record<string, string> = {
   "secondBrain.fileReference.copyPath": "Copy path",
   "secondBrain.fileReference.loading": "Loading preview…",
   "secondBrain.fileReference.missing": "File not found in this thread's folder",
+  "secondBrain.fileReference.folderMissing": "Folder not found in this thread's folder",
   "secondBrain.fileReference.binary": "No text preview for this file",
   "secondBrain.fileReference.empty": "These lines are past the end of the file",
   "secondBrain.fileReference.more.one": "{{count}} more line",
   "secondBrain.fileReference.more.other": "{{count}} more lines",
+  "secondBrain.fileReference.items.one": "{{count}} item",
+  "secondBrain.fileReference.items.other": "{{count}} items",
   "secondBrain.message.design.title": "Design",
   "secondBrain.message.design.badge": "html · sandboxed",
   "secondBrain.message.design.use": "Use this one",

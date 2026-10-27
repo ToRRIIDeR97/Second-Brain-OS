@@ -83,7 +83,7 @@ import {
   sidePanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
-import { SessionFileReferences } from "@/pages/session/file-reference"
+import { SessionFileReferences, slidePanelOpen } from "@/pages/session/file-reference"
 import { DesignCanvasProvider } from "@/pages/session/design-canvas"
 import { SESSION_SIDE_RAIL_SPACE, SessionSideRail } from "@/pages/session/session-side-rail"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
@@ -644,6 +644,13 @@ export default function Page() {
     if (prev === undefined || prev === open) return open
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+    // Opening slides the panel in while the thread column eases left; its content follows once it has
+    // arrived. Closing still snaps, so the column never sweeps across an emptied panel.
+    if (open) {
+      setUi("reviewSnap", false)
+      slidePanelOpen()
+      return open
+    }
     setUi("reviewSnap", true)
     reviewFrame = requestAnimationFrame(() => {
       reviewFrame = undefined
@@ -2145,7 +2152,7 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-            "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
+            "duration-300 ease-emphasized will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap && !desktopInlineTerminalOnlyOpen(),
           }}
           style={{
