@@ -2,7 +2,6 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "so
 import type { Part, ToolPart } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
-import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { Icon as StepIcon } from "@opencode-ai/ui/icon"
 import {
   stepIcon,
@@ -112,16 +111,9 @@ export function TurnStepsSummary(props: {
   const summary = createMemo(() => summarizeTurn(props.parts))
   const counts = createMemo(() => stepCounts(summary().counts))
   const live = () => props.working && !props.open
-  const activity = createMemo(() =>
-    // Finished lanes stay, with a full bar, until the turn ends so parallel subagents don't jump around.
-    live() ? { ticker: tickerStep(props.parts), lanes: subagentLanes(props.parts) } : undefined,
-  )
-  const active = () => !!activity()?.ticker || (activity()?.lanes.length ?? 0) > 0
-  // The live card folds through Reveal when the turn ends or the steps open; it keeps its last content
-  // while it folds.
-  const shown = createMemo<ReturnType<typeof activity>>((last) => (active() ? activity() : last))
-  const ticker = () => shown()?.ticker
-  const lanes = () => shown()?.lanes ?? []
+  const ticker = createMemo(() => (live() ? tickerStep(props.parts) : undefined))
+  // Finished lanes stay, with a full bar, until the turn ends so parallel subagents don't jump around.
+  const lanes = createMemo(() => (live() ? subagentLanes(props.parts) : []))
   // One clock drives the turn and step timers; it only ticks while the turn works.
   const [now, setNow] = createSignal(Date.now())
   createEffect(() => {
@@ -203,7 +195,8 @@ export function TurnStepsSummary(props: {
           classList={{ "rotate-90 rtl:-rotate-90": props.open }}
         />
       </button>
-      <Reveal open={active()}>
+      {/* Shown and hidden at once: the card sits in a virtualized timeline row. */}
+      <Show when={ticker() || lanes().length > 0}>
         <div class="flex flex-col gap-2 px-3 pb-2.5 text-[13px] leading-5">
           {/* One line, fixed height: a new step replaces the old one instead of pushing rows below it. */}
           <Show when={ticker()} keyed>
@@ -303,7 +296,7 @@ export function TurnStepsSummary(props: {
             }}
           </For>
         </div>
-      </Reveal>
+      </Show>
     </div>
   )
 }

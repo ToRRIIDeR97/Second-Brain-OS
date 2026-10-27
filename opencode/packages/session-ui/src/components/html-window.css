@@ -100,7 +100,7 @@
     width: 100%;
     border: 0;
     background: transparent;
-    transition: height var(--v2-duration-medium) var(--v2-ease-standard);
+    transition: height var(--v2-duration-short) var(--v2-ease-standard);
 
     &[data-enter] {
       animation: html-window-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;

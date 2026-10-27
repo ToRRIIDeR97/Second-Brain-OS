@@ -185,16 +185,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Material 3 shape and motion: rounded menu surface that scales in from its anchor. */
+/* Material 3 shape and motion: rounded menu surface that scales in from its anchor (short +
+   emphasized-decelerate). Menus and selects close at once: an exit would keep the menu mounted, so a
+   selection or a dismissal would wait on it. */
 [data-component="menu-v2-content"] {
   border-radius: var(--v2-radius-md);
   transform-origin: var(--kb-menu-content-transform-origin, top left);
-  animation: menu-v2-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate);
-}
-
-/* Exit uses its own animation-name so Kobalte's presence keeps the menu mounted until it ends. */
-[data-component="menu-v2-content"][data-closed] {
-  animation: menu-v2-exit var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
+  animation: menu-v2-enter var(--v2-duration-short) var(--v2-ease-emphasized-decelerate);
 }
 
 @keyframes menu-v2-enter {
@@ -208,16 +205,8 @@
   }
 }
 
-@keyframes menu-v2-exit {
-  to {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  [data-component="menu-v2-content"],
-  [data-component="menu-v2-content"][data-closed] {
+  [data-component="menu-v2-content"] {
     animation: none;
   }
 }
