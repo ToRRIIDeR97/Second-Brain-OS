@@ -1,17 +1,19 @@
-import { onMount } from "solid-js"
-
 /**
  * For live lists whose rows `For` recreates on every rebuild: reports whether an id joined the list after
- * its first render, so only rows that appear later (a new thread, a run that started) animate in. Call it
- * once per row, as the row is created, inside the component that owns the list.
+ * its first non-empty render, so only rows that appear later (a new thread, a run that started) animate
+ * in. Lists often mount empty and fill when their query resolves; the rows of that first fill, created in
+ * one synchronous render, all count as seen. Call it once per row, as the row is created.
  */
 export function createFreshItems() {
   const seen = new Set<string>()
-  const ready = { current: false }
-  onMount(() => (ready.current = true))
+  const state = { ready: false, arming: false }
   return (id: string) => {
-    const fresh = ready.current && !seen.has(id)
+    const fresh = state.ready && !seen.has(id)
     seen.add(id)
+    if (!state.ready && !state.arming) {
+      state.arming = true
+      queueMicrotask(() => (state.ready = true))
+    }
     return fresh
   }
 }

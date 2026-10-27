@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { createRoot } from "solid-js"
 import { focusWhenConnected } from "../src/utils/focus-when-connected"
 import { createFreshItems } from "../src/utils/fresh-items"
 
@@ -20,16 +19,16 @@ describe("focusWhenConnected", () => {
 })
 
 describe("createFreshItems", () => {
-  test("marks only ids that join after the first render", () => {
-    const fresh = createRoot((dispose) => {
-      const check = createFreshItems()
-      expect(check("first")).toBe(false)
-      return { check, dispose }
-    })
-    expect(fresh.check("first")).toBe(false)
-    expect(fresh.check("later")).toBe(true)
+  test("treats the first non-empty render as seen, then marks only later ids", async () => {
+    const check = createFreshItems()
+    // The list mounted empty; its query resolves later and renders every row in one pass.
+    await Promise.resolve()
+    expect(check("first")).toBe(false)
+    expect(check("second")).toBe(false)
+    await Promise.resolve()
+    expect(check("first")).toBe(false)
+    expect(check("later")).toBe(true)
     // A rebuilt list recreates the row; it does not enter again.
-    expect(fresh.check("later")).toBe(false)
-    fresh.dispose()
+    expect(check("later")).toBe(false)
   })
 })

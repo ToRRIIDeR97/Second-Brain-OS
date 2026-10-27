@@ -163,7 +163,7 @@ function ProviderPickerV2(props: {
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
 
-  onMount(() => search && focusWhenConnected(search, { preventScroll: true }))
+  onMount(() => search && focusWhenConnected(search))
 
   const connect = (provider: string) => {
     props.onPrepare?.()
@@ -664,7 +664,7 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      if (apiKey) focusWhenConnected(apiKey, { preventScroll: true })
+      if (apiKey) focusWhenConnected(apiKey)
     })
 
     async function handleSubmit(e: SubmitEvent) {
@@ -732,7 +732,7 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      if (codeInput) focusWhenConnected(codeInput, { preventScroll: true })
+      if (codeInput) focusWhenConnected(codeInput)
     })
 
     async function handleSubmit(e: SubmitEvent) {

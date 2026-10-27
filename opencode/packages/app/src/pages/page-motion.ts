@@ -1,9 +1,17 @@
 import { NEW_THREAD_PATH } from "@/context/drafts"
 
-/** The shell section a pathname belongs to. Draft and session routes share one section: the thread view. */
+const pages = new Set(["/", "/notes", "/calendar", "/projects", "/activity"])
+
+/**
+ * The shell section a pathname belongs to. Draft and session routes share one section, the thread view,
+ * and so do the legacy draft and session paths that redirect there (`/new-session`, `/:dir/session/...`).
+ * Every other path redirects to Home (`/brain`, `/workspaces`, unknown paths), so it counts as Home.
+ */
 export function routeSection(pathname: string) {
-  if (pathname === NEW_THREAD_PATH || pathname.startsWith("/server/")) return "thread"
-  return pathname
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname
+  if (path === NEW_THREAD_PATH || path === "/new-session" || path.startsWith("/server/")) return "thread"
+  if (path.split("/")[2] === "session") return "thread"
+  return pages.has(path) ? path : "/"
 }
 
 export type PageMotionKey = { section: string; count: number }
