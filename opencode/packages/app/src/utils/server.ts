@@ -146,6 +146,24 @@ export async function listHarnessesForServer(
   return decodeHarnessResponse(await response.json()).data
 }
 
+// The last list each server reported per folder. A composer that opens shows it at once while its own
+// check runs, so opening a thread doesn't wait on the server starting every harness CLI. Every check
+// replaces it; a failed check is never kept.
+const recentHarnesses = new Map<string, ReadonlyArray<HarnessSchema.Instance>>()
+const recentHarnessKey = (url: string, directory: string) => `${url}\n${directory}`
+
+export function rememberedHarnesses(url: string, directory: string) {
+  return recentHarnesses.get(recentHarnessKey(url, directory))
+}
+
+/** Lists the harnesses for a folder and remembers the answer. A failed check returns the fallback list. */
+export async function listHarnessesRemembered(input: Parameters<typeof listHarnessesForServer>[0], directory: string) {
+  const list = await listHarnessesForServer(input, directory).catch(() => undefined)
+  if (!list) return fallbackHarnesses()
+  recentHarnesses.set(recentHarnessKey(input.server.url, directory), list)
+  return list
+}
+
 const decodeSettingsList = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.SettingsEntry)))
 const decodeSettingsEntry = Schema.decodeUnknownSync(Location.response(HarnessSchema.SettingsEntry))
 const decodeDiscovery = Schema.decodeUnknownSync(Location.response(HarnessSchema.Discovery))

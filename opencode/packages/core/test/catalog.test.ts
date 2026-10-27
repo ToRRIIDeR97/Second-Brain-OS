@@ -408,6 +408,10 @@ describe("CatalogV2", () => {
       ] as const
       for (const [providerID, modelID] of cases)
         expect(yield* catalog.model.getAvailable(providerID, modelID)).toEqual(yield* listed(providerID, modelID))
+      const availableProviders = new Set((yield* catalog.provider.available()).map((provider) => provider.id))
+      expect(yield* catalog.model.available()).toEqual(
+        (yield* catalog.model.all()).filter((item) => availableProviders.has(item.providerID) && item.enabled),
+      )
       expect(yield* catalog.model.getAvailable(open, model)).toMatchObject({ api: { url: "https://open.example/v1" } })
       expect(yield* catalog.model.getAvailable(gated, model)).toBeUndefined()
 

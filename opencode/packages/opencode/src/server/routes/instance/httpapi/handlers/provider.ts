@@ -4,7 +4,6 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { Auth } from "@/auth"
 
-import { mapValues } from "remeda"
 import { Effect, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -34,6 +33,16 @@ function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R
 
 const listEtagBoot = crypto.randomUUID()
 const encodeListResult = Schema.encodeSync(Provider.ListResult)
+const encodeInfo = Schema.encodeSync(Provider.Info)
+// Encoded models.dev entries, keyed by the shared (read-only) Provider.fromModelsDev entry they came from.
+const encodedShared = new WeakMap<Provider.Info, unknown>()
+function encodeShared(info: Provider.Info) {
+  const cached = encodedShared.get(info)
+  if (cached) return cached
+  const encoded = encodeInfo(info)
+  encodedShared.set(info, encoded)
+  return encoded
+}
 
 function matchesEtag(header: string | undefined, etag: string) {
   if (!header) return false
@@ -77,18 +86,24 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       ) {
         const disabled = new Set(config.disabled_providers ?? [])
         const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-        const filtered: Record<string, (typeof all)[string]> = {}
-        for (const [key, value] of Object.entries(all)) {
+        // The models.dev projection is directory-independent and shared with Provider state.
+        const shared = Provider.fromModelsDev(all)
+        const filtered: Record<string, Provider.Info> = {}
+        for (const [key, value] of Object.entries(shared.catalog)) {
           if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
         }
-        const providers = Object.assign(
-          mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
-          connected,
-        )
-        const result = {
-          all: Object.values(providers).map(Provider.toPublicInfo),
+        const providers: Record<string, Provider.Info> = Object.assign(filtered, connected)
+        const head = encodeListResult({
+          all: [],
           default: Provider.defaultModelIDs(providers),
           connected: Object.keys(providers).filter((id) => id in connected || credentials[id]),
+        })
+        const result = {
+          all: Object.entries(providers).map(([id, item]) =>
+            id in connected ? encodeInfo(Provider.toPublicInfo(item)) : encodeShared(shared.database[id]),
+          ),
+          default: head.default,
+          connected: head.connected,
         }
         version += 1
         cached = {
@@ -98,7 +113,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           credentials: credentialIDs,
           // The boot token keeps ETags from a previous server process from matching.
           etag: `W/"${listEtagBoot}-${version}"`,
-          body: JSON.stringify(encodeListResult(result)),
+          body: JSON.stringify(result),
         }
       }
       const headers = { etag: cached.etag }

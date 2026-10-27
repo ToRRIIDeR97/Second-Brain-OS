@@ -1599,6 +1599,33 @@ test("public provider info omits invalid models", () => {
   expect(result.models.invalid).toBeUndefined()
 })
 
+test("models.dev catalog is derived once per snapshot", () => {
+  const snapshot = () =>
+    ({
+      test: {
+        id: "test",
+        name: "Test",
+        env: [],
+        models: {
+          valid: {
+            id: "valid",
+            name: "Valid",
+            cost: { input: 1, output: 1 },
+            limit: { context: 128_000, output: 16_000 },
+          },
+        },
+      },
+    }) as unknown as Record<string, ModelsDev.Provider>
+  const first = snapshot()
+  const derived = Provider.fromModelsDev(first)
+
+  expect(Provider.fromModelsDev(first)).toBe(derived)
+  expect(derived.catalog.test).toEqual(Provider.fromModelsDevProvider(first.test))
+  expect(derived.database.test).toEqual(Provider.toPublicInfo(Provider.fromModelsDevProvider(first.test)))
+  // A refreshed snapshot is a new object and gets its own derivation.
+  expect(Provider.fromModelsDev(snapshot())).not.toBe(derived)
+})
+
 it.instance("model variants are generated for reasoning models", () =>
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
