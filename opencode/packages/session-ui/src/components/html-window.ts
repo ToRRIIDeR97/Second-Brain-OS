@@ -111,6 +111,8 @@ function mount(
     const el = button(labels.source, () => {
       const showing = wrapper.dataset.htmlWindow === shown
       wrapper.dataset.htmlWindow = showing ? hidden : shown
+      // The view the toggle reveals fades in (html-window.css); views shown on mount do not.
+      wrapper.dataset.htmlWindowToggled = ""
       el.textContent = showing ? labels.source : back
       if (pressable) el.setAttribute("aria-pressed", String(!showing))
     })
@@ -185,6 +187,7 @@ function unmount(wrapper: HTMLElement) {
     )
     .forEach((el) => el.remove())
   delete wrapper.dataset.htmlWindow
+  delete wrapper.dataset.htmlWindowToggled
   mounted.delete(wrapper)
 }
 

@@ -256,3 +256,32 @@
     animation: none !important;
   }
 }
+
+/* Agent tab transcript disclosures (subagent-tab.tsx) open and close their content through
+   ::details-content: medium + emphasized-decelerate opening, short + emphasized-accelerate closing. */
+[data-slot="subagent-details"] {
+  interpolate-size: allow-keywords;
+
+  &::details-content {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      block-size var(--v2-duration-short) var(--v2-ease-emphasized-accelerate),
+      opacity var(--v2-duration-short) var(--v2-ease-emphasized-accelerate),
+      content-visibility var(--v2-duration-short) allow-discrete;
+  }
+
+  &[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+    transition-duration: var(--v2-duration-medium);
+    transition-timing-function: var(--v2-ease-emphasized-decelerate);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="subagent-details"]::details-content {
+    transition: none;
+  }
+}

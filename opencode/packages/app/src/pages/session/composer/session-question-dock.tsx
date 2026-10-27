@@ -1,4 +1,14 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from "solid-js"
+import {
+  For,
+  Show,
+  createComputed,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  type Component,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
@@ -6,6 +16,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
@@ -88,6 +99,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   })
 
   let root: HTMLDivElement | undefined
+  let textRef: HTMLDivElement | undefined
   // A signal: each question mounts its own options list (see the keyed body below), and it is measured again.
   const [optionsRef, setOptionsRef] = createSignal<HTMLDivElement>()
   let customRef: HTMLButtonElement | undefined
@@ -128,8 +140,50 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const collapse = useSpring(() => (store.minimized ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const hidden = createMemo(() => Math.max(0, Math.min(1, collapse())))
   const optionsOff = createMemo(() => hidden() > 0.98)
-  // The question text clamps only once minimizing has finished, so it doesn't jump while the options fold.
-  const clamped = () => store.minimized && optionsOff()
+  // Minimizing clamps the question text to three lines; its height eases there (easeHeight below).
+  const clamped = () => store.minimized
+
+  // Next/Back and minimize change the dock's and the question text's height at once; each change plays one
+  // height animation from the old height (read before the DOM updates) to the new one. Growing is medium +
+  // emphasized-decelerate, shrinking short + emphasized-accelerate; reduced motion keeps the jump.
+  const heights = { dock: 0, text: 0 }
+  const easeHeight = (el: HTMLElement | undefined, from: number) => {
+    if (!el || !from || prefersReducedMotion()) return
+    const to = el.getBoundingClientRect().height
+    if (Math.abs(to - from) < 1) return
+    const grow = to > from
+    const easing = getComputedStyle(el)
+      .getPropertyValue(grow ? "--v2-ease-emphasized-decelerate" : "--v2-ease-emphasized-accelerate")
+      .trim()
+    el.animate(
+      [
+        { height: `${from}px`, overflow: "hidden" },
+        { height: `${to}px`, overflow: "hidden" },
+      ],
+      { duration: motionDuration(grow ? "medium" : "short"), easing: easing || "ease" },
+    )
+  }
+  // (`on` is taken by the custom-answer memo below, so these compare against the previous value themselves.)
+  createComputed<number | undefined>((last) => {
+    const tab = store.tab
+    if (last !== undefined && last !== tab) heights.dock = root?.getBoundingClientRect().height ?? 0
+    return tab
+  })
+  createEffect<number | undefined>((last) => {
+    const tab = store.tab
+    if (last !== undefined && last !== tab) easeHeight(root, heights.dock)
+    return tab
+  })
+  createComputed<boolean | undefined>((last) => {
+    const minimized = store.minimized
+    if (last !== undefined && last !== minimized) heights.text = textRef?.getBoundingClientRect().height ?? 0
+    return minimized
+  })
+  createEffect<boolean | undefined>((last) => {
+    const minimized = store.minimized
+    if (last !== undefined && last !== minimized) easeHeight(textRef, heights.text)
+    return minimized
+  })
 
   const customUpdate = (value: string, selected: boolean = on()) => {
     const prev = input().trim()
@@ -579,6 +633,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             return (
               <div class={`flex min-h-0 flex-1 flex-col gap-1${entering ? " animate-enter" : ""}`}>
                 <div
+                  ref={textRef}
                   data-slot="question-text"
                   style={{
                     display: clamped() ? "-webkit-box" : undefined,

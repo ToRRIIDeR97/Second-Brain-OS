@@ -127,6 +127,15 @@
   }
 }
 
+/* After the Source toggle, the source or the preview it reveals fades in. */
+[data-component="markdown"] [data-component="markdown-code"][data-html-window-toggled] {
+  &[data-html-window="source"] pre,
+  &[data-html-window="card-source"] pre,
+  &[data-html-window="window"] [data-slot="html-window-frame"] {
+    animation: html-window-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+  }
+}
+
 @keyframes html-window-enter {
   from {
     opacity: 0;
@@ -147,5 +156,12 @@
 
   [data-component="markdown"] [data-slot="html-window-frame"] {
     transition: none;
+  }
+
+  [data-component="markdown"] [data-component="markdown-code"][data-html-window-toggled] pre,
+  [data-component="markdown"]
+    [data-component="markdown-code"][data-html-window-toggled]
+    [data-slot="html-window-frame"] {
+    animation: none !important;
   }
 }

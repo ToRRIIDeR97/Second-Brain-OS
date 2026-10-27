@@ -274,7 +274,7 @@ function TranscriptEntry(props: { entry: SubagentTranscriptEntry }) {
       </Match>
       <Match when={props.entry.type === "reasoning" && props.entry}>
         {(entry) => (
-          <details class="group text-[13px] text-v2-text-text-muted">
+          <details data-slot="subagent-details" class="group text-[13px] text-v2-text-text-muted">
             <summary class={SUMMARY}>
               <Disclosure />
               {language.t("secondBrain.agentTab.reasoning")}
@@ -307,7 +307,7 @@ function TranscriptEntry(props: { entry: SubagentTranscriptEntry }) {
                 }
               >
                 {(output) => (
-                  <details class="group">
+                  <details data-slot="subagent-details" class="group">
                     <summary class={SUMMARY}>
                       <Disclosure />
                       {row()}

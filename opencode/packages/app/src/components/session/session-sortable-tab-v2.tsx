@@ -14,6 +14,7 @@ export function SortableTabV2(props: {
   temporary?: boolean
   onTabClose: (tab: string) => void
   onTabDoubleClick?: (tab: string) => void
+  class?: string
 }): JSX.Element {
   const file = useFile()
   const language = useLanguage()
@@ -33,7 +34,7 @@ export function SortableTabV2(props: {
     return <FileVisual path={value} temporary={props.temporary} />
   })
   return (
-    <div ref={sortable.ref} class="h-full flex items-center">
+    <div ref={sortable.ref} class={`h-full flex items-center${props.class ? ` ${props.class}` : ""}`}>
       <TabsV2.Trigger
         value={props.tab}
         onMiddleClick={() => props.onTabClose(props.tab)}

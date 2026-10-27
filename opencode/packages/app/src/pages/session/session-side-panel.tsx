@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { DragDropProvider as DndKitProvider, PointerSensor } from "@dnd-kit/solid"
@@ -313,7 +313,7 @@ export function SessionSidePanel(props: {
 
   const contextTrigger = () => (
     <Show when={contextOpen()}>
-      <TabsV2.Trigger value="context" onMiddleClick={() => tabs().close("context")}>
+      <TabsV2.Trigger value="context" class={tabEnter()} onMiddleClick={() => tabs().close("context")}>
         <SessionContextUsage variant="indicator" />
         <span>{language.t("secondBrain.sessionTab.title")}</span>
         {closeButton("context")}
@@ -323,17 +323,22 @@ export function SessionSidePanel(props: {
 
   const canvasTrigger = () => (
     <Show when={tabState.canvasOpen()}>
-      <TabsV2.Trigger value={CANVAS_TAB} onMiddleClick={() => tabs().close(CANVAS_TAB)}>
+      <TabsV2.Trigger value={CANVAS_TAB} class={tabEnter()} onMiddleClick={() => tabs().close(CANVAS_TAB)}>
         <span>{language.t("secondBrain.canvas.title")}</span>
         {closeButton(CANVAS_TAB)}
       </TabsV2.Trigger>
     </Show>
   )
 
+  // Tabs opened after the strip has mounted fade and rise in; the tabs it opens with do not.
+  const strip = { ready: false }
+  onMount(() => requestAnimationFrame(() => (strip.ready = true)))
+  const tabEnter = () => (strip.ready ? "animate-enter" : undefined)
+
   const agentTriggers = () => (
     <For each={agentTabs()}>
       {(tab) => (
-        <TabsV2.Trigger value={tab} onMiddleClick={() => tabs().close(tab)}>
+        <TabsV2.Trigger value={tab} class={tabEnter()} onMiddleClick={() => tabs().close(tab)}>
           <SubagentTabLabel found={subagentParts().get(agentTabPartID(tab)!)} />
           {closeButton(tab)}
         </TabsV2.Trigger>
@@ -364,7 +369,11 @@ export function SessionSidePanel(props: {
   )
 
   const openFileTrigger = () => (
-    <TabsV2.Trigger value={SESSION_OPEN_FILE_TAB} onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}>
+    <TabsV2.Trigger
+      value={SESSION_OPEN_FILE_TAB}
+      class={tabEnter()}
+      onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
+    >
       <Icon name="magnifying-glass" size="small" />
       <span class="italic">{language.t("command.file.open")}</span>
       {closeButton(SESSION_OPEN_FILE_TAB)}
@@ -637,6 +646,7 @@ export function SessionSidePanel(props: {
                                   fallback={
                                     <SortableTabV2
                                       tab={tab}
+                                      class={tabEnter()}
                                       index={() => tabs().all().indexOf(tab)}
                                       temporary={temporaryTab() === tab}
                                       onTabClose={tabs().close}
