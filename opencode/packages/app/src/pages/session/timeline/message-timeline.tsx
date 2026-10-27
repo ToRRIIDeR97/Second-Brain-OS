@@ -248,6 +248,8 @@ export function MessageTimeline(props: {
   onHistoryScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   shouldAnchorBottom: () => boolean
+  /** True while a user toggle settles; the page pauses following the bottom meanwhile (see holdForToggle). */
+  onToggleHold?: (hold: boolean) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   userMessages: UserMessage[]
@@ -274,6 +276,27 @@ export function MessageTimeline(props: {
   const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
+  // Opening or closing something (any control with aria-expanded) holds the thread still while the content
+  // eases, instead of following the bottom: the clicked control stays under the pointer. Streaming growth
+  // follows the bottom again once the hold ends.
+  const [toggleHold, setToggleHold] = createSignal(false)
+  let toggleHoldTimer: ReturnType<typeof setTimeout> | undefined
+  const holdForToggle = () => {
+    clearTimeout(toggleHoldTimer)
+    if (!toggleHold()) {
+      setToggleHold(true)
+      props.onToggleHold?.(true)
+    }
+    toggleHoldTimer = setTimeout(
+      () => {
+        setToggleHold(false)
+        props.onToggleHold?.(false)
+      },
+      motionDuration("medium") + 500,
+    )
+  }
+  onCleanup(() => clearTimeout(toggleHoldTimer))
+  const anchorBottom = () => !toggleHold() && props.shouldAnchorBottom()
   const sessionID = createMemo(() => params.id)
   const sessionStatus = createMemo(() => {
     const id = sessionID()
@@ -338,7 +361,8 @@ export function MessageTimeline(props: {
   // A user toggle wins; otherwise steps open only when one failed. A working turn shows its live ticker instead.
   const turnStepsOpen = (row: TimelineRow.TurnSteps) =>
     toolOpen[`turn:${row.userMessageID}:${row.segment}`] ?? row.failed
-  // Unfolding a turn's steps fades its step rows in; folding fades them out before they leave the projection.
+  // Unfolding a turn's steps grows its step rows in (height and opacity, thread.css); folding shrinks them to
+  // nothing before they leave the projection, so the rows below never jump.
   // Only the toggled rows animate, never the initial history load.
   const [stepMotion, setStepMotion] = createSignal<{ turn: string; keys: Set<string>; phase: "enter" | "exit" }>()
   let stepMotionTimer: ReturnType<typeof setTimeout> | undefined
@@ -379,11 +403,14 @@ export function MessageTimeline(props: {
     }
     setStepMotion({ turn, keys: stepRowKeys(row), phase: "exit" })
     pendingFold = apply
-    stepMotionTimer = setTimeout(() => {
-      pendingFold = undefined
-      setStepMotion(undefined)
-      apply()
-    }, motionDuration("short"))
+    stepMotionTimer = setTimeout(
+      () => {
+        pendingFold = undefined
+        setStepMotion(undefined)
+        apply()
+      },
+      motionDuration("short") + 30,
+    )
   }
   const stepFolding = (row: TimelineRow.TurnSteps) => {
     const motion = stepMotion()
@@ -499,7 +526,10 @@ export function MessageTimeline(props: {
     },
     anchorTo: "end",
     followOnAppend: true,
-    scrollEndThreshold: 80,
+    // Off during a toggle hold, so a resize near the end doesn't keep the end pinned.
+    get scrollEndThreshold() {
+      return toggleHold() ? -1 : 80
+    },
     get scrollMargin() {
       return showHeader() ? 64 : 0
     },
@@ -522,7 +552,7 @@ export function MessageTimeline(props: {
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
-      if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+      if (!anchorBottom() || props.hasScrollGesture()) return
       virtualizer.scrollToEnd()
     })
   }
@@ -547,10 +577,10 @@ export function MessageTimeline(props: {
       })
     }
     resizeItem(index, size)
-    if (root && props.shouldAnchorBottom()) anchorResizedBottom()
+    if (root && anchorBottom()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-    if (props.shouldAnchorBottom()) return false
+    if (anchorBottom()) return false
     const first = virtualizer.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -582,7 +612,7 @@ export function MessageTimeline(props: {
 
   const maybeAnchorBottom = () => {
     if (timelineRows().length === 0) return
-    if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+    if (!anchorBottom() || props.hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
@@ -625,6 +655,16 @@ export function MessageTimeline(props: {
     setListRoot(root)
     props.setScrollRef(root)
   }
+  createEffect(() => {
+    const root = listRoot()
+    if (!root) return
+    const onToggle = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("[aria-expanded]")) holdForToggle()
+    }
+    // Capture, so the hold starts before the toggle's own click handler changes the content.
+    root.addEventListener("click", onToggle, true)
+    onCleanup(() => root.removeEventListener("click", onToggle, true))
+  })
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
     if (!prependLoading) clearPrependAnchor()
@@ -1288,7 +1328,7 @@ export function MessageTimeline(props: {
             element = value
           }}
           data-index={item().index}
-          classList={{ "animate-enter": stepPhase() === "enter", "animate-exit": stepPhase() === "exit" }}
+          data-step-motion={stepPhase()}
           style={{ "min-height": ready() ? undefined : `${initialItem.size}px` }}
         >
           <TimelineRowView
