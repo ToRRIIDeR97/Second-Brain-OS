@@ -1,6 +1,8 @@
 /* ViewSwitch fade-through: out is short + emphasized-accelerate, in is medium + emphasized-decelerate.
    The two keyframes have different names so each phase restarts the animation. */
+/* The outgoing view is also inert (view-switch.tsx); pointer-events covers the frame before that applies. */
 [data-component="view-switch-v2"][data-phase="out"] {
+  pointer-events: none;
   animation: view-switch-v2-out var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
 }
 

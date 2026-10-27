@@ -32,35 +32,44 @@ const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
   const [stack, setStack] = createSignal<Active[]>([])
-  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  // A closing dialog waits out its exit animation before it is disposed and leaves the stack.
+  const pending = {
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+    finish: undefined as (() => void) | undefined,
+  }
   const lock = { value: false }
 
   onCleanup(() => {
-    if (timer.current === undefined) return
-    clearTimeout(timer.current)
-    timer.current = undefined
+    clearTimeout(pending.timer)
+    pending.timer = undefined
+    pending.finish = undefined
   })
+
+  // Finishes a pending close now, so a dialog opened during another's exit stacks above a settled list.
+  const settle = () => {
+    const finish = pending.finish
+    clearTimeout(pending.timer)
+    pending.timer = undefined
+    pending.finish = undefined
+    finish?.()
+  }
 
   const close = (id?: string) => {
     const items = stack()
     const current = id ? items.find((item) => item.id === id) : items.at(-1)
-    if (!current || lock.value) return
+    if (!current || lock.value) return false
     lock.value = true
     current.onClose?.()
     current.setClosing(true)
 
-    const closed = current.id
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
-
-    timer.current = setTimeout(() => {
-      timer.current = undefined
+    settle()
+    pending.finish = () => {
       current.dispose()
-      setStack((items) => items.filter((item) => item.id !== closed))
+      setStack((items) => items.filter((item) => item.id !== current.id))
       lock.value = false
-    }, exitDelay())
+    }
+    pending.timer = setTimeout(settle, exitDelay())
+    return true
   }
 
   createEffect(() => {
@@ -68,7 +77,7 @@ function init() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return
-      close()
+      if (!close()) return
       event.preventDefault()
       event.stopPropagation()
     }
@@ -129,21 +138,15 @@ function init() {
   }
 
   const push = (element: DialogElement, owner: Owner, onClose?: () => void) => {
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
+    settle()
     lock.value = false
     mount(element, owner, onClose, stack().length)
   }
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+    settle()
     for (const item of stack()) item.dispose()
     setStack([])
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
     lock.value = false
     mount(element, owner, onClose, 0)
   }
