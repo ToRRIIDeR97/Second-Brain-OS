@@ -1,6 +1,7 @@
-import { createEffect, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { render } from "solid-js/web"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Presence } from "@opencode-ai/ui/v2/presence"
 import type { UiI18n } from "@opencode-ai/ui/context/i18n"
 import type { FileReferenceActions } from "../context/file-reference"
 import {
@@ -284,8 +285,10 @@ function FileReferencePeek(props: {
   onLeave: () => void
   onDismiss: () => void
 }) {
+  // The peek fades out after it is dismissed; until then it keeps showing the reference it had.
+  const shown = createMemo<typeof props.target>((last) => props.target ?? last)
   const [preview] = createResource(
-    () => props.target?.reference,
+    () => shown()?.reference,
     (reference) => {
       const actions = props.actions()
       if (!actions) return { status: "missing" as const, path: reference.path }
@@ -296,9 +299,11 @@ function FileReferencePeek(props: {
   )
   const [copied, setCopied] = createSignal(false)
   let element: HTMLDivElement | undefined
+  let body: HTMLDivElement | undefined
+  let inner: HTMLDivElement | undefined
   let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
-  const reference = () => props.target?.reference
+  const reference = () => shown()?.reference
   // While the next reference loads, `latest` still holds the previous one's result.
   const result = () => (preview.loading ? undefined : preview.latest)
   const found = () => {
@@ -320,29 +325,46 @@ function FileReferencePeek(props: {
     return Math.max(0, current.end - value.start + 1 - value.lines.length)
   }
 
-  // Below the chip, or above it when the viewport has no room; re-placed when the content settles or
-  // the page scrolls. A new chip hides the peek until measured, so it never shows at the old spot.
-  let placedChip: HTMLElement | undefined
+  // Below the chip, or above it (anchored by its bottom edge) when the viewport has no room; re-placed when
+  // the content settles or the page scrolls. The first placement lands before the peek fades in; moving to
+  // another chip glides there (top/left transitions once placed), so it never flashes at the old spot.
   createEffect(() => {
     const target = props.target
     void props.placement
     void preview.state
     if (!target || !element) return
-    if (placedChip !== target.chip) delete element.dataset.placed
     const frame = requestAnimationFrame(() => {
       if (!element) return
       const anchor = target.chip.getBoundingClientRect()
       const box = element.getBoundingClientRect()
-      const below = anchor.bottom + 6
-      const top = below + box.height > window.innerHeight - 8 ? Math.max(8, anchor.top - 6 - box.height) : below
+      // The body eases to its content's height, so place against the height it is heading for.
+      const height = box.height - (body?.offsetHeight ?? 0) + (inner?.offsetHeight ?? 0)
+      const above = anchor.bottom + 6 + height > window.innerHeight - 8 && anchor.top - 6 - height >= 8
       const left = Math.max(8, Math.min(anchor.left, window.innerWidth - box.width - 8))
-      element.style.top = `${top}px`
+      element.style.top = above ? "auto" : `${anchor.bottom + 6}px`
+      element.style.bottom = above ? `${window.innerHeight - anchor.top + 6}px` : "auto"
       element.style.left = `${left}px`
+      if (element.dataset.placed !== undefined) return
+      // Commit the position before the placed state turns its transitions on.
+      void element.offsetWidth
       element.dataset.placed = ""
-      placedChip = target.chip
     })
     onCleanup(() => cancelAnimationFrame(frame))
   })
+
+  // The body follows its content's height (loading line, then the lines); it eases once first sized.
+  const observeBody = (el: HTMLDivElement) => {
+    inner = el
+    const observer = new ResizeObserver(() => {
+      if (!body) return
+      body.style.height = `${el.offsetHeight}px`
+      if (body.dataset.sized !== undefined) return
+      void body.offsetWidth
+      body.dataset.sized = ""
+    })
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
+  }
 
   onCleanup(() => clearTimeout(copiedTimer))
 
@@ -356,87 +378,93 @@ function FileReferencePeek(props: {
   }
 
   return (
-    <Show when={reference()}>
-      {(current) => (
-        <div
-          ref={element}
-          data-component="file-reference-peek"
-          role="dialog"
-          aria-label={path()}
-          onPointerEnter={props.onEnter}
-          onPointerLeave={props.onLeave}
-          onFocusOut={(event) => {
-            const next = event.relatedTarget
-            if (next instanceof Node && (element?.contains(next) || props.target?.chip.contains(next))) return
-            props.onLeave()
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return
-            event.stopPropagation()
-            props.onDismiss()
-          }}
-        >
-          <div data-slot="file-reference-peek-header">
-            <span data-slot="file-reference-peek-name">{name()}</span>
-            <Show when={folder()}>
-              <span data-slot="file-reference-peek-folder">{folder()}</span>
-            </Show>
-            <Show when={fileReferenceRangeLabel(current())}>
-              {(label) => <span data-slot="file-reference-peek-range">{label()}</span>}
-            </Show>
-          </div>
-          <Switch>
-            <Match when={found()}>
-              {(value) => (
-                <Show
-                  when={value().lines.length > 0}
-                  fallback={<div data-slot="file-reference-peek-status">{props.labels().empty}</div>}
-                >
-                  <div data-slot="file-reference-peek-lines">
-                    <For each={value().lines}>
-                      {(line, index) => (
-                        <div data-slot="file-reference-peek-line">
-                          <span data-slot="file-reference-peek-number">{value().start + index()}</span>
-                          <span data-slot="file-reference-peek-text">{line.slice(0, LINE_CHARS)}</span>
+    <Presence when={!!props.target} enterClass="" exitClass="animate-exit pointer-events-none">
+      <Show when={reference()}>
+        {(current) => (
+          <div
+            ref={element}
+            data-component="file-reference-peek"
+            role="dialog"
+            aria-label={path()}
+            onPointerEnter={props.onEnter}
+            onPointerLeave={props.onLeave}
+            onFocusOut={(event) => {
+              const next = event.relatedTarget
+              if (next instanceof Node && (element?.contains(next) || props.target?.chip.contains(next))) return
+              props.onLeave()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return
+              event.stopPropagation()
+              props.onDismiss()
+            }}
+          >
+            <div data-slot="file-reference-peek-header">
+              <span data-slot="file-reference-peek-name">{name()}</span>
+              <Show when={folder()}>
+                <span data-slot="file-reference-peek-folder">{folder()}</span>
+              </Show>
+              <Show when={fileReferenceRangeLabel(current())}>
+                {(label) => <span data-slot="file-reference-peek-range">{label()}</span>}
+              </Show>
+            </div>
+            <div ref={body} data-slot="file-reference-peek-body">
+              <div ref={observeBody}>
+                <Switch>
+                  <Match when={found()}>
+                    {(value) => (
+                      <Show
+                        when={value().lines.length > 0}
+                        fallback={<div data-slot="file-reference-peek-status">{props.labels().empty}</div>}
+                      >
+                        <div data-slot="file-reference-peek-lines">
+                          <For each={value().lines}>
+                            {(line, index) => (
+                              <div data-slot="file-reference-peek-line">
+                                <span data-slot="file-reference-peek-number">{value().start + index()}</span>
+                                <span data-slot="file-reference-peek-text">{line.slice(0, LINE_CHARS)}</span>
+                              </div>
+                            )}
+                          </For>
                         </div>
-                      )}
-                    </For>
-                  </div>
-                  <Show when={hidden() > 0}>
-                    <div data-slot="file-reference-peek-more">{props.labels().more(hidden())}</div>
-                  </Show>
-                </Show>
-              )}
-            </Match>
-            <Match when={folderCount() !== undefined}>
-              <div data-slot="file-reference-peek-status">{props.labels().items(folderCount()!)}</div>
-            </Match>
-            <Match when={preview.loading}>
-              <div data-slot="file-reference-peek-status" role="status">
-                {props.labels().loading}
+                        <Show when={hidden() > 0}>
+                          <div data-slot="file-reference-peek-more">{props.labels().more(hidden())}</div>
+                        </Show>
+                      </Show>
+                    )}
+                  </Match>
+                  <Match when={folderCount() !== undefined}>
+                    <div data-slot="file-reference-peek-status">{props.labels().items(folderCount()!)}</div>
+                  </Match>
+                  <Match when={preview.loading}>
+                    <div data-slot="file-reference-peek-status" role="status">
+                      {props.labels().loading}
+                    </div>
+                  </Match>
+                  <Match when={result()?.status === "binary"}>
+                    <div data-slot="file-reference-peek-status">{props.labels().binary}</div>
+                  </Match>
+                  <Match when={true}>
+                    <div data-slot="file-reference-peek-status" data-missing="">
+                      {current().kind === "folder" ? props.labels().folderMissing : props.labels().missing}
+                    </div>
+                  </Match>
+                </Switch>
               </div>
-            </Match>
-            <Match when={result()?.status === "binary"}>
-              <div data-slot="file-reference-peek-status">{props.labels().binary}</div>
-            </Match>
-            <Match when={true}>
-              <div data-slot="file-reference-peek-status" data-missing="">
-                {current().kind === "folder" ? props.labels().folderMissing : props.labels().missing}
-              </div>
-            </Match>
-          </Switch>
-          <div data-slot="file-reference-peek-actions">
-            <Show when={result()?.status !== "missing"}>
-              <ButtonV2 size="small" variant="ghost" icon="filetree" onClick={() => props.onOpen(current())}>
-                {props.labels().open}
+            </div>
+            <div data-slot="file-reference-peek-actions">
+              <Show when={result()?.status !== "missing"}>
+                <ButtonV2 size="small" variant="ghost" icon="filetree" onClick={() => props.onOpen(current())}>
+                  {props.labels().open}
+                </ButtonV2>
+              </Show>
+              <ButtonV2 size="small" variant="ghost" icon={copied() ? "check" : "outline-copy"} onClick={copy}>
+                {copied() ? props.labels().copied : props.labels().copy}
               </ButtonV2>
-            </Show>
-            <ButtonV2 size="small" variant="ghost" icon={copied() ? "check" : "outline-copy"} onClick={copy}>
-              {copied() ? props.labels().copied : props.labels().copy}
-            </ButtonV2>
+            </div>
           </div>
-        </div>
-      )}
-    </Show>
+        )}
+      </Show>
+    </Presence>
   )
 }

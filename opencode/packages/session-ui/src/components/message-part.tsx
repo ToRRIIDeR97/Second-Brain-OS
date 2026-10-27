@@ -43,6 +43,7 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
+import { AccordionReveal } from "./accordion-reveal"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
@@ -67,6 +68,7 @@ import { partDefaultOpen } from "./part-default-open"
 import { groupParts, isContextGroupTool, sameGroups, toolGroupCounts, type PartGroup } from "./part-group"
 import { stepIcon, stepVerbKey, toolStep } from "./step-kind"
 import { animate } from "motion"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
@@ -98,27 +100,27 @@ async function writeClipboard(text: string): Promise<boolean> {
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
   let valueRef: HTMLSpanElement | undefined
+  // Read once: the reveal plays on mount only, and reduced motion shows the end state at once.
+  const animated = props.animate && !prefersReducedMotion()
 
   onMount(() => {
-    if (!props.animate) return
+    if (!animated) return
+    // Enter motion: medium + emphasized-decelerate (--v2-ease-emphasized-decelerate).
+    const enter = { duration: motionDuration("medium") / 1000, ease: [0.05, 0.7, 0.1, 1] as const }
     requestAnimationFrame(() => {
-      if (widthRef) {
-        animate(widthRef, { width: "auto" }, { type: "spring", visualDuration: 0.25, bounce: 0 })
-      }
-      if (valueRef) {
-        animate(valueRef, { opacity: 1, filter: "blur(0px)" }, { duration: 0.32, ease: [0.16, 1, 0.3, 1] })
-      }
+      if (widthRef) animate(widthRef, { width: "auto" }, enter)
+      if (valueRef) animate(valueRef, { opacity: 1, filter: "blur(0px)" }, enter)
     })
   })
 
   return (
     <span data-component="shell-submessage" dir="ltr">
-      <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: props.animate ? "0px" : undefined }}>
+      <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: animated ? "0px" : undefined }}>
         <span data-slot="basic-tool-tool-subtitle">
           <span
             ref={valueRef}
             data-slot="shell-submessage-value"
-            style={props.animate ? { opacity: 0, filter: "blur(2px)" } : undefined}
+            style={animated ? { opacity: 0, filter: "blur(2px)" } : undefined}
           >
             {props.text}
           </span>
@@ -1557,15 +1559,17 @@ export const ToolRegistry = {
 
 function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
   const value = createMemo(() => props.path || "tool-file")
+  const [open, setOpen] = createSignal(true)
 
   return (
     <Accordion
       multiple
       data-scope="apply-patch"
       style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
-      defaultValue={[value()]}
+      value={open() ? [value()] : []}
+      onChange={(next) => setOpen(Array.isArray(next) ? next.includes(value()) : next === value())}
     >
-      <Accordion.Item value={value()}>
+      <Accordion.Item value={value()} forceMount>
         <StickyAccordionHeader>
           <Accordion.Trigger>
             <div data-slot="apply-patch-trigger-content">
@@ -1585,7 +1589,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
             </div>
           </Accordion.Trigger>
         </StickyAccordionHeader>
-        <Accordion.Content>{props.children}</Accordion.Content>
+        <AccordionReveal open={open()}>{props.children}</AccordionReveal>
       </Accordion.Item>
     </Accordion>
   )
@@ -2535,7 +2539,8 @@ ToolRegistry.register({
 
                       createEffect(() => {
                         if (!active()) {
-                          setVisible(false)
+                          // The diff stays while the item closes; AccordionReveal's onClosed drops it.
+                          if (prefersReducedMotion()) setVisible(false)
                           return
                         }
 
@@ -2546,7 +2551,7 @@ ToolRegistry.register({
                       })
 
                       return (
-                        <Accordion.Item value={file.filePath} data-type={file.type}>
+                        <Accordion.Item value={file.filePath} data-type={file.type} forceMount>
                           <StickyAccordionHeader>
                             <Accordion.Trigger>
                               <div data-slot="apply-patch-trigger-content">
@@ -2585,7 +2590,7 @@ ToolRegistry.register({
                               </div>
                             </Accordion.Trigger>
                           </StickyAccordionHeader>
-                          <Accordion.Content>
+                          <AccordionReveal open={active()} onClosed={() => setVisible(false)}>
                             <Show when={props.deferContent === false || visible()}>
                               <div data-component="apply-patch-file-diff">
                                 <Dynamic
@@ -2598,7 +2603,7 @@ ToolRegistry.register({
                                 />
                               </div>
                             </Show>
-                          </Accordion.Content>
+                          </AccordionReveal>
                         </Accordion.Item>
                       )
                     }}

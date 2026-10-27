@@ -11,12 +11,13 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
-import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import type { IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
+import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { useData } from "../context"
 import { Markdown } from "./markdown"
 import { stepIcon, stepVerbKey, toolStep } from "./step-kind"
@@ -50,7 +51,6 @@ export interface BasicToolProps {
   allowOpenWhilePending?: boolean
   defer?: boolean
   locked?: boolean
-  animated?: boolean
   onSubtitleClick?: () => void
   onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
   onTriggerKeyDown?: JSX.EventHandlerUnion<HTMLElement, KeyboardEvent>
@@ -59,7 +59,6 @@ export interface BasicToolProps {
   clickable?: boolean
 }
 
-const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
 const deferredMounts: Array<{ active: boolean; fn: () => void }> = []
 let deferredFrame: number | undefined
 
@@ -149,7 +148,8 @@ export function BasicTool(props: BasicToolProps) {
         if (!props.defer) return
         if (!value) {
           cancel()
-          setState("ready", false)
+          // The body stays mounted while Reveal closes it; it unmounts in onTransitionEnd below.
+          if (prefersReducedMotion()) setState("ready", false)
           return
         }
 
@@ -158,38 +158,6 @@ export function BasicTool(props: BasicToolProps) {
       { defer: true },
     ),
   )
-
-  // Animated height for collapsible open/close
-  let contentRef: HTMLDivElement | undefined
-  let heightAnim: AnimationPlaybackControls | undefined
-  const initialOpen = open()
-
-  createEffect(
-    on(
-      open,
-      (isOpen) => {
-        if (!props.animated || !contentRef) return
-        heightAnim?.stop()
-        if (isOpen) {
-          contentRef.style.overflow = "hidden"
-          heightAnim = animate(contentRef, { height: "auto" }, SPRING)
-          void heightAnim.finished.then(() => {
-            if (!contentRef || !open()) return
-            contentRef.style.overflow = "visible"
-            contentRef.style.height = "auto"
-          })
-        } else {
-          contentRef.style.overflow = "hidden"
-          heightAnim = animate(contentRef, { height: "0px" }, SPRING)
-        }
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(() => {
-    heightAnim?.stop()
-  })
 
   const handleOpenChange = (value: boolean) => {
     if (pending() && !props.allowOpenWhilePending) return
@@ -270,7 +238,7 @@ export function BasicTool(props: BasicToolProps) {
   )
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+    <Collapsible open={open()} onOpenChange={handleOpenChange} forceMount class="tool-collapsible">
       <Show
         when={props.triggerAsLink || props.triggerHref}
         fallback={
@@ -294,23 +262,20 @@ export function BasicTool(props: BasicToolProps) {
           {trigger()}
         </Collapsible.Trigger>
       </Show>
-      <Show when={props.animated && hasChildren() && !props.hideDetails}>
-        <div
-          ref={contentRef}
-          data-slot="collapsible-content"
-          data-animated
-          style={{
-            height: initialOpen ? "auto" : "0px",
-            overflow: initialOpen ? "visible" : "hidden",
+      {/* Reveal animates the body (grid rows) and unmounts it once closed, so the root force-mounts the
+          Kobalte content and its measured-height keyframes stay off (basic-tool.css). */}
+      <Show when={hasChildren() && !props.hideDetails}>
+        <Reveal
+          open={open()}
+          onTransitionEnd={(event) => {
+            if (event.target !== event.currentTarget || open() || !props.defer) return
+            setState("ready", false)
           }}
         >
-          <Show when={!props.defer || ready()}>{props.children}</Show>
-        </div>
-      </Show>
-      <Show when={!props.animated && hasChildren() && !props.hideDetails}>
-        <Collapsible.Content>
-          <Show when={!props.defer || ready()}>{props.children}</Show>
-        </Collapsible.Content>
+          <Collapsible.Content>
+            <Show when={!props.defer || ready()}>{props.children}</Show>
+          </Collapsible.Content>
+        </Reveal>
       </Show>
     </Collapsible>
   )
@@ -334,7 +299,8 @@ export function GenericTool(props: {
   // Subagent rows name the agent ("Explore Agent"), as the built-in task row does.
   const title = () => {
     const agent = props.input?.subagent_type
-    if (step().kind !== "subagent" || typeof agent !== "string" || !agent) return i18n.t(stepVerbKey(step().kind, running()))
+    if (step().kind !== "subagent" || typeof agent !== "string" || !agent)
+      return i18n.t(stepVerbKey(step().kind, running()))
     return i18n.t("ui.tool.agent", { type: agent[0]!.toUpperCase() + agent.slice(1) })
   }
   const detail = createMemo(() => {

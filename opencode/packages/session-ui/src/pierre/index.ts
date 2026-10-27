@@ -140,7 +140,8 @@ const unsafeCSS = `
 /*
  * Lines revealed from a file reference in a reply: a gutter accent, plus a highlight when first marked.
  * The stronger tint wipes in from the left (a cover in the editor background slides off to the right)
- * for 200ms, then settles to the steady selected-line tint over 400ms. Reduced motion shows the end state.
+ * over the first third (about the short duration), then settles to the steady selected-line tint; the whole
+ * runs short + long on the standard curve. Reduced motion shows the end state.
  */
 [data-file] [data-column-number][data-file-reference] {
   box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
@@ -151,11 +152,11 @@ const unsafeCSS = `
     background-image: linear-gradient(to right, transparent 50%, var(--diffs-bg) 50%);
     background-size: 200% 100%;
     background-repeat: no-repeat;
-    animation: file-reference-wipe 600ms both;
+    animation: file-reference-wipe calc(var(--v2-duration-short) + var(--v2-duration-long)) both;
   }
 
   [data-file] [data-column-number][data-file-reference] {
-    animation: file-reference-gutter 600ms both;
+    animation: file-reference-gutter calc(var(--v2-duration-short) + var(--v2-duration-long)) both;
   }
 }
 
@@ -163,12 +164,12 @@ const unsafeCSS = `
   0% {
     background-position: 100% 0;
     background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
-    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    animation-timing-function: var(--v2-ease-standard);
   }
   33% {
     background-position: 0 0;
     background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
-    animation-timing-function: ease;
+    animation-timing-function: var(--v2-ease-standard);
   }
   100% {
     background-position: 0 0;
@@ -184,7 +185,7 @@ const unsafeCSS = `
   33% {
     box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
     background-color: rgb(from var(--diffs-selection-base) r g b / 0.45);
-    animation-timing-function: ease;
+    animation-timing-function: var(--v2-ease-standard);
   }
   100% {
     box-shadow: inset 2px 0 0 var(--v2-text-text-accent);
