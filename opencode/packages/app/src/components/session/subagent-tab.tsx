@@ -327,7 +327,7 @@ function Disclosure() {
     <Icon
       name="chevron-right"
       size="small"
-      class="size-3 shrink-0 text-v2-icon-icon-muted transition-transform group-open:rotate-90 motion-reduce:transition-none"
+      class="size-3 shrink-0 text-v2-icon-icon-muted transition-transform group-open:rotate-90 rtl:group-open:-rotate-90 motion-reduce:transition-none"
     />
   )
 }
