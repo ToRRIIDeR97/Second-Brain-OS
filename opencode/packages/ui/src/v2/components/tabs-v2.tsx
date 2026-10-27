@@ -84,7 +84,12 @@ function createTabsIndicator(list: () => HTMLElement | undefined) {
     }
 
     const mutations = new MutationObserver(measure)
-    mutations.observe(element, { subtree: true, childList: true, attributeFilter: ["data-selected"] })
+    mutations.observe(element, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributeFilter: ["data-selected"],
+    })
     const resize = new ResizeObserver(measure)
     resize.observe(element)
     measure()

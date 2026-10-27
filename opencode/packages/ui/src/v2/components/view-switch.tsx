@@ -4,7 +4,9 @@ import {
   type ParentProps,
   children,
   createComputed,
+  createEffect,
   createSignal,
+  on,
   onCleanup,
   untrack,
 } from "solid-js"
@@ -23,7 +25,9 @@ export interface ViewSwitchProps extends ParentProps {
  * rendered at a time, so the layout never holds both. Reduced motion swaps at once.
  *
  * The outgoing view is kept as the DOM it last rendered, so it works best when each key renders its own
- * branch (`Switch`/`Match`, `Dynamic`, a keyed `Show`).
+ * branch (`Switch`/`Match`, `Dynamic`, a keyed `Show`). While it fades out it is `inert` and `aria-hidden`,
+ * so clicks and keys cannot reach it; if it held focus, focus moves into the incoming view once attached,
+ * unless the caller has already placed it.
  */
 export function ViewSwitch(props: ViewSwitchProps) {
   const resolved = children(() => props.children)
@@ -31,11 +35,37 @@ export function ViewSwitch(props: ViewSwitchProps) {
     () => props.key,
     () => resolved.toArray(),
   )
+  const [ref, setRef] = createSignal<HTMLDivElement>()
+  const focus = { restore: false }
+
+  // Runs before the render effect that sets `inert`, which would blur the focused element.
+  createComputed(
+    on(view.phase, (phase) => {
+      if (phase !== "out") return
+      focus.restore = !!ref()?.contains(document.activeElement)
+    }),
+  )
+
+  // Effects run after the incoming nodes are inserted.
+  createEffect(
+    on(view.phase, (phase) => {
+      if (phase === "out" || !focus.restore) return
+      focus.restore = false
+      const element = ref()
+      const active = document.activeElement
+      if (!element || element.contains(active) || (active && active !== document.body)) return
+      const target = element.querySelector<HTMLElement>("[autofocus]") ?? element.querySelector<HTMLElement>(FOCUSABLE)
+      target?.focus({ preventScroll: true })
+    }),
+  )
 
   return (
     <div
+      ref={setRef}
       data-component="view-switch-v2"
       data-phase={view.phase()}
+      inert={view.phase() === "out" ? true : undefined}
+      aria-hidden={view.phase() === "out" ? "true" : undefined}
       class={props.class}
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget) view.advance()
@@ -45,6 +75,9 @@ export function ViewSwitch(props: ViewSwitchProps) {
     </div>
   )
 }
+
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 export type ViewSwitchPhase = "idle" | "out" | "in"
 

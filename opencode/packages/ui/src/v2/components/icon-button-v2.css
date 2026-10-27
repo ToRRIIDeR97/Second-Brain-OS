@@ -159,14 +159,17 @@
   cursor: not-allowed;
 }
 
-/* Material 3 shape and motion: circular icon buttons that morph toward a rounded square while pressed. */
+/* Material 3 shape and motion: circular icon buttons that morph toward a rounded square while pressed.
+   This unlayered list overrides Tailwind transition utilities on the button, so it includes transform for
+   callers that rotate it (chevrons). */
 [data-component="icon-button-v2"],
 [data-component="icon-button-v2"][data-size="small"] {
   border-radius: var(--v2-radius-full);
   transition:
     border-radius var(--v2-duration-medium) var(--v2-ease-standard),
     background-color var(--v2-duration-short) var(--v2-ease-standard),
-    color var(--v2-duration-short) var(--v2-ease-standard);
+    color var(--v2-duration-short) var(--v2-ease-standard),
+    transform var(--v2-duration-short) var(--v2-ease-standard);
 }
 
 [data-component="icon-button-v2"]:is(:active, [data-state="pressed"]):not(:disabled) {
