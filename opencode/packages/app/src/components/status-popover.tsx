@@ -1,7 +1,7 @@
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { Popover } from "@opencode-ai/ui/popover"
-import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-js"
+import { Suspense, createMemo, createSignal, lazy, Show, untrack, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { ServerConnection, useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
@@ -15,6 +15,12 @@ import {
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverServerBody })))
+
+// Loading the body before the first open keeps the popover from opening on the short fallback.
+const preloadBodies = () => {
+  void Body.preload()
+  void ServerBody.preload()
+}
 
 export function StatusPopoverV2(props: { scope?: "server" }) {
   if (props.scope === "server") return <ServerStatusPopover />
@@ -94,8 +100,10 @@ type StatusPopoverState = {
 }
 
 function StatusPopoverBody(props: { shown: boolean; children: JSX.Element }) {
+  // Stays through the popover's exit animation; the popover unmounts its content once that ends.
+  const mounted = createMemo((previous: boolean) => previous || props.shown, false)
   return (
-    <Show when={props.shown}>
+    <Show when={mounted()}>
       <Suspense
         fallback={
           <div class="h-14 w-[360px] rounded-[24px] bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)]" />
@@ -127,6 +135,8 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
         class: "!w-9 shrink-0",
         state: props.state.shown ? "pressed" : undefined,
         "aria-label": props.state.label,
+        onPointerEnter: preloadBodies,
+        onFocus: preloadBodies,
       }}
       trigger={
         <div class="relative size-4">
@@ -138,7 +148,8 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
       }
       {...popoverProps}
     >
-      {props.state.body()}
+      {/* Built once per opening: the state object changes with `shown`, which must not rebuild the body. */}
+      {untrack(() => props.state.body())}
     </Popover>
   )
 }

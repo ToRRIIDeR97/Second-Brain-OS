@@ -16,6 +16,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/components/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import {
@@ -30,10 +31,6 @@ import { virtualScrollElement } from "@/components/virtual-scroll-element"
 export type { Kind } from "@/components/file-tree"
 
 const INDENT_STEP = 16
-// Roughly how long the smooth scroll to a revealed folder takes before it expands.
-const REVEAL_EXPAND_MS = 300
-// The row's wash and its children's fade-in have played by then.
-const REVEAL_FLASH_MS = 1200
 
 function rowPaddingStart(level: number, type: FileNode["type"]) {
   if (type === "directory") return 8 + level * INDENT_STEP
@@ -182,7 +179,6 @@ export default function FileTreeV2(props: {
   })
 
   const revealed = () => normalizeFileTreeV2Path(props.revealed?.path ?? "")
-  const still = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
   // The folder whose row is flashing; cleared once the reveal has played, so rows the virtualizer
   // mounts again later do not replay it.
   const [flash, setFlash] = createSignal<string>()
@@ -207,7 +203,8 @@ export default function FileTreeV2(props: {
       const next = rows().findIndex((row) => row.node.path === path)
       if (next < 0) return
       if (virtualizer.range && next >= virtualizer.range.startIndex && next <= virtualizer.range.endIndex) return
-      if (path === revealed() && !still()) virtualizer.scrollToIndex(next, { align: "center", behavior: "smooth" })
+      if (path === revealed() && !prefersReducedMotion())
+        virtualizer.scrollToIndex(next, { align: "center", behavior: "smooth" })
       else virtualizer.scrollToIndex(next, { align: "auto" })
     })
   })
@@ -237,7 +234,7 @@ export default function FileTreeV2(props: {
         setFlash(undefined)
         if (!reveal) return
         const path = normalizeFileTreeV2Path(reveal.path)
-        const motion = !still()
+        const motion = !prefersReducedMotion()
         // A frame apart, so a repeat reveal of the same row restarts its animation.
         const frame = motion ? requestAnimationFrame(() => setFlash(path)) : undefined
         const expand = setTimeout(
@@ -245,9 +242,11 @@ export default function FileTreeV2(props: {
             const row = rows().find((item) => item.node.path === path)
             if (!expanded(path)) file.tree.expand(row?.node.originalPath ?? path, live() ? undefined : { list: false })
           },
-          motion ? REVEAL_EXPAND_MS : 0,
+          // Roughly how long the smooth scroll to the folder takes (file-tree-v2.css times the wash to it).
+          motion ? motionDuration("medium") : 0,
         )
-        const settle = motion ? setTimeout(() => setFlash(undefined), REVEAL_FLASH_MS) : undefined
+        // The row's wash (twice long) and its children's fade-in have played by then.
+        const settle = motion ? setTimeout(() => setFlash(undefined), motionDuration("long") * 2) : undefined
         onCleanup(() => {
           if (frame !== undefined) cancelAnimationFrame(frame)
           clearTimeout(expand)

@@ -5,6 +5,7 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { createReveal, Reveal } from "@opencode-ai/ui/v2/reveal"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useCommand } from "@/context/command"
@@ -20,11 +21,12 @@ import {
 import { DialogArchivedThreads } from "@/components/sidebar/dialog-archived-threads"
 import { DialogInstructions } from "@/components/sidebar/dialog-instructions"
 import type { ThreadNode } from "@/features/second-brain/sidebar-threads"
+import { createFreshItems } from "@/utils/fresh-items"
 import { sessionPinnedAt } from "@/utils/session"
 import { sessionTitle } from "@/utils/session-title"
 
 const rowClass =
-  "group/row relative grid h-9 w-full min-w-0 shrink-0 cursor-default items-center overflow-hidden rounded-full bg-transparent text-left text-[13px] text-v2-text-text-muted [font-weight:440] transition-[background-color,color,border-radius] duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base active:rounded-[12px] data-[selected]:bg-v2-background-bg-accent-container data-[selected]:text-v2-text-text-on-accent-container data-[selected]:[font-weight:530] focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
+  "group/row relative grid h-9 w-full min-w-0 shrink-0 cursor-default items-center overflow-hidden rounded-full bg-transparent text-left text-[13px] text-v2-text-text-muted [font-weight:440] transition-[background-color,color,border-radius] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base active:rounded-[12px] data-[selected]:bg-v2-background-bg-accent-container data-[selected]:text-v2-text-text-on-accent-container data-[selected]:[font-weight:530] focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)] motion-reduce:transition-none"
 
 export function SecondBrainSidebar() {
   const language = useLanguage()
@@ -33,6 +35,8 @@ export function SecondBrainSidebar() {
   const openSettings = useSettingsDialog()
   const command = useCommand()
   const ctrl = createSidebarController()
+  // The panel keeps its content while its width collapses, so it never closes as an empty column.
+  const panel = createReveal(() => layout.sidebar.opened())
   const path = () => ctrl.location.pathname
   const items = () => [
     { id: "overview", icon: "home" as const, label: language.t("secondBrain.sidebar.overview"), href: "/" },
@@ -63,7 +67,7 @@ export function SecondBrainSidebar() {
           <button
             type="button"
             data-sidebar-item="new-thread"
-            class="mb-3 flex size-14 items-center justify-center rounded-[16px] bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container transition-[border-radius,background-color,transform] duration-300 ease-spring hover:rounded-[20px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+            class="mb-3 flex size-14 items-center justify-center rounded-[16px] bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container transition-[border-radius,background-color,transform] duration-medium ease-spring hover:rounded-[20px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
             aria-label={language.t("secondBrain.sidebar.newThread")}
             onClick={() => ctrl.newThread()}
           >
@@ -97,14 +101,18 @@ export function SecondBrainSidebar() {
 
       <aside
         aria-label={language.t("secondBrain.sidebar.projectsSection")}
+        inert={layout.sidebar.opened() ? undefined : true}
         classList={{
           // The rail stays at every width; the Projects panel needs the room of a md window.
-          "hidden min-h-0 flex-col overflow-hidden transition-[width,opacity] duration-300 ease-emphasized will-change-[width] motion-reduce:transition-none md:flex": true,
-          "w-[248px] opacity-100": layout.sidebar.opened(),
-          "w-0 opacity-0": !layout.sidebar.opened(),
+          "hidden min-h-0 flex-col overflow-hidden transition-[width,opacity] will-change-[width] motion-reduce:transition-none md:flex": true,
+          "w-[248px] opacity-100 duration-medium ease-emphasized-decelerate": layout.sidebar.opened(),
+          "w-0 opacity-0 duration-short ease-emphasized-accelerate": !layout.sidebar.opened(),
+        }}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === "width") panel.settle()
         }}
       >
-        <Show when={layout.sidebar.opened()}>
+        <Show when={panel.mounted()}>
           <div
             data-sidebar-section="projects"
             class="flex min-h-0 w-[248px] flex-1 flex-col overflow-y-auto pb-3 pr-2 pt-1"
@@ -131,7 +139,7 @@ export function SecondBrainSidebar() {
                   </p>
                   <button
                     type="button"
-                    class="shrink-0 rounded-full px-2 py-0.5 text-[12px] text-v2-text-text-muted transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                    class="shrink-0 rounded-full px-2 py-0.5 text-[12px] text-v2-text-text-muted transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
                     onClick={ctrl.retryProjects}
                   >
                     {language.t("secondBrain.error.retry")}
@@ -172,9 +180,11 @@ function RailItem(props: { id: string; icon: string; label: string; active?: boo
       <span class="relative flex h-8 w-14 items-center justify-center">
         <span
           classList={{
-            "absolute inset-y-0 left-1/2 -translate-x-1/2 rounded-full transition-[width,background-color] duration-[450ms] ease-standard motion-reduce:transition-none": true,
-            "w-14 bg-v2-background-bg-accent-container": !!props.active,
-            "w-0 group-hover/rail:w-14 group-hover/rail:bg-v2-overlay-simple-overlay-hover": !props.active,
+            "absolute inset-y-0 left-1/2 -translate-x-1/2 rounded-full transition-[width,background-color] ease-standard motion-reduce:transition-none": true,
+            // Selection grows the indicator slowly; a hover answers faster.
+            "w-14 bg-v2-background-bg-accent-container duration-long": !!props.active,
+            "w-0 duration-medium group-hover/rail:w-14 group-hover/rail:bg-v2-overlay-simple-overlay-hover":
+              !props.active,
           }}
         />
         <span class="relative flex text-v2-icon-icon-muted group-data-[selected]/rail:text-v2-text-text-on-accent-container group-focus-visible/rail:rounded-full group-focus-visible/rail:ring-2 group-focus-visible/rail:ring-v2-border-border-focus">
@@ -202,7 +212,7 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
           as="button"
           type="button"
           data-sidebar-item="workspace"
-          class="flex min-w-0 items-center gap-1 rounded-full px-3 py-1 text-left text-[13px] text-v2-text-text-base [font-weight:600] transition-colors duration-200 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus"
+          class="flex min-w-0 items-center gap-1 rounded-full px-3 py-1 text-left text-[13px] text-v2-text-text-base [font-weight:600] transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
           aria-label={language.t("secondBrain.sidebar.switchWorkspace")}
         >
           <span class="min-w-0 truncate">
@@ -289,7 +299,7 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
 function Chevron(props: { open: boolean }) {
   return (
     <span
-      class="flex size-4 items-center justify-center text-v2-icon-icon-muted transition-transform duration-150 ease-standard motion-reduce:transition-none"
+      class="flex size-4 items-center justify-center text-v2-icon-icon-muted transition-transform duration-short ease-standard motion-reduce:transition-none"
       classList={{ "-rotate-90": !props.open }}
     >
       <Icon name="chevron-down" size="small" />
@@ -321,7 +331,7 @@ function ProjectGroup(props: { ctrl: SidebarController; project: SidebarProjectI
             {props.project.name}
           </span>
         </button>
-        <div class="flex items-center gap-0.5 pr-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100">
+        <div class="flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
           <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.newThread")}>
             <IconButtonV2
               type="button"
@@ -382,9 +392,9 @@ function ProjectGroup(props: { ctrl: SidebarController; project: SidebarProjectI
           </MenuV2>
         </div>
       </div>
-      <Show when={open()}>
+      <Reveal open={open()}>
         <ThreadList ctrl={props.ctrl} threads={props.threads} onNewThread={() => props.ctrl.newThread(props.project)} />
-      </Show>
+      </Reveal>
     </div>
   )
 }
@@ -412,7 +422,7 @@ function ThreadGroup(props: {
         </button>
         <Show when={props.onNewThread}>
           {(run) => (
-            <div class="flex items-center pr-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100">
+            <div class="flex items-center pr-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
               <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.newThread")}>
                 <IconButtonV2
                   type="button"
@@ -427,15 +437,18 @@ function ThreadGroup(props: {
           )}
         </Show>
       </div>
-      <Show when={open()}>
+      <Reveal open={open()}>
         <ThreadList ctrl={props.ctrl} threads={props.threads} onNewThread={props.onNewThread} />
-      </Show>
+      </Reveal>
     </div>
   )
 }
 
 function ThreadList(props: { ctrl: SidebarController; threads: ThreadNode<Session>[]; onNewThread?: () => void }) {
   const language = useLanguage()
+  // The list is rebuilt on every thread change, so `For` recreates its rows. Only a thread that was not
+  // listed before animates in; the rows of the first render, and later reorders, do not.
+  const fresh = createFreshItems()
   return (
     <div class="flex flex-col">
       <Show when={props.onNewThread}>
@@ -453,7 +466,12 @@ function ThreadList(props: { ctrl: SidebarController; threads: ThreadNode<Sessio
           </button>
         )}
       </Show>
-      <For each={props.threads}>{(node) => <ThreadRow ctrl={props.ctrl} node={node} depth={0} />}</For>
+      <For each={props.threads}>
+        {(node) => {
+          const enter = fresh(node.session.id)
+          return <ThreadRow ctrl={props.ctrl} node={node} depth={0} enter={enter} />
+        }}
+      </For>
       <Show when={!props.onNewThread && props.threads.length === 0}>
         <p class="py-1 pl-8 text-[12px] text-v2-text-text-faint">{language.t("secondBrain.sidebar.noThreads")}</p>
       </Show>
@@ -464,7 +482,7 @@ function ThreadList(props: { ctrl: SidebarController; threads: ThreadNode<Sessio
 const containsSession = (node: ThreadNode<Session>, sessionID: string | undefined): boolean =>
   !!sessionID && (node.session.id === sessionID || node.children.some((child) => containsSession(child, sessionID)))
 
-function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; depth: number }) {
+function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; depth: number; enter?: boolean }) {
   const language = useLanguage()
   const [editing, setEditing] = createSignal(false)
   const session = () => props.node.session
@@ -486,7 +504,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
       <div
         data-sidebar-thread={session().id}
         data-selected={active() ? "" : undefined}
-        class={`${rowClass} grid-cols-[1fr_auto]`}
+        class={`${rowClass} grid-cols-[1fr_auto] ${props.enter ? "animate-enter" : ""}`}
         style={{ "padding-left": `${24 + props.depth * 12}px` }}
       >
         <Show
@@ -538,7 +556,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
             onBlur={(event) => finish(event.currentTarget.value)}
           />
         </Show>
-        <div class="flex items-center pr-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100">
+        <div class="flex items-center pr-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
           <MenuV2 gutter={4} modal={false} placement="bottom-start">
             <MenuV2.Trigger
               as={IconButtonV2}
@@ -575,10 +593,12 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
           </MenuV2>
         </div>
       </div>
-      <Show when={showChildren()}>
-        <For each={props.node.children}>
-          {(child) => <ThreadRow ctrl={props.ctrl} node={child} depth={props.depth + 1} />}
-        </For>
+      <Show when={props.node.children.length > 0}>
+        <Reveal open={showChildren()}>
+          <For each={props.node.children}>
+            {(child) => <ThreadRow ctrl={props.ctrl} node={child} depth={props.depth + 1} />}
+          </For>
+        </Reveal>
       </Show>
     </>
   )

@@ -186,9 +186,9 @@
       gap: 8px;
       color: var(--text-weak);
       transition:
-        color 120ms ease,
-        background-color 120ms ease,
-        border-color 120ms ease;
+        color var(--v2-duration-short) var(--v2-ease-standard),
+        background-color var(--v2-duration-short) var(--v2-ease-standard),
+        border-color var(--v2-duration-short) var(--v2-ease-standard);
 
       &::after {
         content: "";
@@ -202,8 +202,8 @@
         transform: scaleX(0.75);
         transform-origin: center;
         transition:
-          opacity 120ms ease,
-          transform 120ms ease;
+          opacity var(--v2-duration-short) var(--v2-ease-standard),
+          transform var(--v2-duration-short) var(--v2-ease-standard);
       }
 
       &[data-value="review"] {
@@ -467,9 +467,9 @@
       box-sizing: border-box;
       border: 1px solid transparent;
       transition:
-        color 120ms ease,
-        background-color 120ms ease,
-        border-color 120ms ease;
+        color var(--v2-duration-short) var(--v2-ease-standard),
+        background-color var(--v2-duration-short) var(--v2-ease-standard),
+        border-color var(--v2-duration-short) var(--v2-ease-standard);
 
       &:not(:has([data-selected])):hover:not(:disabled) {
         color: var(--text-base);
@@ -886,4 +886,12 @@ body[data-new-layout] #review-panel [data-component="tabs"] .session-review-v2-o
 
 body[data-new-layout] #review-panel [data-component="tabs"] .session-review-v2-open-in-app {
   flex-shrink: 0;
+}
+
+/* The variant rules above are more specific, so the reduced-motion override needs !important. */
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tabs"] [data-slot="tabs-trigger-wrapper"],
+  [data-component="tabs"] [data-slot="tabs-trigger-wrapper"]::after {
+    transition: none !important;
+  }
 }

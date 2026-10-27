@@ -70,7 +70,7 @@ export function CalendarGrid(props: {
           {(day) => (
             <button
               type="button"
-              class="flex cursor-pointer flex-col items-center gap-0.5 rounded-[12px] py-1.5 transition-colors duration-150 ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+              class="flex cursor-pointer flex-col items-center gap-0.5 rounded-[12px] py-1.5 transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
               aria-current={day.today ? "date" : undefined}
               onClick={() => props.onOpenDay(day.date)}
             >
@@ -167,7 +167,7 @@ export function CalendarGrid(props: {
                   <button
                     type="button"
                     classList={{
-                      "absolute flex cursor-pointer flex-col gap-px overflow-hidden rounded-[8px] px-2 py-1 text-left text-[12px] leading-4 transition-[filter] duration-150 ease-standard hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
+                      "absolute flex cursor-pointer flex-col gap-px overflow-hidden rounded-[8px] px-2 py-1 text-left text-[12px] leading-4 transition-[filter] duration-short ease-standard hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
                       "bg-v2-icon-icon-accent text-v2-icon-icon-contrast": props.selected === block.event.id,
                       "bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container":
                         props.selected !== block.event.id,

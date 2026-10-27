@@ -6,6 +6,7 @@ import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
+import { Presence } from "@opencode-ai/ui/v2/presence"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { PageEmpty } from "@/components/page"
 import { useLanguage } from "@/context/language"
@@ -264,14 +265,18 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
   return (
     <div class="w-full">
       <div ref={props.onSetSearchRoot} data-component="home-session-search" class="relative z-30 w-full">
-        <Show when={props.searchOpen()}>
+        <Presence
+          when={props.searchOpen()}
+          class="absolute -inset-x-1.5 -top-1.5 origin-top"
+          enterClass="animate-menu-enter"
+          exitClass="animate-menu-exit"
+        >
           <div
             data-component="home-session-search-panel"
             class={`
-              absolute flex flex-col overflow-hidden rounded-[24px]
+              flex flex-col overflow-hidden rounded-[24px]
               bg-v2-background-bg-base shadow-[var(--v2-elevation-floating)]
             `}
-            style={{ top: "-6px", left: "-6px", width: "calc(100% + 12px)" }}
           >
             <div class="flex flex-col pt-9">
               <div id={HOME_SESSION_SEARCH_RESULTS_ID} role="listbox" class="flex flex-col gap-4 pt-4">
@@ -324,12 +329,12 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
               </div>
             </div>
           </div>
-        </Show>
+        </Presence>
         <label
           class={`
             relative z-20 flex h-9 w-full items-center gap-2 rounded-full py-1 pl-3 pr-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
-            duration-200 ease-standard motion-reduce:transition-none hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02
+            duration-short ease-standard motion-reduce:transition-none hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02
           `}
         >
           <IconV2 name="magnifying-glass" />
@@ -417,7 +422,7 @@ function HomeSessionSearchResultRow(
       aria-selected={props.selected}
       class={`
         flex h-10 w-full shrink-0 cursor-default items-center gap-2 border-0 py-3 pl-[18px] pr-6 text-left
-        transition-[background-color] duration-200 ease-standard motion-reduce:transition-none
+        transition-[background-color] duration-short ease-standard motion-reduce:transition-none
         hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
       `}
       classList={{
@@ -503,7 +508,7 @@ function HomeSessionRow(
         class={`
           flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[16px] border-0
           bg-transparent py-3 pl-0 pr-2 text-left text-v2-text-text-muted [font-weight:530]
-          transition-[background-color,color,box-shadow] duration-200 ease-standard motion-reduce:transition-none
+          transition-[background-color,color,box-shadow] duration-short ease-standard motion-reduce:transition-none
           hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
         `}
         onMouseDown={(event) => {

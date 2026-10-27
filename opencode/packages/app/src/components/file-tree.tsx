@@ -147,7 +147,7 @@ const FileTreeNode = (
     <Dynamic
       component={local.as ?? "div"}
       classList={{
-        "w-full min-w-0 h-8 flex items-center justify-start gap-x-2 rounded-full px-2.5 py-0 text-start cursor-pointer transition-[background-color,border-radius] duration-150 ease-standard active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
+        "w-full min-w-0 h-8 flex items-center justify-start gap-x-2 rounded-full px-2.5 py-0 text-start cursor-pointer transition-[background-color,border-radius] duration-short ease-standard active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none": true,
         "hover:bg-v2-overlay-simple-overlay-hover": !selected(),
         "bg-v2-background-bg-accent-container text-v2-text-text-on-accent-container": selected(),
         ...local.classList,
@@ -420,7 +420,7 @@ export default function FileTree(props: {
                         <Icon
                           name="chevron-down"
                           size="small"
-                          class="transition-transform duration-300 ease-standard motion-reduce:transition-none"
+                          class="transition-transform duration-medium ease-standard motion-reduce:transition-none"
                           classList={{ "-rotate-90": !expanded() }}
                         />
                       </div>
@@ -429,7 +429,7 @@ export default function FileTree(props: {
                   <Collapsible.Content class="relative pt-0.5">
                     <div
                       classList={{
-                        "absolute top-0 bottom-0 w-px pointer-events-none bg-v2-border-border-muted opacity-0 transition-opacity duration-150 ease-standard motion-reduce:transition-none": true,
+                        "absolute top-0 bottom-0 w-px pointer-events-none bg-v2-border-border-muted opacity-0 transition-opacity duration-short ease-standard motion-reduce:transition-none": true,
                         "group-hover/filetree:opacity-100": expanded() && deep() === level,
                         "group-hover/filetree:opacity-50": !(expanded() && deep() === level),
                       }}

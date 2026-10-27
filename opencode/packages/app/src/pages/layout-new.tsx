@@ -1,6 +1,7 @@
 import { useLocation } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { createEffect, ErrorBoundary, on, Suspense, type ParentProps } from "solid-js"
+import { ViewSwitch } from "@opencode-ai/ui/v2/view-switch"
+import { createEffect, createMemo, ErrorBoundary, on, Suspense, untrack, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { PageEmpty, PageFrame } from "@/components/page"
 import { DebugBar } from "@/components/debug-bar"
@@ -9,10 +10,17 @@ import { SecondBrainSidebar } from "@/components/second-brain-sidebar"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { nextPageMotionKey, routeSection, type PageMotionKey } from "./page-motion"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
+  const location = useLocation()
   const [state, setState] = createStore({ debugTools: true })
+  // Derived in the same pass as the route outlet, so the fade-through always freezes the outgoing page.
+  const pageKey = createMemo<PageMotionKey>((previous) => nextPageMotionKey(previous, location.pathname), {
+    section: routeSection(untrack(() => location.pathname)),
+    count: 0,
+  })
 
   createEffect(() => setV2Toast(true))
 
@@ -47,7 +55,11 @@ export default function NewLayout(props: ParentProps) {
         <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
           {/* A failed page request shows a retryable message here and keeps the sidebar usable. */}
           <ErrorBoundary fallback={(error, reset) => <PageError error={error} reset={reset} />}>
-            <Suspense>{props.children}</Suspense>
+            <Suspense>
+              <ViewSwitch key={pageKey().count} class="flex min-h-0 min-w-0 w-full flex-1 flex-col items-start">
+                {props.children}
+              </ViewSwitch>
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>

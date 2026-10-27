@@ -39,7 +39,7 @@ export function DialogArchivedThreads(props: { ctrl: SidebarController; project:
           {(session) => (
             <div
               data-archived-thread={session.id}
-              class="flex h-11 min-w-0 items-center gap-2 rounded-full pl-3 pr-1 transition-colors duration-150 ease-standard hover:bg-v2-background-bg-layer-02 motion-reduce:transition-none"
+              class="flex h-11 min-w-0 items-center gap-2 rounded-full pl-3 pr-1 transition-colors duration-short ease-standard hover:bg-v2-background-bg-layer-02 motion-reduce:transition-none"
             >
               <span class="min-w-0 flex-1 truncate text-[13px] text-v2-text-text-base">
                 {sessionTitle(session.title) || session.id}

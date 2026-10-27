@@ -184,7 +184,7 @@ function ServerStatusPopoverView(props: { state: ServerStatusState }) {
         {(item) => (
           <button
             type="button"
-            class="flex min-h-11 w-full items-center gap-2.5 rounded-[16px] py-1.5 pr-2.5 pl-3 text-left text-[13px] transition-[background-color,border-radius] duration-200 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+            class="flex min-h-11 w-full items-center gap-2.5 rounded-[16px] py-1.5 pr-2.5 pl-3 text-left text-[13px] transition-[background-color,border-radius] duration-short ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
             classList={{
               "hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px]": !item.blocked,
               "cursor-not-allowed": item.blocked,

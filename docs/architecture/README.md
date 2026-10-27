@@ -82,7 +82,24 @@ and the incoming one in when `key` changes, rendering one view at a time.
 `@opencode-ai/ui/v2/motion` exposes `prefersReducedMotion()` and
 `motionDuration()` for JS that times work against these animations, and
 `useSpring` (`@opencode-ai/ui/motion-spring`) jumps to its target under reduced
-motion.
+motion. Hand-rolled popups (not Kobalte) use `animate-menu-enter` /
+`animate-menu-exit` (the MenuV2 scale and fade) inside a `Presence`. The pill and
+settings `TabsV2` variants slide one selection indicator between tabs; the
+normal variant keeps a static underline because its tabs can be dragged.
+
+In the app shell, `pages/layout-new.tsx` fades pages through a `ViewSwitch`
+keyed by section (`pages/page-motion.ts`): query-string changes do not fade,
+and moving into the thread view (draft or session) swaps at once so its
+composer can focus on mount. Project detail, Activity, Calendar views and the
+connect-provider steps use `ViewSwitch` too, so a field that focuses on mount
+uses `utils/focus-when-connected.ts`, which waits for the view to be attached.
+Sidebar groups, child threads, settings model groups and Home's "Running now"
+expand through `Reveal`; the Projects panel keeps its content while its width
+collapses. Calendar and Tasks share `features/second-brain/side-panel.tsx`,
+whose grid column eases with the panel and whose panel keeps its last content
+through the exit. Live lists (sidebar threads, running sessions) animate only
+rows that join after the first render (`utils/fresh-items.ts`), never the
+initial list or a reorder.
 
 The sidebar's controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with
