@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -533,8 +533,23 @@ function SessionFileViewV2(props: { tab: string }) {
     scrollSync.queueRestore()
   })
 
+  // The skeleton shows from the first frame until the code has rendered (loading, then highlighting), and the
+  // code fades in as it replaces it; a fallback timer drops the skeleton if the viewer never reports a render.
+  const [rendered, setRendered] = createSignal(false)
+  createEffect(() => {
+    if (!state()?.loaded || rendered()) return
+    const timer = setTimeout(() => setRendered(true), 1500)
+    onCleanup(() => clearTimeout(timer))
+  })
+
   const renderFile = (source: string) => (
-    <div class="relative overflow-hidden pb-40 animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none">
+    <div
+      class="relative overflow-hidden pb-40"
+      classList={{
+        // Not hidden before then: the viewer only renders its lines while it can be seen.
+        "animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none": rendered(),
+      }}
+    >
       <Dynamic
         component={fileComponent}
         mode="text"
@@ -548,6 +563,7 @@ function SessionFileViewV2(props: { tab: string }) {
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
+          setRendered(true)
           scrollSync.queueRestore()
         }}
         annotations={commentsUi.annotations()}
@@ -598,27 +614,27 @@ function SessionFileViewV2(props: { tab: string }) {
         onScroll={scrollSync.handleScroll as any}
       >
         <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
-          <Match when={state()?.loading}>
-            <div
-              role="status"
-              class="flex flex-col gap-2.5 px-6 py-4 animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none"
-            >
-              <span class="sr-only">{language.t("common.loading")}...</span>
-              {[72, 54, 64, 38, 58].map((width) => (
-                <div
-                  aria-hidden="true"
-                  class="h-2.5 rounded-full bg-v2-background-bg-layer-01 animate-pulse motion-reduce:animate-none"
-                  style={{ width: `${width}%` }}
-                />
-              ))}
-            </div>
-          </Match>
           <Match when={state()?.error}>
             {(err) => <div class="px-6 py-4 text-[13px] text-v2-state-fg-danger">{err()}</div>}
           </Match>
+          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
         </Switch>
       </ScrollView>
+      <Show when={!state()?.error && !rendered()}>
+        <div
+          role="status"
+          class="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-2.5 px-6 py-4 animate-in fade-in duration-medium ease-emphasized-decelerate motion-reduce:animate-none"
+        >
+          <span class="sr-only">{language.t("common.loading")}...</span>
+          {[72, 54, 64, 38, 58].map((width) => (
+            <div
+              aria-hidden="true"
+              class="h-2.5 rounded-full bg-v2-background-bg-layer-01 animate-pulse motion-reduce:animate-none"
+              style={{ width: `${width}%` }}
+            />
+          ))}
+        </div>
+      </Show>
     </div>
   )
 

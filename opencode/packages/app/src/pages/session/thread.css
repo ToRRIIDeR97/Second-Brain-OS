@@ -208,3 +208,51 @@
     animation: none !important;
   }
 }
+
+/* A turn's step rows while its steps unfold or fold (message-timeline.tsx): the row grows from (or shrinks
+   to) no height through grid rows, with opacity, so the virtual rows below ease instead of jumping. */
+[data-step-motion] {
+  display: grid;
+  min-height: 0 !important;
+
+  > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+[data-step-motion="enter"] {
+  animation: timeline-step-enter var(--v2-duration-medium) var(--v2-ease-emphasized-decelerate) both;
+}
+
+[data-step-motion="exit"] {
+  animation: timeline-step-exit var(--v2-duration-short) var(--v2-ease-emphasized-accelerate) forwards;
+}
+
+@keyframes timeline-step-enter {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+@keyframes timeline-step-exit {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-step-motion] {
+    animation: none !important;
+  }
+}

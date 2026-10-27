@@ -108,7 +108,10 @@ measured-height keyframes stay off), the question and permission docks grow in
 as the composer folds away, and the queued and rolled-back docks keep removed
 rows closing in place with `createExitList`
 (`pages/session/composer/exit-list.ts`). Animation stays off for streaming text
-and the initial history load; only rows a toggle adds or removes animate.
+and the initial history load; only rows a toggle adds or removes animate. A click
+on any control with `aria-expanded` in the thread holds the scroll position while
+the content eases (`MessageTimeline` stops following the bottom and `session.tsx`
+pauses auto-scroll), then following resumes if the view is still at the bottom.
 
 The sidebar's controller (`components/sidebar/sidebar-controller.ts`) reads
 `GET /second-brain/project-threads`, loads each Project's threads with

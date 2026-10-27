@@ -1603,6 +1603,23 @@ export default function Page() {
     scrollMark += 1
   }
 
+  // A toggle in the thread pauses following the bottom while its content eases (MessageTimeline holds the
+  // virtual list too). Afterwards following resumes only if the view is still at the bottom; a toggle that
+  // pushed the bottom out of view leaves the reader where they are, as a scroll up would.
+  let followHeld = false
+  const holdFollow = (hold: boolean) => {
+    if (hold) {
+      if (autoScroll.userScrolled()) return
+      followHeld = true
+      autoScroll.pause()
+      return
+    }
+    if (!followHeld) return
+    followHeld = false
+    const el = scroller
+    if (el && el.scrollHeight - el.clientHeight - el.scrollTop <= 10) autoScroll.resume()
+  }
+
   createResizeObserver(
     () => content,
     () => {
@@ -2011,6 +2028,7 @@ export default function Page() {
                   shouldAnchorBottom={() =>
                     !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
                   }
+                  onToggleHold={holdFollow}
                   centered={centered()}
                   setContentRef={(el) => {
                     content = el

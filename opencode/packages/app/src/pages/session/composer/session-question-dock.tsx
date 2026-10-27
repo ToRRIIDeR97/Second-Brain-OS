@@ -6,7 +6,6 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { ViewSwitch } from "@opencode-ai/ui/v2/view-switch"
 import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
@@ -89,11 +88,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   })
 
   let root: HTMLDivElement | undefined
-  // A signal: each question mounts its own options list (see the ViewSwitch below), and it is measured again.
+  // A signal: each question mounts its own options list (see the keyed body below), and it is measured again.
   const [optionsRef, setOptionsRef] = createSignal<HTMLDivElement>()
   let customRef: HTMLButtonElement | undefined
   let optsRef: HTMLButtonElement[] = []
   let replied = false
+  // Whether a question has been shown yet: only later steps animate in.
+  let stepped = false
   let focusFrame: number | undefined
 
   const question = createMemo(() => questions()[store.tab])
@@ -569,11 +570,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           </>
         }
       >
-        {/* Next and Back fade through to the other question; each question mounts its own content. */}
-        <ViewSwitch key={store.tab} class="flex min-h-0 flex-1 flex-col gap-1">
-          <Show when={store.tab + 1} keyed>
-            {(_) => (
-              <>
+        {/* Next and Back swap the body in the same frame as the counter and the footer, and the new question
+            fades and rises in (no fade-out, so the card never shows an empty body). */}
+        <Show when={store.tab + 1} keyed>
+          {(_) => {
+            const entering = stepped
+            stepped = true
+            return (
+              <div class={`flex min-h-0 flex-1 flex-col gap-1${entering ? " animate-enter" : ""}`}>
                 <div
                   data-slot="question-text"
                   style={{
@@ -700,10 +704,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                     </form>
                   </Show>
                 </div>
-              </>
-            )}
-          </Show>
-        </ViewSwitch>
+              </div>
+            )
+          }}
+        </Show>
       </DockPrompt>
     </div>
   )
