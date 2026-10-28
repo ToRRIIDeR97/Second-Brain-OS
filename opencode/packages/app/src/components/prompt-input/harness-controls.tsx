@@ -8,6 +8,8 @@ import { useLanguage } from "@/context/language"
 export type PromptInputHarnessController = {
   instances: () => ReadonlyArray<Harness.Instance> | undefined
   loading: () => boolean
+  /** True while any harness check runs or the current harness's models are still being listed. */
+  checking?: () => boolean
   disabled?: () => boolean
   /** Checks the harnesses again in the background; the shown list stays until the answer arrives. */
   revalidate?: () => void
@@ -28,6 +30,12 @@ export function isExternalHarness(instance: Pick<Harness.Instance, "driver">) {
   return instance.driver !== Harness.OpenCodeDriver
 }
 
+/** What an external harness's model slot shows: its picker, a neutral loading label, or the empty state. */
+export function harnessModelSlot(input: { models: number; checking: boolean }) {
+  if (input.models > 0) return "select"
+  return input.checking ? "loading" : "none"
+}
+
 export async function openHarnessSettings(dialog: ReturnType<typeof useDialog>) {
   // Loaded on demand: Settings renders these controls too, so a static import would be circular.
   const { DialogSettings } = await import("@/components/settings-v2/dialog-settings-v2")
@@ -42,9 +50,16 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
   const dialog = useDialog()
   const options = createMemo(() => orderHarnesses(props.controller.instances()))
   const addHarness = () => openHarnessSettings(dialog)
-  const instance = createMemo(() =>
-    props.controller.instances()?.find((item) => item.id === props.controller.current()),
-  )
+  const checking = () => props.controller.loading() || !!props.controller.checking?.()
+  // While a check runs, the last answer for the same harness stays in place, so its model and effort
+  // pickers keep their slot instead of collapsing until the new list arrives.
+  const instance = createMemo<Harness.Instance | undefined>((previous) => {
+    const next = props.controller.instances()?.find((item) => item.id === props.controller.current())
+    const kept = previous?.id === props.controller.current() && previous.models.length > 0 ? previous : undefined
+    if (!next) return checking() ? kept : undefined
+    if (next.models.length === 0 && checking()) return kept ?? next
+    return next
+  })
   // Falls back to the model the picker shows when none is saved yet, so effort and tier stay selectable.
   const model = createMemo(() => {
     const selection = props.controller.model.current()
@@ -77,7 +92,7 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
         footer={{ label: language.t("harness.settings.add"), onSelect: () => void addHarness() }}
         current={props.controller.current()}
         control="harness"
-        currentIcon={<Icon name="status" />}
+        currentIcon={<Icon name="console" />}
         class={SELECT_CLASS}
         disabled={props.controller.loading() || props.controller.disabled?.() || !props.controller.instances()}
         onOpenChange={(open) => open && props.controller.revalidate?.()}
@@ -86,8 +101,14 @@ export function PromptInputHarnessControls(props: { controller: PromptInputHarne
       <Show when={instance()?.driver !== Harness.OpenCodeDriver && instance()}>
         {(item) => (
           <Show
-            when={item().models.length > 0}
-            fallback={<span class="px-2 text-[12px] text-v2-text-text-faint">{language.t("harness.models.none")}</span>}
+            when={harnessModelSlot({ models: item().models.length, checking: checking() }) === "select"}
+            fallback={
+              <span class="px-2 text-[12px] text-v2-text-text-faint">
+                {harnessModelSlot({ models: 0, checking: checking() }) === "loading"
+                  ? language.t("harness.models.loading")
+                  : language.t("harness.models.none")}
+              </span>
+            }
           >
             <PromptInputV2Select
               title={language.t("harness.model")}

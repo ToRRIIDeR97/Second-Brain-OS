@@ -1142,6 +1142,7 @@ export const dict = {
   "harness.unavailable": "No disponible",
   "harness.probeFailed": "No se pudieron comprobar los motores",
   "harness.model": "Modelo",
+  "harness.models.loading": "Cargando modelos…",
   "harness.models.none": "No hay modelos disponibles",
   "harness.effort": "Esfuerzo",
   "harness.serviceTier": "Nivel de servicio",

@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Harness } from "@opencode-ai/schema/harness"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
@@ -75,18 +76,27 @@ export function createPromptHarnessController(selection: HarnessSelection) {
   const instance = createMemo(() => instances()?.find((item) => item.id === selection.current()))
   // An ACP agent answers before its models are listed (the server reads them in the background),
   // so a harness that is up but has no models yet is asked again a few times.
-  let retries = 0
+  const [retry, setRetry] = createStore({ count: 0 })
+  const waitingForModels = () => {
+    const current = instance()
+    return (
+      !!current &&
+      current.driver !== Harness.OpenCodeDriver &&
+      current.status === "available" &&
+      current.models.length === 0
+    )
+  }
   createEffect(() => {
     const current = instance()
     if (!current || current.driver === Harness.OpenCodeDriver || current.status !== "available") return
     if (current.models.length > 0) {
-      retries = 0
+      setRetry("count", 0)
       return
     }
-    if (loaded.loading || retries >= MODEL_RETRIES) return
+    if (loaded.loading || retry.count >= MODEL_RETRIES) return
     const timer = setTimeout(() => {
-      retries++
       void refetch()
+      setRetry("count", (count) => count + 1)
     }, MODEL_RETRY_MS)
     onCleanup(() => clearTimeout(timer))
   })
@@ -121,6 +131,8 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     driver: () => instance()?.driver,
     // Only the first load blocks the picker; a stale list stays usable while it refreshes.
     loading: () => loaded.loading && !list(),
+    // Any fetch in flight, or a harness that is up but whose models are still being asked for.
+    checking: () => loaded.loading || (waitingForModels() && retry.count < MODEL_RETRIES),
     disabled: selection.disabled,
     revalidate,
     current: selection.current,

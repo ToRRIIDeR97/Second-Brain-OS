@@ -6,7 +6,10 @@ export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
   size: number
   min: number
   max: number
+  /** Called at most once per animation frame while dragging, with the clamped size. */
   onResize: (size: number) => void
+  /** Called once when a drag that did not collapse ends, with the final clamped size. */
+  onResizeEnd?: (size: number) => void
   onCollapse?: () => void
   /** Called while dragging when size crosses `collapseThreshold`. */
   onCollapseChange?: (collapsed: boolean) => void
@@ -21,6 +24,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "min",
     "max",
     "onResize",
+    "onResizeEnd",
     "onCollapse",
     "onCollapseChange",
     "collapseThreshold",
@@ -42,10 +46,18 @@ export function ResizeHandle(props: ResizeHandleProps) {
     const max = local.max
     const threshold = local.collapseThreshold ?? 0
     const onResize = local.onResize
+    const onResizeEnd = local.onResizeEnd
     const onCollapse = local.onCollapse
     const onCollapseChange = local.onCollapseChange
     let current = startSize
     let collapsed = false
+    // Pointer moves arrive faster than frames; only the latest size per frame reaches `onResize`.
+    let frame: number | undefined
+    const clamped = () => Math.min(max, Math.max(min, current))
+    const flush = () => {
+      frame = undefined
+      onResize(clamped())
+    }
 
     document.body.style.userSelect = "none"
     document.body.style.overflow = "hidden"
@@ -66,7 +78,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
         collapsed = nextCollapsed
         onCollapseChange?.(collapsed)
       }
-      onResize(Math.min(max, Math.max(min, current)))
+      if (frame === undefined) frame = requestAnimationFrame(flush)
     }
 
     const onMouseUp = () => {
@@ -74,12 +86,17 @@ export function ResizeHandle(props: ResizeHandleProps) {
       document.body.style.overflow = ""
       document.removeEventListener("mousemove", onMouseMove)
       document.removeEventListener("mouseup", onMouseUp)
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame)
+        flush()
+      }
 
       if (collapsed) {
         onCollapse?.()
         return
       }
       onCollapseChange?.(false)
+      onResizeEnd?.(clamped())
     }
 
     document.addEventListener("mousemove", onMouseMove)

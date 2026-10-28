@@ -54,7 +54,11 @@ const build = (messages: Message[] = [], providers: Provider[] = [], selectedHar
   if (!message) return undefined
 
   const provider = providers.find((item) => item.id === message.providerID)
-  const model = provider?.models[message.modelID]
+  // An external harness reports itself, not a provider, as the source. When a known provider lists the same
+  // model id, its context window still applies; otherwise the limit stays unknown.
+  const model = provider
+    ? provider.models[message.modelID]
+    : providers.map((item) => item.models[message.modelID]).find((item) => item !== undefined)
   const limit = model?.limit.context
   const total = tokenTotal(message)
 

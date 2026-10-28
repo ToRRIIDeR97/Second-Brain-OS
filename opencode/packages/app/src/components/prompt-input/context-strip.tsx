@@ -167,13 +167,15 @@ export function ComposerContextStrip(props: { context: ComposerContext }) {
 
   return (
     <Show when={visible()}>
+      {/* The row is its own layer pinned to the strip's bottom edge, so the sheet growing behind it never
+          moves the worktree and branch. Only the sheet's body animates. */}
       <div
+        ref={props.context.setSheet}
         data-component="context-strip"
         class="relative h-[46px] w-full shrink-0"
         style={{ "margin-bottom": "-14px" }}
       >
         <section
-          ref={props.context.setSheet}
           id={props.context.id}
           aria-label={language.t("secondBrain.contextStrip.sheet")}
           data-slot="context-sheet"
@@ -192,37 +194,38 @@ export function ComposerContextStrip(props: { context: ComposerContext }) {
               )}
             </Show>
           </div>
-          <div
-            data-slot="context-strip-row"
-            class="box-content flex h-8 min-w-0 items-center gap-4 px-5 pb-[14px] text-[12px] leading-4 text-v2-text-text-muted"
-          >
-            <Show when={worktree()}>
-              {(value) => (
-                <span
-                  data-slot="context-strip-worktree"
-                  class="flex min-w-0 shrink items-center gap-1.5"
-                  title={directory()}
-                >
-                  <Icon name="folder" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                  <Show when={value().linked}>
-                    <span class="shrink-0">{language.t("secondBrain.contextStrip.worktree")}</span>
-                  </Show>
-                  <span class="min-w-0 truncate text-v2-text-text-base [font-weight:530]">{value().name}</span>
-                </span>
-              )}
-            </Show>
-            <Show when={branch()}>
-              {(value) => (
-                <span data-slot="context-strip-branch" class="flex min-w-0 shrink items-center gap-1.5">
-                  <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                  <span class="min-w-0 truncate font-mono text-v2-text-text-base" title={value()}>
-                    {value()}
-                  </span>
-                </span>
-              )}
-            </Show>
-          </div>
+          <div aria-hidden="true" class="h-[46px]" />
         </section>
+        <div
+          data-slot="context-strip-row"
+          class="absolute inset-x-0 bottom-0 flex h-8 min-w-0 items-center gap-4 px-5 mb-[14px] text-[12px] leading-4 text-v2-text-text-muted"
+        >
+          <Show when={worktree()}>
+            {(value) => (
+              <span
+                data-slot="context-strip-worktree"
+                class="flex min-w-0 shrink items-center gap-1.5"
+                title={directory()}
+              >
+                <Icon name="folder" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                <Show when={value().linked}>
+                  <span class="shrink-0">{language.t("secondBrain.contextStrip.worktree")}</span>
+                </Show>
+                <span class="min-w-0 truncate text-v2-text-text-base [font-weight:530]">{value().name}</span>
+              </span>
+            )}
+          </Show>
+          <Show when={branch()}>
+            {(value) => (
+              <span data-slot="context-strip-branch" class="flex min-w-0 shrink items-center gap-1.5">
+                <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                <span class="min-w-0 truncate font-mono text-v2-text-text-base" title={value()}>
+                  {value()}
+                </span>
+              </span>
+            )}
+          </Show>
+        </div>
       </div>
     </Show>
   )
@@ -248,15 +251,16 @@ function SheetDetails(props: {
       data-slot="context-sheet-details"
       class="grid grid-cols-[150px_minmax(0,1fr)] gap-x-5 gap-y-4 px-[18px] pt-4 text-[12px] leading-4 text-v2-text-text-muted"
     >
-      <div data-slot="context-sheet-gauge" class="flex flex-col items-center">
+      <div data-slot="context-sheet-gauge" class="flex flex-col items-center" classList={{ "self-stretch": !limit() }}>
         <Show
           when={limit()}
           fallback={
-            <div class="flex h-20 flex-col items-center justify-end gap-1">
-              <span class="text-[22px] leading-7 text-v2-text-text-base tabular-nums [font-weight:600]">
+            <div class="flex min-h-20 flex-1 flex-col items-center justify-center gap-1 text-center">
+              <span class="text-[26px] leading-8 text-v2-text-text-base tabular-nums [font-weight:600]">
                 {formatter().number(props.context.total)}
               </span>
               <span>{language.t("context.usage.tokens")}</span>
+              <span class="text-v2-text-text-faint">{language.t("secondBrain.contextStrip.limitUnknown")}</span>
             </div>
           }
         >
@@ -353,6 +357,15 @@ function SheetDetails(props: {
             </div>
           )}
         </Index>
+        {/* Without a known window there are no bars or shares, so the rows close with their sum instead. */}
+        <Show when={!limit()}>
+          <div data-slot="context-sheet-total" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2.5">
+            <span class="truncate text-v2-text-text-base">{language.t("context.stats.totalTokens")}</span>
+            <span class="text-right tabular-nums text-v2-text-text-base [font-weight:600]">
+              {formatter().number(props.context.total)}
+            </span>
+          </div>
+        </Show>
         <div class="flex min-w-0 items-center gap-3 border-t border-v2-border-border-muted pt-1.5">
           <span class="min-w-0 truncate font-mono" title={props.context.modelLabel}>
             {props.context.modelLabel}

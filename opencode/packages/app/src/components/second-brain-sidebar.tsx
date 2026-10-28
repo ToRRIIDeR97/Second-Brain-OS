@@ -20,6 +20,8 @@ import {
 } from "@/components/sidebar/sidebar-controller"
 import { DialogArchivedThreads } from "@/components/sidebar/dialog-archived-threads"
 import { DialogInstructions } from "@/components/sidebar/dialog-instructions"
+import { DialogAddProject, DialogRemoveProject } from "@/components/sidebar/dialog-project-folder"
+import { useServer } from "@/context/server"
 import type { ThreadNode } from "@/features/second-brain/sidebar-threads"
 import { createFreshItems } from "@/utils/fresh-items"
 import { sessionPinnedAt } from "@/utils/session"
@@ -201,6 +203,12 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
   const language = useLanguage()
   const dialog = useDialog()
   const navigate = useNavigate()
+  const server = useServer()
+  // A modal over the current page; the workspace's list refreshes once the folder is linked.
+  const addProject = () => {
+    const current = server.current
+    if (current) void dialog.show(() => <DialogAddProject server={current} onAdd={props.ctrl.addProject} />)
+  }
   const name = (directory: string) => {
     const item = props.ctrl.workspaces().find((workspace) => workspace.worktree === directory)
     return item?.name || directory.split(/[\\/]/).filter(Boolean).pop() || directory
@@ -251,9 +259,7 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
                   <MenuV2.Item onSelect={props.ctrl.scanFolders}>
                     {language.t("secondBrain.sidebar.scanProjects")}
                   </MenuV2.Item>
-                  <MenuV2.Item onSelect={props.ctrl.linkFolder}>
-                    {language.t("secondBrain.sidebar.linkFolder")}
-                  </MenuV2.Item>
+                  <MenuV2.Item onSelect={addProject}>{language.t("secondBrain.sidebar.addProject")}</MenuV2.Item>
                   <MenuV2.Item
                     onSelect={() => dialog.show(() => <DialogInstructions workspaceDirectory={directory()} />)}
                   >
@@ -270,15 +276,15 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
       </MenuV2>
       <div class="flex-1" />
       <Show when={props.ctrl.brainDirectory()}>
-        <TooltipV2 placement="right" value={language.t("secondBrain.projects.new")}>
+        <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.addProject")}>
           <IconButtonV2
             type="button"
-            data-sidebar-item="new-project"
+            data-sidebar-item="add-project"
             variant="ghost-muted"
             size="large"
             icon={<Icon name="folder-add-left" size="small" />}
-            aria-label={language.t("secondBrain.projects.new")}
-            onClick={() => navigate("/projects?new=1")}
+            aria-label={language.t("secondBrain.sidebar.addProject")}
+            onClick={addProject}
           />
         </TooltipV2>
         <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.scanProjects")}>
@@ -375,18 +381,18 @@ function ProjectGroup(props: { ctrl: SidebarController; project: SidebarProjectI
                   {language.t("secondBrain.sidebar.projectInstructions")}
                 </MenuV2.Item>
                 <MenuV2.Separator />
-                <Show
-                  when={props.ctrl.isLinked(props.project)}
-                  fallback={
-                    <MenuV2.Item onSelect={() => void props.ctrl.archiveProject(props.project)}>
-                      {language.t("secondBrain.sidebar.archiveProject")}
-                    </MenuV2.Item>
+                <MenuV2.Item
+                  onSelect={() =>
+                    dialog.show(() => (
+                      <DialogRemoveProject
+                        name={props.project.name}
+                        onRemove={() => props.ctrl.removeProject(props.project)}
+                      />
+                    ))
                   }
                 >
-                  <MenuV2.Item onSelect={() => props.ctrl.unlinkProject(props.project)}>
-                    {language.t("secondBrain.sidebar.unlinkFolder")}
-                  </MenuV2.Item>
-                </Show>
+                  {language.t("secondBrain.sidebar.removeProject")}
+                </MenuV2.Item>
               </MenuV2.Content>
             </MenuV2.Portal>
           </MenuV2>

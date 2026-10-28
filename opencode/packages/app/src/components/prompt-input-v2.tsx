@@ -81,7 +81,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         modelControlVisible={openCode()}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
-        variantControlVisible={openCode() && !props.controller.model.loading}
+        variantControlVisible={openCode()}
         trailingControl={
           <>
             {props.trailing}
@@ -356,7 +356,30 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       keybind: command.keybindParts(item.id),
     })),
   )
-  const variants = createMemo(() => ["default", ...props.controls.model.selection.variant.list()])
+  // Agents and providers load per directory, so they read as empty while a session switch or a first
+  // load is in flight. Keep the last resolved list in place (disabled) instead of unmounting the
+  // control, which made the toolbar jump.
+  const variants = createMemo<string[]>(
+    (previous) =>
+      props.controls.model.loading && previous.length > 1
+        ? previous
+        : ["default", ...props.controls.model.selection.variant.list()],
+    ["default"],
+  )
+  const agents = createMemo<{ options: string[]; current: string; loading: boolean } | undefined>((previous) => {
+    const state = props.controls.agents
+    if (state.loading) return previous && { ...previous, loading: true }
+    if (!state.visible || state.options.length === 0) return undefined
+    return { options: state.options, current: state.current || (previous?.current ?? ""), loading: false }
+  })
+  // One stable object: the toolbar mounts it with a keyed Show, so a fresh object would remount the select.
+  const agentControl = {
+    options: () => (agents()?.options ?? []).map((name) => ({ id: name, label: name })),
+    current: () => agents()?.current ?? "",
+    disabled: () => agents()?.loading ?? false,
+    onSelect: (value: string) => props.controls.agents.select(value),
+    keybind: () => command.keybindParts("agent.cycle"),
+  }
   const controller = createPromptInputV2Controller({
     store: () => prompt.capture().store,
     state: interaction,
@@ -423,18 +446,12 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     view: {
       placeholder: designPlaceholder,
       get agent() {
-        return props.controls.agents.visible && props.controls.agents.options.length > 0
-          ? {
-              options: () => props.controls.agents.options.map((name) => ({ id: name, label: name })),
-              current: () => props.controls.agents.current,
-              onSelect: (value: string) => props.controls.agents.select(value),
-              keybind: () => command.keybindParts("agent.cycle"),
-            }
-          : undefined
+        return agents() ? agentControl : undefined
       },
       variant: {
         options: () => variants().map((value) => ({ id: value, label: value })),
         current: () => props.controls.model.selection.variant.current() ?? "default",
+        disabled: () => props.controls.model.loading,
         onSelect: (value) => props.controls.model.selection.variant.set(value === "default" ? undefined : value),
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
@@ -584,11 +601,15 @@ function PromptInputV2ModelControl(props: {
   onClose: () => void
   onUnpaidClick: () => void
 }) {
-  const shouldAnimate = createMemo<boolean>((previous) => previous ?? props.loading)
+  // While providers load (first open, or a session switch to another directory) the control stays in
+  // its slot, disabled, with the last model it showed.
+  const shown = createMemo<{ providerID?: string; modelName: string }>((previous) =>
+    props.loading && previous ? previous : { providerID: props.providerID, modelName: props.modelName },
+  )
   const content = () => (
     <>
       <span class="prompt-input-control-icon flex shrink-0">
-        <Show when={props.providerID} fallback={<Icon name="monitor" />}>
+        <Show when={shown().providerID} fallback={<Icon name="monitor" />}>
           {(providerID) => (
             <ProviderIcon
               id={providerID()}
@@ -598,22 +619,38 @@ function PromptInputV2ModelControl(props: {
           )}
         </Show>
       </span>
-      <span class="prompt-input-control-label truncate leading-4">{props.modelName}</span>
+      <span class="prompt-input-control-label truncate leading-4">{shown().modelName}</span>
       <span class="prompt-input-control-chevron -ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
       </span>
     </>
   )
+  const buttonClass = "prompt-input-responsive-select min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
   return (
-    <Show when={!props.loading}>
-      <TooltipV2
-        placement="top"
-        gutter={4}
-        value={
-          <>
-            {props.title}: {props.modelName}
-            <KeybindV2 keys={props.keybind} variant="neutral" />
-          </>
+    <TooltipV2
+      placement="top"
+      gutter={4}
+      value={
+        <>
+          {props.title}: {shown().modelName}
+          <KeybindV2 keys={props.keybind} variant="neutral" />
+        </>
+      }
+    >
+      <Show
+        when={!props.loading}
+        fallback={
+          <ButtonV2
+            data-action="prompt-model"
+            variant="ghost-muted"
+            size="normal"
+            class={buttonClass}
+            style={{ height: "28px" }}
+            aria-label={props.title}
+            disabled
+          >
+            {content()}
+          </ButtonV2>
         }
       >
         <Show
@@ -624,9 +661,9 @@ function PromptInputV2ModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="prompt-input-responsive-select min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
-              classList={{ "animate-in fade-in": shouldAnimate() }}
+              class={buttonClass}
               style={{ height: "28px" }}
+              aria-label={props.title}
               onClick={props.onUnpaidClick}
             >
               {content()}
@@ -641,8 +678,8 @@ function PromptInputV2ModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="prompt-input-responsive-select min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
-                classList={{ "animate-in fade-in": shouldAnimate() }}
+                class={buttonClass}
+                aria-label={props.title}
                 data-action="prompt-model"
                 data-control-type="popover"
               >
@@ -652,8 +689,8 @@ function PromptInputV2ModelControl(props: {
             onClose={props.onClose}
           />
         </Show>
-      </TooltipV2>
-    </Show>
+      </Show>
+    </TooltipV2>
   )
 }
 

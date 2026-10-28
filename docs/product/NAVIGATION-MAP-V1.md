@@ -46,9 +46,13 @@ is hidden and the rail remains.
    pill highlight), and **Settings** at the bottom.
 2. **Workspace** panel. The heading is a dropdown: the opened folders (the
    current one checked), **Open folder as workspace**, **Scan for projects**,
-   **Link a folder as a project**, **Workspace instructions** (the workspace's
-   default `AGENTS.md`) and **Manage projects** (`/projects`). The button next
-   to it scans again. Each workspace is also scanned once per app session when
+   **Add project…**, **Workspace instructions** (the workspace's
+   default `AGENTS.md`) and **Manage projects** (`/projects`). Next to it, the
+   folder button also opens **Add project…** and the other button scans again.
+   **Add project…** is a dialog over the current page (no route change): type or
+   paste a folder path (folder suggestions from the server), or **Browse…** with
+   the system picker on desktop with a local server. The folder may be anywhere;
+   it is linked through `POST /second-brain/projects/link`. Each workspace is also scanned once per app session when
    it is first shown; if that scan fails, a toast says so and it runs again the
    next time the workspace is shown. If the Project list cannot load, the
    panel shows **Request failed** with **Retry**.
@@ -70,7 +74,7 @@ Row actions:
 
 | Row | Actions |
 |---|---|
-| Project | New thread, open project card (`/projects?project=<id>`), archived threads, instructions, archive project (**Unlink folder and archive project** for a linked folder) |
+| Project | New thread, open project card (`/projects?project=<id>`), archived threads, instructions, **Remove from workspace…** (after a confirmation: unlinks a linked folder, archives the card of a folder inside the workspace; files are never touched) |
 | Thread | Rename (also double-click), pin / unpin, fork, archive, delete |
 
 Pins are stored on the thread (`metadata.pinned`, the pin time) so they survive
