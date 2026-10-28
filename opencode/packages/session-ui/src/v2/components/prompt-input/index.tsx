@@ -580,6 +580,7 @@ function PromptInputV2ConfiguredSelect(props: {
       keybind={props.control.keybind?.() ?? props.keybind}
       options={props.control.options()}
       current={current()}
+      disabled={props.control.disabled?.()}
       currentIcon={
         <Show when={props.model && providerID()} fallback={props.icon}>
           <ProviderIcon id={providerID()!} class="size-4 shrink-0 opacity-60" />

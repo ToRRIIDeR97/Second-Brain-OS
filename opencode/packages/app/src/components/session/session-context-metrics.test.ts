@@ -81,6 +81,34 @@ describe("getSessionContext", () => {
     expect(ctx?.usage).toBeNull()
   })
 
+  test("resolves a harness model's limit from a provider that lists the same model id", () => {
+    const providers = [{ id: "anthropic", models: { "claude-x": { name: "Claude X", limit: { context: 200 } } } }]
+    const known = [
+      assistant("a1", { input: 40, output: 10, reasoning: 0, read: 0, write: 0 }, 0, "claude-code", "claude-x"),
+    ]
+    const alias = [
+      assistant("a1", { input: 40, output: 10, reasoning: 0, read: 0, write: 0 }, 0, "claude-code", "haiku"),
+    ]
+
+    expect(getSessionContext(known, providers)?.limit).toBe(200)
+    expect(getSessionContext(known, providers)?.usage).toBe(25)
+    expect(getSessionContext(alias, providers)?.limit).toBeUndefined()
+    expect(getSessionContext(alias, providers)?.usage).toBeNull()
+  })
+
+  test("leaves a harness model's limit unknown when providers disagree on it", () => {
+    const providers = [
+      { id: "anthropic", models: { "claude-x": { name: "Claude X", limit: { context: 200 } } } },
+      { id: "proxy", models: { "claude-x": { name: "Claude X", limit: { context: 100 } } } },
+    ]
+    const messages = [
+      assistant("a1", { input: 40, output: 10, reasoning: 0, read: 0, write: 0 }, 0, "claude-code", "claude-x"),
+    ]
+
+    expect(getSessionContext(messages, providers)?.limit).toBeUndefined()
+    expect(getSessionContext(messages, providers)?.usage).toBeNull()
+  })
+
   test("recomputes when message array is mutated in place", () => {
     const messages = [assistant("a1", { input: 10, output: 10, reasoning: 10, read: 10, write: 10 }, 0.25)]
     const providers = [{ id: "openai", models: {} }]

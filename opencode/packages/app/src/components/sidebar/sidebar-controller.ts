@@ -188,22 +188,15 @@ export function createSidebarController() {
       .catch(requestFailed)
   }
 
-  /** Add a folder from anywhere on this computer as a Project of the selected workspace. */
-  const linkFolder = () => {
+  /**
+   * Add a folder from anywhere on this computer as a Project of the selected workspace. Rejects with the
+   * server's reason (for example a folder inside the workspace) so the add dialog can show it.
+   */
+  const addProject = async (folder: string) => {
     const directory = brainDirectory()
-    if (!directory || !server.current) return
-    pickDirectory({
-      server: server.current,
-      title: language.t("secondBrain.sidebar.linkFolder"),
-      multiple: false,
-      onSelect: (result) => {
-        const folder = homeProjectDirectories(result)[0]
-        if (!folder) return
-        void linkProjectFolder(client(directory), folder)
-          .then(() => refreshProjects())
-          .catch(requestFailed)
-      },
-    })
+    if (!directory) return
+    await linkProjectFolder(client(directory), folder)
+    await refreshProjects()
   }
 
   /** Linked Projects have an absolute folder; Projects inside the workspace's projects folder don't. */
@@ -214,9 +207,9 @@ export function createSidebarController() {
   const unlinkProject = (project: SidebarProjectItem) => {
     const directory = brainDirectory()
     const folder = project.entry.project.location?.path
-    if (!directory || !folder) return
+    if (!directory || !folder) return Promise.resolve()
     const previous = project.entry.project.status
-    void unlinkProjectFolder(client(directory), folder)
+    return unlinkProjectFolder(client(directory), folder)
       .then(async () => {
         await refreshProjects()
         undo.push({
@@ -230,6 +223,13 @@ export function createSidebarController() {
       })
       .catch(requestFailed)
   }
+
+  /**
+   * Take a Project off the workspace's list without touching its files: a linked folder is unlinked,
+   * a folder inside the workspace keeps its folder and has its card archived (a scan keeps known cards).
+   */
+  const removeProject = (project: SidebarProjectItem) =>
+    isLinked(project) ? unlinkProject(project) : archiveProject(project)
 
   // Per-directory thread lists, kept live by session.created/updated/deleted events.
   const directories = createMemo(() => {
@@ -763,9 +763,9 @@ export function createSidebarController() {
     workspaces,
     selectWorkspace,
     scanFolders,
-    linkFolder,
+    addProject,
     isLinked,
-    unlinkProject,
+    removeProject,
     projects,
     groups,
     projectThreads,

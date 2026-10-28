@@ -5,7 +5,8 @@
 
 /*
  * The sheet grows upward from the strip, behind the composer: its body row runs from 0fr to 1fr, so the height
- * follows the content without measuring it. The worktree and branch row stays on the bottom edge.
+ * follows the content without measuring it. The worktree and branch row is a separate layer pinned to the
+ * strip's bottom edge, above a fixed spacer row, so the growing sheet never shifts it by a (sub)pixel.
  */
 [data-slot="context-sheet"] {
   grid-template-rows: 0fr auto;

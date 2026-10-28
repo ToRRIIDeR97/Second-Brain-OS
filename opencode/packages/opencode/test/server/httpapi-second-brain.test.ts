@@ -150,6 +150,38 @@ describe("second brain project folders HttpApi", () => {
       expect(linked.status).toBe(400)
     }),
   )
+
+  it.instance("links a folder outside the workspace as a Project and unlinks it without touching its files", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+      const outside = yield* tmpdirScoped()
+      yield* Effect.promise(() => writeFile(path.join(outside, "notes.md"), "# keep\n"))
+      const post = (route: string) =>
+        request(route, { method: "POST", headers, body: JSON.stringify({ folder: outside }) }).pipe(
+          Effect.flatMap(json<BrainProject.ScanResult>),
+        )
+      const threads = () =>
+        request("/second-brain/project-threads", { headers }).pipe(Effect.flatMap(json<BrainProject.ThreadSummary[]>))
+
+      expect(yield* post("/second-brain/projects/link")).toMatchObject({ folders: 1, created: 1 })
+      const linked = (yield* threads()).find((entry) => entry.project.location?.path === outside)
+      expect(linked).toMatchObject({ threadDirectory: outside, project: { status: "active" } })
+      // The link lives in the workspace manifest, so it survives a reload.
+      const manifest = yield* Effect.promise(() =>
+        Bun.file(path.join(test.directory, ".tenon", "workspace.json")).json(),
+      )
+      expect(manifest).toEqual({ version: 1, linkedFolders: [outside] })
+
+      yield* post("/second-brain/projects/unlink")
+      const after = (yield* threads()).find((entry) => entry.project.id === linked?.project.id)
+      expect(after?.project.status ?? "archived").toBe("archived")
+      expect(
+        yield* Effect.promise(() => Bun.file(path.join(test.directory, ".tenon", "workspace.json")).json()),
+      ).toEqual({ version: 1, linkedFolders: [] })
+      expect(yield* Effect.promise(() => readdir(outside))).toContain("notes.md")
+    }),
+  )
 })
 
 describe("second brain errors and recovery HttpApi", () => {

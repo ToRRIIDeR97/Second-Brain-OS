@@ -26,6 +26,8 @@ export type PromptInputV2SelectControl = {
   current: Accessor<string>
   onSelect: (id: string) => void
   keybind?: Accessor<string[]>
+  /** Keeps the control in place but inert while its data is still loading. */
+  disabled?: Accessor<boolean>
 }
 
 export type PromptInputV2ViewConfig = {

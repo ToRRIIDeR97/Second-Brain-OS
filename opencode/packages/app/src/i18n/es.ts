@@ -1142,6 +1142,13 @@ export const dict = {
   "harness.unavailable": "No disponible",
   "harness.probeFailed": "No se pudieron comprobar los motores",
   "harness.model": "Modelo",
+  "secondBrain.sidebar.addProject.error.invalidFolder":
+    "Esa ruta no es una carpeta de este equipo. Escribe la ruta completa de una carpeta existente.",
+  "secondBrain.sidebar.addProject.error.overlapsWorkspace":
+    "Esa carpeta es el espacio de trabajo, lo contiene o está dentro de él. Las carpetas dentro del espacio de trabajo se añaden al buscar proyectos.",
+  "secondBrain.sidebar.addProject.error.protectedFolder":
+    "Esa carpeta es o contiene tu carpeta personal o la carpeta de datos de la aplicación, así que no puede ser un proyecto.",
+  "harness.models.loading": "Cargando modelos…",
   "harness.models.none": "No hay modelos disponibles",
   "harness.effort": "Esfuerzo",
   "harness.serviceTier": "Nivel de servicio",

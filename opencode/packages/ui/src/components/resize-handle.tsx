@@ -1,4 +1,4 @@
-import { splitProps, type JSX } from "solid-js"
+import { onCleanup, splitProps, type JSX } from "solid-js"
 
 export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onResize"> {
   direction: "horizontal" | "vertical"
@@ -6,7 +6,10 @@ export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
   size: number
   min: number
   max: number
+  /** Called at most once per animation frame while dragging, with the clamped size. */
   onResize: (size: number) => void
+  /** Called once when a drag that did not collapse ends, with the final clamped size. */
+  onResizeEnd?: (size: number) => void
   onCollapse?: () => void
   /** Called while dragging when size crosses `collapseThreshold`. */
   onCollapseChange?: (collapsed: boolean) => void
@@ -21,6 +24,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "min",
     "max",
     "onResize",
+    "onResizeEnd",
     "onCollapse",
     "onCollapseChange",
     "collapseThreshold",
@@ -28,8 +32,13 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "classList",
   ])
 
+  // Ends a drag still in progress when the handle unmounts, so no listener or frame outlives it.
+  let release: (() => void) | undefined
+  onCleanup(() => release?.())
+
   const handleMouseDown = (e: MouseEvent) => {
     if (e.detail > 1) return
+    release?.()
     e.preventDefault()
     const edge = local.edge ?? (local.direction === "vertical" ? "start" : "end")
     const start = local.direction === "horizontal" ? e.clientX : e.clientY
@@ -42,10 +51,18 @@ export function ResizeHandle(props: ResizeHandleProps) {
     const max = local.max
     const threshold = local.collapseThreshold ?? 0
     const onResize = local.onResize
+    const onResizeEnd = local.onResizeEnd
     const onCollapse = local.onCollapse
     const onCollapseChange = local.onCollapseChange
     let current = startSize
     let collapsed = false
+    // Pointer moves arrive faster than frames; only the latest size per frame reaches `onResize`.
+    let frame: number | undefined
+    const clamped = () => Math.min(max, Math.max(min, current))
+    const flush = () => {
+      frame = undefined
+      onResize(clamped())
+    }
 
     document.body.style.userSelect = "none"
     document.body.style.overflow = "hidden"
@@ -66,23 +83,42 @@ export function ResizeHandle(props: ResizeHandleProps) {
         collapsed = nextCollapsed
         onCollapseChange?.(collapsed)
       }
-      onResize(Math.min(max, Math.max(min, current)))
+      if (frame === undefined) frame = requestAnimationFrame(flush)
     }
 
-    const onMouseUp = () => {
+    const detach = () => {
+      release = undefined
       document.body.style.userSelect = ""
       document.body.style.overflow = ""
       document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("pointerup", onMouseUp, true)
+      document.removeEventListener("pointercancel", onMouseUp, true)
       document.removeEventListener("mouseup", onMouseUp)
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    }
+
+    // Ends on the capture-phase pointerup, before window listeners (such as a parent's sizing state that
+    // re-enables width transitions) see it, so the last frame and the commit land without animating.
+    const onMouseUp = () => {
+      const pending = frame !== undefined
+      detach()
+      if (pending) flush()
 
       if (collapsed) {
         onCollapse?.()
         return
       }
       onCollapseChange?.(false)
+      onResizeEnd?.(clamped())
     }
 
+    release = () => {
+      detach()
+      frame = undefined
+    }
     document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("pointerup", onMouseUp, true)
+    document.addEventListener("pointercancel", onMouseUp, true)
     document.addEventListener("mouseup", onMouseUp)
   }
 

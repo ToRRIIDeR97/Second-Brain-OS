@@ -470,6 +470,22 @@ export default function Page() {
       available: sessionPanelAvailable(),
     }),
   )
+  // A drag moves the split by writing the session panel's width straight to the element, once per frame
+  // (the handle coalesces moves). The persisted layout store, and everything that reads it such as the
+  // review's diff layout, takes the width once, on release.
+  let sessionPanel: HTMLDivElement | undefined
+  const previewSidePanelWidth = (width: number) => {
+    if (!sessionPanel) return
+    const available = sessionPanelAvailable()
+    const side = clampSidePanelWidth({ width, available })
+    sessionPanel.style.width =
+      available === undefined ? `calc(100% - ${side + 8 + railSpace()}px)` : `${available - side}px`
+  }
+  const commitSidePanelWidth = (width: number) => {
+    layout.sidePanel.resize(width)
+    // The reactive style only writes when its value changes, so restore it in case the drag ended where it began.
+    if (sessionPanel) sessionPanel.style.width = sessionPanelWidth()
+  }
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return railSpace() ? `calc(100% - ${railSpace()}px)` : "100%"
     if (desktopSessionResizeOpen()) {
@@ -2141,6 +2157,7 @@ export default function Page() {
       <SessionHeader />
       <div ref={panelRow} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2">
         <div
+          ref={sessionPanel}
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
             "duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
@@ -2171,10 +2188,8 @@ export default function Page() {
                   min={SIDE_PANEL_WIDTH_MIN}
                   max={sidePanelMax()}
                   collapseThreshold={SIDE_PANEL_COLLAPSE_THRESHOLD}
-                  onResize={(width) => {
-                    size.touch()
-                    layout.sidePanel.resize(width)
-                  }}
+                  onResize={previewSidePanelWidth}
+                  onResizeEnd={commitSidePanelWidth}
                   onCollapse={() => {
                     if (desktopV2ReviewOpen()) view().reviewPanel.close()
                     else view().terminal.close()

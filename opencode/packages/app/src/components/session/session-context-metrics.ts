@@ -54,7 +54,7 @@ const build = (messages: Message[] = [], providers: Provider[] = [], selectedHar
   if (!message) return undefined
 
   const provider = providers.find((item) => item.id === message.providerID)
-  const model = provider?.models[message.modelID]
+  const model = provider ? provider.models[message.modelID] : sharedModel(providers, message.modelID)
   const limit = model?.limit.context
   const total = tokenTotal(message)
 
@@ -69,6 +69,20 @@ const build = (messages: Message[] = [], providers: Provider[] = [], selectedHar
     total,
     usage: limit ? Math.round((total / limit) * 100) : null,
   }
+}
+
+/**
+ * An external harness reports itself, not a provider, as the source. When the known providers that list
+ * the same model id all agree on its context window, that window applies; otherwise it stays unknown.
+ */
+const sharedModel = (providers: Provider[], modelID: string) => {
+  const matches = providers.flatMap((item) => {
+    const model = item.models[modelID]
+    return model ? [model] : []
+  })
+  const first = matches[0]
+  if (!first || matches.some((item) => item.limit.context !== first.limit.context)) return undefined
+  return first
 }
 
 export function getSessionContext(messages: Message[] = [], providers: Provider[] = [], selectedHarness?: string) {
