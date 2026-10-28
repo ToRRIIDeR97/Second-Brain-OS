@@ -1,4 +1,4 @@
-import { splitProps, type JSX } from "solid-js"
+import { onCleanup, splitProps, type JSX } from "solid-js"
 
 export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onResize"> {
   direction: "horizontal" | "vertical"
@@ -32,8 +32,13 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "classList",
   ])
 
+  // Ends a drag still in progress when the handle unmounts, so no listener or frame outlives it.
+  let release: (() => void) | undefined
+  onCleanup(() => release?.())
+
   const handleMouseDown = (e: MouseEvent) => {
     if (e.detail > 1) return
+    release?.()
     e.preventDefault()
     const edge = local.edge ?? (local.direction === "vertical" ? "start" : "end")
     const start = local.direction === "horizontal" ? e.clientX : e.clientY
@@ -81,15 +86,23 @@ export function ResizeHandle(props: ResizeHandleProps) {
       if (frame === undefined) frame = requestAnimationFrame(flush)
     }
 
-    const onMouseUp = () => {
+    const detach = () => {
+      release = undefined
       document.body.style.userSelect = ""
       document.body.style.overflow = ""
       document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("pointerup", onMouseUp, true)
+      document.removeEventListener("pointercancel", onMouseUp, true)
       document.removeEventListener("mouseup", onMouseUp)
-      if (frame !== undefined) {
-        cancelAnimationFrame(frame)
-        flush()
-      }
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    }
+
+    // Ends on the capture-phase pointerup, before window listeners (such as a parent's sizing state that
+    // re-enables width transitions) see it, so the last frame and the commit land without animating.
+    const onMouseUp = () => {
+      const pending = frame !== undefined
+      detach()
+      if (pending) flush()
 
       if (collapsed) {
         onCollapse?.()
@@ -99,7 +112,13 @@ export function ResizeHandle(props: ResizeHandleProps) {
       onResizeEnd?.(clamped())
     }
 
+    release = () => {
+      detach()
+      frame = undefined
+    }
     document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("pointerup", onMouseUp, true)
+    document.addEventListener("pointercancel", onMouseUp, true)
     document.addEventListener("mouseup", onMouseUp)
   }
 

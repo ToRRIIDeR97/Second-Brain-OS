@@ -12,7 +12,7 @@ import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import type { ServerConnection } from "@/context/server"
-import { errorMessage } from "@/pages/layout/helpers"
+import { linkFolderErrorKey } from "./project-folder-error"
 
 /**
  * Add a folder from anywhere as a Project of the workspace. A modal over the current page: type or paste
@@ -53,7 +53,7 @@ export function DialogAddProject(props: { server: ServerConnection.Any; onAdd: (
     void props
       .onAdd(folder)
       .then(() => dialog.close())
-      .catch((cause: unknown) => setState("error", errorMessage(cause, language.t("common.requestFailed"))))
+      .catch((cause: unknown) => setState("error", language.t(linkFolderErrorKey(cause))))
       .finally(() => setState("busy", false))
   }
 

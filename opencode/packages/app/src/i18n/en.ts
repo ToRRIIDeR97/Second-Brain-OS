@@ -908,6 +908,12 @@ export const dict = {
   "secondBrain.sidebar.addProject.browse": "Browse…",
   "secondBrain.sidebar.addProject.suggestions": "Suggested folders",
   "secondBrain.sidebar.addProject.submit": "Add project",
+  "secondBrain.sidebar.addProject.error.invalidFolder":
+    "That path is not a folder on this computer. Enter the full path of an existing folder.",
+  "secondBrain.sidebar.addProject.error.overlapsWorkspace":
+    "That folder is the workspace, or contains or sits inside it. Add folders inside the workspace with Scan for projects.",
+  "secondBrain.sidebar.addProject.error.protectedFolder":
+    "That folder is or contains your home folder or the app data folder, so it cannot be a project.",
   "secondBrain.sidebar.removeProject": "Remove from workspace…",
   "secondBrain.sidebar.removeProject.title": "Remove {{name}} from this workspace?",
   "secondBrain.sidebar.removeProject.description":

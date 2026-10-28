@@ -45,7 +45,8 @@ is hidden and the rail remains.
    **Activity** as icons with a label underneath (the current page gets a
    pill highlight), and **Settings** at the bottom.
 2. **Workspace** panel. The heading is a dropdown: the opened folders (the
-   current one checked), **Open folder as workspace**, **Scan for projects**,
+   current one checked), **Open folder as workspace**, **New Project** (opens the
+   Projects page's create form, `/projects?new=1`, to create a card), **Scan for projects**,
    **Add project…**, **Workspace instructions** (the workspace's
    default `AGENTS.md`) and **Manage projects** (`/projects`). Next to it, the
    folder button also opens **Add project…** and the other button scans again.

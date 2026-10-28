@@ -4,6 +4,7 @@ import { PromptInputV2Select } from "@opencode-ai/session-ui/v2/prompt-input"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { harnessModelSlot } from "./harness-model-slot"
 
 export type PromptInputHarnessController = {
   instances: () => ReadonlyArray<Harness.Instance> | undefined
@@ -28,12 +29,6 @@ export function orderHarnesses(instances: ReadonlyArray<Harness.Instance> | unde
 
 export function isExternalHarness(instance: Pick<Harness.Instance, "driver">) {
   return instance.driver !== Harness.OpenCodeDriver
-}
-
-/** What an external harness's model slot shows: its picker, a neutral loading label, or the empty state. */
-export function harnessModelSlot(input: { models: number; checking: boolean }) {
-  if (input.models > 0) return "select"
-  return input.checking ? "loading" : "none"
 }
 
 export async function openHarnessSettings(dialog: ReturnType<typeof useDialog>) {

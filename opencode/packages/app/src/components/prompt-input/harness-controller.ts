@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Harness } from "@opencode-ai/schema/harness"
 import { usePlatform } from "@/context/platform"
@@ -86,6 +86,8 @@ export function createPromptHarnessController(selection: HarnessSelection) {
       current.models.length === 0
     )
   }
+  // A newly selected harness gets its own full set of model retries.
+  createEffect(on(selection.current, () => setRetry("count", 0), { defer: true }))
   createEffect(() => {
     const current = instance()
     if (!current || current.driver === Harness.OpenCodeDriver || current.status !== "available") return

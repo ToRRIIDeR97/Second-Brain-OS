@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { harnessModelSlot } from "./harness-controls"
+import { harnessModelSlot } from "./harness-model-slot"
 
 describe("harnessModelSlot", () => {
   test("shows the picker whenever the harness reports models", () => {
