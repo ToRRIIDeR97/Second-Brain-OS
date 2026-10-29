@@ -524,7 +524,7 @@
   align-items: center;
   gap: 10px;
   min-height: 32px;
-  padding: 0 10px;
+  padding: 6px 10px;
   border-radius: var(--v2-radius-md);
   font-size: 13px;
   color: var(--v2-text-text-base);

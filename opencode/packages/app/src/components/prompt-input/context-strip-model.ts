@@ -43,12 +43,12 @@ export function formatShare(value: number, limit: number, locale: string) {
   return percent(locale, ratio < 0.01 ? 1 : 0).format(ratio)
 }
 
-/** Usage reports in sheet order: the thread's own harness first, the others in the order the server listed them. */
-export function orderUsage<T extends { instanceID: string }>(reports: ReadonlyArray<T>, current: string | undefined) {
-  return [
-    ...reports.filter((item) => item.instanceID === current),
-    ...reports.filter((item) => item.instanceID !== current),
-  ]
+/** The thread's own harness report for the sheet, or undefined when that harness doesn't report usage. */
+export function threadUsage<T extends { instanceID: string; status: string }>(
+  reports: ReadonlyArray<T>,
+  current: string | undefined,
+) {
+  return reports.find((item) => item.instanceID === current && item.status !== "unsupported")
 }
 
 /** How far off a usage window's reset is, as a locale's relative time ("in 3 hours"), in the largest whole unit. */

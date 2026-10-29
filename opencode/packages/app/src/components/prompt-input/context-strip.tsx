@@ -3,21 +3,8 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
-import type { Harness } from "@opencode-ai/schema/harness"
-import {
-  For,
-  Index,
-  Match,
-  Show,
-  Switch,
-  createEffect,
-  createMemo,
-  createSignal,
-  createUniqueId,
-  on,
-  onCleanup,
-  untrack,
-} from "solid-js"
+import { Harness } from "@opencode-ai/schema/harness"
+import { Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { openSessionContext } from "@/components/session-context-usage"
 import { createSessionContextFormatter } from "@/components/session/session-context-format"
@@ -32,7 +19,8 @@ import { useSync } from "@/context/sync"
 import { useProviders } from "@/hooks/use-providers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { listHarnessUsage } from "@/utils/server"
-import { contextTokenRows, formatResetIn, formatShare, orderUsage, threadWorktree } from "./context-strip-model"
+import { HarnessUsageWindows } from "@/components/harness-usage"
+import { contextTokenRows, formatShare, threadUsage, threadWorktree } from "./context-strip-model"
 
 /** The harnesses the composer knows: the thread's own harness and every harness's display name. */
 type ComposerHarness = {
@@ -422,7 +410,7 @@ function SheetDetails(props: {
 }
 
 /**
- * The plan limits each enabled harness reports, the thread's own harness first. It asks the server when the
+ * The plan limits the thread's own harness reports. It asks the server when the
  * sheet opens and again at most once a minute while it stays open.
  */
 function UsageLimits(props: { open: boolean; directory: string; harness?: ComposerHarness }) {
@@ -448,98 +436,37 @@ function UsageLimits(props: { open: boolean; directory: string; harness?: Compos
     const timer = setInterval(load, USAGE_REFRESH_MS)
     onCleanup(() => clearInterval(timer))
   })
-  const reports = createMemo(() => orderUsage(state.reports ?? [], props.harness?.current()))
-  const name = (id: string) => props.harness?.instances()?.find((item) => item.id === id)?.name ?? id
-  const percent = (value: number) =>
-    new Intl.NumberFormat(language.intl(), { style: "percent", maximumFractionDigits: 0 }).format(value / 100)
+  // Only the thread's own harness; one that doesn't report usage (the built-in agent, OpenCode) shows nothing.
+  const report = createMemo(() => threadUsage(state.reports ?? [], props.harness?.current()))
+  const shown = () => {
+    if (state.reports) return !!report()
+    const current = props.harness?.current()
+    return !!current && current !== Harness.OpenCode
+  }
+  const name = () => props.harness?.instances()?.find((item) => item.id === props.harness?.current())?.name ?? ""
 
   return (
-    <div
-      data-slot="context-sheet-usage"
-      class="flex flex-col gap-2.5 px-[18px] pt-3 text-[12px] leading-4 text-v2-text-text-muted"
-    >
-      <span class="text-v2-text-text-base [font-weight:530]">{language.t("secondBrain.contextStrip.usage.title")}</span>
-      <Show
-        when={state.reports}
-        fallback={
-          <span data-slot="context-sheet-usage-status">
-            {language.t(
-              state.failed ? "secondBrain.contextStrip.usage.error" : "secondBrain.contextStrip.usage.loading",
-            )}
-          </span>
-        }
+    <Show when={shown()}>
+      <div
+        data-slot="context-sheet-usage"
+        class="flex flex-col gap-2.5 px-[18px] pt-3 text-[12px] leading-4 text-v2-text-text-muted"
       >
-        <For each={reports()}>
-          {(report) => (
-            <div
-              data-slot="context-sheet-usage-harness"
-              data-status={report.status}
-              class="flex min-w-0 flex-col gap-1.5"
-            >
-              <span class="truncate text-v2-text-text-base">{name(report.instanceID)}</span>
-              <Switch
-                fallback={<span title={report.reason}>{language.t("secondBrain.contextStrip.usage.unsupported")}</span>}
-              >
-                <Match when={report.status === "available" && report.windows.length > 0}>
-                  <For each={report.windows}>
-                    {(window) => (
-                      <div
-                        data-slot="context-sheet-usage-window"
-                        class="grid grid-cols-[82px_minmax(0,1fr)_auto] items-center gap-x-2.5"
-                      >
-                        <span class="truncate">{window.label}</span>
-                        <span
-                          data-slot="context-sheet-bar-track"
-                          class="h-2 overflow-hidden rounded-full"
-                          role="meter"
-                          aria-label={window.label}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={window.usedPercent}
-                        >
-                          <span
-                            data-slot="context-sheet-bar"
-                            class="block h-full rounded-full"
-                            style={{
-                              width: `max(3px, ${window.usedPercent}%)`,
-                              transform: props.open ? "scaleX(1)" : "scaleX(0)",
-                            }}
-                          />
-                        </span>
-                        <span class="flex justify-end gap-2 tabular-nums">
-                          <span class="text-v2-text-text-base">
-                            {language.t("secondBrain.contextStrip.usage.used", {
-                              percent: percent(window.usedPercent),
-                            })}
-                          </span>
-                          <Show when={window.resetsAt}>
-                            {(resetsAt) => (
-                              <span>
-                                {language.t("secondBrain.contextStrip.usage.resets", {
-                                  time: formatResetIn(resetsAt(), state.now, language.intl()),
-                                })}
-                              </span>
-                            )}
-                          </Show>
-                        </span>
-                      </div>
-                    )}
-                  </For>
-                </Match>
-                <Match when={report.status === "available"}>
-                  <span>{language.t("secondBrain.contextStrip.usage.noLimits")}</span>
-                </Match>
-                <Match when={report.status === "signed-out"}>
-                  <span>{language.t("secondBrain.contextStrip.usage.signedOut")}</span>
-                </Match>
-                <Match when={report.status === "error"}>
-                  <span title={report.reason}>{language.t("secondBrain.contextStrip.usage.error")}</span>
-                </Match>
-              </Switch>
-            </div>
-          )}
-        </For>
-      </Show>
-    </div>
+        <span class="text-v2-text-text-base [font-weight:530]">
+          {language.t("secondBrain.contextStrip.usage.titleFor", { name: name() })}
+        </span>
+        <Show
+          when={report()}
+          fallback={
+            <span data-slot="context-sheet-usage-status">
+              {language.t(
+                state.failed ? "secondBrain.contextStrip.usage.error" : "secondBrain.contextStrip.usage.loading",
+              )}
+            </span>
+          }
+        >
+          {(item) => <HarnessUsageWindows report={item()} now={state.now} revealed={props.open} />}
+        </Show>
+      </div>
+    </Show>
   )
 }

@@ -1122,13 +1122,19 @@ cost) and "View context usage" (`openSessionContext`). When the limit is
 unknown the gauge shows the token total without a percentage and the rows show
 counts without bars or shares.
 
-Under the details a "Usage limits" section (`UsageLimits`) lists each enabled
-external harness, the thread's own harness first, with one bar per plan window
-("N% used", "resets in …" from `Intl.RelativeTimeFormat`). It calls
+Under the details a "Usage limits · <harness>" section (`UsageLimits`) shows
+the thread's own harness only, with one bar per plan window ("N% used",
+"resets in …" from `Intl.RelativeTimeFormat`). A harness that doesn't report
+usage (the built-in agent, OpenCode) hides the section. It calls
 `GET /api/harness/usage` (`listHarnessUsage` in `app/src/utils/server.ts`)
-when the sheet opens and at most once a minute while it stays open. A harness
-row reads "Sign in to see usage", "Not available for this harness" or
+when the sheet opens and at most once a minute while it stays open. The
+section reads "Sign in to see usage", "No usage limits on this plan" or
 "Couldn't load usage" for the other report states.
+
+Settings → Harnesses asks the same route once when the tab opens. Each harness
+in the list shows its fullest window as a slim bar with its percentage, and the
+selected harness's details list every window above Models. Both places render
+reports with `HarnessUsageWindows` (`app/src/components/harness-usage.tsx`).
 
 `HarnessRuntime.usage` (`core/src/harness.ts`) builds the reports with
 `core/src/harness/usage.ts`. Each enabled instance except the in-process
