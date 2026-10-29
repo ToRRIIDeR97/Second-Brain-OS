@@ -266,6 +266,9 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
                   >
                     {language.t("secondBrain.sidebar.workspaceInstructions")}
                   </MenuV2.Item>
+                  <MenuV2.Item onSelect={() => navigate("/projects/overview")}>
+                    {language.t("secondBrain.projects.overview.title")}
+                  </MenuV2.Item>
                   <MenuV2.Item onSelect={() => navigate("/projects")}>
                     {language.t("secondBrain.sidebar.manageProjects")}
                   </MenuV2.Item>

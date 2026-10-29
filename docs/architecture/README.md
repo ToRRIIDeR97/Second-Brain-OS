@@ -41,7 +41,8 @@ Brain files through the server's location services. See
 ## Product entry points and persistence
 
 `opencode/packages/app/src/app.tsx` owns routing: `/`, `/notes`,
-`/calendar`, `/activity`, `/projects`, the draft route
+`/calendar`, `/activity`, `/projects`, `/projects/overview` (every Project's
+notes and milestones, grouped by `features/second-brain/project-overview.ts`), the draft route
 `/new-thread?project=<id>&draftId=<id>` and server-scoped threads at
 `/server/<server>/session/<id>`. Old `/workspaces`, `/brain`, `/new-session`
 and `/<dir>/session[/<id>]` URLs redirect. Settings, model/provider

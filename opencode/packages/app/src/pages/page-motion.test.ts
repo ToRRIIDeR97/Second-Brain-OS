@@ -8,6 +8,13 @@ describe("page motion key", () => {
     expect(routeSection("/notes")).toBe("/notes")
   })
 
+  test("gives the cross-project overview its own section", () => {
+    expect(routeSection("/projects/overview")).toBe("/projects/overview")
+    expect(routeSection("/projects/overview/")).toBe("/projects/overview")
+    const projects = { section: "/projects", count: 1 }
+    expect(nextPageMotionKey(projects, "/projects/overview").count).toBe(2)
+  })
+
   test("changes between pages and out of a thread, but not into one", () => {
     const home = { section: "/", count: 0 }
     const notes = nextPageMotionKey(home, "/notes")

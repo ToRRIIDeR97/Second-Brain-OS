@@ -60,6 +60,7 @@ const NewSession = lazy(() => import("@/pages/new-session"))
 const NotesPage = lazy(() => import("@/pages/notes"))
 const CalendarPage = lazy(() => import("@/pages/calendar"))
 const ProjectsPage = lazy(() => import("@/pages/projects"))
+const ProjectOverviewPage = lazy(() => import("@/pages/project-overview"))
 const BrainHomePage = lazy(() => import("@/pages/brain-home"))
 const ActivityPage = lazy(() => import("@/pages/activity"))
 
@@ -529,6 +530,7 @@ function Routes() {
       <Route path="/notes" component={NotesPage} />
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/projects" component={ProjectsPage} />
+      <Route path="/projects/overview" component={ProjectOverviewPage} />
       <Route path="/activity" component={ActivityPage} />
       <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
       <Route path={NEW_THREAD_PATH} component={DraftRoute} />
