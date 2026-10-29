@@ -81,6 +81,8 @@ import type {
   HarnessesRefreshOutput,
   HarnessesUpdatesInput,
   HarnessesUpdatesOutput,
+  HarnessesUsageInput,
+  HarnessesUsageOutput,
   HarnessesUpgradeInput,
   HarnessesUpgradeOutput,
   HarnessesSetupInput,
@@ -820,6 +822,18 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/harness/updates`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      usage: (input?: HarnessesUsageInput, requestOptions?: RequestOptions) =>
+        request<HarnessesUsageOutput>(
+          {
+            method: "GET",
+            path: `/api/harness/usage`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],

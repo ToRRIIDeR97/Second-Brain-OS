@@ -205,7 +205,8 @@ on its own. Removed in the T3 parity Phase 1 cleanup:
 
 Still outbound: the configured LLM providers (including the `opencode` Zen
 provider when the user selects it), the `models.dev` catalog, Google APIs,
-and links the user opens. `$schema` URLs in config files are identifiers, not
+`api.anthropic.com/api/oauth/usage` for Claude Code usage limits (see
+[Harness usage limits](#harness-usage-limits)), and links the user opens. `$schema` URLs in config files are identifiers, not
 fetches. Known remaining references: upstream agent prompts that point the
 model at `opencode.ai/docs`, the MCP OAuth `client_uri` metadata value, and
 two help-text links printed by the developer-only `providers login` command.
@@ -258,9 +259,9 @@ The setup dialog ([ADR-013](../adr/ADR-013-built-in-harness-setup.md),
   holds the OAuth callback and stores the result in its own home. The app sees
   only the returned link. Claude Code and OpenCode log in through their own
   CLI in an app terminal, the same PTY capability the terminal panel already
-  has. The app never reads or stores their tokens; it only checks that their
+  has. The app never stores their tokens; setup only checks that their
   login files exist (`oauthAccount` in `~/.claude.json`, a non-empty OpenCode
-  `auth.json`).
+  `auth.json`). The usage route below reads Claude Code's OAuth token.
 - **API keys.**
   - Codex keys go straight to Codex.
   - Claude Code and OpenCode keys are stored in plain text in
@@ -275,6 +276,31 @@ The setup dialog ([ADR-013](../adr/ADR-013-built-in-harness-setup.md),
 Known gap: anyone who can read the user's data folder can read stored harness
 keys. That is the same exposure as `auth.json`; OS-keychain storage would need
 the desktop main process.
+
+## Harness usage limits
+
+`GET /api/harness/usage` (`opencode/packages/core/src/harness/usage.ts`,
+`HarnessRuntime.usage`) reports plan usage windows. It takes no input beyond
+the location query and has the same auth as the other harness routes.
+
+- **Claude credential read.** The server reads `claudeAiOauth.accessToken` and
+  `expiresAt` from `$CLAUDE_CONFIG_DIR/.credentials.json` or
+  `~/.claude/.credentials.json` on each uncached call. The token stays in the
+  server process. It is never returned to the renderer, logged, written to disk
+  or put in a URL; it is sent only in the `Authorization` header of the usage
+  request. Expired tokens are not refreshed, and the app never writes the file.
+- **Outbound call.** `GET https://api.anthropic.com/api/oauth/usage` with
+  `anthropic-beta: oauth-2025-04-20`, at most once a minute per location
+  runtime (the server caches each report for 60 s; the sheet asks at most once
+  a minute while open). The response is parsed into percentages and reset
+  times only.
+- **Codex.** `account/read` and `account/rateLimits/read` go to the user's own
+  `codex app-server`, which holds its own credentials; no token reaches the app.
+- **Reports.** Error reasons are fixed strings or a short protocol message from
+  the harness, never a token or response body.
+
+Known gap: anything that can read the user's home folder can read the same
+Claude credentials file. The app adds no new copy of it.
 
 ## Harness registration
 

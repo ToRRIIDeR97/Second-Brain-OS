@@ -8,7 +8,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { createReveal, Reveal } from "@opencode-ai/ui/v2/reveal"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useCommand } from "@/context/command"
+import { formatKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettingsDialog } from "@/components/settings-dialog"
@@ -18,6 +18,7 @@ import {
   type SidebarController,
   type SidebarProjectItem,
 } from "@/components/sidebar/sidebar-controller"
+import { THREAD_MENU_KEYS, threadMenuAction, type ThreadMenuAction } from "@/components/sidebar/thread-menu-keys"
 import { DialogArchivedThreads } from "@/components/sidebar/dialog-archived-threads"
 import { DialogInstructions } from "@/components/sidebar/dialog-instructions"
 import { DialogAddProject, DialogRemoveProject } from "@/components/sidebar/dialog-project-folder"
@@ -504,6 +505,19 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
     setEditing(false)
     if (value !== undefined) void props.ctrl.renameThread(session(), value)
   }
+  const [menuOpen, setMenuOpen] = createSignal(false)
+  // Each menu item runs from a click or from its single-key hint while the menu has focus.
+  const run: Record<ThreadMenuAction, () => void> = {
+    rename: () => {
+      saved = false
+      setEditing(true)
+    },
+    pin: () => void props.ctrl.setThreadPinned(session(), !pinned()),
+    fork: () => void props.ctrl.forkThread(session()),
+    archive: () => void props.ctrl.archiveThread(session()),
+    delete: () => props.ctrl.deleteThread(session()),
+  }
+  const hint = (action: ThreadMenuAction) => formatKeybind(THREAD_MENU_KEYS[action], language.t)
 
   return (
     <>
@@ -563,7 +577,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
           />
         </Show>
         <div class="flex items-center pr-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
-          <MenuV2 gutter={4} modal={false} placement="bottom-start">
+          <MenuV2 gutter={4} modal={false} placement="bottom-start" open={menuOpen()} onOpenChange={setMenuOpen}>
             <MenuV2.Trigger
               as={IconButtonV2}
               variant="ghost-muted"
@@ -572,26 +586,31 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
               aria-label={language.t("secondBrain.sidebar.threadActions")}
             />
             <MenuV2.Portal>
-              <MenuV2.Content>
-                <MenuV2.Item
-                  onSelect={() => {
-                    saved = false
-                    setEditing(true)
-                  }}
-                >
+              <MenuV2.Content
+                onKeyDown={(event) => {
+                  const action = threadMenuAction(event)
+                  if (!action) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  // Same order as a click: the item runs, then the menu closes.
+                  run[action]()
+                  setMenuOpen(false)
+                }}
+              >
+                <MenuV2.Item onSelect={run.rename} shortcut={hint("rename")}>
                   {language.t("common.rename")}
                 </MenuV2.Item>
-                <MenuV2.Item onSelect={() => void props.ctrl.setThreadPinned(session(), !pinned())}>
+                <MenuV2.Item onSelect={run.pin} shortcut={hint("pin")}>
                   {language.t(pinned() ? "secondBrain.sidebar.unpin" : "secondBrain.sidebar.pin")}
                 </MenuV2.Item>
-                <MenuV2.Item onSelect={() => void props.ctrl.forkThread(session())}>
+                <MenuV2.Item onSelect={run.fork} shortcut={hint("fork")}>
                   {language.t("secondBrain.sidebar.fork")}
                 </MenuV2.Item>
                 <MenuV2.Separator />
-                <MenuV2.Item onSelect={() => void props.ctrl.archiveThread(session())}>
+                <MenuV2.Item onSelect={run.archive} shortcut={hint("archive")}>
                   {language.t("common.archive")}
                 </MenuV2.Item>
-                <MenuV2.Item onSelect={() => props.ctrl.deleteThread(session())}>
+                <MenuV2.Item onSelect={run.delete} shortcut={hint("delete")}>
                   {language.t("common.delete")}
                 </MenuV2.Item>
               </MenuV2.Content>

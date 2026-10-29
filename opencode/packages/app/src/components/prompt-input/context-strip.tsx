@@ -3,18 +3,45 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
-import { Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from "solid-js"
+import type { Harness } from "@opencode-ai/schema/harness"
+import {
+  For,
+  Index,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  on,
+  onCleanup,
+  untrack,
+} from "solid-js"
+import { createStore } from "solid-js/store"
 import { openSessionContext } from "@/components/session-context-usage"
 import { createSessionContextFormatter } from "@/components/session/session-context-format"
 import { getSessionContext } from "@/components/session/session-context-metrics"
 import { getSessionUsage } from "@/components/session/session-usage"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSync } from "@/context/sync"
 import { useProviders } from "@/hooks/use-providers"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { contextTokenRows, formatShare, threadWorktree } from "./context-strip-model"
+import { listHarnessUsage } from "@/utils/server"
+import { contextTokenRows, formatResetIn, formatShare, orderUsage, threadWorktree } from "./context-strip-model"
+
+/** The harnesses the composer knows: the thread's own harness and every harness's display name. */
+type ComposerHarness = {
+  current: () => Harness.InstanceID
+  instances: () => ReadonlyArray<Harness.Instance> | undefined
+}
+
+// The server caches each harness's usage for a minute, so the open sheet asks no more often than that.
+const USAGE_REFRESH_MS = 60_000
 
 const TOKEN_LABEL = {
   input: "secondBrain.sessionTab.input",
@@ -149,7 +176,11 @@ export function ComposerContextRing(props: { context: ComposerContext }) {
  * A slim strip on the composer's top edge with the thread's worktree and Git branch. The context ring
  * unfolds it upward, behind the composer, into a sheet with the context window's use.
  */
-export function ComposerContextStrip(props: { context: ComposerContext; attached?: boolean }) {
+export function ComposerContextStrip(props: {
+  context: ComposerContext
+  attached?: boolean
+  harness?: ComposerHarness
+}) {
   const sync = useSync()
   const sdk = useSDK()
   const layout = useLayout()
@@ -195,6 +226,7 @@ export function ComposerContextStrip(props: { context: ComposerContext; attached
                 />
               )}
             </Show>
+            <UsageLimits open={props.context.open()} directory={directory()} harness={props.harness} />
           </div>
           <div aria-hidden="true" class="h-[46px]" />
         </section>
@@ -385,6 +417,126 @@ function SheetDetails(props: {
         </div>
       </div>
       <div aria-hidden="true" class="col-span-full h-px bg-v2-border-border-muted" />
+    </div>
+  )
+}
+
+/**
+ * The plan limits each enabled harness reports, the thread's own harness first. It asks the server when the
+ * sheet opens and again at most once a minute while it stays open.
+ */
+function UsageLimits(props: { open: boolean; directory: string; harness?: ComposerHarness }) {
+  const language = useLanguage()
+  const platform = usePlatform()
+  const serverSDK = useServerSDK()
+  const [state, setState] = createStore<{
+    reports?: ReadonlyArray<Harness.UsageReport>
+    failed: boolean
+    now: number
+  }>({ failed: false, now: Date.now() })
+  let checked = 0
+  const load = () => {
+    checked = Date.now()
+    listHarnessUsage({ server: serverSDK().server.http, fetch: platform.fetch }, props.directory)
+      .then((reports) => setState({ reports, failed: false, now: Date.now() }))
+      .catch(() => setState({ failed: true, now: Date.now() }))
+  }
+  createEffect(() => {
+    if (!props.open) return
+    // Reopening within a minute of the last check shows that answer instead of asking again.
+    if (Date.now() - checked >= USAGE_REFRESH_MS) untrack(load)
+    const timer = setInterval(load, USAGE_REFRESH_MS)
+    onCleanup(() => clearInterval(timer))
+  })
+  const reports = createMemo(() => orderUsage(state.reports ?? [], props.harness?.current()))
+  const name = (id: string) => props.harness?.instances()?.find((item) => item.id === id)?.name ?? id
+  const percent = (value: number) =>
+    new Intl.NumberFormat(language.intl(), { style: "percent", maximumFractionDigits: 0 }).format(value / 100)
+
+  return (
+    <div
+      data-slot="context-sheet-usage"
+      class="flex flex-col gap-2.5 px-[18px] pt-3 text-[12px] leading-4 text-v2-text-text-muted"
+    >
+      <span class="text-v2-text-text-base [font-weight:530]">{language.t("secondBrain.contextStrip.usage.title")}</span>
+      <Show
+        when={state.reports}
+        fallback={
+          <span data-slot="context-sheet-usage-status">
+            {language.t(
+              state.failed ? "secondBrain.contextStrip.usage.error" : "secondBrain.contextStrip.usage.loading",
+            )}
+          </span>
+        }
+      >
+        <For each={reports()}>
+          {(report) => (
+            <div
+              data-slot="context-sheet-usage-harness"
+              data-status={report.status}
+              class="flex min-w-0 flex-col gap-1.5"
+            >
+              <span class="truncate text-v2-text-text-base">{name(report.instanceID)}</span>
+              <Switch
+                fallback={<span title={report.reason}>{language.t("secondBrain.contextStrip.usage.unsupported")}</span>}
+              >
+                <Match when={report.status === "available" && report.windows.length > 0}>
+                  <For each={report.windows}>
+                    {(window) => (
+                      <div
+                        data-slot="context-sheet-usage-window"
+                        class="grid grid-cols-[82px_minmax(0,1fr)_auto] items-center gap-x-2.5"
+                      >
+                        <span class="truncate">{window.label}</span>
+                        <span
+                          data-slot="context-sheet-bar-track"
+                          class="h-2 overflow-hidden rounded-full"
+                          role="meter"
+                          aria-label={window.label}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={window.usedPercent}
+                        >
+                          <span
+                            data-slot="context-sheet-bar"
+                            class="block h-full rounded-full"
+                            style={{
+                              width: `max(3px, ${window.usedPercent}%)`,
+                              transform: props.open ? "scaleX(1)" : "scaleX(0)",
+                            }}
+                          />
+                        </span>
+                        <span class="flex justify-end gap-2 tabular-nums">
+                          <span class="text-v2-text-text-base">
+                            {language.t("secondBrain.contextStrip.usage.used", {
+                              percent: percent(window.usedPercent),
+                            })}
+                          </span>
+                          <Show when={window.resetsAt}>
+                            {(resetsAt) => (
+                              <span>
+                                {language.t("secondBrain.contextStrip.usage.resets", {
+                                  time: formatResetIn(resetsAt(), state.now, language.intl()),
+                                })}
+                              </span>
+                            )}
+                          </Show>
+                        </span>
+                      </div>
+                    )}
+                  </For>
+                </Match>
+                <Match when={report.status === "signed-out"}>
+                  <span>{language.t("secondBrain.contextStrip.usage.signedOut")}</span>
+                </Match>
+                <Match when={report.status === "error"}>
+                  <span title={report.reason}>{language.t("secondBrain.contextStrip.usage.error")}</span>
+                </Match>
+              </Switch>
+            </div>
+          )}
+        </For>
+      </Show>
     </div>
   )
 }

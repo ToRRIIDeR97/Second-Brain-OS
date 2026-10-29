@@ -1121,6 +1121,31 @@ cost) and "View context usage" (`openSessionContext`). When the limit is
 unknown the gauge shows the token total without a percentage and the rows show
 counts without bars or shares.
 
+Under the details a "Usage limits" section (`UsageLimits`) lists each enabled
+external harness, the thread's own harness first, with one bar per plan window
+("N% used", "resets in …" from `Intl.RelativeTimeFormat`). It calls
+`GET /api/harness/usage` (`listHarnessUsage` in `app/src/utils/server.ts`)
+when the sheet opens and at most once a minute while it stays open. A harness
+row reads "Sign in to see usage", "Not available for this harness" or
+"Couldn't load usage" for the other report states.
+
+`HarnessRuntime.usage` (`core/src/harness.ts`) builds the reports with
+`core/src/harness/usage.ts`. Each enabled instance except the in-process
+`opencode` loop is read in parallel with an 8 s timeout and cached per instance
+for 60 s in the location's runtime:
+
+- Codex: `account/read`, then `account/rateLimits/read` on an open thread's
+  app-server connection or a short-lived one. `null` account is signed out; an
+  API-key account is unsupported.
+- Claude Code: the OAuth token from `$CLAUDE_CONFIG_DIR/.credentials.json` (or
+  `~/.claude/.credentials.json`) goes to
+  `GET https://api.anthropic.com/api/oauth/usage`. A missing or expired token
+  is signed out; a stored Anthropic API key is unsupported. A sign-in recorded
+  in `.claude.json` without a credentials file (macOS keeps the token in the
+  keychain) is unsupported.
+- OpenCode, Command Code and other ACP agents: unsupported. Neither CLI exposes
+  plan usage over ACP or a documented endpoint.
+
 ### Composer delivery, background send and stash
 
 While a thread is working, the composer sends each message with a `delivery`

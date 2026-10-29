@@ -39,6 +39,7 @@ import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
 import { HarnessSetup } from "./harness/setup"
 import { HarnessUpdate } from "./harness/update"
+import { HarnessUsage } from "./harness/usage"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
 import { FSUtil } from "./fs-util"
@@ -83,6 +84,8 @@ export interface Interface {
   readonly updates: () => Effect.Effect<ReadonlyArray<Harness.UpdateStatus>>
   /** Updates one harness CLI with the package manager that installed it, then restarts its processes. */
   readonly upgrade: (id: string) => Effect.Effect<Harness.UpdateStatus, HarnessUpdate.UpdateError>
+  /** Subscription usage limits of the enabled external harnesses, cached per instance for a minute. */
+  readonly usage: () => Effect.Effect<ReadonlyArray<HarnessUsage.UsageReport>>
   readonly driver: (instanceID: Harness.InstanceID) => Harness.DriverKind | undefined
   readonly stream: (
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
@@ -821,6 +824,58 @@ const layer = Layer.effect(
         )
         return { ...result, close }
       })
+    const usageCache = HarnessUsage.makeCache()
+    // Codex reports its own limits over the app-server: an open thread's connection is reused, or a short-lived one opens.
+    const codexUsage = (instance: InstanceConfig) => {
+      const read = (client: CodexClient) =>
+        client.request("account/read", {}).pipe(
+          Effect.flatMap((response): Effect.Effect<HarnessUsage.Result, ProtocolError> => {
+            const account = isRecord(response) && isRecord(response.account) ? response.account : undefined
+            if (!account && readAccount(response).available)
+              return Effect.succeed(HarnessUsage.unsupported("Codex uses a custom provider without plan limits."))
+            if (!account) return Effect.succeed({ status: "signed-out", windows: [] })
+            if (account.type !== "chatgpt")
+              return Effect.succeed(HarnessUsage.unsupported("Usage limits apply to ChatGPT sign-ins, not API keys."))
+            return client
+              .request("account/rateLimits/read", { excludeResetCreditDetails: true })
+              .pipe(Effect.map((body) => ({ status: "available", windows: HarnessUsage.parseCodexRateLimits(body) })))
+          }),
+        )
+      const open = [...runtimes.entries()].find(([key]) => key.startsWith(`${instance.id}:`))?.[1]
+      if (open) return read(open.client)
+      return Effect.scoped(
+        openCodex(process, decodeCodexSettings(instance.config), os.homedir()).pipe(
+          Effect.flatMap((opened) => read(opened.client)),
+        ),
+      )
+    }
+    // The OAuth token is read here and sent only to api.anthropic.com; it never leaves this process otherwise.
+    const claudeUsage = (keys: HarnessSetup.Keys) =>
+      keys[Harness.ClaudeCode]
+        ? Effect.succeed(HarnessUsage.unsupported("Usage limits apply to Claude sign-ins, not API keys."))
+        : HarnessUsage.readClaudeToken().pipe(
+            Effect.flatMap((token): Effect.Effect<HarnessUsage.Result, Error> => {
+              if (token.status === "valid") return HarnessUsage.fetchClaudeUsage(token.token)
+              if (token.status === "expired")
+                return Effect.succeed({ status: "signed-out", windows: [], reason: "Claude Code sign-in has expired." })
+              // Signed in without a credentials file: on macOS Claude Code keeps the token in the keychain.
+              const recipe = HarnessSetup.recipe(Harness.ClaudeCode)
+              return (recipe ? HarnessSetup.signedIn(recipe) : Effect.succeed("signed-out" as const)).pipe(
+                Effect.map(
+                  (auth): HarnessUsage.Result =>
+                    auth === "signed-in"
+                      ? HarnessUsage.unsupported("Claude Code keeps its sign-in where the app can't read it.")
+                      : { status: "signed-out", windows: [] },
+                ),
+              )
+            }),
+          )
+    const usageSource = (instance: InstanceConfig, keys: HarnessSetup.Keys) => {
+      if (instance.driver === Harness.CodexDriver) return codexUsage(instance)
+      if (instance.id === Harness.ClaudeCode) return claudeUsage(keys)
+      // Neither OpenCode nor other ACP agents (Command Code included) report plan usage to the app.
+      return Effect.succeed(HarnessUsage.unsupported(`${instance.name} doesn't report usage limits.`))
+    }
     // Only one browser login at a time: Codex's callback listens on a fixed local port.
     let pendingLogin: Effect.Effect<void> | undefined
 
@@ -891,6 +946,17 @@ const layer = Layer.effect(
           yield* instances
           return yield* setupChanged(item)
         }),
+      // The in-process default agent runs on provider API keys, so it has no harness plan to report.
+      usage: () =>
+        Effect.all([instances, HarnessSetup.readKeys(global.data)]).pipe(
+          Effect.flatMap(([current, keys]) =>
+            usageCache(
+              current
+                .filter((instance) => instance.enabled && instance.driver !== Harness.OpenCodeDriver)
+                .map((instance) => ({ instanceID: instance.id, read: usageSource(instance, keys) })),
+            ),
+          ),
+        ),
       reportedCommands: (id) => commands.get(id),
       updates: () =>
         instances.pipe(

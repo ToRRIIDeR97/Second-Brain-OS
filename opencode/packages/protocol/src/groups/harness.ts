@@ -205,6 +205,20 @@ export const HarnessGroup = HttpApiGroup.make("server.harness")
       ),
   )
   .add(
+    HttpApiEndpoint.get("harness.usage", "/api/harness/usage", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(Harness.UsageReport)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        annotate(
+          "v2.harness.usage",
+          "Harness usage limits",
+          "Subscription usage windows of each enabled external harness, cached per harness for a minute.",
+        ),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("harness.upgrade", "/api/harness/upgrade/:id", {
       params: { id: Schema.String },
       query: LocationQuery,

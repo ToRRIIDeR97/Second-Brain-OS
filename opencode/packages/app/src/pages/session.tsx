@@ -2182,7 +2182,11 @@ export default function Page() {
                   header={
                     <>
                       <SessionRevertTray dock={controller.revert} />
-                      <ComposerContextStrip context={composerContext} attached={!!controller.revert()?.items.length} />
+                      <ComposerContextStrip
+                        context={composerContext}
+                        attached={!!controller.revert()?.items.length}
+                        harness={sessionHarness}
+                      />
                     </>
                   }
                   trailing={<ComposerContextRing context={composerContext} />}

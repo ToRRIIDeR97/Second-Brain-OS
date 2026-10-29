@@ -95,6 +95,18 @@ describe("keybind settings controller", () => {
     expect(state.changes).toEqual([["session.beta", "mod+x"]])
   })
 
+  test("shows every binding of a command with more than one", () => {
+    const state = setup({ "session.alpha": "mod+n,mod+t" })
+    const mac = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
+    expect(state.controller.catalog.keybind("session.alpha")).toBe(
+      mac ? "⌘N, ⌘T" : "common.key.ctrl+N, common.key.ctrl+T",
+    )
+    expect(state.controller.catalog.keybind("session.beta")).toBe(mac ? "⌘B" : "common.key.ctrl+B")
+
+    state.dispose()
+  })
+
   test("resets persisted overrides and reports success", () => {
     const state = setup({ "session.alpha": "none" })
 

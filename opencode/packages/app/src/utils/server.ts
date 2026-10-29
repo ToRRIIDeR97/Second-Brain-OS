@@ -348,6 +348,13 @@ export async function listHarnessUpdates(input: HarnessServer, directory: string
   return decodeUpdates(await harnessSettingsRequest(input, directory, "/updates")).data
 }
 
+const decodeUsage = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.UsageReport)))
+
+/** Subscription usage limits of each enabled harness; the server caches each harness's answer for a minute. */
+export async function listHarnessUsage(input: HarnessServer, directory: string) {
+  return decodeUsage(await harnessSettingsRequest(input, directory, "/usage")).data
+}
+
 export async function upgradeHarness(input: HarnessServer, directory: string, id: string) {
   return decodeUpdate(
     await harnessSettingsRequest(input, directory, `/upgrade/${encodeURIComponent(id)}`, { method: "POST" }),

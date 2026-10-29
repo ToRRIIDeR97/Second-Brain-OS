@@ -76,7 +76,7 @@ Row actions:
 | Row | Actions |
 |---|---|
 | Project | New thread, open project card (`/projects?project=<id>`), archived threads, instructions, **Remove from workspace…** (after a confirmation: unlinks a linked folder, archives the card of a folder inside the workspace; files are never touched) |
-| Thread | Rename (also double-click), pin / unpin, fork, archive, delete |
+| Thread | Rename (also double-click), pin / unpin, fork, archive, delete. While the menu has focus, `R`, `P`, `F`, `A` and `Delete` (or `Backspace`) run these items; each item shows its key |
 
 Pins are stored on the thread (`metadata.pinned`, the pin time) so they survive
 restarts. Pinned threads sort first inside their own group (a Project or
@@ -139,7 +139,9 @@ deleted.
 
 | Key | Action |
 |---|---|
-| `mod+n` | New thread in the current Project (else in the workspace folder) |
+| `mod+n` / `mod+t` | New thread in the current Project (else in the workspace folder) |
+| `mod+shift+a` / `mod+shift+backspace` | Archive the open thread |
+| `mod+shift+y` | Toggle auto-accept of permission requests in the open thread |
 | `mod+shift+n` | Open a folder as a workspace |
 | `mod+b` | Toggle the sidebar |
 | `alt+up` / `alt+down` | Previous / next visible thread in the sidebar |
@@ -165,9 +167,11 @@ Shortcuts):
 | `ArrowUp` | Previous prompt from history (empty composer) |
 
 The desktop File menu uses `Cmd+N` for a new thread, `Cmd+Shift+N` to open a
-folder as a workspace and `Cmd+Alt+N` for a new window. `mod+t`, `mod+shift+t`
-and tab-closing `mod+w` were removed with the tab strip. In-session panels
-keep their own `mod+w`.
+folder as a workspace and `Cmd+Alt+N` for a new window. `mod+shift+t` and
+tab-closing `mod+w` were removed with the tab strip; `mod+t` now starts a new
+thread. In-session panels keep their own `mod+w`. Global shortcuts also fire
+while the integrated terminal has focus, so `mod+t` and `mod+n` there start a
+thread rather than reaching the shell.
 
 ## Deep links
 

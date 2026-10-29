@@ -256,6 +256,16 @@ export function createKeybindSettingsController(
     setStore("active", id)
     input.command.keybinds(false)
   }
+  // A command can have more than one binding (`mod+n,mod+t`); the list shows each of them.
+  const shown = (id: string) =>
+    [
+      ...new Set(
+        (effective(id) ?? "")
+          .split(",")
+          .map((combo) => formatKeybind(combo.trim(), language.t))
+          .filter(Boolean),
+      ),
+    ].join(", ")
   const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
 
   const handle = (event: KeyboardEvent) => {
@@ -319,10 +329,9 @@ export function createKeybindSettingsController(
   return {
     catalog: {
       groups: GROUPS,
-      filtered: (query: string) =>
-        filteredFor(query, list(), grouped(), (id) => formatKeybind(effective(id) ?? "", language.t)),
+      filtered: (query: string) => filteredFor(query, list(), grouped(), shown),
       title,
-      keybind: (id: string) => formatKeybind(effective(id) ?? "", language.t),
+      keybind: shown,
     },
     capture: {
       active: () => store.active,
