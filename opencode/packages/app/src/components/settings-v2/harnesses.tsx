@@ -18,6 +18,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { modelProvider, useSettings } from "@/context/settings"
 import { harnessSettingsChanged } from "@/components/prompt-input/harness-controller"
+import { HarnessUsageWindows, fullestWindow } from "@/components/harness-usage"
 import {
   addHarness,
   discoverHarness,
@@ -25,6 +26,7 @@ import {
   harnessAssistantDirectory,
   listHarnessSettings,
   listHarnessUpdates,
+  listHarnessUsage,
   listHarnessesForServer,
   refreshHarnesses,
   removeHarness,
@@ -72,6 +74,13 @@ export const SettingsHarnessesV2: Component<{
   )
   const [updates, { mutate: setUpdates }] = createResource(directory, (dir) =>
     listHarnessUpdates(server(), dir).catch(() => []),
+  )
+  // Plan limits, asked once when the tab opens; the server caches each harness's answer for a minute.
+  const [usage] = createResource(directory, (dir) =>
+    listHarnessUsage(server(), dir).then(
+      (reports) => ({ reports, now: Date.now() }),
+      () => ({ reports: [], now: Date.now() }),
+    ),
   )
   const [titleAgent, { mutate: setTitleAgentValue }] = createResource(directory, (dir) =>
     getTitleAgent(server(), dir).catch(() => undefined),
@@ -182,6 +191,9 @@ export const SettingsHarnessesV2: Component<{
   const selected = createMemo(() => entryList().find((entry) => entry.id === state.selected) ?? entryList()[0])
   const instance = (id: string) => instances.latest?.find((item) => item.id === id)
   const update = (id: string) => updates.latest?.find((item) => item.id === id)
+  const usageReport = (id: string) => usage.latest?.reports.find((item) => item.instanceID === id)
+  const percent = (value: number) =>
+    new Intl.NumberFormat(language.intl(), { style: "percent", maximumFractionDigits: 0 }).format(value / 100)
 
   return (
     <>
@@ -233,7 +245,39 @@ export const SettingsHarnessesV2: Component<{
                   onClick={() => setState({ selected: entry.id, confirming: undefined })}
                 >
                   <span class="settings-v2-harness-dot" data-state={harnessState(entry, instance(entry.id))} />
-                  <span class="min-w-0 flex-1 truncate">{entry.name}</span>
+                  <span class="flex min-w-0 flex-1 flex-col gap-1">
+                    <span class="flex min-w-0 items-center gap-2">
+                      <span class="min-w-0 flex-1 truncate">{entry.name}</span>
+                      <Show when={entry.enabled && fullestWindow(usageReport(entry.id))}>
+                        {(window) => (
+                          <span class="shrink-0 text-[12px] font-normal tabular-nums text-v2-text-text-muted">
+                            {percent(window().usedPercent)}
+                          </span>
+                        )}
+                      </Show>
+                    </span>
+                    {/* The fullest window only; the details pane lists every window with its reset time. */}
+                    <Show when={entry.enabled && fullestWindow(usageReport(entry.id))}>
+                      {(window) => (
+                        <span
+                          class="h-1 overflow-hidden rounded-full bg-v2-background-bg-layer-04"
+                          role="meter"
+                          aria-label={language.t("harness.settings.usage.meter", {
+                            window: window().label,
+                            percent: percent(window().usedPercent),
+                          })}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={window().usedPercent}
+                        >
+                          <span
+                            class="block h-full rounded-full bg-v2-icon-icon-accent"
+                            style={{ width: `max(2px, ${window().usedPercent}%)` }}
+                          />
+                        </span>
+                      )}
+                    </Show>
+                  </span>
                   <Show when={update(entry.id)?.updateAvailable}>
                     <span
                       class="settings-v2-harness-update-dot"
@@ -266,6 +310,8 @@ export const SettingsHarnessesV2: Component<{
                 entry={entry}
                 instance={instance(entry.id)}
                 update={update(entry.id)}
+                usage={usageReport(entry.id)}
+                usageNow={usage.latest?.now ?? Date.now()}
                 busy={state.busy === entry.id}
                 confirming={state.confirming === entry.id}
                 onToggle={(checked) =>
@@ -298,6 +344,8 @@ const HarnessDetails: Component<{
   entry: Harness.SettingsEntry
   instance?: Harness.Instance
   update?: Harness.UpdateStatus
+  usage?: Harness.UsageReport
+  usageNow: number
   busy: boolean
   confirming: boolean
   onToggle: (enabled: boolean) => void
@@ -373,6 +421,16 @@ const HarnessDetails: Component<{
 
       <Show when={host()}>
         <span class="settings-v2-harness-detail">{language.t("harness.settings.hostModels")}</span>
+      </Show>
+      <Show when={props.entry.enabled && props.usage?.status !== "unsupported" && props.usage}>
+        {(report) => (
+          <div class="settings-v2-section" data-component="harness-usage">
+            <h4 class="settings-v2-section-title">{language.t("secondBrain.contextStrip.usage.title")}</h4>
+            <div class="flex flex-col gap-2.5 text-[12px] leading-4 text-v2-text-text-muted">
+              <HarnessUsageWindows report={report()} now={props.usageNow} />
+            </div>
+          </div>
+        )}
       </Show>
       <Show when={props.entry.enabled && !host()}>
         <HarnessModels entry={props.entry} models={props.instance?.models ?? []} />

@@ -1,19 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { contextTokenRows, formatResetIn, formatShare, orderUsage, threadWorktree } from "./context-strip-model"
+import { contextTokenRows, formatResetIn, formatShare, threadUsage, threadWorktree } from "./context-strip-model"
 
 describe("usage limits", () => {
-  test("lists the thread's own harness first and keeps the server order for the rest", () => {
-    const reports = [{ instanceID: "codex" }, { instanceID: "claude-code" }, { instanceID: "opencode-acp" }]
-    expect(orderUsage(reports, "claude-code").map((item) => item.instanceID)).toEqual([
-      "claude-code",
-      "codex",
-      "opencode-acp",
-    ])
-    expect(orderUsage(reports, "opencode").map((item) => item.instanceID)).toEqual([
-      "codex",
-      "claude-code",
-      "opencode-acp",
-    ])
+  test("shows only the thread's own harness, and nothing for one that doesn't report usage", () => {
+    const reports = [
+      { instanceID: "codex", status: "available" },
+      { instanceID: "claude-code", status: "signed-out" },
+      { instanceID: "opencode-acp", status: "unsupported" },
+    ]
+    expect(threadUsage(reports, "claude-code")).toEqual({ instanceID: "claude-code", status: "signed-out" })
+    expect(threadUsage(reports, "opencode-acp")).toBeUndefined()
+    expect(threadUsage(reports, "opencode")).toBeUndefined()
+    expect(threadUsage(reports, undefined)).toBeUndefined()
   })
 
   test("says how far off a reset is in minutes, hours, or days", () => {
