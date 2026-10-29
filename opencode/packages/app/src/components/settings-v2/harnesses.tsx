@@ -116,6 +116,9 @@ export const SettingsHarnessesV2: Component<{
 
   const saved = (entry: Harness.SettingsEntry) => {
     changed()
+    // A new harness's models are listed in the background; ask for them now so its details aren't empty.
+    setState("selected", entry.id)
+    refreshModels(entry.id)
     showToast({
       variant: "success",
       icon: "circle-check",

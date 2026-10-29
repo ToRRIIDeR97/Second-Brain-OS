@@ -265,7 +265,7 @@ function assistantMessage(
   sessionID: string,
   parentID: string,
   message: SessionMessageAssistant,
-): AssistantMessage & { harnessInstanceID: string } {
+): AssistantMessage & { harnessInstanceID: string; contextWindow?: number } {
   const error = message.error
     ? message.error.type.toLowerCase().includes("abort") || message.error.type.toLowerCase().includes("interrupt")
       ? { name: "MessageAbortedError" as const, data: { message: message.error.message } }
@@ -287,6 +287,7 @@ function assistantMessage(
       (message as SessionMessageAssistant & { harnessInstanceID?: string }).harnessInstanceID ?? Harness.OpenCode,
     path: { cwd: "", root: "" },
     cost: message.cost ?? 0,
+    contextWindow: (message as SessionMessageAssistant & { contextWindow?: number }).contextWindow,
     tokens: message.tokens ?? emptyTokens,
     finish: message.finish,
   }

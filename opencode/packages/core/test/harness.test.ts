@@ -61,6 +61,7 @@ describe("Codex harness", () => {
         params: {
           tokenUsage: {
             last: { inputTokens: 100, cachedInputTokens: 40, outputTokens: 20, reasoningOutputTokens: 5 },
+            modelContextWindow: 258400,
           },
         },
       },
@@ -74,7 +75,13 @@ describe("Codex harness", () => {
     expect(state.finished).toBe(true)
     expect(events[0]).toMatchObject({
       type: "step-finish",
-      usage: { inputTokens: 100, nonCachedInputTokens: 60, cacheReadInputTokens: 40, outputTokens: 20 },
+      usage: {
+        inputTokens: 100,
+        nonCachedInputTokens: 60,
+        cacheReadInputTokens: 40,
+        outputTokens: 20,
+        providerMetadata: { harness: { contextSize: 258400 } },
+      },
     })
   })
 

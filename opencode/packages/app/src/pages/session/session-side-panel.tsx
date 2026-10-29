@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, on, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { DragDropProvider as DndKitProvider, PointerSensor } from "@dnd-kit/solid"
@@ -452,6 +452,20 @@ export function SessionSidePanel(props: {
     </Show>
   )
 
+  // A drag on the thread/panel split pins the panel's content at its starting width and lets the panel clip it.
+  // Re-wrapping the diff at every width costs a frame or more, so the content reflows once, on release.
+  let content: HTMLDivElement | undefined
+  createEffect(
+    on(
+      () => props.size.active(),
+      (active) => {
+        if (!content) return
+        content.style.flex = active ? `0 0 ${content.offsetWidth}px` : ""
+      },
+      { defer: true },
+    ),
+  )
+
   const reviewContent = () => (
     <Show when={reviewTab() && props.canReview() && activeTab() === "review"}>
       <div
@@ -488,6 +502,7 @@ export function SessionSidePanel(props: {
         <Show when={open()}>
           {/* Mounted at once so files load, but shown only once the sliding panel has arrived. */}
           <div
+            ref={content}
             class="size-full flex transition-opacity duration-medium ease-emphasized-decelerate motion-reduce:transition-none"
             classList={{ "opacity-0": !panelSettled() }}
           >

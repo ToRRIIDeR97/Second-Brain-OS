@@ -36,6 +36,12 @@ const harnessCost = (usage: Usage | undefined) => {
   return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : 0
 }
 
+/** Harness drivers that know the model's context window put it in `usage.providerMetadata.harness.contextSize`. */
+const harnessContextWindow = (usage: Usage | undefined) => {
+  const size = usage?.providerMetadata?.harness?.contextSize
+  return typeof size === "number" && Number.isFinite(size) && size > 0 ? size : undefined
+}
+
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
 
@@ -79,7 +85,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantFailed = false
   let providerFailed = false
   let stepSettlement:
-    | { readonly finish: string; readonly tokens: ReturnType<typeof tokens>; readonly cost: number }
+    | {
+        readonly finish: string
+        readonly tokens: ReturnType<typeof tokens>
+        readonly cost: number
+        readonly contextWindow: number | undefined
+      }
     | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
@@ -422,7 +433,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* flush()
         assistantActive = false
         if (stepSettlement) return yield* Effect.die("Duplicate step finish")
-        stepSettlement = { finish: event.reason, tokens: tokens(event.usage), cost: harnessCost(event.usage) }
+        stepSettlement = {
+          finish: event.reason,
+          tokens: tokens(event.usage),
+          cost: harnessCost(event.usage),
+          contextWindow: harnessContextWindow(event.usage),
+        }
         return
       case "finish":
         return

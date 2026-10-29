@@ -178,6 +178,8 @@ export const Assistant = Schema.Struct({
   }).pipe(optional),
   finish: Schema.String.pipe(optional),
   cost: Schema.Finite.pipe(optional),
+  // The context window a harness reported for this step; harness model ids can be aliases no provider lists.
+  contextWindow: Schema.Finite.pipe(optional),
   tokens: Schema.Struct({
     input: Schema.Finite,
     output: Schema.Finite,
