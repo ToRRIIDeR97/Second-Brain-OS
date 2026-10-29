@@ -84,6 +84,8 @@ export function SessionSidePanel(props: {
   activeDiff?: string
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
+  /** The panel is sliding out: keep Review mounted, faded and pinned until the thread column has arrived. */
+  closing?: boolean
   size: Sizing
   stacked?: boolean
   /** Display name of a harness instance, for agent tabs; undefined when the harness isn't listed. */
@@ -102,7 +104,7 @@ export function SessionSidePanel(props: {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const shown = settings.visibility.fileTree
 
-  const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const reviewOpen = createMemo(() => isDesktop() && (view().reviewPanel.opened() || !!props.closing))
   const fileOpen = createMemo(
     () =>
       isDesktop() &&
@@ -452,12 +454,13 @@ export function SessionSidePanel(props: {
     </Show>
   )
 
-  // A drag on the thread/panel split pins the panel's content at its starting width and lets the panel clip it.
+  // A drag on the thread/panel split, or the panel sliding out, pins the panel's content at its starting width
+  // and lets the panel clip it.
   // Re-wrapping the diff at every width costs a frame or more, so the content reflows once, on release.
   let content: HTMLDivElement | undefined
   createEffect(
     on(
-      () => props.size.active(),
+      () => props.size.active() || !!props.closing,
       (active) => {
         if (!content) return
         content.style.flex = active ? `0 0 ${content.offsetWidth}px` : ""
@@ -486,7 +489,7 @@ export function SessionSidePanel(props: {
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
-        inert={!open()}
+        inert={!open() || props.closing}
         class={`relative min-w-0 flex overflow-hidden ${pagePanelClass}`}
         classList={{
           "h-full shrink-0": !props.stacked,
@@ -504,7 +507,7 @@ export function SessionSidePanel(props: {
           <div
             ref={content}
             class="size-full flex transition-opacity duration-medium ease-emphasized-decelerate motion-reduce:transition-none"
-            classList={{ "opacity-0": !panelSettled() }}
+            classList={{ "opacity-0": !panelSettled() || !!props.closing }}
           >
             <Show when={reviewOpen()}>
               <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
