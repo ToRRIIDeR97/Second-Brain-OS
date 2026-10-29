@@ -501,7 +501,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
   let saved = false
   let input: HTMLInputElement | undefined
   // A rename picked from the menu focuses the input only once the menu has closed: closing returns focus to
-  // the "…" trigger, which would blur the input and end the edit straight away.
+  // the "…" trigger, which would blur an already focused input and end the edit straight away.
   let renameFromMenu = false
   const finish = (value: string | undefined) => {
     if (saved) return
@@ -606,12 +606,15 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
                   run[action]()
                   setMenuOpen(false)
                 }}
-                onCloseAutoFocus={(event) => {
+                onCloseAutoFocus={() => {
                   if (!renameFromMenu) return
                   renameFromMenu = false
-                  event.preventDefault()
-                  input?.focus()
-                  input?.select()
+                  // Kobalte's DropdownMenu.Content focuses the trigger right after this handler even when it is
+                  // prevented, so the input takes focus in a microtask, once that has happened.
+                  queueMicrotask(() => {
+                    input?.focus()
+                    input?.select()
+                  })
                 }}
               >
                 <MenuV2.Item onSelect={run.rename} shortcut={hint("rename")}>
