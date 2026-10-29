@@ -91,9 +91,7 @@ export const readClaudeToken = (env: Readonly<Record<string, string | undefined>
       { readonly status: "valid"; readonly token: string } | { readonly status: "missing" | "expired" }
     > => {
       const dir = env.CLAUDE_CONFIG_DIR || path.join(env.HOME ?? os.homedir(), ".claude")
-      const value = Option.getOrUndefined(
-        decodeJson(await fs.readFile(path.join(dir, ".credentials.json"), "utf8").catch(() => "")),
-      )
+      const value = await readCredentialFile(path.join(dir, ".credentials.json"))
       const oauth = isRecord(value) && isRecord(value.claudeAiOauth) ? value.claudeAiOauth : undefined
       if (!oauth || typeof oauth.accessToken !== "string" || !oauth.accessToken) return { status: "missing" }
       if (finite(oauth.expiresAt) && oauth.expiresAt <= now) return { status: "expired" }
@@ -113,7 +111,9 @@ export const fetchClaudeUsage = (token: string, request: typeof fetch = fetch) =
         return { status: "signed-out", windows: [], reason: "Claude Code sign-in has expired." }
       if (!response.ok)
         return { status: "error", windows: [], reason: `Usage request failed (HTTP ${response.status}).` }
-      return { status: "available", windows: parseClaudeUsage(await response.json().catch(() => undefined)) }
+      const body = await readBody(response)
+      if (!body) return badBody
+      return { status: "available", windows: parseClaudeUsage(body.value) }
     },
     catch: () => new Error("Could not reach api.anthropic.com."),
   })
@@ -155,9 +155,7 @@ export const readCommandCodeKey = (env: Readonly<Record<string, string | undefin
     const fromEnv = env.COMMAND_CODE_API_KEY?.trim()
     if (fromEnv) return fromEnv
     const home = env.HOME ?? env.USERPROFILE ?? os.homedir()
-    const value = Option.getOrUndefined(
-      decodeJson(await fs.readFile(path.join(home, ".commandcode", "auth.json"), "utf8").catch(() => "")),
-    )
+    const value = await readCredentialFile(path.join(home, ".commandcode", "auth.json"))
     return isRecord(value) && typeof value.apiKey === "string" && value.apiKey ? value.apiKey : undefined
   })
 
@@ -175,8 +173,9 @@ export const fetchCommandCodeUsage = (key: string, request: typeof fetch = fetch
       if (whoami.status === 401 || whoami.status === 403)
         return { status: "signed-out", windows: [], reason: "Command Code sign-in has expired." }
       if (!whoami.ok) return { status: "error", windows: [], reason: `Usage request failed (HTTP ${whoami.status}).` }
-      const account: unknown = await whoami.json().catch(() => undefined)
-      const org = isRecord(account) && isRecord(account.org) ? account.org.id : undefined
+      const account = await readBody(whoami)
+      if (!account) return badBody
+      const org = isRecord(account.value) && isRecord(account.value.org) ? account.value.org.id : undefined
       const credits = await get(
         typeof org === "string" && org
           ? `/alpha/billing/credits?${new URLSearchParams({ orgId: org }).toString()}`
@@ -185,7 +184,9 @@ export const fetchCommandCodeUsage = (key: string, request: typeof fetch = fetch
       if (credits.status === 401 || credits.status === 403)
         return { status: "signed-out", windows: [], reason: "Command Code sign-in has expired." }
       if (!credits.ok) return { status: "error", windows: [], reason: `Usage request failed (HTTP ${credits.status}).` }
-      return { status: "available", windows: parseCommandCodeUsage(await credits.json().catch(() => undefined)) }
+      const body = await readBody(credits)
+      if (!body) return badBody
+      return { status: "available", windows: parseCommandCodeUsage(body.value) }
     },
     catch: () => new Error("Could not reach api.commandcode.ai."),
   })
@@ -269,3 +270,53 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+// Credential files are a few hundred bytes of JSON; anything bigger, or not a regular file, counts as missing.
+const MAX_CREDENTIAL_BYTES = 64 * 1024
+// Usage responses are small JSON documents; a larger or malformed body is reported as an error.
+const MAX_BODY_BYTES = 256 * 1024
+
+const badBody: Result = { status: "error", windows: [], reason: "Usage response was too large or not JSON." }
+
+/** Parses a small JSON credential file, reading at most `MAX_CREDENTIAL_BYTES`. Never throws. */
+async function readCredentialFile(file: string): Promise<unknown> {
+  const handle = await fs.open(file, "r").catch(() => undefined)
+  if (!handle) return undefined
+  try {
+    const stat = await handle.stat()
+    if (!stat.isFile() || stat.size > MAX_CREDENTIAL_BYTES) return undefined
+    // The file can grow after the stat, so the read itself stops one byte past the cap.
+    const buffer = Buffer.alloc(MAX_CREDENTIAL_BYTES + 1)
+    const read = await handle.read(buffer, 0, buffer.length, 0)
+    if (read.bytesRead > MAX_CREDENTIAL_BYTES) return undefined
+    return Option.getOrUndefined(decodeJson(buffer.subarray(0, read.bytesRead).toString("utf8")))
+  } catch {
+    return undefined
+  } finally {
+    await handle.close().catch(() => undefined)
+  }
+}
+
+/** Reads and parses a JSON response body of at most `MAX_BODY_BYTES`; `undefined` when it is larger or invalid. */
+async function readBody(response: Response): Promise<{ readonly value: unknown } | undefined> {
+  if (!response.body) return undefined
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    for (;;) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      size += chunk.value.byteLength
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        return undefined
+      }
+      chunks.push(chunk.value)
+    }
+  } catch {
+    return undefined
+  }
+  const value = decodeJson(Buffer.concat(chunks).toString("utf8"))
+  return Option.isSome(value) ? { value: value.value } : undefined
+}

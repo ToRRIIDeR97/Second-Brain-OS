@@ -526,6 +526,9 @@ function UsageLimits(props: { open: boolean; directory: string; harness?: Compos
                     )}
                   </For>
                 </Match>
+                <Match when={report.status === "available"}>
+                  <span>{language.t("secondBrain.contextStrip.usage.noLimits")}</span>
+                </Match>
                 <Match when={report.status === "signed-out"}>
                   <span>{language.t("secondBrain.contextStrip.usage.signedOut")}</span>
                 </Match>

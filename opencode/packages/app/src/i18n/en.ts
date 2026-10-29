@@ -1640,6 +1640,7 @@ export const dict = {
   "secondBrain.contextStrip.usage.resets": "resets {{time}}",
   "secondBrain.contextStrip.usage.signedOut": "Sign in to see usage",
   "secondBrain.contextStrip.usage.unsupported": "Not available for this harness",
+  "secondBrain.contextStrip.usage.noLimits": "No usage limits on this plan",
   "secondBrain.contextStrip.usage.error": "Couldn't load usage",
   "secondBrain.composer.shortcuts.title": "Composer",
   "secondBrain.composer.shortcuts.send": "Send message",

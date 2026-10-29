@@ -117,6 +117,18 @@ describe("readClaudeToken", () => {
     expect(result).toEqual({ status: "expired" })
   })
 
+  test("treats an oversized file or a directory at the path as missing", async () => {
+    const big = await configDir()
+    await fs.writeFile(
+      path.join(big, ".credentials.json"),
+      JSON.stringify({ claudeAiOauth: { accessToken: "tok-1", padding: "x".repeat(70 * 1024) } }),
+    )
+    expect(await read(big)).toEqual({ status: "missing" })
+    const folder = await configDir()
+    await fs.mkdir(path.join(folder, ".credentials.json"))
+    expect(await read(folder)).toEqual({ status: "missing" })
+  })
+
   test("returns a valid token", async () => {
     expect(await read(await configDir({ claudeAiOauth: { accessToken: "tok-1", expiresAt: 5_000 } }))).toEqual({
       status: "valid",
@@ -139,6 +151,20 @@ describe("fetchClaudeUsage", () => {
     expect(calls[0]!.url).not.toContain("tok-1")
     expect(calls[0]!.headers.get("authorization")).toBe("Bearer tok-1")
     expect(calls[0]!.headers.get("anthropic-beta")).toBe("oauth-2025-04-20")
+  })
+
+  test("reports an oversized or non-JSON body from either service as an error", async () => {
+    const body = (text: string) => (async () => new Response(text)) as unknown as typeof fetch
+    const huge = JSON.stringify({ five_hour: { utilization: 1, resets_at: null }, pad: "x".repeat(300 * 1024) })
+    const bad: HarnessUsage.Result = {
+      status: "error",
+      windows: [],
+      reason: "Usage response was too large or not JSON.",
+    }
+    expect(await Effect.runPromise(HarnessUsage.fetchClaudeUsage("tok-1", body(huge)))).toEqual(bad)
+    expect(await Effect.runPromise(HarnessUsage.fetchClaudeUsage("tok-1", body("<html>")))).toEqual(bad)
+    expect(await Effect.runPromise(HarnessUsage.fetchCommandCodeUsage("cc-key", body(huge)))).toEqual(bad)
+    expect(await Effect.runPromise(HarnessUsage.fetchCommandCodeUsage("cc-key", body("not json")))).toEqual(bad)
   })
 
   test("maps a rejected token to signed-out and other failures to errors without the token", async () => {
@@ -214,6 +240,14 @@ describe("readCommandCodeKey", () => {
     expect(
       await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: await home({ userName: "me" }) })),
     ).toBeUndefined()
+  })
+
+  test("treats an oversized auth file or a directory at the path as no key", async () => {
+    const big = await home({ apiKey: "file-key", padding: "x".repeat(70 * 1024) })
+    expect(await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: big }))).toBeUndefined()
+    const folder = await home()
+    await fs.mkdir(path.join(folder, ".commandcode", "auth.json"), { recursive: true })
+    expect(await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: folder }))).toBeUndefined()
   })
 
   test("prefers COMMAND_CODE_API_KEY over the auth file, which it falls back to", async () => {
