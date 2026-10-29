@@ -426,7 +426,7 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
-  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopReviewOpen =createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopV2ReviewOpen = createMemo(() => desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
@@ -446,8 +446,49 @@ export default function Page() {
     () => panelRow,
     ({ width }) => setPanelRowWidth(width),
   )
-  // A closed review panel leaves a slim rail at the right edge to reopen it.
-  const desktopRailOpen = createMemo(() => isDesktop() && !!params.id && !desktopV2ReviewOpen())
+  const panelState = () => ({
+    open: desktopReviewOpen(),
+    terminal: desktopTerminalOpen(),
+    shown: desktopReviewOpen() || desktopFileTreeOpen(),
+    key: sessionKey(),
+  })
+  // Closing Review with nothing else in the right column slides it out: the panel stays mounted until the
+  // thread column has eased right. A memo rather than a signal set from the computed below, so the Shows that
+  // keep the panel mounted see the close in the same update as the toggle and never unmount it for one pass.
+  const [closeSettled, setCloseSettled] = createSignal<object>()
+  const panelClose = createMemo(
+    (prev: { state: ReturnType<typeof panelState>; close?: object }) => {
+      const state = panelState()
+      if (
+        state.open === prev.state.open &&
+        state.terminal === prev.state.terminal &&
+        state.shown === prev.state.shown &&
+        state.key === prev.state.key
+      )
+        return prev
+      const close =
+        prev.state.open && !state.shown && !state.terminal && prev.state.key === state.key && !prefersReducedMotion()
+      return { state, close: close ? {} : undefined }
+    },
+    { state: panelState() },
+  )
+  const panelClosing = () => {
+    const close = panelClose().close
+    return !!close && close !== closeSettled()
+  }
+  let closeTimer: number | undefined
+  createEffect(
+    on(
+      () => panelClose().close,
+      (close) => {
+        window.clearTimeout(closeTimer)
+        if (close) closeTimer = window.setTimeout(() => setCloseSettled(close), motionDuration("medium"))
+      },
+    ),
+  )
+  // A closed review panel leaves a slim rail at the right edge to reopen it. A closing panel shrinks into
+  // the rail's place first.
+  const desktopRailOpen = createMemo(() => isDesktop() && !!params.id && !desktopV2ReviewOpen() && !panelClosing())
   const railSpace = createMemo(() => (desktopRailOpen() ? SESSION_SIDE_RAIL_SPACE : 0))
   // The observer reports the row width; subtract the flex gap between the
   // panels and the rail.
@@ -487,6 +528,7 @@ export default function Page() {
     if (sessionPanel) sessionPanel.style.width = sessionPanelWidth()
   }
   const sessionPanelWidth = createMemo(() => {
+    if (panelClosing()) return `calc(100% - ${SESSION_SIDE_RAIL_SPACE}px)`
     if (!desktopSidePanelOpen()) return railSpace() ? `calc(100% - ${railSpace()}px)` : "100%"
     if (desktopSessionResizeOpen()) {
       const available = sessionPanelAvailable()
@@ -659,12 +701,6 @@ export default function Page() {
   let diffFrame: number | undefined
   let diffTimer: number | undefined
 
-  const panelState = () => ({
-    open: desktopReviewOpen(),
-    terminal: desktopTerminalOpen(),
-    shown: desktopReviewOpen() || desktopFileTreeOpen(),
-    key: sessionKey(),
-  })
   createComputed((prev: ReturnType<typeof panelState>) => {
     const next = panelState()
     // The terminal alone counts like Review: it opens the right column from nothing.
@@ -673,13 +709,18 @@ export default function Page() {
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     // Opening a closed side panel (Review or the terminal alone) slides it in while the thread column eases
-    // left; its content follows once it has arrived. Everything else snaps: closing (so the column never
-    // sweeps across an emptied panel), switching sessions, and adding Review beside a file tree that is
-    // already showing.
+    // left; its content follows once it has arrived. Closing Review with nothing else in the column mirrors
+    // it: the panel stays mounted, fades and clips while the thread eases right, then gives way to the rail.
+    // Everything else snaps: switching sessions, closing beside a file tree or terminal, and adding Review
+    // beside a file tree that is already showing.
     const opening = terminalOnly ? next.terminal : next.open
     if (opening && !prev.shown && prev.key === next.key) {
       setUi("reviewSnap", false)
       slidePanelOpen()
+      return next
+    }
+    if (panelClose().close) {
+      setUi("reviewSnap", false)
       return next
     }
     setUi("reviewSnap", true)
@@ -1961,6 +2002,7 @@ export default function Page() {
 
   onCleanup(() => {
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+    window.clearTimeout(closeTimer)
     if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
     if (todoTimer !== undefined) window.clearTimeout(todoTimer)
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
@@ -2177,7 +2219,7 @@ export default function Page() {
           </Show>
         </div>
 
-        <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
+        <Show when={isDesktop() ? desktopV2PanelLayout().visible || panelClosing() : terminalOpen()}>
           <div class="relative min-w-0 h-full flex flex-1 flex-col">
             <Show when={desktopSessionResizeOpen()}>
               <div onPointerDown={() => size.start()}>
@@ -2198,7 +2240,7 @@ export default function Page() {
                 />
               </div>
             </Show>
-            <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
+            <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen() || panelClosing())}>
               <div class="min-h-0 flex-1">
                 <Suspense>
                   <SessionSidePanel
@@ -2221,6 +2263,7 @@ export default function Page() {
                     activeDiff={activeReviewFile()}
                     focusReviewDiff={focusReviewDiff}
                     reviewSnap={ui.reviewSnap}
+                    closing={panelClosing()}
                     size={size}
                     stacked={desktopV2PanelLayout().stacked}
                     harnessName={(id) => sessionHarness.instances()?.find((item) => item.id === id)?.name}
