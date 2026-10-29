@@ -262,6 +262,27 @@ describe("second brain errors and recovery HttpApi", () => {
     }),
   )
 
+  it.instance("moves a legacy calendar once when two first reads race", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory }
+      const legacy = path.join(test.directory, ".second-brain")
+      const calendar = JSON.stringify({ version: 2, revision: "r1", events: [], tasks: [] })
+      yield* Effect.promise(() => mkdir(legacy, { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(legacy, "calendar-v1.json"), calendar))
+
+      const reads = yield* Effect.all(
+        Array.from({ length: 4 }, () => request("/second-brain/calendar", { headers })),
+        { concurrency: "unbounded" },
+      )
+      expect(reads.map((response) => response.status)).toEqual([200, 200, 200, 200])
+      expect(
+        yield* Effect.promise(() => readFile(path.join(test.directory, ".tenon", "calendar-v1.json"), "utf8")),
+      ).toBe(calendar)
+      expect(yield* Effect.promise(() => readdir(test.directory))).not.toContain(".second-brain")
+    }),
+  )
+
   it.instance("keeps the .tenon calendar and leaves a legacy copy untouched when both exist", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

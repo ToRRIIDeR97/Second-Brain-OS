@@ -1056,9 +1056,12 @@ deletes the boundary message and every later message and input, clears the
 revert, and drops the session's harness continuations
 (`metadata.harnessContinuations` and the legacy `harnessContinuation`) while
 keeping its harness choice. `HarnessRuntime` closes the session's open harness
-runtimes on the same event, so the next harness turn starts a fresh native
-session with the trimmed transcript as its handoff. The renderer removes the
-same messages from its store when the event arrives.
+runtimes from an `events.listen` listener (`closeOnRevertCommit`), which runs
+inside the commit's publish, so they are gone before the prompt is admitted and
+the next harness turn starts a fresh native session with the trimmed transcript
+as its handoff. A second commit of the same revert (two prompts sent at once)
+finds its boundary gone and only clears a revert still staged there. The
+renderer removes the same messages from its store when the event arrives.
 
 The rolled-back messages show as the top row of the composer's tray
 (`SessionRevertTray` in `app/src/pages/session/composer/session-revert-dock.tsx`,

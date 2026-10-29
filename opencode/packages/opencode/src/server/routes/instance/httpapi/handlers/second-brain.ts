@@ -255,6 +255,7 @@ const migrateCalendar = Effect.fn("SecondBrain.migrateCalendar")(function* (targ
   yield* files
     .create({ target, content: bytes })
     .pipe(Effect.catchTag("FileMutation.TargetExistsError", () => Effect.void))
+  // A concurrent move may have removed it already; FileMutation.remove treats a missing file as done.
   yield* files.remove({ target: legacy })
   // rmdir removes the folder only when it is empty; anything else left there keeps it.
   yield* Effect.tryPromise(() => rmdir(path.dirname(legacy.canonical))).pipe(Effect.ignore)

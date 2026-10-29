@@ -26,6 +26,7 @@ import { Location } from "@opencode-ai/core/location"
 import { SessionRevert } from "@opencode-ai/core/session/revert"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { HarnessRuntime } from "@opencode-ai/core/harness"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
 const sessionsLayer = AppNodeBuilder.build(SessionV2.node, [[SessionExecution.node, SessionExecution.noopLayer]])
@@ -330,6 +331,87 @@ describe("SessionProjector", () => {
       // Native harness sessions still hold the removed turns, so they are dropped; the harness choice stays.
       expect(row?.metadata).toEqual({ harnessInstanceID: "codex", harnessModel: { id: "gpt-5.5" }, harnessRevision: 1 })
     }).pipe(Effect.provide(sessionsLayer)),
+  )
+
+  it.effect("closes the session's harness runtimes inside the commit, before the prompt is admitted", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* seedSession
+      const events = yield* EventV2.Service
+      for (const text of ["first", "second"])
+        yield* events.publish(SessionEvent.Prompted, {
+          sessionID,
+          messageID: SessionMessage.ID.make(`msg_${text}`),
+          timestamp: created,
+          prompt: Prompt.make({ text }),
+          delivery: "steer",
+        })
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        revert: { messageID: SessionMessage.ID.make("msg_second"), files: [] },
+      })
+      // Records each close and whether the new prompt had been admitted by then.
+      const closed: { sessionID: string; admitted: boolean }[] = []
+      yield* HarnessRuntime.closeOnRevertCommit(events, (id) =>
+        db
+          .select({ id: SessionInputTable.id })
+          .from(SessionInputTable)
+          .where(eq(SessionInputTable.id, SessionMessage.ID.make("msg_replacement")))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => void closed.push({ sessionID: id, admitted: !!row })),
+          ),
+      )
+
+      const sessions = yield* SessionV2.Service
+      yield* sessions.prompt({
+        id: SessionMessage.ID.make("msg_replacement"),
+        sessionID,
+        prompt: { text: "replacement" },
+        resume: false,
+      })
+
+      expect(closed).toEqual([{ sessionID, admitted: false }])
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
+  it.effect("treats a second commit of the same revert as already committed", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* seedSession
+      const boundary = SessionMessage.ID.make("msg_boundary")
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(SessionMessage.ID.make("msg_earlier"), 1), assistantRow(boundary, 2)])
+        .run()
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        revert: { messageID: boundary, files: [] },
+      })
+      const commit = { sessionID, messageID: boundary, timestamp: DateTime.makeUnsafe(2) }
+      yield* events.publish(SessionEvent.RevertEvent.Committed, commit)
+      // Two prompts sent at once both read the staged revert and both commit it.
+      yield* events.publish(SessionEvent.RevertEvent.Committed, { ...commit, timestamp: DateTime.makeUnsafe(3) })
+
+      expect(
+        (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
+      ).toEqual([SessionMessage.ID.make("msg_earlier")])
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
+
+      // A stale commit for a removed boundary leaves a newer staged revert alone.
+      const newer = { messageID: SessionMessage.ID.make("msg_earlier"), files: [] }
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(4),
+        revert: newer,
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Committed, { ...commit, timestamp: DateTime.makeUnsafe(5) })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toMatchObject(newer)
+    }),
   )
 
   it.effect("stages a messages-only revert without restoring files", () =>

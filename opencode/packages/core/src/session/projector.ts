@@ -531,7 +531,23 @@ const layer = Layer.effectDiscard(
           )
           .get()
           .pipe(Effect.orDie)
-        if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
+        // Two prompts sent at once can both commit the same staged revert; the later one finds its
+        // boundary already deleted. It only clears a revert still staged at that boundary.
+        if (!boundary) {
+          const current = yield* db
+            .select({ revert: SessionTable.revert })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, event.data.sessionID))
+            .get()
+            .pipe(Effect.orDie)
+          if (current?.revert?.messageID !== event.data.messageID) return
+          return yield* db
+            .update(SessionTable)
+            .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+            .where(eq(SessionTable.id, event.data.sessionID))
+            .run()
+            .pipe(Effect.orDie, Effect.asVoid)
+        }
         // The boundary is the first rolled-back message, so it is removed with everything after it.
         yield* db
           .delete(SessionMessageTable)

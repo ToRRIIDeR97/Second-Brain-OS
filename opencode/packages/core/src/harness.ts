@@ -338,10 +338,10 @@ const layer = Layer.effect(
       )
 
     // A committed rollback removed turns the native sessions still hold; their next turn reconnects fresh.
-    yield* events.subscribe(SessionEvent.RevertEvent.Committed).pipe(
-      Stream.runForEach((event) => closeRuntimesWhere((key) => key.includes(`:${event.data.sessionID}:`))),
-      Effect.forkScoped({ startImmediately: true }),
+    const unlisten = yield* closeOnRevertCommit(events, (sessionID) =>
+      closeRuntimesWhere((key) => key.includes(`:${sessionID}:`)),
     )
+    yield* Effect.addFinalizer(() => unlisten)
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
@@ -1622,6 +1622,20 @@ function approve(
   options?: PermissionV2.AssertOptions,
 ) {
   return Effect.exit(permissions.assert(input, options)).pipe(Effect.map(Exit.isSuccess))
+}
+
+/**
+ * Runs `close` for each committed rollback. An `events.listen` listener runs inside the commit's publish,
+ * so the session's runtimes are gone before `SessionV2.prompt` admits the prompt and wakes the next turn
+ * (a `subscribe` stream would run later and could close the runtime that turn just opened).
+ */
+export function closeOnRevertCommit(events: EventV2.Interface, close: (sessionID: SessionID) => Effect.Effect<void>) {
+  return events.listen((event) => {
+    const sessionID: unknown = isRecord(event.data) ? event.data.sessionID : undefined
+    return event.type === SessionEvent.RevertEvent.Committed.type && typeof sessionID === "string"
+      ? close(SessionID.make(sessionID))
+      : Effect.void
+  })
 }
 
 function readContinuation(
