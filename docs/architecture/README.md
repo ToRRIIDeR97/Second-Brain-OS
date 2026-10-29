@@ -661,7 +661,10 @@ Each ACP session that opens for a Run also updates the list. Saved model IDs in
 longer saves them when adding a harness.
 
 `POST /api/harness/refresh` (`{ id? }`) clears both caches for one harness or
-all, then lists again. Settings → Harnesses → Refresh models calls it. The
+all, then lists again. With an `id`, it first waits for that ACP harness's
+model discovery (`discoverNow`), so the answer carries the new list instead of
+an empty catalog. Settings → Harnesses → Refresh models calls it, and so does
+saving a new harness. The
 composer has no refresh button: its harness list revalidates in the background
 when the window regains focus or the harness picker opens, at most once a
 minute, and keeps showing the last list until the answer arrives. The renderer
@@ -1170,8 +1173,11 @@ Cache hit is `cacheRead / (input + cacheRead + cacheWrite)`. Cost is the sum
 of reported costs, and it reads "Not reported" when no message reported one
 above 0. ACP turns get a per-turn cost from `usage_update`
 (`core/src/harness/acp.ts`), which the runner publishes on `Step.Ended`. The
-context window still comes from `getSessionContext` (last message, provider
-limit). Subagents are built-in `task` parts. Tool counts come from
+context window comes from `getSessionContext`: the window the harness reported
+for the last step (`contextWindow` on `Step.Ended` and the assistant message,
+from ACP `usage_update.size` or Codex `tokenUsage.modelContextWindow`), else
+the provider's limit for that model. Harness model IDs can be aliases such as
+Claude Code's `haiku` that no provider lists. Subagents are built-in `task` parts. Tool counts come from
 `summarizeTurn` over the harness's parts.
 
 ACP subagents open as agent tabs (`agent://<partID>`) in the same side panel.

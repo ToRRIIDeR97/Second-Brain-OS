@@ -1,7 +1,7 @@
 import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
 import { Harness } from "@opencode-ai/schema/harness"
 
-type HarnessAssistant = AssistantMessage & { harnessInstanceID?: string }
+type HarnessAssistant = AssistantMessage & { harnessInstanceID?: string; contextWindow?: number }
 
 type Provider = {
   id: string
@@ -55,7 +55,8 @@ const build = (messages: Message[] = [], providers: Provider[] = [], selectedHar
 
   const provider = providers.find((item) => item.id === message.providerID)
   const model = provider ? provider.models[message.modelID] : sharedModel(providers, message.modelID)
-  const limit = model?.limit.context
+  // A harness's own report wins: it names the window it ran with, and its model id may be an alias.
+  const limit = (message as HarnessAssistant).contextWindow || model?.limit.context
   const total = tokenTotal(message)
 
   return {

@@ -537,6 +537,7 @@ const layer = Layer.effect(
                 assistantMessageID: yield* publisher.startAssistant(),
                 finish: stepSettlement.finish,
                 cost: stepSettlement.cost,
+                contextWindow: stepSettlement.contextWindow,
                 tokens: stepSettlement.tokens,
                 snapshot: endSnapshot,
                 files,

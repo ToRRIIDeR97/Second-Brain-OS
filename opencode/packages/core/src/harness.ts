@@ -287,6 +287,29 @@ const layer = Layer.effect(
       for (const key of probes.keys()) if (matches(key)) probes.delete(key)
       for (const key of catalogs.keys()) if (matches(key)) catalogs.delete(key)
     }
+    // An explicit refresh of one ACP harness waits for its model list, which a listing only starts in the
+    // background; otherwise the caller would see the emptied catalog and nothing would ask again.
+    const discoverNow = (id: string) =>
+      instances.pipe(
+        Effect.flatMap((current) => {
+          const instance = current.find((item) => item.id === id)
+          const settings =
+            instance?.enabled && instance.driver === Harness.AcpDriver
+              ? AcpHarness.decodeSettings(instance.config)
+              : undefined
+          if (!instance || !settings) return Effect.void
+          const key = instanceKey(instance)
+          return AcpHarness.discover(process, settings, location.directory).pipe(
+            Effect.tap((agent) =>
+              Effect.sync(() => {
+                catalogs.set(key, { models: agent.models, checked: Date.now() })
+                probes.delete(key)
+              }),
+            ),
+            Effect.ignore,
+          )
+        }),
+      )
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
@@ -894,7 +917,11 @@ const layer = Layer.effect(
             )
           }),
         ),
-      refresh: (id) => Effect.sync(() => forget(id)).pipe(Effect.andThen(list())),
+      refresh: (id) =>
+        Effect.sync(() => forget(id)).pipe(
+          Effect.andThen(id === undefined ? Effect.void : discoverNow(id)),
+          Effect.andThen(list()),
+        ),
       driver: (instanceID) => latest.find((instance) => instance.id === instanceID)?.driver,
       stream(input) {
         // Known instances stream without touching the registry; a new ID or a changed setup key needs a re-read.
@@ -1379,7 +1406,10 @@ export function parseCodexNotification(
   }
   if (notification.method === "thread/tokenUsage/updated") {
     const tokenUsage = isRecord(params.tokenUsage) ? params.tokenUsage : undefined
-    state.usage = normalizeUsage(isRecord(tokenUsage?.last) ? tokenUsage.last : undefined)
+    state.usage = normalizeUsage(
+      isRecord(tokenUsage?.last) ? tokenUsage.last : undefined,
+      number(tokenUsage?.modelContextWindow),
+    )
     return []
   }
   if (notification.method === "error") {
@@ -1750,7 +1780,7 @@ function oneLine(value: string) {
   return line.length > 160 ? `${line.slice(0, 160)}...` : line
 }
 
-function normalizeUsage(value: Record<string, unknown> | undefined) {
+function normalizeUsage(value: Record<string, unknown> | undefined, contextSize?: number) {
   if (!value) return undefined
   const inputTokens = number(value.inputTokens)
   const cachedInputTokens = number(value.cachedInputTokens) ?? 0
@@ -1762,6 +1792,7 @@ function normalizeUsage(value: Record<string, unknown> | undefined) {
     outputTokens: number(value.outputTokens),
     reasoningTokens: number(value.reasoningOutputTokens),
     totalTokens: number(value.totalTokens),
+    ...(contextSize === undefined ? {} : { providerMetadata: { harness: { contextSize } } }),
   }
 }
 

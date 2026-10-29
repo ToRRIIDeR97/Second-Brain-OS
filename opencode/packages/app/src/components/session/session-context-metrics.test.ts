@@ -96,6 +96,20 @@ describe("getSessionContext", () => {
     expect(getSessionContext(alias, providers)?.usage).toBeNull()
   })
 
+  test("prefers the context window a harness reported for the step", () => {
+    const providers = [{ id: "anthropic", models: { "claude-x": { name: "Claude X", limit: { context: 200 } } } }]
+    const reported = (modelID: string) => [
+      {
+        ...(assistant("a1", { input: 40, output: 10, reasoning: 0, read: 0, write: 0 }, 0, "claude-code", modelID) as object),
+        contextWindow: 1000,
+      } as unknown as Message,
+    ]
+
+    expect(getSessionContext(reported("haiku"), providers)?.limit).toBe(1000)
+    expect(getSessionContext(reported("haiku"), providers)?.usage).toBe(5)
+    expect(getSessionContext(reported("claude-x"), providers)?.limit).toBe(1000)
+  })
+
   test("leaves a harness model's limit unknown when providers disagree on it", () => {
     const providers = [
       { id: "anthropic", models: { "claude-x": { name: "Claude X", limit: { context: 200 } } } },

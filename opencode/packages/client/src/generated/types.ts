@@ -899,6 +899,7 @@ export type SessionsContextOutput = {
         readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
         readonly finish?: string
         readonly cost?: number
+        readonly contextWindow?: number
         readonly tokens?: {
           readonly input: number
           readonly output: number
@@ -1244,6 +1245,7 @@ export type SessionsHistoryOutput = {
                 }
                 readonly finish?: string
                 readonly cost?: number
+                readonly contextWindow?: number
                 readonly tokens?: {
                   readonly input: number
                   readonly output: number
@@ -1336,6 +1338,7 @@ export type SessionsHistoryOutput = {
           readonly assistantMessageID: string
           readonly finish: string
           readonly cost: number
+          readonly contextWindow?: number
           readonly tokens: {
             readonly input: number
             readonly output: number
@@ -1938,6 +1941,7 @@ export type SessionsEventsOutput =
               }
               readonly finish?: string
               readonly cost?: number
+              readonly contextWindow?: number
               readonly tokens?: {
                 readonly input: number
                 readonly output: number
@@ -2030,6 +2034,7 @@ export type SessionsEventsOutput =
         readonly assistantMessageID: string
         readonly finish: string
         readonly cost: number
+        readonly contextWindow?: number
         readonly tokens: {
           readonly input: number
           readonly output: number
@@ -2455,6 +2460,7 @@ export type SessionsMessageOutput = {
         readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
         readonly finish?: string
         readonly cost?: number
+        readonly contextWindow?: number
         readonly tokens?: {
           readonly input: number
           readonly output: number
@@ -2633,6 +2639,7 @@ export type MessagesListOutput = {
         readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
         readonly finish?: string
         readonly cost?: number
+        readonly contextWindow?: number
         readonly tokens?: {
           readonly input: number
           readonly output: number

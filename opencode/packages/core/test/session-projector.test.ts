@@ -674,6 +674,7 @@ describe("SessionProjector", () => {
         assistantMessageID: SessionMessage.ID.make("msg_assistant_2"),
         finish: "stop",
         cost: 0,
+        contextWindow: 200000,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       })
 
@@ -691,6 +692,7 @@ describe("SessionProjector", () => {
       expect(messages[1]).toMatchObject({
         type: "assistant",
         finish: "stop",
+        contextWindow: 200000,
         time: { completed: DateTime.makeUnsafe(1) },
       })
     }),
