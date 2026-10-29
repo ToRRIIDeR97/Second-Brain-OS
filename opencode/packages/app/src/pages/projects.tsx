@@ -403,6 +403,7 @@ export default function ProjectsPage() {
                       retry={() => void projectActions.refetch()}
                       create={() => setState({ creating: true, selectedId: "", error: "", errorField: "" })}
                       choose={choose}
+                      openOverview={() => navigate("/projects/overview")}
                       language={language}
                     />
                   }
@@ -579,6 +580,7 @@ function ProjectList(props: {
   retry: () => void
   create: () => void
   choose: (project: ProjectRecord) => void
+  openOverview: () => void
   language: ReturnType<typeof useLanguage>
 }) {
   return (
@@ -601,6 +603,22 @@ function ProjectList(props: {
             </PageEmpty>
           }
         >
+          <button type="button" class={pageRowClass} onClick={props.openOverview}>
+            <span
+              aria-hidden="true"
+              class="flex size-8 shrink-0 items-center justify-center rounded-full bg-v2-background-bg-layer-02 text-v2-icon-icon-muted"
+            >
+              <Icon name="workspace" size="small" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[13px] text-v2-text-text-base [font-weight:530]">
+                {props.language.t("secondBrain.projects.overview.title")}
+              </span>
+              <span class="block truncate text-[12px] text-v2-text-text-faint">
+                {props.language.t("secondBrain.projects.overview.description")}
+              </span>
+            </span>
+          </button>
           <Show
             when={props.projects.length > 0}
             fallback={

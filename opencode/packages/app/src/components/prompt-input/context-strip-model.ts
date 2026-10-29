@@ -43,6 +43,23 @@ export function formatShare(value: number, limit: number, locale: string) {
   return percent(locale, ratio < 0.01 ? 1 : 0).format(ratio)
 }
 
+/** Usage reports in sheet order: the thread's own harness first, the others in the order the server listed them. */
+export function orderUsage<T extends { instanceID: string }>(reports: ReadonlyArray<T>, current: string | undefined) {
+  return [
+    ...reports.filter((item) => item.instanceID === current),
+    ...reports.filter((item) => item.instanceID !== current),
+  ]
+}
+
+/** How far off a usage window's reset is, as a locale's relative time ("in 3 hours"), in the largest whole unit. */
+export function formatResetIn(resetsAt: number, now: number, locale: string) {
+  const minutes = Math.max(1, Math.round((resetsAt - now) / 60_000))
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "always" })
+  if (minutes < 60) return format.format(minutes, "minute")
+  if (minutes < 48 * 60) return format.format(Math.round(minutes / 60), "hour")
+  return format.format(Math.round(minutes / (24 * 60)), "day")
+}
+
 const percent = (locale: string, digits: number) =>
   new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: digits })
 

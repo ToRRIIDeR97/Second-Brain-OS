@@ -115,7 +115,7 @@
 <rect class="store" x="760" y="335" width="200" height="76" rx="6"/>
 <text x="770" y="353" text-anchor="start" class="t">Workspace files</text>
 <text x="770" y="369" text-anchor="start" class="s">notes/, projects/*, .tenon/</text>
-<text x="770" y="385" text-anchor="start" class="s">.second-brain/calendar-v1.json</text>
+<text x="770" y="385" text-anchor="start" class="s">.tenon/calendar-v1.json</text>
 <rect class="store" x="760" y="445" width="200" height="56" rx="6"/>
 <text x="770" y="463" text-anchor="start" class="t">Profile SQLite</text>
 <text x="770" y="479" text-anchor="start" class="s">sessions, events, permissions</text>

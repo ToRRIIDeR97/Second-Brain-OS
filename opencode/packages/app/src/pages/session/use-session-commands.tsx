@@ -388,7 +388,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     sessionCommand({
       id: "session.archive",
       title: language.t("command.session.archive"),
-      keybind: "mod+shift+backspace",
+      keybind: "mod+shift+a,mod+shift+backspace",
       disabled: !params.id,
       onSelect: () => {
         const id = params.id
@@ -523,7 +523,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: isAutoAcceptActive()
         ? language.t("command.permissions.autoaccept.disable")
         : language.t("command.permissions.autoaccept.enable"),
-      keybind: "mod+shift+a",
+      keybind: "mod+shift+y",
       disabled: false,
       onSelect: toggleAutoAccept,
     }),

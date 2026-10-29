@@ -3136,6 +3136,33 @@ export type HarnessesUpdatesOutput = {
   }>
 }
 
+export type HarnessesUsageInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type HarnessesUsageOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly instanceID: string
+    readonly status: "available" | "unsupported" | "signed-out" | "error"
+    readonly windows: ReadonlyArray<{
+      readonly id: string
+      readonly label: string
+      readonly usedPercent: number | "Infinity" | "-Infinity" | "NaN"
+      readonly resetsAt?: number | "Infinity" | "-Infinity" | "NaN"
+      readonly windowMinutes?: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+    readonly reason?: string
+    readonly checkedAt: number | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
 export type HarnessesUpgradeInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {

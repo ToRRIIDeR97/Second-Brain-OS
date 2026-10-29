@@ -125,6 +125,29 @@ describe("listHarnessesRemembered", () => {
     expect(rememberedHarnesses("http://localhost:4097", "C:\\brain")).toMatchObject([{ id: Harness.Codex }])
     expect(rememberedHarnesses("http://localhost:4097", "C:\\other")).toBeUndefined()
   })
+
+  test("hands only a good list to the persisted copy", async () => {
+    const codex = { id: Harness.Codex, driver: Harness.CodexDriver, name: "Codex", status: "available", models: [] }
+    let ok = true
+    const fetcher = Object.assign(
+      async () =>
+        ok
+          ? Response.json({
+              location: { directory: "C:\\kept", project: { id: "p", directory: "C:\\kept" } },
+              data: [codex],
+            })
+          : new Response(null, { status: 500 }),
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const input = { server: { url: "http://localhost:4097" }, fetch: fetcher }
+    const kept: unknown[] = []
+
+    await listHarnessesRemembered(input, "C:\\kept", (list) => kept.push(list))
+    ok = false
+    await listHarnessesRemembered(input, "C:\\kept", (list) => kept.push(list))
+
+    expect(kept).toMatchObject([[{ id: Harness.Codex }]])
+  })
 })
 
 describe("switchHarnessForServer", () => {

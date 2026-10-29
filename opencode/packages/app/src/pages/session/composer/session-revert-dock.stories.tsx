@@ -17,7 +17,8 @@ Real \`SessionRevertDock\` from app code, rendered above a mock composer card.
 - \`packages/app/src/pages/session/composer/session-revert-dock.tsx\`
 
 ### Why the mock composer
-The live composer overlaps the dock's bottom by 18px (\`session-composer-region-controller.ts\` \`lift()\`).
+The dock is the top row of the composer's tray: the next row (the context strip or the composer) overlaps
+its last 14px, which the dock gives back through its own negative bottom margin.
 The card below reproduces that overlap so the collapsed/expanded cutoff behavior can be verified in isolation.
 
 ### Notes
@@ -67,12 +68,12 @@ function Stage(props: { count: number }) {
         </button>
       </div>
 
-      {/* Reproduce the real composer stack: dock + card overlapping the dock's bottom by lift() = 18px */}
+      {/* Reproduce the real composer stack: dock + card overlapping the dock's last 14px */}
       <div style={{ display: "flex", "flex-direction": "column" }}>
         <SessionRevertDock items={store.items} onRestore={restore} />
         <DockShell
           data-dock-border-underlay="v2"
-          style={{ position: "relative", "z-index": 70, "margin-top": "-18px" }}
+          style={{ position: "relative", "z-index": 70 }}
           class="min-h-24 w-full rounded-[12px] px-4 py-3 text-[13px] bg-v2-background-bg-base text-v2-text-text-faint"
         >
           Ask anything...

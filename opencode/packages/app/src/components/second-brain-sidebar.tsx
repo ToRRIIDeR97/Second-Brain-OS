@@ -8,7 +8,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { createReveal, Reveal } from "@opencode-ai/ui/v2/reveal"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useCommand } from "@/context/command"
+import { formatKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettingsDialog } from "@/components/settings-dialog"
@@ -18,6 +18,7 @@ import {
   type SidebarController,
   type SidebarProjectItem,
 } from "@/components/sidebar/sidebar-controller"
+import { THREAD_MENU_KEYS, threadMenuAction, type ThreadMenuAction } from "@/components/sidebar/thread-menu-keys"
 import { DialogArchivedThreads } from "@/components/sidebar/dialog-archived-threads"
 import { DialogInstructions } from "@/components/sidebar/dialog-instructions"
 import { DialogAddProject, DialogRemoveProject } from "@/components/sidebar/dialog-project-folder"
@@ -265,6 +266,9 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
                   >
                     {language.t("secondBrain.sidebar.workspaceInstructions")}
                   </MenuV2.Item>
+                  <MenuV2.Item onSelect={() => navigate("/projects/overview")}>
+                    {language.t("secondBrain.projects.overview.title")}
+                  </MenuV2.Item>
                   <MenuV2.Item onSelect={() => navigate("/projects")}>
                     {language.t("secondBrain.sidebar.manageProjects")}
                   </MenuV2.Item>
@@ -498,12 +502,31 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
   // Child threads show while their parent's lineage is on screen.
   const showChildren = () => props.node.children.length > 0 && containsSession(props.node, props.ctrl.activeSessionID())
   let saved = false
+  let input: HTMLInputElement | undefined
+  // A rename picked from the menu focuses the input only once the menu has closed: closing returns focus to
+  // the "…" trigger, which would blur an already focused input and end the edit straight away.
+  let renameFromMenu = false
   const finish = (value: string | undefined) => {
     if (saved) return
     saved = true
+    renameFromMenu = false
     setEditing(false)
     if (value !== undefined) void props.ctrl.renameThread(session(), value)
   }
+  const [menuOpen, setMenuOpen] = createSignal(false)
+  // Each menu item runs from a click or from its single-key hint while the menu has focus.
+  const run: Record<ThreadMenuAction, () => void> = {
+    rename: () => {
+      renameFromMenu = true
+      saved = false
+      setEditing(true)
+    },
+    pin: () => void props.ctrl.setThreadPinned(session(), !pinned()),
+    fork: () => void props.ctrl.forkThread(session()),
+    archive: () => void props.ctrl.archiveThread(session()),
+    delete: () => props.ctrl.deleteThread(session()),
+  }
+  const hint = (action: ThreadMenuAction) => formatKeybind(THREAD_MENU_KEYS[action], language.t)
 
   return (
     <>
@@ -523,6 +546,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
               aria-current={active() ? "page" : undefined}
               onClick={() => props.ctrl.openThread(session())}
               onDblClick={() => {
+                renameFromMenu = false
                 saved = false
                 setEditing(true)
               }}
@@ -550,7 +574,10 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
           }
         >
           <input
-            ref={(el) => queueMicrotask(() => el.select())}
+            ref={(el) => {
+              input = el
+              if (!renameFromMenu) queueMicrotask(() => el.select())
+            }}
             class="mx-1 h-7 min-w-0 rounded-full bg-v2-background-bg-base px-3 text-[13px] text-v2-text-text-base outline-none [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)]"
             value={session().title ?? ""}
             aria-label={language.t("secondBrain.sidebar.renameThread")}
@@ -563,7 +590,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
           />
         </Show>
         <div class="flex items-center pr-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
-          <MenuV2 gutter={4} modal={false} placement="bottom-start">
+          <MenuV2 gutter={4} modal={false} placement="bottom-start" open={menuOpen()} onOpenChange={setMenuOpen}>
             <MenuV2.Trigger
               as={IconButtonV2}
               variant="ghost-muted"
@@ -572,26 +599,41 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
               aria-label={language.t("secondBrain.sidebar.threadActions")}
             />
             <MenuV2.Portal>
-              <MenuV2.Content>
-                <MenuV2.Item
-                  onSelect={() => {
-                    saved = false
-                    setEditing(true)
-                  }}
-                >
+              <MenuV2.Content
+                onKeyDown={(event) => {
+                  const action = threadMenuAction(event)
+                  if (!action) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  // Same order as a click: the item runs, then the menu closes.
+                  run[action]()
+                  setMenuOpen(false)
+                }}
+                onCloseAutoFocus={() => {
+                  if (!renameFromMenu) return
+                  renameFromMenu = false
+                  // Kobalte's DropdownMenu.Content focuses the trigger right after this handler even when it is
+                  // prevented, so the input takes focus in a microtask, once that has happened.
+                  queueMicrotask(() => {
+                    input?.focus()
+                    input?.select()
+                  })
+                }}
+              >
+                <MenuV2.Item onSelect={run.rename} shortcut={hint("rename")}>
                   {language.t("common.rename")}
                 </MenuV2.Item>
-                <MenuV2.Item onSelect={() => void props.ctrl.setThreadPinned(session(), !pinned())}>
+                <MenuV2.Item onSelect={run.pin} shortcut={hint("pin")}>
                   {language.t(pinned() ? "secondBrain.sidebar.unpin" : "secondBrain.sidebar.pin")}
                 </MenuV2.Item>
-                <MenuV2.Item onSelect={() => void props.ctrl.forkThread(session())}>
+                <MenuV2.Item onSelect={run.fork} shortcut={hint("fork")}>
                   {language.t("secondBrain.sidebar.fork")}
                 </MenuV2.Item>
                 <MenuV2.Separator />
-                <MenuV2.Item onSelect={() => void props.ctrl.archiveThread(session())}>
+                <MenuV2.Item onSelect={run.archive} shortcut={hint("archive")}>
                   {language.t("common.archive")}
                 </MenuV2.Item>
-                <MenuV2.Item onSelect={() => props.ctrl.deleteThread(session())}>
+                <MenuV2.Item onSelect={run.delete} shortcut={hint("delete")}>
                   {language.t("common.delete")}
                 </MenuV2.Item>
               </MenuV2.Content>

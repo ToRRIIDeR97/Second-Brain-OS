@@ -67,6 +67,7 @@ import {
   createSessionComposerController,
   createSessionComposerRegionController,
   SessionComposerRegion,
+  SessionRevertTray,
 } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
@@ -104,7 +105,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { createQueuedActions } from "@/pages/session/composer/queued-actions"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
-import type { HarnessSession } from "@/utils/session"
+import { revertRestoresFiles, type HarnessSession } from "@/utils/session"
 import { switchHarnessForServer } from "@/utils/server"
 import { Harness } from "@opencode-ai/schema/harness"
 import { createSessionOwnership } from "./session/session-ownership"
@@ -426,7 +427,7 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
-  const desktopReviewOpen =createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopV2ReviewOpen = createMemo(() => desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
@@ -1864,11 +1865,7 @@ export default function Page() {
             : halt(sessionID).then(() =>
                 // keep a messages-only rewind from restoring files when moving the boundary forward
                 session.revert
-                  .stage({
-                    sessionID,
-                    messageID: next.id,
-                    files: last?.diff === undefined ? undefined : last.diff.length > 0,
-                  })
+                  .stage({ sessionID, messageID: next.id, files: revertRestoresFiles(last) })
                   .then(() => undefined),
               ),
         complete: () => undefined,
@@ -2182,7 +2179,16 @@ export default function Page() {
                   controller={promptController}
                   harness={sessionHarness}
                   borderUnderlay
-                  header={<ComposerContextStrip context={composerContext} />}
+                  header={
+                    <>
+                      <SessionRevertTray dock={controller.revert} />
+                      <ComposerContextStrip
+                        context={composerContext}
+                        attached={!!controller.revert()?.items.length}
+                        harness={sessionHarness}
+                      />
+                    </>
+                  }
                   trailing={<ComposerContextRing context={composerContext} />}
                 />
               }

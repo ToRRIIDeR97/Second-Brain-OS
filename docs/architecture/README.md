@@ -26,7 +26,10 @@ and a coverage index are in [the UML architecture views](uml.md).
   handlers. `packages/opencode` mounts the native `/api` routes from
   `packages/server` (contracts in `packages/protocol`) next to its legacy
   instance routes; the session and harness runtime lives in `packages/core`. Notes and project records use workspace files through the location
-  and file mutation services; calendar data is stored under `.second-brain/`.
+  and file mutation services; calendar data is stored in `.tenon/calendar-v1.json`. The first calendar
+  read moves a file left at the old `.second-brain/calendar-v1.json` into `.tenon`
+  (new file first, then the old one and its folder if empty); when both exist the
+  `.tenon` file wins and the old one is left alone.
 - Former Rust policy and release documents are historical requirements, not
   evidence of controls in the active desktop runtime.
 
@@ -38,7 +41,8 @@ Brain files through the server's location services. See
 ## Product entry points and persistence
 
 `opencode/packages/app/src/app.tsx` owns routing: `/`, `/notes`,
-`/calendar`, `/activity`, `/projects`, the draft route
+`/calendar`, `/activity`, `/projects`, `/projects/overview` (every Project's
+notes and milestones, grouped by `features/second-brain/project-overview.ts`), the draft route
 `/new-thread?project=<id>&draftId=<id>` and server-scoped threads at
 `/server/<server>/session/<id>`. Old `/workspaces`, `/brain`, `/new-session`
 and `/<dir>/session[/<id>]` URLs redirect. Settings, model/provider
@@ -179,7 +183,7 @@ state alive across route changes; it replaced the tab store.
 | Workspace manifest         | `brain.ts`; workspace `.tenon/workspace.json` (linked project folders)                                                |
 | Linked-folder index        | `brain.ts` writes, `core/src/workspace-instructions.ts` reads; `workspace-links.json` in the data folder; rebuilt by a scan; the first workspace to link a folder keeps it |
 | Project thread directories | Derived, not stored: the card's `location.path` folder (inside the workspace, or a checked linked folder), else a linked Workspace worktree, else the card folder; thread counts read from `opencode.db` |
-| Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
+| Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.tenon/calendar-v1.json` |
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in `$XDG_DATA_HOME/tenon-workbench`            |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
 | Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
@@ -637,13 +641,26 @@ answer that delegation is turned off.
 
 The picker shows the models each harness reports, not a list saved when the
 harness was added. `HarnessRuntime` in `core/src/harness.ts` keeps two
-in-memory caches per instance configuration:
+caches per instance configuration:
 
-- An availability check, reused for 30 seconds, or 5 seconds after a failure.
+- An availability check, reused for 30 seconds, or 5 seconds after a failure
+  (`makeCachedProbe`). Each result, failed ones included, is also written to
+  `harness-probes.json` beside the model cache, without its CLI error text. On
+  the first listing after a restart the stored result answers at once and the
+  real check runs in the background (stale-while-revalidate), so a slow CLI
+  (Command Code takes about 5 seconds) no longer holds up `/api/harness`.
 - The last model list the harness reported. After 10 minutes the next check
   asks the harness again; if that fails, the old list stays and counts as
-  checked. The list is dropped when the server stops, so every app launch
-  reads it again.
+  checked. The lists are also written to `harness-models.json` in the XDG data
+  directory (`core/src/harness/catalog-cache.ts`), keyed by a SHA-256 of the
+  instance configuration because that can hold API keys. The server seeds its
+  lists from that file at startup and keeps each entry's check time, so the
+  10-minute rule still decides when to ask again. The file is a rebuildable
+  cache: a missing or corrupt file only means the next check discovers again.
+
+Each check and each ACP model discovery logs `harness check` or
+`harness model discovery` at info level with the instance ID, driver and
+duration in milliseconds.
 
 An ACP check (`AcpHarness.probe`) runs only the handshake, so a list answers
 in about a second. When no model list is known, or it is 10 minutes old, the
@@ -669,8 +686,14 @@ composer has no refresh button: its harness list revalidates in the background
 when the window regains focus or the harness picker opens, at most once a
 minute, and keeps showing the last list until the answer arrives. The renderer
 also remembers the last good list per server and folder
-(`listHarnessesRemembered` in `app/src/utils/server.ts`). A composer that opens
-shows it at once and checks in the background, and Brain Home uses it as
+(`listHarnessesRemembered` in `app/src/utils/server.ts`) and persists it
+(`Persist.global("harness.instances.v1")` in
+`app/src/components/prompt-input/harness-controller.ts`). The persisted copy is
+keyed by the connection's `ServerConnection.key` and folder
+(`persistedHarnessKey`), because the desktop sidecar gets a new port on every
+launch; the in-memory copy stays keyed by URL. So after a restart
+the picker works from the last list before the server has checked again. A
+composer that opens shows it at once and checks in the background, and Brain Home uses it as
 placeholder data after its query is collected. A failed check shows the fallback
 list but never replaces the remembered one. The composer never suspends on the
 list, so opening a thread or a new thread doesn't wait for every harness CLI to
@@ -1032,6 +1055,30 @@ later turn, and asks for confirmation with that file list before staging.
 Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
 files, so the compatibility layer rejects `files: false` for them.
 
+The rollback stays staged (the rolled-back messages are hidden, not deleted)
+until the next prompt. `SessionV2.prompt` (`core/src/session.ts`) commits a
+staged revert before it admits the prompt, interrupting a running turn first,
+so every harness and the built-in loop behave the same. A commit
+(`session.next.revert.committed`, projected in `core/src/session/projector.ts`)
+deletes the boundary message and every later message and input, clears the
+revert, and drops the session's harness continuations
+(`metadata.harnessContinuations` and the legacy `harnessContinuation`) while
+keeping its harness choice. `HarnessRuntime` closes the session's open harness
+runtimes from an `events.listen` listener (`closeOnRevertCommit`), which runs
+inside the commit's publish, so they are gone before the prompt is admitted and
+the next harness turn starts a fresh native session with the trimmed transcript
+as its handoff. A second commit of the same revert (two prompts sent at once)
+finds its boundary gone and only clears a revert still staged there. The
+renderer removes the same messages from its store when the event arrives.
+
+The rolled-back messages show as the top row of the composer's tray
+(`SessionRevertTray` in `app/src/pages/session/composer/session-revert-dock.tsx`,
+passed through `PromptInputV2`'s `header` above the context strip): the same
+surface and top radius as the strip, collapsed by default, with Restore on each
+row. Restore on a row restores that message and every earlier rolled-back one;
+a messages-only rewind never restores files when the boundary moves
+(`revertRestoresFiles` in `app/src/utils/session.ts`).
+
 ### Composer context strip
 
 `ComposerContextStrip` (`app/src/components/prompt-input/context-strip.tsx`)
@@ -1074,6 +1121,40 @@ Below them are the model, the session cost (hidden when no response reported a
 cost) and "View context usage" (`openSessionContext`). When the limit is
 unknown the gauge shows the token total without a percentage and the rows show
 counts without bars or shares.
+
+Under the details a "Usage limits" section (`UsageLimits`) lists each enabled
+external harness, the thread's own harness first, with one bar per plan window
+("N% used", "resets in …" from `Intl.RelativeTimeFormat`). It calls
+`GET /api/harness/usage` (`listHarnessUsage` in `app/src/utils/server.ts`)
+when the sheet opens and at most once a minute while it stays open. A harness
+row reads "Sign in to see usage", "Not available for this harness" or
+"Couldn't load usage" for the other report states.
+
+`HarnessRuntime.usage` (`core/src/harness.ts`) builds the reports with
+`core/src/harness/usage.ts`. Each enabled instance except the in-process
+`opencode` loop is read in parallel with an 8 s timeout and cached per instance
+for 60 s in the location's runtime:
+
+- Codex: `account/read`, then `account/rateLimits/read` on an open thread's
+  app-server connection or a short-lived one. `null` account is signed out; an
+  API-key account is unsupported.
+- Claude Code: the OAuth token from `$CLAUDE_CONFIG_DIR/.credentials.json` (or
+  `~/.claude/.credentials.json`) goes to
+  `GET https://api.anthropic.com/api/oauth/usage`. A missing or expired token
+  is signed out; a stored Anthropic API key is unsupported. A sign-in recorded
+  in `.claude.json` without a credentials file (macOS keeps the token in the
+  keychain) is unsupported.
+- Command Code (an ACP entry whose command is `command-code`, `commandcode`,
+  `cmdc` or a path into its npm package): the key from `COMMAND_CODE_API_KEY`,
+  else `apiKey` in `~/.commandcode/auth.json`, the way its CLI finds it.
+  `GET https://api.commandcode.ai/alpha/whoami?limits=1` names the account's
+  organization and `GET /alpha/billing/credits` (`orgId` when there is one)
+  returns `windowLimits` (5-hour and weekly `used` of `cap`, `resetAt` in ms).
+  These are the undocumented `/alpha` routes the CLI's `/usage` overlay calls,
+  read from its bundle (v1.88.1), so they may change without notice. No key is
+  signed out.
+- OpenCode and other ACP agents: unsupported. OpenCode exposes no plan usage
+  over ACP or an endpoint in its installed CLI.
 
 ### Composer delivery, background send and stash
 

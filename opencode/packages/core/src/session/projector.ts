@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, desc, eq, gt, or, sql } from "drizzle-orm"
+import { and, desc, eq, gte, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -531,11 +531,28 @@ const layer = Layer.effectDiscard(
           )
           .get()
           .pipe(Effect.orDie)
-        if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
+        // Two prompts sent at once can both commit the same staged revert; the later one finds its
+        // boundary already deleted. It only clears a revert still staged at that boundary.
+        if (!boundary) {
+          const current = yield* db
+            .select({ revert: SessionTable.revert })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, event.data.sessionID))
+            .get()
+            .pipe(Effect.orDie)
+          if (current?.revert?.messageID !== event.data.messageID) return
+          return yield* db
+            .update(SessionTable)
+            .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+            .where(eq(SessionTable.id, event.data.sessionID))
+            .run()
+            .pipe(Effect.orDie, Effect.asVoid)
+        }
+        // The boundary is the first rolled-back message, so it is removed with everything after it.
         yield* db
           .delete(SessionMessageTable)
           .where(
-            and(eq(SessionMessageTable.session_id, event.data.sessionID), gt(SessionMessageTable.seq, boundary.seq)),
+            and(eq(SessionMessageTable.session_id, event.data.sessionID), gte(SessionMessageTable.seq, boundary.seq)),
           )
           .run()
           .pipe(Effect.orDie)
@@ -544,14 +561,22 @@ const layer = Layer.effectDiscard(
           .where(
             and(
               eq(SessionInputTable.session_id, event.data.sessionID),
-              or(gt(SessionInputTable.admitted_seq, boundary.seq), gt(SessionInputTable.promoted_seq, boundary.seq)),
+              or(gte(SessionInputTable.admitted_seq, boundary.seq), gte(SessionInputTable.promoted_seq, boundary.seq)),
             ),
           )
           .run()
           .pipe(Effect.orDie)
+        const row = yield* db
+          .select({ metadata: SessionTable.metadata })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        // Native harness sessions still hold the removed turns; the next turn starts fresh with the trimmed history.
+        const { harnessContinuation: _legacy, harnessContinuations: _continuations, ...metadata } = row?.metadata ?? {}
         yield* db
           .update(SessionTable)
-          .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+          .set({ revert: null, metadata, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)

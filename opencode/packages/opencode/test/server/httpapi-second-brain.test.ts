@@ -1,6 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { mkdir, readdir, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Config, Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
@@ -215,7 +215,7 @@ describe("second brain errors and recovery HttpApi", () => {
     Effect.gen(function* () {
       const test = yield* TestInstance
       const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
-      const directory = path.join(test.directory, ".second-brain")
+      const directory = path.join(test.directory, ".tenon")
       yield* Effect.promise(() => mkdir(directory, { recursive: true }))
       yield* Effect.promise(() => writeFile(path.join(directory, "calendar-v1.json"), '{"version": 2, "events": ['))
 
@@ -240,11 +240,76 @@ describe("second brain errors and recovery HttpApi", () => {
     }),
   )
 
+  it.instance("moves a legacy .second-brain calendar into .tenon on first read", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory }
+      const legacy = path.join(test.directory, ".second-brain")
+      const event = { id: "event_a", title: "Kickoff", date: "2026-08-30", source: "local", syncState: "local" }
+      const calendar = JSON.stringify({ version: 2, revision: "r1", events: [event], tasks: [] })
+      yield* Effect.promise(() => mkdir(legacy, { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(legacy, "calendar-v1.json"), calendar))
+
+      const read = yield* request("/second-brain/calendar", { headers }).pipe(
+        Effect.flatMap(json<{ revision: string; events: Array<{ id: string }> }>),
+      )
+      expect(read.events.map((item) => item.id)).toEqual(["event_a"])
+      expect(
+        yield* Effect.promise(() => readFile(path.join(test.directory, ".tenon", "calendar-v1.json"), "utf8")),
+      ).toBe(calendar)
+      // The emptied legacy folder is gone too.
+      expect(yield* Effect.promise(() => readdir(test.directory))).not.toContain(".second-brain")
+    }),
+  )
+
+  it.instance("moves a legacy calendar once when two first reads race", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory }
+      const legacy = path.join(test.directory, ".second-brain")
+      const calendar = JSON.stringify({ version: 2, revision: "r1", events: [], tasks: [] })
+      yield* Effect.promise(() => mkdir(legacy, { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(legacy, "calendar-v1.json"), calendar))
+
+      const reads = yield* Effect.all(
+        Array.from({ length: 4 }, () => request("/second-brain/calendar", { headers })),
+        { concurrency: "unbounded" },
+      )
+      expect(reads.map((response) => response.status)).toEqual([200, 200, 200, 200])
+      expect(
+        yield* Effect.promise(() => readFile(path.join(test.directory, ".tenon", "calendar-v1.json"), "utf8")),
+      ).toBe(calendar)
+      expect(yield* Effect.promise(() => readdir(test.directory))).not.toContain(".second-brain")
+    }),
+  )
+
+  it.instance("keeps the .tenon calendar and leaves a legacy copy untouched when both exist", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory }
+      const legacy = path.join(test.directory, ".second-brain")
+      const current = path.join(test.directory, ".tenon")
+      const old = JSON.stringify({ version: 2, revision: "old", events: [], tasks: [] })
+      const event = { id: "event_new", title: "Kickoff", date: "2026-08-30", source: "local", syncState: "local" }
+      const next = JSON.stringify({ version: 2, revision: "new", events: [event], tasks: [] })
+      yield* Effect.promise(() => mkdir(legacy, { recursive: true }))
+      yield* Effect.promise(() => mkdir(current, { recursive: true }))
+      yield* Effect.promise(() => writeFile(path.join(legacy, "calendar-v1.json"), old))
+      yield* Effect.promise(() => writeFile(path.join(current, "calendar-v1.json"), next))
+
+      const read = yield* request("/second-brain/calendar", { headers }).pipe(
+        Effect.flatMap(json<{ events: Array<{ id: string }> }>),
+      )
+      expect(read.events.map((item) => item.id)).toEqual(["event_new"])
+      expect(yield* Effect.promise(() => readFile(path.join(legacy, "calendar-v1.json"), "utf8"))).toBe(old)
+    }),
+  )
+
   it.instance("refuses a calendar from a newer version without moving it aside", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
       const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
-      const directory = path.join(test.directory, ".second-brain")
+      const directory = path.join(test.directory, ".tenon")
       const newer = JSON.stringify({ version: 3, revision: "r", events: [], tasks: [] })
       yield* Effect.promise(() => mkdir(directory, { recursive: true }))
       yield* Effect.promise(() => writeFile(path.join(directory, "calendar-v1.json"), newer))
@@ -264,7 +329,7 @@ describe("second brain errors and recovery HttpApi", () => {
     Effect.gen(function* () {
       const test = yield* TestInstance
       const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
-      const directory = path.join(test.directory, ".second-brain")
+      const directory = path.join(test.directory, ".tenon")
       const event = { id: "event_a", title: "Kickoff", date: "2026-08-30", source: "local", syncState: "local" }
       const duplicated = JSON.stringify({ version: 2, revision: "r", events: [event, event], tasks: [] })
       yield* Effect.promise(() => mkdir(directory, { recursive: true }))

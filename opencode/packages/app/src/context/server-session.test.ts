@@ -266,6 +266,40 @@ describe("server session", () => {
     expect(store.get("child")).toMatchObject({ directory: "/other", path: "pkg", projectID: "project" })
   })
 
+  test("drops the boundary message and everything after it when a rollback is committed", () => {
+    const store = setup({ child: session("child") }).store
+    store.remember(session("child"))
+    store.set("session_message", "child", [
+      { id: "msg_1_user", type: "user", text: "keep", time: { created: 1 } },
+      { id: "msg_2_user", type: "user", text: "rolled back", time: { created: 2 } },
+      { id: "msg_3_user", type: "user", text: "rolled back too", time: { created: 3 } },
+    ])
+    store.set("message", "child", [userMessage("msg_1_user"), userMessage("msg_2_user"), userMessage("msg_3_user")])
+
+    store.applyV2({
+      id: "evt_commit",
+      created: 4,
+      type: "session.next.revert.committed",
+      data: { sessionID: "child", messageID: "msg_2_user" },
+    } as unknown as OpenCodeEvent)
+
+    expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_1_user"])
+    expect(store.data.session_message.child?.map((message) => message.id)).toEqual(["msg_1_user"])
+  })
+
+  test("keeps a thread's harness when a legacy update carries it only in metadata", () => {
+    const store = setup({}).store
+    store.apply({
+      type: "session.updated",
+      properties: {
+        sessionID: "child",
+        info: { ...session("child"), title: "Renamed", metadata: { harnessInstanceID: "claude-code" } },
+      },
+    })
+
+    expect(store.get("child")).toMatchObject({ title: "Renamed", harnessInstanceID: "claude-code" })
+  })
+
   test("keeps an ISO-timestamped current prompt before its hydrated assistant", async () => {
     const created = Date.parse("2026-09-01T00:43:00.000Z")
     const assistant = {

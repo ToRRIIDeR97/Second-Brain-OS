@@ -140,9 +140,6 @@ export function createSessionComposerRegionController(input: {
     dock: () => (store.ready && input.state.dock()) || value() > 0.001,
     dockProgress: value,
     dockHeight: () => Math.max(78, store.height),
-    // How far the composer overlaps the revert dock above it. The todo dock's 36px overlap is applied by the
-    // region whether or not the revert dock shows, so this only depends on the revert dock.
-    lift: () => (input.revert()?.items.length ? 18 : 0),
     setDockBodyRef: (el: HTMLDivElement) => setStore("body", el),
   }
 }

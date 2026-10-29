@@ -31,6 +31,8 @@ flowchart LR
     Workspace --> General[General group]
     Workspace --> Menu[Switch, open folder, scan, link, instructions]
     Menu --> Cards[Projects page: cards and management]
+    Menu --> Overview[All projects: every Project's notes and milestones]
+    Cards --> Overview
 ```
 
 ## Sidebar
@@ -48,7 +50,7 @@ is hidden and the rail remains.
    current one checked), **Open folder as workspace**, **New Project** (opens the
    Projects page's create form, `/projects?new=1`, to create a card), **Scan for projects**,
    **Add project…**, **Workspace instructions** (the workspace's
-   default `AGENTS.md`) and **Manage projects** (`/projects`). Next to it, the
+   default `AGENTS.md`), **All projects** (`/projects/overview`) and **Manage projects** (`/projects`). Next to it, the
    folder button also opens **Add project…** and the other button scans again.
    **Add project…** is a dialog over the current page (no route change): type or
    paste a folder path (folder suggestions from the server), or **Browse…** with
@@ -76,7 +78,7 @@ Row actions:
 | Row | Actions |
 |---|---|
 | Project | New thread, open project card (`/projects?project=<id>`), archived threads, instructions, **Remove from workspace…** (after a confirmation: unlinks a linked folder, archives the card of a folder inside the workspace; files are never touched) |
-| Thread | Rename (also double-click), pin / unpin, fork, archive, delete |
+| Thread | Rename (also double-click), pin / unpin, fork, archive, delete. While the menu has focus, `R`, `P`, `F`, `A` and `Delete` (or `Backspace`) run these items; each item shows its key |
 
 Pins are stored on the thread (`metadata.pinned`, the pin time) so they survive
 restarts. Pinned threads sort first inside their own group (a Project or
@@ -116,6 +118,7 @@ The titlebar is window chrome only: the sidebar toggle, back and forward
 | `/` | Home | Home |
 | `/notes`, `/calendar`, `/activity` | That page | That item |
 | `/projects`, `/projects?project=<id>` | Project cards; a selected card | None |
+| `/projects/overview` | All projects: every Project's notes and milestones | None |
 | `/new-thread?project=<id>&draftId=<id>` | Draft composer in the Project's thread directory | The Project |
 | `/server/<server>/session/<id>` | A thread | The Project whose folder holds the thread's directory, else General |
 
@@ -139,7 +142,9 @@ deleted.
 
 | Key | Action |
 |---|---|
-| `mod+n` | New thread in the current Project (else in the workspace folder) |
+| `mod+n` / `mod+t` | New thread in the current Project (else in the workspace folder) |
+| `mod+shift+a` / `mod+shift+backspace` | Archive the open thread |
+| `mod+shift+y` | Toggle auto-accept of permission requests in the open thread |
 | `mod+shift+n` | Open a folder as a workspace |
 | `mod+b` | Toggle the sidebar |
 | `alt+up` / `alt+down` | Previous / next visible thread in the sidebar |
@@ -165,9 +170,11 @@ Shortcuts):
 | `ArrowUp` | Previous prompt from history (empty composer) |
 
 The desktop File menu uses `Cmd+N` for a new thread, `Cmd+Shift+N` to open a
-folder as a workspace and `Cmd+Alt+N` for a new window. `mod+t`, `mod+shift+t`
-and tab-closing `mod+w` were removed with the tab strip. In-session panels
-keep their own `mod+w`.
+folder as a workspace and `Cmd+Alt+N` for a new window. `mod+shift+t` and
+tab-closing `mod+w` were removed with the tab strip; `mod+t` now starts a new
+thread. In-session panels keep their own `mod+w`. Global shortcuts also fire
+while the integrated terminal has focus, so `mod+t` and `mod+n` there start a
+thread rather than reaching the shell.
 
 ## Deep links
 
@@ -182,7 +189,15 @@ folder as a workspace and selects it) and `tenon://new-session?directory=<path>&
   opens the Projects page's create form (`/projects?new=1`). Sending from Home's composer opens
   the new thread and sends the message in one step.
 - **Projects** lists Project cards by status and opens a card with Overview,
-  Plan, Work, Files, Activity and Map views.
+  Plan, Work, Files, Activity and Map views. **All projects**, the first row of
+  its list, opens the cross-project page.
+- **All projects** (`/projects/overview`) shows every Project of the workspace
+  on one page, in the Projects order, then a **Workspace** group for notes and
+  calendar items linked to no Project. Each group shows the status, progress,
+  next milestone, up to five upcoming events and open tasks, and up to five
+  recent notes; **Show all** opens the Project's calendar or notes, and a note
+  opens in Notes. A filter narrows notes and items by title; a Project whose
+  name matches keeps everything.
 - **Calendar** shows events and tasks. Today and Week are hour grids
   (07:00–22:00, widened to fit events) with all-day events and open tasks in a
   strip above; clicking a day's header opens it in Today. Agenda lists items by

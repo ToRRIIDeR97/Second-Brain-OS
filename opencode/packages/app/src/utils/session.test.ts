@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
 import { Harness } from "@opencode-ai/schema/harness"
-import { listAllSessions, normalizeSessionInfo, sessionPinnedAt } from "./session"
+import { listAllSessions, normalizeSessionInfo, revertRestoresFiles, sessionPinnedAt } from "./session"
 
 describe("normalizeSessionInfo", () => {
   test("adapts a current session to the app session shape", () => {
@@ -41,6 +41,33 @@ describe("normalizeSessionInfo", () => {
     })
   })
 
+  test("reads the harness from metadata on the legacy shape", () => {
+    const legacy = {
+      id: "session-1",
+      time: { created: 1, updated: 1 },
+      metadata: { harnessInstanceID: "codex", harnessModel: { id: "gpt-5.5" }, harnessRevision: 3 },
+    } as unknown as Parameters<typeof normalizeSessionInfo>[0]
+    const result = normalizeSessionInfo(legacy)
+    expect(result.harnessInstanceID).toBe(Harness.InstanceID.make("codex"))
+    expect(result.harnessModel).toEqual({ id: "gpt-5.5" })
+    expect(result.harnessRevision).toBe(3)
+
+    const topLevel = normalizeSessionInfo({
+      ...legacy,
+      harnessInstanceID: "claude-code",
+    } as unknown as Parameters<typeof normalizeSessionInfo>[0])
+    expect(topLevel.harnessInstanceID).toBe(Harness.InstanceID.make("claude-code"))
+
+    const invalid = normalizeSessionInfo({
+      id: "session-2",
+      time: { created: 1, updated: 1 },
+      metadata: { harnessInstanceID: "", harnessModel: { name: "x" }, harnessRevision: "1" },
+    } as unknown as Parameters<typeof normalizeSessionInfo>[0])
+    expect(invalid.harnessInstanceID).toBe(Harness.OpenCode)
+    expect(invalid.harnessModel).toBeUndefined()
+    expect(invalid.harnessRevision).toBeUndefined()
+  })
+
   test("maps the current pin time onto legacy metadata", () => {
     const pinned = { ...currentSession("session-1"), time: { created: 1, updated: 1, pinned: 7 } } as SessionInfo
     expect(sessionPinnedAt(normalizeSessionInfo(pinned))).toBe(7)
@@ -54,6 +81,21 @@ describe("normalizeSessionInfo", () => {
 
     expect(normalizeSessionInfo(root).title).toBe("New session - 1970-01-01T00:00:00.000Z")
     expect(normalizeSessionInfo(child).title).toBe("Child session - 1970-01-01T00:00:00.000Z")
+  })
+})
+
+describe("revertRestoresFiles", () => {
+  test("keeps a messages-only rewind file-free when the boundary moves forward", () => {
+    // Current shape: a staged rewind with no file changes normalizes to an empty diff.
+    const current = normalizeSessionInfo({
+      ...currentSession("session-1"),
+      revert: { messageID: "message-1", files: [] },
+    } as unknown as SessionInfo)
+    expect(revertRestoresFiles(current.revert)).toBe(false)
+    // Legacy shape (session.updated events) carries the stored diff.
+    expect(revertRestoresFiles({ diff: "" })).toBe(false)
+    expect(revertRestoresFiles({ diff: "patch a.ts\n" })).toBe(true)
+    expect(revertRestoresFiles(undefined)).toBeUndefined()
   })
 })
 

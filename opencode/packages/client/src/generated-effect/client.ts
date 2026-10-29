@@ -457,61 +457,66 @@ type Endpoint7_11Input = { readonly location?: Endpoint7_11Request["query"]["loc
 const Endpoint7_11 = (raw: RawClient["server.harness"]) => (input?: Endpoint7_11Input) =>
   raw["harness.updates"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint7_12Request = Parameters<RawClient["server.harness"]["harness.upgrade"]>[0]
-type Endpoint7_12Input = {
-  readonly id: Endpoint7_12Request["params"]["id"]
-  readonly location?: Endpoint7_12Request["query"]["location"]
+type Endpoint7_12Request = Parameters<RawClient["server.harness"]["harness.usage"]>[0]
+type Endpoint7_12Input = { readonly location?: Endpoint7_12Request["query"]["location"] }
+const Endpoint7_12 = (raw: RawClient["server.harness"]) => (input?: Endpoint7_12Input) =>
+  raw["harness.usage"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint7_13Request = Parameters<RawClient["server.harness"]["harness.upgrade"]>[0]
+type Endpoint7_13Input = {
+  readonly id: Endpoint7_13Request["params"]["id"]
+  readonly location?: Endpoint7_13Request["query"]["location"]
 }
-const Endpoint7_12 = (raw: RawClient["server.harness"]) => (input: Endpoint7_12Input) =>
+const Endpoint7_13 = (raw: RawClient["server.harness"]) => (input: Endpoint7_13Input) =>
   raw["harness.upgrade"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint7_13Request = Parameters<RawClient["server.harness"]["harness.setup"]>[0]
-type Endpoint7_13Input = { readonly location?: Endpoint7_13Request["query"]["location"] }
-const Endpoint7_13 = (raw: RawClient["server.harness"]) => (input?: Endpoint7_13Input) =>
+type Endpoint7_14Request = Parameters<RawClient["server.harness"]["harness.setup"]>[0]
+type Endpoint7_14Input = { readonly location?: Endpoint7_14Request["query"]["location"] }
+const Endpoint7_14 = (raw: RawClient["server.harness"]) => (input?: Endpoint7_14Input) =>
   raw["harness.setup"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint7_14Request = Parameters<RawClient["server.harness"]["harness.install"]>[0]
-type Endpoint7_14Input = {
-  readonly id: Endpoint7_14Request["params"]["id"]
-  readonly location?: Endpoint7_14Request["query"]["location"]
-}
-const Endpoint7_14 = (raw: RawClient["server.harness"]) => (input: Endpoint7_14Input) =>
-  raw["harness.install"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
-    Effect.mapError(mapClientError),
-  )
-
-type Endpoint7_15Request = Parameters<RawClient["server.harness"]["harness.signIn"]>[0]
+type Endpoint7_15Request = Parameters<RawClient["server.harness"]["harness.install"]>[0]
 type Endpoint7_15Input = {
   readonly id: Endpoint7_15Request["params"]["id"]
   readonly location?: Endpoint7_15Request["query"]["location"]
 }
 const Endpoint7_15 = (raw: RawClient["server.harness"]) => (input: Endpoint7_15Input) =>
+  raw["harness.install"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint7_16Request = Parameters<RawClient["server.harness"]["harness.signIn"]>[0]
+type Endpoint7_16Input = {
+  readonly id: Endpoint7_16Request["params"]["id"]
+  readonly location?: Endpoint7_16Request["query"]["location"]
+}
+const Endpoint7_16 = (raw: RawClient["server.harness"]) => (input: Endpoint7_16Input) =>
   raw["harness.signIn"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint7_16Request = Parameters<RawClient["server.harness"]["harness.setKey"]>[0]
-type Endpoint7_16Input = {
-  readonly id: Endpoint7_16Request["params"]["id"]
-  readonly location?: Endpoint7_16Request["query"]["location"]
-  readonly option: Endpoint7_16Request["payload"]["option"]
-  readonly key: Endpoint7_16Request["payload"]["key"]
+type Endpoint7_17Request = Parameters<RawClient["server.harness"]["harness.setKey"]>[0]
+type Endpoint7_17Input = {
+  readonly id: Endpoint7_17Request["params"]["id"]
+  readonly location?: Endpoint7_17Request["query"]["location"]
+  readonly option: Endpoint7_17Request["payload"]["option"]
+  readonly key: Endpoint7_17Request["payload"]["key"]
 }
-const Endpoint7_16 = (raw: RawClient["server.harness"]) => (input: Endpoint7_16Input) =>
+const Endpoint7_17 = (raw: RawClient["server.harness"]) => (input: Endpoint7_17Input) =>
   raw["harness.setKey"]({
     params: { id: input["id"] },
     query: { location: input["location"] },
     payload: { option: input["option"], key: input["key"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint7_17Request = Parameters<RawClient["server.harness"]["harness.removeKey"]>[0]
-type Endpoint7_17Input = {
-  readonly id: Endpoint7_17Request["params"]["id"]
-  readonly location?: Endpoint7_17Request["query"]["location"]
+type Endpoint7_18Request = Parameters<RawClient["server.harness"]["harness.removeKey"]>[0]
+type Endpoint7_18Input = {
+  readonly id: Endpoint7_18Request["params"]["id"]
+  readonly location?: Endpoint7_18Request["query"]["location"]
 }
-const Endpoint7_17 = (raw: RawClient["server.harness"]) => (input: Endpoint7_17Input) =>
+const Endpoint7_18 = (raw: RawClient["server.harness"]) => (input: Endpoint7_18Input) =>
   raw["harness.removeKey"]({ params: { id: input["id"] }, query: { location: input["location"] } }).pipe(
     Effect.mapError(mapClientError),
   )
@@ -529,12 +534,13 @@ const adaptGroup7 = (raw: RawClient["server.harness"]) => ({
   remove: Endpoint7_9(raw),
   refresh: Endpoint7_10(raw),
   updates: Endpoint7_11(raw),
-  upgrade: Endpoint7_12(raw),
-  setup: Endpoint7_13(raw),
-  install: Endpoint7_14(raw),
-  signIn: Endpoint7_15(raw),
-  setKey: Endpoint7_16(raw),
-  removeKey: Endpoint7_17(raw),
+  usage: Endpoint7_12(raw),
+  upgrade: Endpoint7_13(raw),
+  setup: Endpoint7_14(raw),
+  install: Endpoint7_15(raw),
+  signIn: Endpoint7_16(raw),
+  setKey: Endpoint7_17(raw),
+  removeKey: Endpoint7_18(raw),
 })
 
 type Endpoint8_0Request = Parameters<RawClient["server.integration"]["integration.list"]>[0]

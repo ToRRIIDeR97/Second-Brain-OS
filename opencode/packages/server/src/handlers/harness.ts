@@ -37,6 +37,13 @@ export const HarnessHandler = HttpApiBuilder.group(Api, "server.harness", (handl
       }),
     )
     .handle(
+      "harness.usage",
+      Effect.fn(function* () {
+        const harnesses = yield* HarnessRuntime.Service
+        return yield* response(harnesses.usage())
+      }),
+    )
+    .handle(
       "harness.upgrade",
       Effect.fn(function* (ctx) {
         const harnesses = yield* HarnessRuntime.Service

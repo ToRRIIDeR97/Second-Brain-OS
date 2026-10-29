@@ -269,6 +269,29 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
+  test("keeps the harness stored in metadata when a v1 update replaces a session", () => {
+    const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "ses_1" })], sessionTotal: 1 }))
+    const info = {
+      ...rootSession({ id: "ses_1" }),
+      title: "Renamed",
+      metadata: { harnessInstanceID: "claude-code", harnessModel: { id: "sonnet" }, harnessRevision: 2 },
+    } as Session
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const stored = store.session[0] as Session & { harnessInstanceID?: string; harnessModel?: { id: string } }
+    expect(stored.title).toBe("Renamed")
+    expect(stored.harnessInstanceID).toBe("claude-code")
+    expect(stored.harnessModel).toEqual({ id: "sonnet" })
+  })
+
   test("re-inserts a session when an update clears its archive time", () => {
     const [store, setStore] = createStore(
       baseState({ session: [rootSession({ id: "ses_1" }), rootSession({ id: "ses_2" })], sessionTotal: 2 }),

@@ -150,17 +150,26 @@ export async function listHarnessesForServer(
 // check runs, so opening a thread doesn't wait on the server starting every harness CLI. Every check
 // replaces it; a failed check is never kept.
 const recentHarnesses = new Map<string, ReadonlyArray<HarnessSchema.Instance>>()
-const recentHarnessKey = (url: string, directory: string) => `${url}\n${directory}`
+// The persisted list (harness-controller.ts) uses the same shape with the connection key in place of the URL.
+export const recentHarnessKey = (server: string, directory: string) => `${server}\n${directory}`
 
 export function rememberedHarnesses(url: string, directory: string) {
   return recentHarnesses.get(recentHarnessKey(url, directory))
 }
 
-/** Lists the harnesses for a folder and remembers the answer. A failed check returns the fallback list. */
-export async function listHarnessesRemembered(input: Parameters<typeof listHarnessesForServer>[0], directory: string) {
+/**
+ * Lists the harnesses for a folder and remembers the answer, also through `keep` (which persists it).
+ * A failed check returns the fallback list and keeps nothing.
+ */
+export async function listHarnessesRemembered(
+  input: Parameters<typeof listHarnessesForServer>[0],
+  directory: string,
+  keep?: (list: ReadonlyArray<HarnessSchema.Instance>) => void,
+) {
   const list = await listHarnessesForServer(input, directory).catch(() => undefined)
   if (!list) return fallbackHarnesses()
   recentHarnesses.set(recentHarnessKey(input.server.url, directory), list)
+  keep?.(list)
   return list
 }
 
@@ -337,6 +346,13 @@ const decodeUpdate = Schema.decodeUnknownSync(Location.response(HarnessSchema.Up
 
 export async function listHarnessUpdates(input: HarnessServer, directory: string) {
   return decodeUpdates(await harnessSettingsRequest(input, directory, "/updates")).data
+}
+
+const decodeUsage = Schema.decodeUnknownSync(Location.response(Schema.Array(HarnessSchema.UsageReport)))
+
+/** Subscription usage limits of each enabled harness; the server caches each harness's answer for a minute. */
+export async function listHarnessUsage(input: HarnessServer, directory: string) {
+  return decodeUsage(await harnessSettingsRequest(input, directory, "/usage")).data
 }
 
 export async function upgradeHarness(input: HarnessServer, directory: string, id: string) {

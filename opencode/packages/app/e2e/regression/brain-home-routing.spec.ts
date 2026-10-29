@@ -95,6 +95,19 @@ test("the sidebar is the only navigation", async ({ page }) => {
   await expect(page).toHaveURL(/\/projects$/)
 })
 
+test("the cross-project overview opens from the workspace menu and the Projects page", async ({ page }) => {
+  await openApp(page, { projects: [], sessions: [] })
+  await page.goto("/")
+  await sidebar(page).getByRole("button", { name: "Switch workspace" }).click()
+  await page.getByRole("menuitem", { name: "All projects" }).click()
+  await expect(page).toHaveURL(/\/projects\/overview$/)
+  await expect(page.getByRole("heading", { name: "All projects", level: 1 })).toBeVisible()
+  await page.getByRole("button", { name: "Back to Projects" }).click()
+  await expect(page).toHaveURL(/\/projects$/)
+  await page.getByRole("button", { name: /^All projects/ }).click()
+  await expect(page).toHaveURL(/\/projects\/overview$/)
+})
+
 test("groups threads by Project and the workspace, hides other workspaces, and starts a thread in a Project", async ({
   page,
 }) => {

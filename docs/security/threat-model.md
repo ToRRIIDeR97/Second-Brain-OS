@@ -78,6 +78,9 @@ parsed through `Frontmatter.parse` (`opencode/packages/core/src/frontmatter.ts`)
 which refuses gray-matter's `---js` engine (it would `eval` the block) and any
 front matter over 64 KiB. Cards and the manifest over 1 MiB, notes over 5 MiB
 and the calendar over 16 MiB are refused after a `stat`, before they are read.
+The calendar lives at `.tenon/calendar-v1.json` inside the workspace, resolved
+through `LocationMutation` like the other Second Brain files; a file left at the
+old `.second-brain/calendar-v1.json` is moved there on the first read.
 
 Workspace notes, projects, calendar files, session data, provider tokens, and
 agent tool permissions are sensitive. Treat note contents, provider responses,
@@ -202,7 +205,9 @@ on its own. Removed in the T3 parity Phase 1 cleanup:
 
 Still outbound: the configured LLM providers (including the `opencode` Zen
 provider when the user selects it), the `models.dev` catalog, Google APIs,
-and links the user opens. `$schema` URLs in config files are identifiers, not
+`api.anthropic.com/api/oauth/usage` and `api.commandcode.ai/alpha/*` for
+Claude Code and Command Code usage limits (see
+[Harness usage limits](#harness-usage-limits)), and links the user opens. `$schema` URLs in config files are identifiers, not
 fetches. Known remaining references: upstream agent prompts that point the
 model at `opencode.ai/docs`, the MCP OAuth `client_uri` metadata value, and
 two help-text links printed by the developer-only `providers login` command.
@@ -255,9 +260,9 @@ The setup dialog ([ADR-013](../adr/ADR-013-built-in-harness-setup.md),
   holds the OAuth callback and stores the result in its own home. The app sees
   only the returned link. Claude Code and OpenCode log in through their own
   CLI in an app terminal, the same PTY capability the terminal panel already
-  has. The app never reads or stores their tokens; it only checks that their
+  has. The app never stores their tokens; setup only checks that their
   login files exist (`oauthAccount` in `~/.claude.json`, a non-empty OpenCode
-  `auth.json`).
+  `auth.json`). The usage route below reads Claude Code's OAuth token.
 - **API keys.**
   - Codex keys go straight to Codex.
   - Claude Code and OpenCode keys are stored in plain text in
@@ -272,6 +277,41 @@ The setup dialog ([ADR-013](../adr/ADR-013-built-in-harness-setup.md),
 Known gap: anyone who can read the user's data folder can read stored harness
 keys. That is the same exposure as `auth.json`; OS-keychain storage would need
 the desktop main process.
+
+## Harness usage limits
+
+`GET /api/harness/usage` (`opencode/packages/core/src/harness/usage.ts`,
+`HarnessRuntime.usage`) reports plan usage windows. It takes no input beyond
+the location query and has the same auth as the other harness routes.
+
+- **Claude credential read.** The server reads `claudeAiOauth.accessToken` and
+  `expiresAt` from `$CLAUDE_CONFIG_DIR/.credentials.json` or
+  `~/.claude/.credentials.json` on each uncached call. The token stays in the
+  server process. It is never returned to the renderer, logged, written to disk
+  or put in a URL; it is sent only in the `Authorization` header of the usage
+  request. Expired tokens are not refreshed, and the app never writes the file.
+- **Outbound call.** `GET https://api.anthropic.com/api/oauth/usage` with
+  `anthropic-beta: oauth-2025-04-20`, at most once a minute per location
+  runtime (the server caches each report for 60 s; the sheet asks at most once
+  a minute while open). The response is parsed into percentages and reset
+  times only.
+- **Command Code key read.** For an ACP harness that runs the Command Code CLI,
+  the server reads `COMMAND_CODE_API_KEY` from its own environment, else
+  `apiKey` from `~/.commandcode/auth.json`, on each uncached call. Like the
+  Claude token, the key stays in the server process: only in the
+  `Authorization` header, never returned, logged, written or put in a URL.
+- **Outbound call (Command Code).** `GET https://api.commandcode.ai/alpha/whoami?limits=1`
+  and `GET https://api.commandcode.ai/alpha/billing/credits` (with the
+  account's non-secret `orgId` in the query when it has one), under the same
+  60 s cache. These are undocumented endpoints; only the 5-hour and weekly
+  `used`, `cap` and `resetAt` values are kept from the responses.
+- **Codex.** `account/read` and `account/rateLimits/read` go to the user's own
+  `codex app-server`, which holds its own credentials; no token reaches the app.
+- **Reports.** Error reasons are fixed strings or a short protocol message from
+  the harness, never a token or response body.
+
+Known gap: anything that can read the user's home folder can read the same
+Claude and Command Code credential files. The app adds no new copy of them.
 
 ## Harness registration
 
@@ -528,7 +568,13 @@ permission checks on its tools remain the control.
 
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
-picker refreshes don't relaunch every agent.
+picker refreshes don't relaunch every agent. The model lists harnesses report
+and the last availability checks are also kept in `harness-models.json` and
+`harness-probes.json` (without the CLI's error text) in the server data folder,
+rebuildable caches. Their keys are SHA-256 hashes of the instance configuration,
+which can carry API keys, so the files hold harness names, status and model
+names but no configuration or keys; a file that doesn't decode is ignored. The renderer keeps the last harness list
+per server and folder in its own storage (`harness.instances.v1`).
 
 ## Agent-authored SVG in chat
 

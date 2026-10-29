@@ -157,6 +157,26 @@ export const UpdateStatus = Schema.Struct({
 }).annotate({ identifier: "Harness.UpdateStatus" })
 export interface UpdateStatus extends Schema.Schema.Type<typeof UpdateStatus> {}
 
+// Subscription usage a harness reports, one window per limit (for example 5-hour and weekly).
+// `resetsAt` and `checkedAt` are epoch milliseconds.
+export const UsageWindow = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  usedPercent: Schema.Number,
+  resetsAt: Schema.Number.pipe(optional),
+  windowMinutes: Schema.Number.pipe(optional),
+}).annotate({ identifier: "Harness.UsageWindow" })
+export interface UsageWindow extends Schema.Schema.Type<typeof UsageWindow> {}
+
+export const UsageReport = Schema.Struct({
+  instanceID: Schema.String,
+  status: Schema.Literals(["available", "unsupported", "signed-out", "error"]),
+  windows: Schema.Array(UsageWindow),
+  reason: Schema.String.pipe(optional),
+  checkedAt: Schema.Number,
+}).annotate({ identifier: "Harness.UsageReport" })
+export interface UsageReport extends Schema.Schema.Type<typeof UsageReport> {}
+
 export const RefreshInput = Schema.Struct({
   id: Schema.String.pipe(optional),
 }).annotate({ identifier: "Harness.RefreshInput" })

@@ -15,12 +15,15 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Effect, Layer } from "effect"
 import { PlatformError } from "effect/PlatformError"
+import { rmdir } from "node:fs/promises"
 import path from "node:path"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { SecondBrainConflictError, SecondBrainInvalidError } from "../groups/second-brain"
 
-const CALENDAR_PATH = ".second-brain/calendar-v1.json"
+const CALENDAR_PATH = ".tenon/calendar-v1.json"
+// Where earlier builds kept the calendar; the first read moves it into `.tenon`.
+const LEGACY_CALENDAR_PATH = ".second-brain/calendar-v1.json"
 const CALENDAR_LIMIT = 16 * 1024 * 1024
 
 type ApiFailure =
@@ -220,6 +223,7 @@ const calendarFile = Effect.fn("SecondBrain.calendarFile")(function* () {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
   const target = yield* mutation.resolve({ path: CALENDAR_PATH, kind: "file" })
+  yield* migrateCalendar(target)
   // Refuse an oversized calendar before reading it; "too_large" is not moved aside by a save.
   const stat = yield* fs
     .stat(target.canonical)
@@ -230,6 +234,32 @@ const calendarFile = Effect.fn("SecondBrain.calendarFile")(function* () {
     .readFile(target.canonical)
     .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
   return { target, bytes }
+})
+
+/**
+ * Move a calendar from `.second-brain` into `.tenon` when only the old file exists: write the new file,
+ * then remove the old one and its folder if that is now empty. With both present the new one wins and
+ * the old one is left alone. The bytes move as they are, so a damaged file is still moved aside on save.
+ */
+const migrateCalendar = Effect.fn("SecondBrain.migrateCalendar")(function* (target: LocationMutation.Target) {
+  const mutation = yield* LocationMutation.Service
+  const fs = yield* FSUtil.Service
+  const files = yield* FileMutation.Service
+  if (yield* fs.existsSafe(target.canonical)) return
+  const legacy = yield* mutation.resolve({ path: LEGACY_CALENDAR_PATH, kind: "file" })
+  const bytes = yield* fs
+    .readFile(legacy.canonical)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+  if (!bytes) return
+  // A concurrent read may have moved it first; its copy holds the same bytes.
+  yield* files
+    .create({ target, content: bytes })
+    .pipe(Effect.catchTag("FileMutation.TargetExistsError", () => Effect.void))
+  // A concurrent move may have removed it already; FileMutation.remove treats a missing file as done.
+  yield* files.remove({ target: legacy })
+  // rmdir removes the folder only when it is empty; anything else left there keeps it.
+  yield* Effect.tryPromise(() => rmdir(path.dirname(legacy.canonical))).pipe(Effect.ignore)
+  yield* Effect.logInfo("Moved the Second Brain calendar into .tenon")
 })
 
 const decodeCalendar = (bytes: Uint8Array | undefined) =>

@@ -34,10 +34,12 @@ import {
   type ServerRequest,
 } from "./harness/codex-app-server"
 import { HarnessAskUser } from "./harness/ask-user"
+import { HarnessCatalogCache } from "./harness/catalog-cache"
 import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
 import { HarnessSetup } from "./harness/setup"
 import { HarnessUpdate } from "./harness/update"
+import { HarnessUsage } from "./harness/usage"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
 import { FSUtil } from "./fs-util"
@@ -82,6 +84,8 @@ export interface Interface {
   readonly updates: () => Effect.Effect<ReadonlyArray<Harness.UpdateStatus>>
   /** Updates one harness CLI with the package manager that installed it, then restarts its processes. */
   readonly upgrade: (id: string) => Effect.Effect<Harness.UpdateStatus, HarnessUpdate.UpdateError>
+  /** Subscription usage limits of the enabled external harnesses, cached per instance for a minute. */
+  readonly usage: () => Effect.Effect<ReadonlyArray<HarnessUsage.UsageReport>>
   readonly driver: (instanceID: Harness.InstanceID) => Harness.DriverKind | undefined
   readonly stream: (
     input: StreamInput & { readonly instanceID: Harness.InstanceID },
@@ -204,8 +208,7 @@ const layer = Layer.effect(
     const runtimes = new Map<string, CodexRuntime>()
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
-    const probes = new Map<string, { readonly expires: number; readonly instance: Harness.Instance }>()
-    const inflight = new Map<string, Deferred.Deferred<Harness.Instance>>()
+    const probes = new Map<string, ProbeEntry>()
     // Models each harness reported. After catalogTTL a check asks for them again; a failed check
     // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
     const catalogs = new Map<string, { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }>()
@@ -213,42 +216,35 @@ const layer = Layer.effect(
     const commands = new Map<Harness.InstanceID, ReadonlyArray<AcpHarness.AcpCommand>>()
     const instanceKey = (instance: InstanceConfig) =>
       `${instance.id}:${JSON.stringify([instance.name, instance.config])}`
-    const cachedProbe = (
-      instance: InstanceConfig,
-      probe: (
-        known: ReadonlyArray<Harness.Model> | undefined,
-        rediscover: boolean,
-      ) => Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }>,
-    ) => {
-      const key = instanceKey(instance)
-      return Effect.suspend(() => {
-        const cached = probes.get(key)
-        if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
-        // Home, open threads, and Settings list at once on startup and focus; they share one check.
-        const running = inflight.get(key)
-        if (running) return Deferred.await(running)
-        const done = Deferred.makeUnsafe<Harness.Instance>()
-        inflight.set(key, done)
-        const catalog = catalogs.get(key)
-        const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
-        return probe(catalog?.models, rediscover).pipe(
-          Effect.map((result) => {
-            // Background discovery finished first: this result holds the older list, so nothing is cached.
-            if (catalogs.get(key) !== catalog) return result.instance
-            // A failed rediscovery still counts as checked, so it isn't retried on every probe.
-            if (result.discovered || rediscover)
-              catalogs.set(key, { models: result.discovered ?? catalog!.models, checked: Date.now() })
-            const ttl = result.instance.status === "available" ? probeTTL : failedProbeTTL
-            probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
-            return result.instance
-          }),
-          // An interrupted check (the caller went away) still releases everyone waiting on it.
-          Effect.onExit((exit) =>
-            Effect.sync(() => inflight.delete(key)).pipe(Effect.andThen(Deferred.done(done, exit))),
-          ),
-        )
-      })
+    // Lists from the last run seed the catalogs, so the first listing after a restart already has models.
+    // Their `checked` time is kept, so the usual catalogTTL still decides when to ask the harness again.
+    const stored = yield* HarnessCatalogCache.read(global.data)
+    for (const instance of latest) {
+      const entry = stored[HarnessCatalogCache.id(instanceKey(instance))]
+      if (entry) catalogs.set(instanceKey(instance), entry)
     }
+    const setCatalog = (key: string, models: ReadonlyArray<Harness.Model>) => {
+      const entry = { models, checked: Date.now() }
+      catalogs.set(key, entry)
+      return HarnessCatalogCache.write(global.data, key, entry)
+    }
+    // Checks from the last run answer the first listing after a restart while the real check runs.
+    const storedProbes = yield* HarnessCatalogCache.readProbes(global.data)
+    const lastProbes = new Map(
+      latest.flatMap((instance) => {
+        const entry = storedProbes[HarnessCatalogCache.id(instanceKey(instance))]
+        return entry ? [[instanceKey(instance), entry] as const] : []
+      }),
+    )
+    const probeCached = makeCachedProbe({
+      catalogs,
+      probes,
+      stored: lastProbes,
+      setCatalog,
+      persist: (key, instance) => HarnessCatalogCache.writeProbe(global.data, key, instance),
+      scope: layerScope,
+    })
+    const cachedProbe = (instance: InstanceConfig, probe: Probe) => probeCached(instanceKey(instance), instance, probe)
     // Listing an ACP agent's models opens a session and switches to each model once (about 10s for
     // Claude Code), so it runs beside the listing; its result reaches the picker on the next list.
     const discovering = new Set<string>()
@@ -256,26 +252,40 @@ const layer = Layer.effect(
       const key = instanceKey(instance)
       if (discovering.has(key)) return Effect.void
       discovering.add(key)
-      return AcpHarness.discover(process, settings, location.directory).pipe(
-        Effect.tap((agent) =>
-          Effect.sync(() => {
-            catalogs.set(key, { models: agent.models, checked: Date.now() })
-            probes.delete(key)
-          }),
-        ),
+      return discoverModels(instance, settings).pipe(
         Effect.ignore,
         Effect.ensuring(Effect.sync(() => discovering.delete(key))),
         Effect.forkIn(layerScope),
         Effect.asVoid,
       )
     }
+    // Asks an ACP agent for its models, stores the list, and drops the check that predates it.
+    const discoverModels = (instance: InstanceConfig, settings: AcpHarness.Settings) => {
+      const key = instanceKey(instance)
+      const started = Date.now()
+      return AcpHarness.discover(process, settings, location.directory).pipe(
+        Effect.tap((agent) =>
+          Effect.logInfo("harness model discovery", {
+            instanceID: instance.id,
+            driver: instance.driver,
+            models: agent.models.length,
+            durationMs: Date.now() - started,
+          }),
+        ),
+        Effect.tap((agent) =>
+          setCatalog(key, agent.models).pipe(Effect.andThen(Effect.sync(() => probes.delete(key)))),
+        ),
+      )
+    }
     // Ends the harness processes behind open threads; each reconnects on its next message.
-    const closeRuntimes = (id: string) =>
+    const closeRuntimes = (id: string) => closeRuntimesWhere((key) => key.startsWith(`${id}:`))
+    // Runtime keys are `${instanceID}:${sessionID}:${revision}`.
+    const closeRuntimesWhere = (matches: (key: string) => boolean) =>
       Effect.forEach(
         [runtimes, acpRuntimes] as const,
         (map) =>
           Effect.forEach(
-            [...map.entries()].filter(([key]) => key.startsWith(`${id}:`)),
+            [...map.entries()].filter(([key]) => matches(key)),
             ([key, runtime]) =>
               Effect.sync(() => map.delete(key)).pipe(Effect.andThen(Scope.close(runtime.scope, Exit.void))),
             { discard: true },
@@ -298,18 +308,15 @@ const layer = Layer.effect(
               ? AcpHarness.decodeSettings(instance.config)
               : undefined
           if (!instance || !settings) return Effect.void
-          const key = instanceKey(instance)
-          return AcpHarness.discover(process, settings, location.directory).pipe(
-            Effect.tap((agent) =>
-              Effect.sync(() => {
-                catalogs.set(key, { models: agent.models, checked: Date.now() })
-                probes.delete(key)
-              }),
-            ),
-            Effect.ignore,
-          )
+          return discoverModels(instance, settings).pipe(Effect.ignore)
         }),
       )
+
+    // A committed rollback removed turns the native sessions still hold; their next turn reconnects fresh.
+    const unlisten = yield* closeOnRevertCommit(events, (sessionID) =>
+      closeRuntimesWhere((key) => key.includes(`:${sessionID}:`)),
+    )
+    yield* Effect.addFinalizer(() => unlisten)
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
@@ -528,7 +535,7 @@ const layer = Layer.effect(
       }
       // Each opened session reports the agent's current models; the picker shows them on its next check.
       if (session.models.length > 0) {
-        catalogs.set(instanceKey(instance), { models: session.models, checked: Date.now() })
+        yield* setCatalog(instanceKey(instance), session.models)
         probes.delete(instanceKey(instance))
       }
       return {
@@ -817,6 +824,69 @@ const layer = Layer.effect(
         )
         return { ...result, close }
       })
+    const usageCache = HarnessUsage.makeCache()
+    // Codex reports its own limits over the app-server: an open thread's connection is reused, or a short-lived one opens.
+    const codexUsage = (instance: InstanceConfig) => {
+      const read = (client: CodexClient) =>
+        client.request("account/read", {}).pipe(
+          Effect.flatMap((response): Effect.Effect<HarnessUsage.Result, ProtocolError> => {
+            const account = isRecord(response) && isRecord(response.account) ? response.account : undefined
+            if (!account && readAccount(response).available)
+              return Effect.succeed(HarnessUsage.unsupported("Codex uses a custom provider without plan limits."))
+            if (!account) return Effect.succeed({ status: "signed-out", windows: [] })
+            if (account.type !== "chatgpt")
+              return Effect.succeed(HarnessUsage.unsupported("Usage limits apply to ChatGPT sign-ins, not API keys."))
+            return client
+              .request("account/rateLimits/read", { excludeResetCreditDetails: true })
+              .pipe(Effect.map((body) => ({ status: "available", windows: HarnessUsage.parseCodexRateLimits(body) })))
+          }),
+        )
+      const open = [...runtimes.entries()].find(([key]) => key.startsWith(`${instance.id}:`))?.[1]
+      if (open) return read(open.client)
+      return Effect.scoped(
+        openCodex(process, decodeCodexSettings(instance.config), os.homedir()).pipe(
+          Effect.flatMap((opened) => read(opened.client)),
+        ),
+      )
+    }
+    // The OAuth token is read here and sent only to api.anthropic.com; it never leaves this process otherwise.
+    const claudeUsage = (keys: HarnessSetup.Keys) =>
+      keys[Harness.ClaudeCode]
+        ? Effect.succeed(HarnessUsage.unsupported("Usage limits apply to Claude sign-ins, not API keys."))
+        : HarnessUsage.readClaudeToken().pipe(
+            Effect.flatMap((token): Effect.Effect<HarnessUsage.Result, Error> => {
+              if (token.status === "valid") return HarnessUsage.fetchClaudeUsage(token.token)
+              if (token.status === "expired")
+                return Effect.succeed({ status: "signed-out", windows: [], reason: "Claude Code sign-in has expired." })
+              // Signed in without a credentials file: on macOS Claude Code keeps the token in the keychain.
+              const recipe = HarnessSetup.recipe(Harness.ClaudeCode)
+              return (recipe ? HarnessSetup.signedIn(recipe) : Effect.succeed("signed-out" as const)).pipe(
+                Effect.map(
+                  (auth): HarnessUsage.Result =>
+                    auth === "signed-in"
+                      ? HarnessUsage.unsupported("Claude Code keeps its sign-in where the app can't read it.")
+                      : { status: "signed-out", windows: [] },
+                ),
+              )
+            }),
+          )
+    const usageSource = (instance: InstanceConfig, keys: HarnessSetup.Keys) => {
+      if (instance.driver === Harness.CodexDriver) return codexUsage(instance)
+      if (instance.id === Harness.ClaudeCode) return claudeUsage(keys)
+      // Command Code is a user-registered ACP agent, recognized by the CLI its command runs. Its key stays here.
+      if (
+        instance.driver === Harness.AcpDriver &&
+        HarnessUsage.isCommandCode(AcpHarness.decodeSettings(instance.config)?.command)
+      )
+        return HarnessUsage.readCommandCodeKey().pipe(
+          Effect.flatMap(
+            (key): Effect.Effect<HarnessUsage.Result, Error> =>
+              key ? HarnessUsage.fetchCommandCodeUsage(key) : Effect.succeed({ status: "signed-out", windows: [] }),
+          ),
+        )
+      // Neither OpenCode nor other ACP agents report plan usage to the app.
+      return Effect.succeed(HarnessUsage.unsupported(`${instance.name} doesn't report usage limits.`))
+    }
     // Only one browser login at a time: Codex's callback listens on a fixed local port.
     let pendingLogin: Effect.Effect<void> | undefined
 
@@ -887,6 +957,17 @@ const layer = Layer.effect(
           yield* instances
           return yield* setupChanged(item)
         }),
+      // The in-process default agent runs on provider API keys, so it has no harness plan to report.
+      usage: () =>
+        Effect.all([instances, HarnessSetup.readKeys(global.data)]).pipe(
+          Effect.flatMap(([current, keys]) =>
+            usageCache(
+              current
+                .filter((instance) => instance.enabled && instance.driver !== Harness.OpenCodeDriver)
+                .map((instance) => ({ instanceID: instance.id, read: usageSource(instance, keys) })),
+            ),
+          ),
+        ),
       reportedCommands: (id) => commands.get(id),
       updates: () =>
         instances.pipe(
@@ -1590,6 +1671,87 @@ function approve(
   options?: PermissionV2.AssertOptions,
 ) {
   return Effect.exit(permissions.assert(input, options)).pipe(Effect.map(Exit.isSuccess))
+}
+
+type Catalog = { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }
+type ProbeEntry = { readonly expires: number; readonly instance: Harness.Instance }
+type Probe = (
+  known: ReadonlyArray<Harness.Model> | undefined,
+  rediscover: boolean,
+) => Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }>
+
+/**
+ * One availability check per instance key at a time, reused for probeTTL (failedProbeTTL after a failure).
+ * `stored` holds the results the last run saved: the first check after a restart answers with that result
+ * at once and runs the real check in the background (stale-while-revalidate), whose result replaces it.
+ */
+export function makeCachedProbe(state: {
+  readonly catalogs: Map<string, Catalog>
+  readonly probes: Map<string, ProbeEntry>
+  readonly stored: Map<string, Harness.Instance>
+  readonly setCatalog: (key: string, models: ReadonlyArray<Harness.Model>) => Effect.Effect<void>
+  readonly persist: (key: string, instance: Harness.Instance) => Effect.Effect<void>
+  readonly scope: Scope.Scope
+}) {
+  const inflight = new Map<string, Deferred.Deferred<Harness.Instance>>()
+  return (key: string, instance: Pick<InstanceConfig, "id" | "driver">, probe: Probe) =>
+    Effect.suspend(() => {
+      const cached = state.probes.get(key)
+      if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
+      const last = state.stored.get(key)
+      const stale = last && { ...last, models: state.catalogs.get(key)?.models ?? last.models }
+      // Home, open threads, and Settings list at once on startup and focus; they share one check.
+      const running = inflight.get(key)
+      if (running) return stale ? Effect.succeed(stale) : Deferred.await(running)
+      const done = Deferred.makeUnsafe<Harness.Instance>()
+      inflight.set(key, done)
+      const catalog = state.catalogs.get(key)
+      const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
+      const started = Date.now()
+      const check = probe(catalog?.models, rediscover).pipe(
+        Effect.tap((result) =>
+          Effect.logInfo("harness check", {
+            instanceID: instance.id,
+            driver: instance.driver,
+            status: result.instance.status,
+            durationMs: Date.now() - started,
+          }),
+        ),
+        // A failed check is stored too, so the next start shows the harness as it was last seen.
+        Effect.tap((result) =>
+          Effect.sync(() => state.stored.delete(key)).pipe(Effect.andThen(state.persist(key, result.instance))),
+        ),
+        Effect.flatMap((result) => {
+          // Background discovery finished first: this result holds the older list, so nothing is cached.
+          if (state.catalogs.get(key) !== catalog) return Effect.succeed(result.instance)
+          const ttl = result.instance.status === "available" ? probeTTL : failedProbeTTL
+          state.probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
+          // A failed rediscovery still counts as checked, so it isn't retried on every probe.
+          if (!result.discovered && !rediscover) return Effect.succeed(result.instance)
+          return state.setCatalog(key, result.discovered ?? catalog!.models).pipe(Effect.as(result.instance))
+        }),
+        // An interrupted check (the caller went away) still releases everyone waiting on it.
+        Effect.onExit((exit) =>
+          Effect.sync(() => inflight.delete(key)).pipe(Effect.andThen(Deferred.done(done, exit))),
+        ),
+      )
+      if (!stale) return check
+      return check.pipe(Effect.forkIn(state.scope), Effect.as(stale))
+    })
+}
+
+/**
+ * Runs `close` for each committed rollback. An `events.listen` listener runs inside the commit's publish,
+ * so the session's runtimes are gone before `SessionV2.prompt` admits the prompt and wakes the next turn
+ * (a `subscribe` stream would run later and could close the runtime that turn just opened).
+ */
+export function closeOnRevertCommit(events: EventV2.Interface, close: (sessionID: SessionID) => Effect.Effect<void>) {
+  return events.listen((event) => {
+    const sessionID: unknown = isRecord(event.data) ? event.data.sessionID : undefined
+    return event.type === SessionEvent.RevertEvent.Committed.type && typeof sessionID === "string"
+      ? close(SessionID.make(sessionID))
+      : Effect.void
+  })
 }
 
 function readContinuation(

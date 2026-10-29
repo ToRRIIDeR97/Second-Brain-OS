@@ -687,7 +687,7 @@ export function createSidebarController() {
       id: "session.new",
       title: language.t("command.session.new"),
       category: language.t("command.category.session"),
-      keybind: "mod+n",
+      keybind: "mod+n,mod+t",
       slash: "new",
       onSelect: () => newThread(),
     },
