@@ -32,9 +32,9 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
 
   <content_rating type="oars-1.1" />
 
-  <url type="bugtracker">https://github.com/ToRRIIDeR97/Second-Brain-OS/issues</url>
-  <url type="homepage">https://github.com/ToRRIIDeR97/Second-Brain-OS</url>
-  <url type="vcs-browser">https://github.com/ToRRIIDeR97/Second-Brain-OS</url>
+  <url type="bugtracker">https://github.com/ToRRIIDeR97/Tenon-Workbench/issues</url>
+  <url type="homepage">https://github.com/ToRRIIDeR97/Tenon-Workbench</url>
+  <url type="vcs-browser">https://github.com/ToRRIIDeR97/Tenon-Workbench</url>
 </component>
 `
 
