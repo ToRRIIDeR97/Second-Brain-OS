@@ -2159,8 +2159,9 @@ export default function Page() {
         <div
           ref={sessionPanel}
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-            "duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
+            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
+            // The whole transition goes during a drag: a bare transition-[width] still eases each frame over 150ms.
+            "transition-[width] duration-medium ease-emphasized-decelerate will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
           style={{
