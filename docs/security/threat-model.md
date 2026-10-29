@@ -532,10 +532,11 @@ permission checks on its tools remain the control.
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
 picker refreshes don't relaunch every agent. The model lists harnesses report
-are also kept in `harness-models.json` in the server data folder, a rebuildable
-cache. Its keys are SHA-256 hashes of the instance configuration, which can
-carry API keys, so the file holds model names but no configuration or keys; a
-file that doesn't decode is ignored. The renderer keeps the last harness list
+and the last availability checks are also kept in `harness-models.json` and
+`harness-probes.json` (without the CLI's error text) in the server data folder,
+rebuildable caches. Their keys are SHA-256 hashes of the instance configuration,
+which can carry API keys, so the files hold harness names, status and model
+names but no configuration or keys; a file that doesn't decode is ignored. The renderer keeps the last harness list
 per server and folder in its own storage (`harness.instances.v1`).
 
 ## Agent-authored SVG in chat

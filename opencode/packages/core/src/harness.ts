@@ -205,8 +205,7 @@ const layer = Layer.effect(
     const runtimes = new Map<string, CodexRuntime>()
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
-    const probes = new Map<string, { readonly expires: number; readonly instance: Harness.Instance }>()
-    const inflight = new Map<string, Deferred.Deferred<Harness.Instance>>()
+    const probes = new Map<string, ProbeEntry>()
     // Models each harness reported. After catalogTTL a check asks for them again; a failed check
     // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
     const catalogs = new Map<string, { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }>()
@@ -226,50 +225,23 @@ const layer = Layer.effect(
       catalogs.set(key, entry)
       return HarnessCatalogCache.write(global.data, key, entry)
     }
-    const cachedProbe = (
-      instance: InstanceConfig,
-      probe: (
-        known: ReadonlyArray<Harness.Model> | undefined,
-        rediscover: boolean,
-      ) => Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }>,
-    ) => {
-      const key = instanceKey(instance)
-      return Effect.suspend(() => {
-        const cached = probes.get(key)
-        if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
-        // Home, open threads, and Settings list at once on startup and focus; they share one check.
-        const running = inflight.get(key)
-        if (running) return Deferred.await(running)
-        const done = Deferred.makeUnsafe<Harness.Instance>()
-        inflight.set(key, done)
-        const catalog = catalogs.get(key)
-        const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
-        const started = Date.now()
-        return probe(catalog?.models, rediscover).pipe(
-          Effect.tap((result) =>
-            Effect.logInfo("harness check", {
-              instanceID: instance.id,
-              driver: instance.driver,
-              status: result.instance.status,
-              durationMs: Date.now() - started,
-            }),
-          ),
-          Effect.flatMap((result) => {
-            // Background discovery finished first: this result holds the older list, so nothing is cached.
-            if (catalogs.get(key) !== catalog) return Effect.succeed(result.instance)
-            const ttl = result.instance.status === "available" ? probeTTL : failedProbeTTL
-            probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
-            // A failed rediscovery still counts as checked, so it isn't retried on every probe.
-            if (!result.discovered && !rediscover) return Effect.succeed(result.instance)
-            return setCatalog(key, result.discovered ?? catalog!.models).pipe(Effect.as(result.instance))
-          }),
-          // An interrupted check (the caller went away) still releases everyone waiting on it.
-          Effect.onExit((exit) =>
-            Effect.sync(() => inflight.delete(key)).pipe(Effect.andThen(Deferred.done(done, exit))),
-          ),
-        )
-      })
-    }
+    // Checks from the last run answer the first listing after a restart while the real check runs.
+    const storedProbes = yield* HarnessCatalogCache.readProbes(global.data)
+    const lastProbes = new Map(
+      latest.flatMap((instance) => {
+        const entry = storedProbes[HarnessCatalogCache.id(instanceKey(instance))]
+        return entry ? [[instanceKey(instance), entry] as const] : []
+      }),
+    )
+    const probeCached = makeCachedProbe({
+      catalogs,
+      probes,
+      stored: lastProbes,
+      setCatalog,
+      persist: (key, instance) => HarnessCatalogCache.writeProbe(global.data, key, instance),
+      scope: layerScope,
+    })
+    const cachedProbe = (instance: InstanceConfig, probe: Probe) => probeCached(instanceKey(instance), instance, probe)
     // Listing an ACP agent's models opens a session and switches to each model once (about 10s for
     // Claude Code), so it runs beside the listing; its result reaches the picker on the next list.
     const discovering = new Set<string>()
@@ -1622,6 +1594,73 @@ function approve(
   options?: PermissionV2.AssertOptions,
 ) {
   return Effect.exit(permissions.assert(input, options)).pipe(Effect.map(Exit.isSuccess))
+}
+
+type Catalog = { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }
+type ProbeEntry = { readonly expires: number; readonly instance: Harness.Instance }
+type Probe = (
+  known: ReadonlyArray<Harness.Model> | undefined,
+  rediscover: boolean,
+) => Effect.Effect<{ readonly instance: Harness.Instance; readonly discovered?: ReadonlyArray<Harness.Model> }>
+
+/**
+ * One availability check per instance key at a time, reused for probeTTL (failedProbeTTL after a failure).
+ * `stored` holds the results the last run saved: the first check after a restart answers with that result
+ * at once and runs the real check in the background (stale-while-revalidate), whose result replaces it.
+ */
+export function makeCachedProbe(state: {
+  readonly catalogs: Map<string, Catalog>
+  readonly probes: Map<string, ProbeEntry>
+  readonly stored: Map<string, Harness.Instance>
+  readonly setCatalog: (key: string, models: ReadonlyArray<Harness.Model>) => Effect.Effect<void>
+  readonly persist: (key: string, instance: Harness.Instance) => Effect.Effect<void>
+  readonly scope: Scope.Scope
+}) {
+  const inflight = new Map<string, Deferred.Deferred<Harness.Instance>>()
+  return (key: string, instance: Pick<InstanceConfig, "id" | "driver">, probe: Probe) =>
+    Effect.suspend(() => {
+      const cached = state.probes.get(key)
+      if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
+      const last = state.stored.get(key)
+      const stale = last && { ...last, models: state.catalogs.get(key)?.models ?? last.models }
+      // Home, open threads, and Settings list at once on startup and focus; they share one check.
+      const running = inflight.get(key)
+      if (running) return stale ? Effect.succeed(stale) : Deferred.await(running)
+      const done = Deferred.makeUnsafe<Harness.Instance>()
+      inflight.set(key, done)
+      const catalog = state.catalogs.get(key)
+      const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
+      const started = Date.now()
+      const check = probe(catalog?.models, rediscover).pipe(
+        Effect.tap((result) =>
+          Effect.logInfo("harness check", {
+            instanceID: instance.id,
+            driver: instance.driver,
+            status: result.instance.status,
+            durationMs: Date.now() - started,
+          }),
+        ),
+        // A failed check is stored too, so the next start shows the harness as it was last seen.
+        Effect.tap((result) =>
+          Effect.sync(() => state.stored.delete(key)).pipe(Effect.andThen(state.persist(key, result.instance))),
+        ),
+        Effect.flatMap((result) => {
+          // Background discovery finished first: this result holds the older list, so nothing is cached.
+          if (state.catalogs.get(key) !== catalog) return Effect.succeed(result.instance)
+          const ttl = result.instance.status === "available" ? probeTTL : failedProbeTTL
+          state.probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
+          // A failed rediscovery still counts as checked, so it isn't retried on every probe.
+          if (!result.discovered && !rediscover) return Effect.succeed(result.instance)
+          return state.setCatalog(key, result.discovered ?? catalog!.models).pipe(Effect.as(result.instance))
+        }),
+        // An interrupted check (the caller went away) still releases everyone waiting on it.
+        Effect.onExit((exit) =>
+          Effect.sync(() => inflight.delete(key)).pipe(Effect.andThen(Deferred.done(done, exit))),
+        ),
+      )
+      if (!stale) return check
+      return check.pipe(Effect.forkIn(state.scope), Effect.as(stale))
+    })
 }
 
 /**

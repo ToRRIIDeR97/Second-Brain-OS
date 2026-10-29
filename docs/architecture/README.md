@@ -642,8 +642,12 @@ The picker shows the models each harness reports, not a list saved when the
 harness was added. `HarnessRuntime` in `core/src/harness.ts` keeps two
 caches per instance configuration:
 
-- An availability check, in memory, reused for 30 seconds, or 5 seconds after
-  a failure.
+- An availability check, reused for 30 seconds, or 5 seconds after a failure
+  (`makeCachedProbe`). Each result, failed ones included, is also written to
+  `harness-probes.json` beside the model cache, without its CLI error text. On
+  the first listing after a restart the stored result answers at once and the
+  real check runs in the background (stale-while-revalidate), so a slow CLI
+  (Command Code takes about 5 seconds) no longer holds up `/api/harness`.
 - The last model list the harness reported. After 10 minutes the next check
   asks the harness again; if that fails, the old list stays and counts as
   checked. The lists are also written to `harness-models.json` in the XDG data
@@ -683,7 +687,10 @@ minute, and keeps showing the last list until the answer arrives. The renderer
 also remembers the last good list per server and folder
 (`listHarnessesRemembered` in `app/src/utils/server.ts`) and persists it
 (`Persist.global("harness.instances.v1")` in
-`app/src/components/prompt-input/harness-controller.ts`), so after a restart
+`app/src/components/prompt-input/harness-controller.ts`). The persisted copy is
+keyed by the connection's `ServerConnection.key` and folder
+(`persistedHarnessKey`), because the desktop sidecar gets a new port on every
+launch; the in-memory copy stays keyed by URL. So after a restart
 the picker works from the last list before the server has checked again. A
 composer that opens shows it at once and checks in the background, and Brain Home uses it as
 placeholder data after its query is collected. A failed check shows the fallback

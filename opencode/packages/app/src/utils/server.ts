@@ -150,8 +150,8 @@ export async function listHarnessesForServer(
 // check runs, so opening a thread doesn't wait on the server starting every harness CLI. Every check
 // replaces it; a failed check is never kept.
 const recentHarnesses = new Map<string, ReadonlyArray<HarnessSchema.Instance>>()
-// Also the key a persisted list is stored under (harness-controller.ts).
-export const recentHarnessKey = (url: string, directory: string) => `${url}\n${directory}`
+// The persisted list (harness-controller.ts) uses the same shape with the connection key in place of the URL.
+export const recentHarnessKey = (server: string, directory: string) => `${server}\n${directory}`
 
 export function rememberedHarnesses(url: string, directory: string) {
   return recentHarnesses.get(recentHarnessKey(url, directory))

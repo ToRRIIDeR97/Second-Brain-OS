@@ -6,6 +6,7 @@ import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSettings, withVisibleModels } from "@/context/settings"
 import { Persist, persisted } from "@/utils/persist"
+import { ServerConnection } from "@/context/server"
 import { listHarnessesRemembered, recentHarnessKey, rememberedHarnesses } from "@/utils/server"
 import type { PromptInputHarnessController } from "./harness-controls"
 
@@ -40,6 +41,13 @@ export const MODEL_RETRIES = 10
 const [settingsVersion, setSettingsVersion] = createSignal(0)
 export const harnessSettingsChanged = () => setSettingsVersion((value) => value + 1)
 
+/**
+ * Where a server's persisted harness list is stored for a folder. The desktop sidecar gets a new port on
+ * every launch, so this uses the connection's stable key (as drafts do), not its URL.
+ */
+export const persistedHarnessKey = (server: ServerConnection.Any, directory: string) =>
+  recentHarnessKey(ServerConnection.key(server), directory)
+
 export function createPromptHarnessController(selection: HarnessSelection) {
   const sdk = useSDK()
   const platform = usePlatform()
@@ -52,14 +60,14 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     Persist.global("harness.instances.v1"),
     createStore<Record<string, ReadonlyArray<Harness.Instance>>>({}),
   )
-  const storedList = () => stored[recentHarnessKey(server().server.url, sdk().directory)]
+  const storedList = () => stored[persistedHarnessKey(serverSDK().server, sdk().directory)]
   // A list another composer or Home already loaded shows at once; this composer still checks.
   const remembered = rememberedHarnesses(server().server.url, sdk().directory) ?? storedList()
   const [loaded, { refetch }] = createResource(
     () => ({ directory: sdk().directory, version: settingsVersion() }),
     ({ directory }) =>
       listHarnessesRemembered(server(), directory, (list) =>
-        setStored(recentHarnessKey(server().server.url, directory), list),
+        setStored(persistedHarnessKey(serverSDK().server, directory), list),
       ),
     // Only a present `initialValue` counts as resolved, so the key is left out when nothing is remembered.
     (remembered ? { initialValue: remembered } : {}) as { initialValue: ReadonlyArray<Harness.Instance> },
