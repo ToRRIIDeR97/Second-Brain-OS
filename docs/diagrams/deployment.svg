@@ -116,8 +116,7 @@
 <rect class="store" x="510" y="430" width="230" height="90" rx="6"/>
 <text x="520" y="448" text-anchor="start" class="t">Workspace directories</text>
 <text x="520" y="464" text-anchor="start" class="s">notes/, projects/* (Projects)</text>
-<text x="520" y="480" text-anchor="start" class="s">.tenon/ (cards, manifest)</text>
-<text x="520" y="496" text-anchor="start" class="s">.second-brain/</text>
+<text x="520" y="480" text-anchor="start" class="s">.tenon/ (cards, manifest, calendar)</text>
 <rect class="ext" x="800" y="100" width="180" height="60" rx="6"/>
 <text x="810" y="118" text-anchor="start" class="t">Google APIs</text>
 <text x="810" y="134" text-anchor="start" class="s">oauth2, calendar v3,</text>

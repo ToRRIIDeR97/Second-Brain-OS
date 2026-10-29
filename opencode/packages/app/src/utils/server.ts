@@ -150,17 +150,26 @@ export async function listHarnessesForServer(
 // check runs, so opening a thread doesn't wait on the server starting every harness CLI. Every check
 // replaces it; a failed check is never kept.
 const recentHarnesses = new Map<string, ReadonlyArray<HarnessSchema.Instance>>()
-const recentHarnessKey = (url: string, directory: string) => `${url}\n${directory}`
+// Also the key a persisted list is stored under (harness-controller.ts).
+export const recentHarnessKey = (url: string, directory: string) => `${url}\n${directory}`
 
 export function rememberedHarnesses(url: string, directory: string) {
   return recentHarnesses.get(recentHarnessKey(url, directory))
 }
 
-/** Lists the harnesses for a folder and remembers the answer. A failed check returns the fallback list. */
-export async function listHarnessesRemembered(input: Parameters<typeof listHarnessesForServer>[0], directory: string) {
+/**
+ * Lists the harnesses for a folder and remembers the answer, also through `keep` (which persists it).
+ * A failed check returns the fallback list and keeps nothing.
+ */
+export async function listHarnessesRemembered(
+  input: Parameters<typeof listHarnessesForServer>[0],
+  directory: string,
+  keep?: (list: ReadonlyArray<HarnessSchema.Instance>) => void,
+) {
   const list = await listHarnessesForServer(input, directory).catch(() => undefined)
   if (!list) return fallbackHarnesses()
   recentHarnesses.set(recentHarnessKey(input.server.url, directory), list)
+  keep?.(list)
   return list
 }
 

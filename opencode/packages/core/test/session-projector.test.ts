@@ -264,10 +264,72 @@ describe("SessionProjector", () => {
         messageID: boundary,
         timestamp: DateTime.makeUnsafe(4),
       })
+      // The boundary is the first rolled-back message (the client hides it), so a commit removes it too.
       expect(
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
-      ).toEqual([boundary])
+      ).toEqual([])
     }),
+  )
+
+  it.effect("commits a staged revert when the next prompt is sent", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* seedSession
+      yield* db
+        .update(SessionTable)
+        .set({
+          metadata: {
+            harnessInstanceID: "codex",
+            harnessModel: { id: "gpt-5.5" },
+            harnessRevision: 1,
+            harnessContinuations: { codex: { nativeID: "thread_1", lastSeenMessageID: "msg_third" } },
+            harnessContinuation: { instanceID: "codex", value: "thread_0" },
+          },
+        })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      for (const text of ["first", "second", "third"])
+        yield* events.publish(SessionEvent.Prompted, {
+          sessionID,
+          messageID: SessionMessage.ID.make(`msg_${text}`),
+          timestamp: created,
+          prompt: Prompt.make({ text }),
+          delivery: "steer",
+        })
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        revert: { messageID: SessionMessage.ID.make("msg_second"), files: [] },
+      })
+
+      const sessions = yield* SessionV2.Service
+      yield* sessions.prompt({
+        id: SessionMessage.ID.make("msg_replacement"),
+        sessionID,
+        prompt: { text: "replacement" },
+        resume: false,
+      })
+
+      // The boundary and every later message are gone; the earlier turn stays.
+      expect(
+        (yield* sessions.messages({ sessionID, order: "asc" })).map((message) =>
+          message.type === "user" ? message.text : message.type,
+        ),
+      ).toEqual(["first"])
+      expect(
+        (yield* db
+          .select({ id: SessionInputTable.id })
+          .from(SessionInputTable)
+          .orderBy(asc(SessionInputTable.admitted_seq))
+          .all()).map((row) => row.id),
+      ).toEqual([SessionMessage.ID.make("msg_first"), SessionMessage.ID.make("msg_replacement")])
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      expect(row?.revert).toBeNull()
+      // Native harness sessions still hold the removed turns, so they are dropped; the harness choice stays.
+      expect(row?.metadata).toEqual({ harnessInstanceID: "codex", harnessModel: { id: "gpt-5.5" }, harnessRevision: 1 })
+    }).pipe(Effect.provide(sessionsLayer)),
   )
 
   it.effect("stages a messages-only revert without restoring files", () =>

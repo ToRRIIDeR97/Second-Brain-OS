@@ -34,6 +34,7 @@ import {
   type ServerRequest,
 } from "./harness/codex-app-server"
 import { HarnessAskUser } from "./harness/ask-user"
+import { HarnessCatalogCache } from "./harness/catalog-cache"
 import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
 import { HarnessSetup } from "./harness/setup"
@@ -213,6 +214,18 @@ const layer = Layer.effect(
     const commands = new Map<Harness.InstanceID, ReadonlyArray<AcpHarness.AcpCommand>>()
     const instanceKey = (instance: InstanceConfig) =>
       `${instance.id}:${JSON.stringify([instance.name, instance.config])}`
+    // Lists from the last run seed the catalogs, so the first listing after a restart already has models.
+    // Their `checked` time is kept, so the usual catalogTTL still decides when to ask the harness again.
+    const stored = yield* HarnessCatalogCache.read(global.data)
+    for (const instance of latest) {
+      const entry = stored[HarnessCatalogCache.id(instanceKey(instance))]
+      if (entry) catalogs.set(instanceKey(instance), entry)
+    }
+    const setCatalog = (key: string, models: ReadonlyArray<Harness.Model>) => {
+      const entry = { models, checked: Date.now() }
+      catalogs.set(key, entry)
+      return HarnessCatalogCache.write(global.data, key, entry)
+    }
     const cachedProbe = (
       instance: InstanceConfig,
       probe: (
@@ -231,16 +244,24 @@ const layer = Layer.effect(
         inflight.set(key, done)
         const catalog = catalogs.get(key)
         const rediscover = !!catalog && Date.now() - catalog.checked > catalogTTL
+        const started = Date.now()
         return probe(catalog?.models, rediscover).pipe(
-          Effect.map((result) => {
+          Effect.tap((result) =>
+            Effect.logInfo("harness check", {
+              instanceID: instance.id,
+              driver: instance.driver,
+              status: result.instance.status,
+              durationMs: Date.now() - started,
+            }),
+          ),
+          Effect.flatMap((result) => {
             // Background discovery finished first: this result holds the older list, so nothing is cached.
-            if (catalogs.get(key) !== catalog) return result.instance
-            // A failed rediscovery still counts as checked, so it isn't retried on every probe.
-            if (result.discovered || rediscover)
-              catalogs.set(key, { models: result.discovered ?? catalog!.models, checked: Date.now() })
+            if (catalogs.get(key) !== catalog) return Effect.succeed(result.instance)
             const ttl = result.instance.status === "available" ? probeTTL : failedProbeTTL
             probes.set(key, { expires: Date.now() + ttl, instance: result.instance })
-            return result.instance
+            // A failed rediscovery still counts as checked, so it isn't retried on every probe.
+            if (!result.discovered && !rediscover) return Effect.succeed(result.instance)
+            return setCatalog(key, result.discovered ?? catalog!.models).pipe(Effect.as(result.instance))
           }),
           // An interrupted check (the caller went away) still releases everyone waiting on it.
           Effect.onExit((exit) =>
@@ -256,26 +277,40 @@ const layer = Layer.effect(
       const key = instanceKey(instance)
       if (discovering.has(key)) return Effect.void
       discovering.add(key)
-      return AcpHarness.discover(process, settings, location.directory).pipe(
-        Effect.tap((agent) =>
-          Effect.sync(() => {
-            catalogs.set(key, { models: agent.models, checked: Date.now() })
-            probes.delete(key)
-          }),
-        ),
+      return discoverModels(instance, settings).pipe(
         Effect.ignore,
         Effect.ensuring(Effect.sync(() => discovering.delete(key))),
         Effect.forkIn(layerScope),
         Effect.asVoid,
       )
     }
+    // Asks an ACP agent for its models, stores the list, and drops the check that predates it.
+    const discoverModels = (instance: InstanceConfig, settings: AcpHarness.Settings) => {
+      const key = instanceKey(instance)
+      const started = Date.now()
+      return AcpHarness.discover(process, settings, location.directory).pipe(
+        Effect.tap((agent) =>
+          Effect.logInfo("harness model discovery", {
+            instanceID: instance.id,
+            driver: instance.driver,
+            models: agent.models.length,
+            durationMs: Date.now() - started,
+          }),
+        ),
+        Effect.tap((agent) =>
+          setCatalog(key, agent.models).pipe(Effect.andThen(Effect.sync(() => probes.delete(key)))),
+        ),
+      )
+    }
     // Ends the harness processes behind open threads; each reconnects on its next message.
-    const closeRuntimes = (id: string) =>
+    const closeRuntimes = (id: string) => closeRuntimesWhere((key) => key.startsWith(`${id}:`))
+    // Runtime keys are `${instanceID}:${sessionID}:${revision}`.
+    const closeRuntimesWhere = (matches: (key: string) => boolean) =>
       Effect.forEach(
         [runtimes, acpRuntimes] as const,
         (map) =>
           Effect.forEach(
-            [...map.entries()].filter(([key]) => key.startsWith(`${id}:`)),
+            [...map.entries()].filter(([key]) => matches(key)),
             ([key, runtime]) =>
               Effect.sync(() => map.delete(key)).pipe(Effect.andThen(Scope.close(runtime.scope, Exit.void))),
             { discard: true },
@@ -298,18 +333,15 @@ const layer = Layer.effect(
               ? AcpHarness.decodeSettings(instance.config)
               : undefined
           if (!instance || !settings) return Effect.void
-          const key = instanceKey(instance)
-          return AcpHarness.discover(process, settings, location.directory).pipe(
-            Effect.tap((agent) =>
-              Effect.sync(() => {
-                catalogs.set(key, { models: agent.models, checked: Date.now() })
-                probes.delete(key)
-              }),
-            ),
-            Effect.ignore,
-          )
+          return discoverModels(instance, settings).pipe(Effect.ignore)
         }),
       )
+
+    // A committed rollback removed turns the native sessions still hold; their next turn reconnects fresh.
+    yield* events.subscribe(SessionEvent.RevertEvent.Committed).pipe(
+      Stream.runForEach((event) => closeRuntimesWhere((key) => key.includes(`:${event.data.sessionID}:`))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
@@ -528,7 +560,7 @@ const layer = Layer.effect(
       }
       // Each opened session reports the agent's current models; the picker shows them on its next check.
       if (session.models.length > 0) {
-        catalogs.set(instanceKey(instance), { models: session.models, checked: Date.now() })
+        yield* setCatalog(instanceKey(instance), session.models)
         probes.delete(instanceKey(instance))
       }
       return {

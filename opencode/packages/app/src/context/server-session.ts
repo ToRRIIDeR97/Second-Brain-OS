@@ -1033,6 +1033,19 @@ export function createServerSession(
         next: event.data.at,
       })
     if (event.type === "session.forked") void resolve(sessionID, { force: true }).catch(() => {})
+    // A committed rollback deleted its boundary message and every later one on the server. The prompt that
+    // committed it may already be shown optimistically after them, so that one stays.
+    if (eventType === "session.next.revert.committed") {
+      const boundary = (event.data as { messageID?: string }).messageID
+      const from = (items: { id: string }[] | undefined) => {
+        const index = items?.findIndex((item) => item.id === boundary) ?? -1
+        return index < 0 ? [] : items!.slice(index).map((item) => item.id)
+      }
+      new Set([...from(data.message[sessionID]), ...from(data.session_message[sessionID])]).forEach((messageID) => {
+        if (!optimistic.get(sessionID)?.has(messageID))
+          apply({ type: "message.removed", properties: { sessionID, messageID } })
+      })
+    }
     if (isSessionRevertEvent(eventType)) void resolve(sessionID, { force: true }).catch(() => {})
   }
 
@@ -1049,11 +1062,12 @@ export function createServerSession(
         void resolve(eventID).catch(() => {})
     }
     switch (event.type) {
+      // v1 events keep the harness in `metadata`; normalizing keeps the thread's harness after a title or touch.
       case "session.created":
-        remember((event.properties as { info: Session }).info)
+        remember(normalizeSessionInfo((event.properties as { info: Session }).info))
         return
       case "session.updated": {
-        const info = (event.properties as { info: Session }).info
+        const info = normalizeSessionInfo((event.properties as { info: Session }).info)
         remember(info)
         if (info.time.archived) evict([info.id])
         return

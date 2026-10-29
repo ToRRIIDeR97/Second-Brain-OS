@@ -6,6 +6,32 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Reveal } from "@opencode-ai/ui/v2/reveal"
 import { useLanguage } from "@/context/language"
 import { createExitList } from "./exit-list"
+import type { SessionComposerRevertDock } from "./session-composer-region-controller"
+
+/**
+ * The rollback rows on top of the composer's tray (the context strip and the composer below it). It
+ * folds in through Reveal and, while closing, keeps rendering the last value it had.
+ */
+export function SessionRevertTray(props: { dock: () => SessionComposerRevertDock | undefined }) {
+  const rolled = () => (props.dock()?.items.length ? props.dock() : undefined)
+  const last = createMemo<SessionComposerRevertDock | undefined>((previous) => rolled() ?? previous)
+  // The dock object is rebuilt on every read, so the tray takes accessors instead of remounting (which
+  // would reset its collapsed state, focus and row motion) whenever the rollback or its actions change.
+  return (
+    <Reveal open={!!rolled()}>
+      <Show when={last()}>
+        {(dock) => (
+          <SessionRevertDock
+            items={dock().items}
+            restoring={dock().restoring}
+            disabled={dock().disabled}
+            onRestore={(id) => dock().onRestore(id)}
+          />
+        )}
+      </Show>
+    </Reveal>
+  )
+}
 
 export function SessionRevertDock(props: {
   items: { id: string; text: string }[]
@@ -40,9 +66,12 @@ export function SessionRevertDock(props: {
   }
 
   return (
+    // Same surface and radius as the context strip. The last 14px sit under the next row of the tray
+    // (the strip or the composer), as the strip's own bottom does, so the rows read as one surface.
     <div
       data-component="session-revert-dock"
-      class="w-full overflow-hidden rounded-[24px] bg-v2-background-bg-layer-01"
+      class="w-full overflow-hidden rounded-t-[24px] bg-v2-background-bg-layer-01"
+      style={{ "margin-bottom": "-14px" }}
     >
       <div
         class="flex h-[42px] items-center gap-2 pl-5 pr-3"
@@ -88,8 +117,7 @@ export function SessionRevertDock(props: {
         </div>
       </div>
 
-      {/* The list folds through Reveal and rows expand in and collapse out (createExitList). The 18px below is
-          sacrificial space the composer overlaps via its negative lift, so the header stays fully visible. */}
+      {/* The list folds through Reveal and rows expand in and collapse out (createExitList). */}
       <Reveal open={!store.collapsed}>
         {/* Scroll viewport ends above the composer */}
         <div class="flex max-h-42 flex-col overflow-y-auto px-5 pt-px pb-3 no-scrollbar">
@@ -115,7 +143,7 @@ export function SessionRevertDock(props: {
           </For>
         </div>
       </Reveal>
-      <div class="h-[18px]" aria-hidden="true" />
+      <div class="h-[14px]" aria-hidden="true" />
     </div>
   )
 }

@@ -78,6 +78,9 @@ parsed through `Frontmatter.parse` (`opencode/packages/core/src/frontmatter.ts`)
 which refuses gray-matter's `---js` engine (it would `eval` the block) and any
 front matter over 64 KiB. Cards and the manifest over 1 MiB, notes over 5 MiB
 and the calendar over 16 MiB are refused after a `stat`, before they are read.
+The calendar lives at `.tenon/calendar-v1.json` inside the workspace, resolved
+through `LocationMutation` like the other Second Brain files; a file left at the
+old `.second-brain/calendar-v1.json` is moved there on the first read.
 
 Workspace notes, projects, calendar files, session data, provider tokens, and
 agent tool permissions are sensitive. Treat note contents, provider responses,
@@ -528,7 +531,12 @@ permission checks on its tools remain the control.
 
 Availability probes start each enabled harness command for an `initialize`
 handshake. Results are cached per instance configuration for 30 seconds so
-picker refreshes don't relaunch every agent.
+picker refreshes don't relaunch every agent. The model lists harnesses report
+are also kept in `harness-models.json` in the server data folder, a rebuildable
+cache. Its keys are SHA-256 hashes of the instance configuration, which can
+carry API keys, so the file holds model names but no configuration or keys; a
+file that doesn't decode is ignored. The renderer keeps the last harness list
+per server and folder in its own storage (`harness.instances.v1`).
 
 ## Agent-authored SVG in chat
 

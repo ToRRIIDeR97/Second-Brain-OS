@@ -16,6 +16,7 @@ import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { messageKey } from "@/utils/session-message"
+import { normalizeSessionInfo } from "@/utils/session"
 import { SERVER_EVENT_NAMES, sessionMovedData } from "./event-names"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
@@ -130,7 +131,7 @@ export function applyDirectoryEvent(input: {
       return
     }
     case "session.created": {
-      const info = (event.properties as { info: Session }).info
+      const info = normalizeSessionInfo((event.properties as { info: Session }).info)
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
@@ -145,7 +146,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.updated": {
-      const info = (event.properties as { info: Session }).info
+      const info = normalizeSessionInfo((event.properties as { info: Session }).info)
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
         if (!result.found) break

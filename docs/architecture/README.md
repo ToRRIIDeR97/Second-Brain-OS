@@ -26,7 +26,10 @@ and a coverage index are in [the UML architecture views](uml.md).
   handlers. `packages/opencode` mounts the native `/api` routes from
   `packages/server` (contracts in `packages/protocol`) next to its legacy
   instance routes; the session and harness runtime lives in `packages/core`. Notes and project records use workspace files through the location
-  and file mutation services; calendar data is stored under `.second-brain/`.
+  and file mutation services; calendar data is stored in `.tenon/calendar-v1.json`. The first calendar
+  read moves a file left at the old `.second-brain/calendar-v1.json` into `.tenon`
+  (new file first, then the old one and its folder if empty); when both exist the
+  `.tenon` file wins and the old one is left alone.
 - Former Rust policy and release documents are historical requirements, not
   evidence of controls in the active desktop runtime.
 
@@ -179,7 +182,7 @@ state alive across route changes; it replaced the tab store.
 | Workspace manifest         | `brain.ts`; workspace `.tenon/workspace.json` (linked project folders)                                                |
 | Linked-folder index        | `brain.ts` writes, `core/src/workspace-instructions.ts` reads; `workspace-links.json` in the data folder; rebuilt by a scan; the first workspace to link a folder keeps it |
 | Project thread directories | Derived, not stored: the card's `location.path` folder (inside the workspace, or a checked linked folder), else a linked Workspace worktree, else the card folder; thread counts read from `opencode.db` |
-| Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.second-brain/calendar-v1.json` |
+| Local events and tasks     | Second Brain HTTP handler and `packages/opencode/src/planner/calendar.ts`; workspace `.tenon/calendar-v1.json` |
 | Sessions and runtime state | `packages/core/src/database/` and runtime session services; `opencode.db` in `$XDG_DATA_HOME/tenon-workbench`            |
 | Unsent desktop drafts      | `packages/desktop/src/main/draft-store.ts`; profile `drafts.sqlite`                                                   |
 | Draft list, sidebar state  | `packages/app/src/context/drafts.tsx`, `components/sidebar/sidebar-controller.ts`; per-window `drafts` and `sidebar` keys |
@@ -637,13 +640,22 @@ answer that delegation is turned off.
 
 The picker shows the models each harness reports, not a list saved when the
 harness was added. `HarnessRuntime` in `core/src/harness.ts` keeps two
-in-memory caches per instance configuration:
+caches per instance configuration:
 
-- An availability check, reused for 30 seconds, or 5 seconds after a failure.
+- An availability check, in memory, reused for 30 seconds, or 5 seconds after
+  a failure.
 - The last model list the harness reported. After 10 minutes the next check
   asks the harness again; if that fails, the old list stays and counts as
-  checked. The list is dropped when the server stops, so every app launch
-  reads it again.
+  checked. The lists are also written to `harness-models.json` in the XDG data
+  directory (`core/src/harness/catalog-cache.ts`), keyed by a SHA-256 of the
+  instance configuration because that can hold API keys. The server seeds its
+  lists from that file at startup and keeps each entry's check time, so the
+  10-minute rule still decides when to ask again. The file is a rebuildable
+  cache: a missing or corrupt file only means the next check discovers again.
+
+Each check and each ACP model discovery logs `harness check` or
+`harness model discovery` at info level with the instance ID, driver and
+duration in milliseconds.
 
 An ACP check (`AcpHarness.probe`) runs only the handshake, so a list answers
 in about a second. When no model list is known, or it is 10 minutes old, the
@@ -669,8 +681,11 @@ composer has no refresh button: its harness list revalidates in the background
 when the window regains focus or the harness picker opens, at most once a
 minute, and keeps showing the last list until the answer arrives. The renderer
 also remembers the last good list per server and folder
-(`listHarnessesRemembered` in `app/src/utils/server.ts`). A composer that opens
-shows it at once and checks in the background, and Brain Home uses it as
+(`listHarnessesRemembered` in `app/src/utils/server.ts`) and persists it
+(`Persist.global("harness.instances.v1")` in
+`app/src/components/prompt-input/harness-controller.ts`), so after a restart
+the picker works from the last list before the server has checked again. A
+composer that opens shows it at once and checks in the background, and Brain Home uses it as
 placeholder data after its query is collected. A failed check shows the fallback
 list but never replaces the remembered one. The composer never suspends on the
 list, so opening a thread or a new thread doesn't wait for every harness CLI to
@@ -1031,6 +1046,27 @@ unions `GET /api/session/:sessionID/diff` across the selected turn and every
 later turn, and asks for confirmation with that file list before staging.
 Redoing a messages-only rewind keeps `files: false`. V1 servers always restore
 files, so the compatibility layer rejects `files: false` for them.
+
+The rollback stays staged (the rolled-back messages are hidden, not deleted)
+until the next prompt. `SessionV2.prompt` (`core/src/session.ts`) commits a
+staged revert before it admits the prompt, interrupting a running turn first,
+so every harness and the built-in loop behave the same. A commit
+(`session.next.revert.committed`, projected in `core/src/session/projector.ts`)
+deletes the boundary message and every later message and input, clears the
+revert, and drops the session's harness continuations
+(`metadata.harnessContinuations` and the legacy `harnessContinuation`) while
+keeping its harness choice. `HarnessRuntime` closes the session's open harness
+runtimes on the same event, so the next harness turn starts a fresh native
+session with the trimmed transcript as its handoff. The renderer removes the
+same messages from its store when the event arrives.
+
+The rolled-back messages show as the top row of the composer's tray
+(`SessionRevertTray` in `app/src/pages/session/composer/session-revert-dock.tsx`,
+passed through `PromptInputV2`'s `header` above the context strip): the same
+surface and top radius as the strip, collapsed by default, with Restore on each
+row. Restore on a row restores that message and every earlier rolled-back one;
+a messages-only rewind never restores files when the boundary moves
+(`revertRestoresFiles` in `app/src/utils/session.ts`).
 
 ### Composer context strip
 

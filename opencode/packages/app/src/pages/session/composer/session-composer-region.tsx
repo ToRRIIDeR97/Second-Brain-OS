@@ -5,9 +5,9 @@ import { useLanguage } from "@/context/language"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
 import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
-import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
+import { SessionRevertTray } from "@/pages/session/composer/session-revert-dock"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
-import type { SessionComposerFollowupDock, SessionComposerRevertDock } from "./session-composer-region-controller"
+import type { SessionComposerFollowupDock } from "./session-composer-region-controller"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
 export function SessionComposerRegion(props: {
@@ -16,33 +16,17 @@ export function SessionComposerRegion(props: {
 }) {
   const language = useLanguage()
   const controller = props.controller
-  const rolled = () => {
-    const revert = controller.revert()
-    return revert?.items.length ? revert : undefined
-  }
   // Each dock opens and closes through Reveal, so the region's height eases instead of jumping. A closing
   // dock keeps rendering the last value it had, which these hold once the live value is gone.
   const question = createMemo<QuestionRequest | undefined>((last) => controller.state.questionRequest() ?? last)
   const permission = createMemo<PermissionRequest | undefined>((last) => controller.state.permissionRequest() ?? last)
-  const revert = createMemo<SessionComposerRevertDock | undefined>((last) => rolled() ?? last)
   const followup = createMemo<SessionComposerFollowupDock | undefined>((last) =>
     controller.followup()?.items.length ? controller.followup() : last,
   )
 
-  // The dock objects are rebuilt on every read, so the docks take accessors instead of remounting (which
-  // would reset their collapsed state, focus and row motion) whenever the queue or its actions change.
   // A composer that replaces the handoff placeholder (the prompt was still loading) fades in over it; one
   // that is ready from the start does not.
   const handedOff = !untrack(controller.promptReady)
-
-  const revertDock = (dock: () => SessionComposerRevertDock) => (
-    <SessionRevertDock
-      items={dock().items}
-      restoring={dock().restoring}
-      disabled={dock().disabled}
-      onRestore={(id) => dock().onRestore(id)}
-    />
-  )
 
   return (
     <div
@@ -107,36 +91,23 @@ export function SessionComposerRegion(props: {
             <Show
               when={controller.promptReady()}
               fallback={
-                <>
-                  <Reveal open={!!rolled()}>
-                    <Show when={revert()}>{(dock) => <div class="pb-2">{revertDock(dock)}</div>}</Show>
-                  </Reveal>
-                  <div
-                    class="w-full min-h-32 md:min-h-40 rounded-[28px] bg-v2-background-bg-layer-01 px-5 py-4 text-v2-text-text-faint whitespace-pre-wrap pointer-events-none"
-                    style={{ "margin-top": `${-36 * controller.dockProgress()}px` }}
-                  >
+                <div style={{ "margin-top": `${-36 * controller.dockProgress()}px` }}>
+                  {/* The live composer carries the rollback rows in its own tray; the placeholder stands in for it. */}
+                  <SessionRevertTray dock={controller.revert} />
+                  <div class="w-full min-h-32 md:min-h-40 rounded-[28px] bg-v2-background-bg-layer-01 px-5 py-4 text-v2-text-text-faint whitespace-pre-wrap pointer-events-none">
                     {controller.handoffPrompt() || language.t("prompt.loading")}
                   </div>
-                </>
+                </div>
               }
             >
-              {/* The todo overlap sits here whether or not the revert dock shows, and the composer's own lift
-                  eases with the revert dock's reveal, so the composer's offset never jumps. */}
-              <div style={{ "margin-top": `${-36 * controller.dockProgress()}px` }}>
-                <Reveal open={!!rolled()}>
-                  <Show when={revert()}>{(dock) => revertDock(dock)}</Show>
-                </Reveal>
-              </div>
+              {/* The rollback rows live in the composer's tray (its header), so they fold in with the tray
+                  and the composer below them never jumps. */}
               <div
                 classList={{
-                  "relative z-[70] transition-[margin-top] motion-reduce:transition-none": true,
+                  "relative z-[70]": true,
                   "animate-in fade-in duration-short ease-standard motion-reduce:animate-none": handedOff,
-                  "duration-medium ease-emphasized-decelerate": !!rolled(),
-                  "duration-short ease-emphasized-accelerate": !rolled(),
                 }}
-                style={{
-                  "margin-top": `${-controller.lift()}px`,
-                }}
+                style={{ "margin-top": `${-36 * controller.dockProgress()}px` }}
               >
                 <Reveal open={!!controller.followup()?.items.length}>
                   <Show when={followup()}>

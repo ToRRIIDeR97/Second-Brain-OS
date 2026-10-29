@@ -165,7 +165,7 @@
 <text x="920.0" y="708" text-anchor="middle" class="t">CalendarSnapshot</text>
 <line class="e" x1="800" y1="716" x2="1040" y2="716"/>
 <text x="808" y="732" text-anchor="start" class="s">version 2, revision (ULID)</text>
-<text x="808" y="747" text-anchor="start" class="s">.second-brain/calendar-v1.json</text>
+<text x="808" y="747" text-anchor="start" class="s">.tenon/calendar-v1.json</text>
 <text x="808" y="762" text-anchor="start" class="s">events ≤ 5000, tasks ≤ 5000</text>
 <path class="e " d="M135,179 L135,240" marker-start="url(#dm)"/>
 <path class="e " d="M250,300 L280,300" marker-start="url(#dm)"/>

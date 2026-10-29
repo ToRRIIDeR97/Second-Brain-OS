@@ -460,7 +460,12 @@ const layer = Layer.effect(
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* result.get(input.sessionID)
+            const session = yield* result.get(input.sessionID)
+            // Sending after "Edit from here" makes the staged rollback permanent, for every harness alike.
+            if (session.revert) {
+              if ((yield* execution.active).has(input.sessionID)) yield* execution.interrupt(input.sessionID)
+              yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+            }
             const prompt = resolvePrompt(input.prompt)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"

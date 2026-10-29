@@ -149,7 +149,7 @@ export function ComposerContextRing(props: { context: ComposerContext }) {
  * A slim strip on the composer's top edge with the thread's worktree and Git branch. The context ring
  * unfolds it upward, behind the composer, into a sheet with the context window's use.
  */
-export function ComposerContextStrip(props: { context: ComposerContext }) {
+export function ComposerContextStrip(props: { context: ComposerContext; attached?: boolean }) {
   const sync = useSync()
   const sdk = useSDK()
   const layout = useLayout()
@@ -180,7 +180,9 @@ export function ComposerContextStrip(props: { context: ComposerContext }) {
           aria-label={language.t("secondBrain.contextStrip.sheet")}
           data-slot="context-sheet"
           data-open={props.context.open() ? "" : undefined}
-          class="absolute inset-x-0 bottom-0 grid overflow-hidden rounded-t-[24px] bg-v2-background-bg-layer-01"
+          class="absolute inset-x-0 bottom-0 grid overflow-hidden bg-v2-background-bg-layer-01"
+          // Below the rollback rows the strip continues their surface, so only the open sheet rounds its top.
+          classList={{ "rounded-t-[24px]": !props.attached || props.context.open() }}
         >
           <div data-slot="context-sheet-body" class="min-h-0 overflow-hidden" inert={!props.context.open()}>
             <Show when={props.context.context()}>
