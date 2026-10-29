@@ -95,10 +95,14 @@ Upgrade consequences:
 `app.setPath("userData")` and the single-instance lock, before logging and the
 stores open:
 
-- Only the dev channel (packaged dev builds and unpackaged dev runs) copies
-  from `%APPDATA%/ai.opencode.desktop.dev`. The release workflow only built
-  dev candidates. Beta and prod start fresh because their old folders belong
-  to upstream OpenCode Desktop.
+- Only packaged dev builds copy from `%APPDATA%/ai.opencode.desktop.dev`. The
+  release workflow only built dev candidates. Beta and prod start fresh
+  because their old folders belong to upstream OpenCode Desktop.
+- Unpackaged runs (`bun run dev`) use their own ID,
+  `io.github.torriider97.tenonworkbench.dev.local`, for `userData`, the
+  AppUserModelId and the single-instance lock. They start with fresh settings,
+  never change an installed dev build's saved windows, workspaces or theme, and
+  can run while it is open.
 - Not copied: `Cache`, `Code Cache`, `GPUCache`, `DawnGraphiteCache`,
   `DawnWebGPUCache`, `Crashpad`, `logs`, `cli`, `DevToolsActivePort`,
   `Singleton*`, `lockfile`.
