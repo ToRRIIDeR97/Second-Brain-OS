@@ -499,9 +499,14 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
   // Child threads show while their parent's lineage is on screen.
   const showChildren = () => props.node.children.length > 0 && containsSession(props.node, props.ctrl.activeSessionID())
   let saved = false
+  let input: HTMLInputElement | undefined
+  // A rename picked from the menu focuses the input only once the menu has closed: closing returns focus to
+  // the "…" trigger, which would blur the input and end the edit straight away.
+  let renameFromMenu = false
   const finish = (value: string | undefined) => {
     if (saved) return
     saved = true
+    renameFromMenu = false
     setEditing(false)
     if (value !== undefined) void props.ctrl.renameThread(session(), value)
   }
@@ -509,6 +514,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
   // Each menu item runs from a click or from its single-key hint while the menu has focus.
   const run: Record<ThreadMenuAction, () => void> = {
     rename: () => {
+      renameFromMenu = true
       saved = false
       setEditing(true)
     },
@@ -537,6 +543,7 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
               aria-current={active() ? "page" : undefined}
               onClick={() => props.ctrl.openThread(session())}
               onDblClick={() => {
+                renameFromMenu = false
                 saved = false
                 setEditing(true)
               }}
@@ -564,7 +571,10 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
           }
         >
           <input
-            ref={(el) => queueMicrotask(() => el.select())}
+            ref={(el) => {
+              input = el
+              if (!renameFromMenu) queueMicrotask(() => el.select())
+            }}
             class="mx-1 h-7 min-w-0 rounded-full bg-v2-background-bg-base px-3 text-[13px] text-v2-text-text-base outline-none [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] focus:[box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)]"
             value={session().title ?? ""}
             aria-label={language.t("secondBrain.sidebar.renameThread")}
@@ -595,6 +605,13 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
                   // Same order as a click: the item runs, then the menu closes.
                   run[action]()
                   setMenuOpen(false)
+                }}
+                onCloseAutoFocus={(event) => {
+                  if (!renameFromMenu) return
+                  renameFromMenu = false
+                  event.preventDefault()
+                  input?.focus()
+                  input?.select()
                 }}
               >
                 <MenuV2.Item onSelect={run.rename} shortcut={hint("rename")}>

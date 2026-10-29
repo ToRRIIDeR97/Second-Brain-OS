@@ -25,30 +25,28 @@ export interface UsageReport {
 
 export type Result = Pick<UsageReport, "status" | "windows" | "reason">
 
-const claudeLabels: Record<string, string> = {
-  five_hour: "5-hour",
-  seven_day: "Weekly",
-  seven_day_opus: "Weekly (Opus)",
-  seven_day_sonnet: "Weekly (Sonnet)",
-}
+const claudeWindows = [
+  { id: "five_hour", label: "5-hour" },
+  { id: "seven_day", label: "Weekly" },
+  { id: "seven_day_opus", label: "Weekly (Opus)" },
+  { id: "seven_day_sonnet", label: "Weekly (Sonnet)" },
+] as const
 
 /**
  * Reads Anthropic's OAuth usage response: `{ five_hour: { utilization, resets_at } | null, seven_day: ..., ... }`.
- * Known windows come first in a fixed order, then any other key with the same shape. Malformed input yields `[]`.
+ * Only the known windows are reported, in a fixed order: the response also carries internal keys with the same
+ * shape that aren't meant for people. Malformed input yields `[]`.
  */
 export function parseClaudeUsage(body: unknown): UsageWindow[] {
   if (!isRecord(body)) return []
-  const known = Object.keys(claudeLabels).filter((key) => key in body)
-  const other = Object.keys(body).filter((key) => !(key in claudeLabels))
-  return [...known, ...other].flatMap((key) => {
-    const value = body[key]
-    // Other keys count only with the window shape, so fields like `extra_usage` are skipped.
-    if (!isRecord(value) || !finite(value.utilization) || !(key in claudeLabels || "resets_at" in value)) return []
+  return claudeWindows.flatMap((window) => {
+    const value = body[window.id]
+    if (!isRecord(value) || !finite(value.utilization)) return []
     const resetsAt = typeof value.resets_at === "string" ? Date.parse(value.resets_at) : Number.NaN
     return [
       {
-        id: key,
-        label: claudeLabels[key] ?? keyLabel(key),
+        id: window.id,
+        label: window.label,
         usedPercent: clamp(value.utilization),
         ...(Number.isFinite(resetsAt) ? { resetsAt } : {}),
       },
@@ -246,15 +244,10 @@ function failureReason(cause: Cause.Cause<unknown>) {
 }
 
 function minutesLabel(minutes: number) {
-  if (minutes === 300) return "5-hour"
   if (minutes === 10080) return "Weekly"
+  if (minutes % 1440 === 0) return `${minutes / 1440}-day`
   if (minutes % 60 === 0) return `${minutes / 60}-hour`
   return `${minutes}-minute`
-}
-
-function keyLabel(key: string) {
-  const words = key.split("_").filter(Boolean).join(" ")
-  return words ? words[0]!.toUpperCase() + words.slice(1) : key
 }
 
 function clamp(value: number) {

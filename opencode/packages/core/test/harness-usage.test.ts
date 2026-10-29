@@ -23,18 +23,16 @@ describe("parseClaudeUsage", () => {
     ])
   })
 
-  test("labels unknown windows of the same shape from their key and skips other fields", () => {
+  test("reports only the known windows and drops other keys, even with the same shape", () => {
     expect(
       HarnessUsage.parseClaudeUsage({
-        seven_day_opus: { utilization: 50, resets_at: null },
-        seven_day_oauth_apps: { utilization: 5, resets_at: "not a date" },
+        internal_window: { utilization: 100, resets_at: null },
+        seven_day_opus: { utilization: 50, resets_at: "not a date" },
+        seven_day_oauth_apps: { utilization: 5, resets_at: null },
         extra_usage: { is_enabled: false, utilization: 10 },
         plan: "max",
       }),
-    ).toEqual([
-      { id: "seven_day_opus", label: "Weekly (Opus)", usedPercent: 50 },
-      { id: "seven_day_oauth_apps", label: "Seven day oauth apps", usedPercent: 5 },
-    ])
+    ).toEqual([{ id: "seven_day_opus", label: "Weekly (Opus)", usedPercent: 50 }])
   })
 
   test("returns no windows for malformed input and never throws", () => {
@@ -59,7 +57,7 @@ describe("parseCodexRateLimits", () => {
     ])
   })
 
-  test("labels other lengths in hours or minutes and falls back to Primary/Secondary", () => {
+  test("labels other lengths in days, hours or minutes and falls back to Primary/Secondary", () => {
     expect(
       HarnessUsage.parseCodexRateLimits({
         rateLimits: {
@@ -71,6 +69,19 @@ describe("parseCodexRateLimits", () => {
       { id: "primary", label: "90-minute", usedPercent: 0, windowMinutes: 90 },
       { id: "secondary", label: "2-hour", usedPercent: 3, windowMinutes: 120 },
     ])
+    expect(
+      HarnessUsage.parseCodexRateLimits({
+        rateLimits: {
+          primary: { usedPercent: 1, windowDurationMins: 1440 },
+          secondary: { usedPercent: 2, windowDurationMins: 43200 },
+        },
+      }).map((window) => window.label),
+    ).toEqual(["1-day", "30-day"])
+    expect(
+      HarnessUsage.parseCodexRateLimits({
+        rateLimits: { primary: { usedPercent: 1, windowDurationMins: 1380 } },
+      }).map((window) => window.label),
+    ).toEqual(["23-hour"])
     expect(
       HarnessUsage.parseCodexRateLimits({
         rateLimits: { primary: { usedPercent: 7, windowDurationMins: null }, secondary: { usedPercent: 8 } },
