@@ -132,7 +132,7 @@
 <text x="495" y="530" text-anchor="start" class="t">LLM providers</text>
 <text x="495" y="546" text-anchor="start" class="s">prompts include</text>
 <text x="495" y="562" text-anchor="start" class="s">workspace content</text>
-<text x="495" y="578" text-anchor="start" class="s">+ Claude usage (OAuth)</text>
+<text x="495" y="578" text-anchor="start" class="s">+ Claude/Cmd Code usage</text>
 <rect class="ext" x="655" y="512" width="155" height="84" rx="6"/>
 <text x="665" y="530" text-anchor="start" class="t">Package registries</text>
 <text x="665" y="546" text-anchor="start" class="s">npm, Homebrew: harness</text>

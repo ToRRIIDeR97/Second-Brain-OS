@@ -205,7 +205,8 @@ on its own. Removed in the T3 parity Phase 1 cleanup:
 
 Still outbound: the configured LLM providers (including the `opencode` Zen
 provider when the user selects it), the `models.dev` catalog, Google APIs,
-`api.anthropic.com/api/oauth/usage` for Claude Code usage limits (see
+`api.anthropic.com/api/oauth/usage` and `api.commandcode.ai/alpha/*` for
+Claude Code and Command Code usage limits (see
 [Harness usage limits](#harness-usage-limits)), and links the user opens. `$schema` URLs in config files are identifiers, not
 fetches. Known remaining references: upstream agent prompts that point the
 model at `opencode.ai/docs`, the MCP OAuth `client_uri` metadata value, and
@@ -294,13 +295,23 @@ the location query and has the same auth as the other harness routes.
   runtime (the server caches each report for 60 s; the sheet asks at most once
   a minute while open). The response is parsed into percentages and reset
   times only.
+- **Command Code key read.** For an ACP harness that runs the Command Code CLI,
+  the server reads `COMMAND_CODE_API_KEY` from its own environment, else
+  `apiKey` from `~/.commandcode/auth.json`, on each uncached call. Like the
+  Claude token, the key stays in the server process: only in the
+  `Authorization` header, never returned, logged, written or put in a URL.
+- **Outbound call (Command Code).** `GET https://api.commandcode.ai/alpha/whoami?limits=1`
+  and `GET https://api.commandcode.ai/alpha/billing/credits` (with the
+  account's non-secret `orgId` in the query when it has one), under the same
+  60 s cache. These are undocumented endpoints; only the 5-hour and weekly
+  `used`, `cap` and `resetAt` values are kept from the responses.
 - **Codex.** `account/read` and `account/rateLimits/read` go to the user's own
   `codex app-server`, which holds its own credentials; no token reaches the app.
 - **Reports.** Error reasons are fixed strings or a short protocol message from
   the harness, never a token or response body.
 
 Known gap: anything that can read the user's home folder can read the same
-Claude credentials file. The app adds no new copy of it.
+Claude and Command Code credential files. The app adds no new copy of them.
 
 ## Harness registration
 

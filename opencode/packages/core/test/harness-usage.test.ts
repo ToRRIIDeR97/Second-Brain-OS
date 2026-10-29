@@ -154,6 +154,133 @@ describe("fetchClaudeUsage", () => {
   })
 })
 
+describe("parseCommandCodeUsage", () => {
+  test("reads the 5-hour then weekly window as a clamped share of its cap with ms reset times", () => {
+    expect(
+      HarnessUsage.parseCommandCodeUsage({
+        credits: { monthlyCredits: 10 },
+        windowLimits: {
+          limited: true,
+          weekly: { used: 150, cap: 100, resetAt: 1_762_000_000_000 },
+          fiveHour: { used: 5, cap: 20, resetAt: "2026-10-29T15:30:00Z" },
+        },
+      }),
+    ).toEqual([
+      { id: "five_hour", label: "5-hour", usedPercent: 25, resetsAt: Date.parse("2026-10-29T15:30:00Z") },
+      { id: "weekly", label: "Weekly", usedPercent: 100, resetsAt: 1_762_000_000_000 },
+    ])
+    expect(
+      HarnessUsage.parseCommandCodeUsage({ windowLimits: { fiveHour: { used: -4, cap: 8, resetAt: null } } }),
+    ).toEqual([{ id: "five_hour", label: "5-hour", usedPercent: 0 }])
+  })
+
+  test("skips windows without a positive cap and plans without window limits", () => {
+    expect(
+      HarnessUsage.parseCommandCodeUsage({
+        windowLimits: { limited: true, fiveHour: { used: 1, resetAt: 5 }, weekly: { used: 1, cap: 0 } },
+      }),
+    ).toEqual([])
+    expect(
+      HarnessUsage.parseCommandCodeUsage({ windowLimits: { limited: false, fiveHour: { used: 1, cap: 2 } } }),
+    ).toEqual([])
+  })
+
+  test("returns no windows for malformed input and never throws", () => {
+    for (const body of [
+      undefined,
+      null,
+      "x",
+      [],
+      { windowLimits: null },
+      { windowLimits: [] },
+      { windowLimits: { fiveHour: { used: "1", cap: 2 }, weekly: "full" } },
+    ])
+      expect(HarnessUsage.parseCommandCodeUsage(body)).toEqual([])
+  })
+})
+
+describe("readCommandCodeKey", () => {
+  const home = async (auth?: unknown) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-usage-cmd-"))
+    if (auth !== undefined) {
+      await fs.mkdir(path.join(dir, ".commandcode"))
+      await fs.writeFile(path.join(dir, ".commandcode", "auth.json"), JSON.stringify(auth))
+    }
+    return dir
+  }
+
+  test("finds no key without the variable or an auth file key", async () => {
+    expect(await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: await home() }))).toBeUndefined()
+    expect(
+      await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: await home({ userName: "me" }) })),
+    ).toBeUndefined()
+  })
+
+  test("prefers COMMAND_CODE_API_KEY over the auth file, which it falls back to", async () => {
+    const dir = await home({ apiKey: "file-key" })
+    expect(await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: dir }))).toBe("file-key")
+    expect(await Effect.runPromise(HarnessUsage.readCommandCodeKey({ USERPROFILE: dir }))).toBe("file-key")
+    expect(
+      await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: dir, COMMAND_CODE_API_KEY: " env-key " })),
+    ).toBe("env-key")
+    expect(await Effect.runPromise(HarnessUsage.readCommandCodeKey({ HOME: dir, COMMAND_CODE_API_KEY: "  " }))).toBe(
+      "file-key",
+    )
+  })
+})
+
+describe("fetchCommandCodeUsage", () => {
+  test("sends the key only in the Authorization header and reads the organization's windows", async () => {
+    const calls: { url: string; headers: Headers }[] = []
+    const request = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: new Headers(init?.headers) })
+      if (String(url).includes("/alpha/whoami")) return Response.json({ org: { id: "org_1" } })
+      return Response.json({ windowLimits: { limited: true, weekly: { used: 3, cap: 12, resetAt: 9 } } })
+    }) as typeof fetch
+    const result = await Effect.runPromise(HarnessUsage.fetchCommandCodeUsage("cc-key", request))
+    expect(result).toEqual({
+      status: "available",
+      windows: [{ id: "weekly", label: "Weekly", usedPercent: 25, resetsAt: 9 }],
+    })
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://api.commandcode.ai/alpha/whoami?limits=1",
+      "https://api.commandcode.ai/alpha/billing/credits?orgId=org_1",
+    ])
+    for (const call of calls) {
+      expect(call.url).not.toContain("cc-key")
+      expect(call.headers.get("authorization")).toBe("Bearer cc-key")
+    }
+  })
+
+  test("reads a personal account without orgId and maps a rejected key to signed-out", async () => {
+    const urls: string[] = []
+    const personal = (async (url: string | URL | Request) => {
+      urls.push(String(url))
+      return Response.json(String(url).includes("whoami") ? { user: { userName: "me" } } : {})
+    }) as typeof fetch
+    expect(await Effect.runPromise(HarnessUsage.fetchCommandCodeUsage("cc-key", personal))).toEqual({
+      status: "available",
+      windows: [],
+    })
+    expect(urls[1]).toBe("https://api.commandcode.ai/alpha/billing/credits")
+    const rejected = (async () => new Response("{}", { status: 401 })) as unknown as typeof fetch
+    expect((await Effect.runPromise(HarnessUsage.fetchCommandCodeUsage("cc-key", rejected))).status).toBe("signed-out")
+  })
+
+  test("recognizes Command Code commands by the names its package installs", () => {
+    for (const command of [
+      "command-code",
+      "commandcode",
+      "cmdc",
+      "C:\\Users\\me\\AppData\\Roaming\\npm\\command-code.cmd",
+      "/usr/local/lib/node_modules/command-code/dist/index.mjs",
+    ])
+      expect(HarnessUsage.isCommandCode(command)).toBe(true)
+    for (const command of [undefined, "", "cmd", "cmd.exe", "opencode", "claude-agent-acp"])
+      expect(HarnessUsage.isCommandCode(command)).toBe(false)
+  })
+})
+
 describe("usage cache", () => {
   const available = (percent: number): HarnessUsage.Result => ({
     status: "available",

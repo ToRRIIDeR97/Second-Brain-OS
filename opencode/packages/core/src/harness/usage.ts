@@ -118,6 +118,88 @@ export const fetchClaudeUsage = (token: string, request: typeof fetch = fetch) =
     catch: () => new Error("Could not reach api.anthropic.com."),
   })
 
+const commandCodeWindows = [
+  { key: "fiveHour", id: "five_hour", label: "5-hour" },
+  { key: "weekly", id: "weekly", label: "Weekly" },
+] as const
+
+/**
+ * Reads the `windowLimits` Command Code's own `/usage` overlay shows: `{ limited, fiveHour?, weekly? }` with each
+ * window `{ used, cap, resetAt }` (`resetAt` in epoch ms, which the CLI compares with `Date.now()`). A plan
+ * without window limits (`limited: false`) and a window without a positive cap yield no window.
+ */
+export function parseCommandCodeUsage(body: unknown): UsageWindow[] {
+  const limits = isRecord(body) && isRecord(body.windowLimits) ? body.windowLimits : undefined
+  if (!limits || limits.limited === false) return []
+  return commandCodeWindows.flatMap((window) => {
+    const value = limits[window.key]
+    if (!isRecord(value) || !finite(value.used) || !finite(value.cap) || value.cap <= 0) return []
+    const resetsAt = typeof value.resetAt === "string" ? Date.parse(value.resetAt) : value.resetAt
+    return [
+      {
+        id: window.id,
+        label: window.label,
+        usedPercent: clamp((value.used / value.cap) * 100),
+        ...(finite(resetsAt) ? { resetsAt } : {}),
+      },
+    ]
+  })
+}
+
+/**
+ * The Command Code API key, found the way its CLI finds it: `COMMAND_CODE_API_KEY`, then `apiKey` in
+ * `~/.commandcode/auth.json` (home from `HOME`, then `USERPROFILE`). The key stays in the server process.
+ */
+export const readCommandCodeKey = (env: Readonly<Record<string, string | undefined>> = process.env) =>
+  Effect.promise(async () => {
+    const fromEnv = env.COMMAND_CODE_API_KEY?.trim()
+    if (fromEnv) return fromEnv
+    const home = env.HOME ?? env.USERPROFILE ?? os.homedir()
+    const value = Option.getOrUndefined(
+      decodeJson(await fs.readFile(path.join(home, ".commandcode", "auth.json"), "utf8").catch(() => "")),
+    )
+    return isRecord(value) && typeof value.apiKey === "string" && value.apiKey ? value.apiKey : undefined
+  })
+
+/**
+ * Asks Command Code for its plan windows the way its `/usage` overlay does: `/alpha/whoami?limits=1` names the
+ * account's organization, then `/alpha/billing/credits` (with `orgId` when there is one) returns `windowLimits`.
+ * These are undocumented `/alpha` routes. The key goes only in the `Authorization` header.
+ */
+export const fetchCommandCodeUsage = (key: string, request: typeof fetch = fetch) =>
+  Effect.tryPromise({
+    try: async (signal): Promise<Result> => {
+      const get = (route: string) =>
+        request(`https://api.commandcode.ai${route}`, { headers: { Authorization: `Bearer ${key}` }, signal })
+      const whoami = await get("/alpha/whoami?limits=1")
+      if (whoami.status === 401 || whoami.status === 403)
+        return { status: "signed-out", windows: [], reason: "Command Code sign-in has expired." }
+      if (!whoami.ok) return { status: "error", windows: [], reason: `Usage request failed (HTTP ${whoami.status}).` }
+      const account: unknown = await whoami.json().catch(() => undefined)
+      const org = isRecord(account) && isRecord(account.org) ? account.org.id : undefined
+      const credits = await get(
+        typeof org === "string" && org
+          ? `/alpha/billing/credits?${new URLSearchParams({ orgId: org }).toString()}`
+          : "/alpha/billing/credits",
+      )
+      if (credits.status === 401 || credits.status === 403)
+        return { status: "signed-out", windows: [], reason: "Command Code sign-in has expired." }
+      if (!credits.ok) return { status: "error", windows: [], reason: `Usage request failed (HTTP ${credits.status}).` }
+      return { status: "available", windows: parseCommandCodeUsage(await credits.json().catch(() => undefined)) }
+    },
+    catch: () => new Error("Could not reach api.commandcode.ai."),
+  })
+
+/** Whether an ACP command runs the Command Code CLI, by the names its npm package installs (`cmd` is left out: it is also Windows' shell). */
+export function isCommandCode(command: string | undefined) {
+  if (!command) return false
+  const name = path
+    .basename(command.replaceAll("\\", "/"))
+    .toLowerCase()
+    .replace(/\.(cmd|exe|ps1|mjs|js)$/, "")
+  return ["command-code", "commandcode", "cmdc"].includes(name) || /node_modules[\\/]command-code[\\/]/i.test(command)
+}
+
 /**
  * Caches each instance's report for `ttl` milliseconds and reads the rest in parallel, each bounded by `timeout`,
  * so one slow harness never holds up the others. A failed or timed-out read becomes an `error` report.

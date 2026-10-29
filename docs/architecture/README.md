@@ -1143,8 +1143,17 @@ for 60 s in the location's runtime:
   is signed out; a stored Anthropic API key is unsupported. A sign-in recorded
   in `.claude.json` without a credentials file (macOS keeps the token in the
   keychain) is unsupported.
-- OpenCode, Command Code and other ACP agents: unsupported. Neither CLI exposes
-  plan usage over ACP or a documented endpoint.
+- Command Code (an ACP entry whose command is `command-code`, `commandcode`,
+  `cmdc` or a path into its npm package): the key from `COMMAND_CODE_API_KEY`,
+  else `apiKey` in `~/.commandcode/auth.json`, the way its CLI finds it.
+  `GET https://api.commandcode.ai/alpha/whoami?limits=1` names the account's
+  organization and `GET /alpha/billing/credits` (`orgId` when there is one)
+  returns `windowLimits` (5-hour and weekly `used` of `cap`, `resetAt` in ms).
+  These are the undocumented `/alpha` routes the CLI's `/usage` overlay calls,
+  read from its bundle (v1.88.1), so they may change without notice. No key is
+  signed out.
+- OpenCode and other ACP agents: unsupported. OpenCode exposes no plan usage
+  over ACP or an endpoint in its installed CLI.
 
 ### Composer delivery, background send and stash
 

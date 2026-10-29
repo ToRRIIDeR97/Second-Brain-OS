@@ -873,7 +873,18 @@ const layer = Layer.effect(
     const usageSource = (instance: InstanceConfig, keys: HarnessSetup.Keys) => {
       if (instance.driver === Harness.CodexDriver) return codexUsage(instance)
       if (instance.id === Harness.ClaudeCode) return claudeUsage(keys)
-      // Neither OpenCode nor other ACP agents (Command Code included) report plan usage to the app.
+      // Command Code is a user-registered ACP agent, recognized by the CLI its command runs. Its key stays here.
+      if (
+        instance.driver === Harness.AcpDriver &&
+        HarnessUsage.isCommandCode(AcpHarness.decodeSettings(instance.config)?.command)
+      )
+        return HarnessUsage.readCommandCodeKey().pipe(
+          Effect.flatMap(
+            (key): Effect.Effect<HarnessUsage.Result, Error> =>
+              key ? HarnessUsage.fetchCommandCodeUsage(key) : Effect.succeed({ status: "signed-out", windows: [] }),
+          ),
+        )
+      // Neither OpenCode nor other ACP agents report plan usage to the app.
       return Effect.succeed(HarnessUsage.unsupported(`${instance.name} doesn't report usage limits.`))
     }
     // Only one browser login at a time: Codex's callback listens on a fixed local port.
