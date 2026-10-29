@@ -194,7 +194,9 @@ const main = Effect.gen(function* () {
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
   const channel = app.isPackaged ? CHANNEL : "dev"
-  const appId = APP_IDS[channel]
+  // An unpackaged run (`bun run dev`) gets its own ID, so its settings, window state and single-instance lock
+  // never touch an installed dev build's, and both can run side by side.
+  const appId = app.isPackaged ? APP_IDS[channel] : `${APP_IDS.dev}.local`
   const onboardingTestRoot = ((): string | undefined => {
     if (!TEST_ONBOARDING) return
 
@@ -225,7 +227,10 @@ const main = Effect.gen(function* () {
   const userDataMigration = (() => {
     if (onboardingTestRoot) return
     try {
-      return migrateUserData(channel === "dev" ? join(app.getPath("appData"), LEGACY_DEV_APP_ID) : undefined, userData)
+      return migrateUserData(
+        app.isPackaged && channel === "dev" ? join(app.getPath("appData"), LEGACY_DEV_APP_ID) : undefined,
+        userData,
+      )
     } catch (error) {
       // No marker is written, so the copy is retried on the next start.
       return error instanceof Error ? error : new Error(String(error))

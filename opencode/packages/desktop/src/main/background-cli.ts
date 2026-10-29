@@ -13,6 +13,7 @@ const stateHome = process.env.XDG_STATE_HOME
 // OpenCode Desktop's background service, which this app must not attach to.
 const desktopStateNames = [
   "io.github.torriider97.tenonworkbench.dev",
+  "io.github.torriider97.tenonworkbench.dev.local",
   "io.github.torriider97.tenonworkbench.beta",
   "io.github.torriider97.tenonworkbench",
 ]
