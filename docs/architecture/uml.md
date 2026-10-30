@@ -124,6 +124,10 @@ Some details of the write path:
   reason, a missing record is 404, a stale write is 409, and IO or permission
   failures are a logged 500. Logs carry the error tag, reason and relative
   path, never content.
+- When a request's workspace folder (`directory`, `location[directory]` or
+  `x-opencode-directory`) no longer exists, the server-wide error middleware
+  turns the resulting defect into a 404 `WorkspaceFolderNotFoundError` instead
+  of a 500. Other unexpected defects stay a logged 500 with an `err_` ref.
 - `FileMutation` replaces a file through a synced sibling temp file and a
   rename, keeping the old permission bits. It refuses a target that isn't
   writable, and writes in place when the directory refuses new files. A

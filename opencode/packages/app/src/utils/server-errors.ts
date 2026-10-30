@@ -93,6 +93,16 @@ export function isServerNotFoundError(error: unknown) {
   )
 }
 
+/** The server's answer when a request names a workspace folder that was moved or deleted. */
+export function isWorkspaceFolderMissing(error: unknown) {
+  return [error, unwrapNamedError(error)].some(
+    (candidate) =>
+      typeof candidate === "object" &&
+      candidate !== null &&
+      (candidate as Record<string, unknown>).name === "WorkspaceFolderNotFoundError",
+  )
+}
+
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
   if (typeof error !== "object" || error === null) return false
   const o = error as Record<string, unknown>

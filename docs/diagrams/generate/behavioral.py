@@ -161,7 +161,7 @@ def activity_write():
     s.start(cx, 70)
     E([(cx, 78), (cx, 92)])
     rows = [(92, "Authorization", "Basic auth (header or auth_token)", "[bad credentials]", "401"),
-            (182, "WorkspaceRouting + InstanceContext", "directory → InstanceStore.load", "[invalid / unknown workspace]", "400 / 500"),
+            (182, "WorkspaceRouting + InstanceContext", "directory → InstanceStore.load", "[invalid · unknown · folder gone]", "400 / 500 / 404"),
             (272, "decode query + payload", "schema layer", "[schema error]", "400"),
             (362, "resolve target path", "notePath rules · LocationMutation.resolve", "[escape · bad path · > 5 MiB]", "400")]
     for y, t, sub, guard, code in rows:

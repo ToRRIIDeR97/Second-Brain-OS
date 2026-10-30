@@ -3,6 +3,7 @@ import type { SessionNotFoundError } from "@opencode-ai/sdk/v2/client"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
 import {
   claimErrorToast,
+  isWorkspaceFolderMissing,
   formatServerError,
   isServerNotFoundError,
   isSessionNotFoundError,
@@ -209,5 +210,13 @@ describe("isServerNotFoundError", () => {
   test("ignores other failures", () => {
     expect(isServerNotFoundError({ name: "UnknownError", data: { message: "boom" } })).toBe(false)
     expect(isServerNotFoundError(new Error("network down"))).toBe(false)
+  })
+})
+
+describe("isWorkspaceFolderMissing", () => {
+  test("matches the server's missing-folder body only", () => {
+    expect(isWorkspaceFolderMissing({ name: "WorkspaceFolderNotFoundError", data: { message: "gone" } })).toBe(true)
+    expect(isWorkspaceFolderMissing({ name: "UnknownError", data: { message: "boom" } })).toBe(false)
+    expect(isWorkspaceFolderMissing(undefined)).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { type QueryClient, useQuery, useQueryClient } from "@tanstack/solid-query"
+import { type QueryClient, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createComputed, createEffect, createMemo, createResource, on, onCleanup, onMount } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -42,7 +42,7 @@ import {
   drainPendingDeepLinks,
 } from "@/pages/layout/deep-links"
 import { errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
-import { isServerNotFoundError } from "@/utils/server-errors"
+import { isServerNotFoundError, isWorkspaceFolderMissing } from "@/utils/server-errors"
 import { pathKey } from "@/utils/path-key"
 import { Persist, persisted } from "@/utils/persist"
 import { sessionHref } from "@/utils/session-route"
@@ -150,6 +150,29 @@ export function createSidebarController() {
   const workspaces = () => layout.projects.list()
   const selectWorkspace = (directory: string) => layout.home.setSelection({ server: server.key, directory })
 
+  // A workspace whose folder was moved or deleted: the server answers its requests with a typed 404,
+  // and the sidebar offers to locate the folder or remove the workspace instead of failing.
+  const folderQueries = useQueries(() => ({
+    queries: workspaces().map((workspace) => ({
+      queryKey: ["workspace-folder", server.key, workspace.worktree] as const,
+      queryFn: () =>
+        serverSDK()
+          .client.file.list({ directory: workspace.worktree, path: "." })
+          .then(
+            () => false,
+            (cause: unknown) => {
+              if (isWorkspaceFolderMissing(cause)) return true
+              throw cause
+            },
+          ),
+      staleTime: 30_000,
+      retry: false,
+    })),
+  }))
+  /** true when the folder is gone, false when it is there, undefined until the check answers. */
+  const folderMissing = (directory: string) =>
+    folderQueries[workspaces().findIndex((workspace) => workspace.worktree === directory)]?.data
+
   // Scan each workspace once per app session when it is first shown, so new project folders appear.
   const scanned = new Set<string>()
   const scan = (directory: string) =>
@@ -160,7 +183,7 @@ export function createSidebarController() {
   createEffect(() => {
     const directory = brainDirectory()
     const key = `${server.key}:${directory}`
-    if (!directory || scanned.has(key)) return
+    if (!directory || scanned.has(key) || folderMissing(directory) !== false) return
     scanned.add(key)
     // Reload the Project list only when the scan added cards; a failed scan is retried on the next visit.
     void scanProjects(client(directory))
@@ -628,6 +651,22 @@ export function createSidebarController() {
     selectWorkspace(directory)
   }
 
+  /** Replace a workspace whose folder is gone with the folder the user picks. */
+  const locateWorkspace = (directory: string) =>
+    pickDirectory({
+      server: server.current!,
+      title: language.t("secondBrain.sidebar.locateFolder"),
+      onSelect: (result) => {
+        const [folder] = homeProjectDirectories(result)
+        if (!folder) return
+        layout.projects.close(directory)
+        void openFolder(folder)
+      },
+    })
+
+  /** Drop a workspace from the list; its folder is not touched. */
+  const removeWorkspace = (directory: string) => layout.projects.close(directory)
+
   const chooseFolder = () =>
     pickDirectory({
       server: server.current!,
@@ -762,6 +801,9 @@ export function createSidebarController() {
     brainDirectory,
     workspaces,
     selectWorkspace,
+    folderMissing,
+    locateWorkspace,
+    removeWorkspace,
     scanFolders,
     addProject,
     isLinked,
