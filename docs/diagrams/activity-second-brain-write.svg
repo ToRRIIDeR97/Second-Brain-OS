@@ -78,7 +78,7 @@
 <path class="dia" d="M440,226 L454,240 L440,254 L426,240 z"/>
 <path class="e " d="M454,240 L680,240" marker-end="url(#a)"/>
 <rect class="sub" x="680" y="225" width="260" height="30" rx="14"/>
-<text x="810.0" y="244.0" text-anchor="middle">400 / 500</text>
+<text x="810.0" y="244.0" text-anchor="middle">400 / 500 / 404</text>
 <path class="e " d="M440,254 L440,272" marker-end="url(#a)"/>
 <rect class="act" x="290" y="272" width="300" height="44" rx="14"/>
 <text x="440.0" y="292.0" text-anchor="middle" class="t">decode query + payload</text>
@@ -148,8 +148,8 @@
 <text x="690" y="882" text-anchor="start" class="s">process-local; other processes can race.</text>
 <rect class="lblbg" x="526.9" y="134.0" width="106.3" height="13" rx="2"/>
 <text class="lbl" x="580" y="144" text-anchor="middle">[bad credentials]</text>
-<rect class="lblbg" x="491.4" y="224.0" width="177.1" height="13" rx="2"/>
-<text class="lbl" x="580" y="234" text-anchor="middle">[invalid / unknown workspace]</text>
+<rect class="lblbg" x="479.6" y="224.0" width="200.7" height="13" rx="2"/>
+<text class="lbl" x="580" y="234" text-anchor="middle">[invalid · unknown · folder gone]</text>
 <rect class="lblbg" x="535.7" y="314.0" width="88.6" height="13" rx="2"/>
 <text class="lbl" x="580" y="324" text-anchor="middle">[schema error]</text>
 <rect class="lblbg" x="491.4" y="404.0" width="177.1" height="13" rx="2"/>

@@ -129,38 +129,43 @@ export function SecondBrainSidebar() {
                 </p>
               }
             >
-              {/* Keyed by the Project, not its group: a group is rebuilt on every thread change. */}
-              <For each={ctrl.projects()}>
-                {(project) => (
-                  <ProjectGroup ctrl={ctrl} project={project} threads={ctrl.projectThreads().get(project.id) ?? []} />
-                )}
-              </For>
-              <Show when={ctrl.failed()}>
-                <div class="flex items-center gap-1 px-3 py-1">
-                  <p role="alert" class="min-w-0 flex-1 text-[12px] text-v2-text-text-critical">
-                    {language.t("common.requestFailed")}
+              <Show when={ctrl.folderMissing(ctrl.brainDirectory()!)}>
+                <MissingFolder ctrl={ctrl} directory={ctrl.brainDirectory()!} />
+              </Show>
+              <Show when={ctrl.folderMissing(ctrl.brainDirectory()!) !== true}>
+                {/* Keyed by the Project, not its group: a group is rebuilt on every thread change. */}
+                <For each={ctrl.projects()}>
+                  {(project) => (
+                    <ProjectGroup ctrl={ctrl} project={project} threads={ctrl.projectThreads().get(project.id) ?? []} />
+                  )}
+                </For>
+                <Show when={ctrl.failed()}>
+                  <div class="flex items-center gap-1 px-3 py-1">
+                    <p role="alert" class="min-w-0 flex-1 text-[12px] text-v2-text-text-critical">
+                      {language.t("common.requestFailed")}
+                    </p>
+                    <button
+                      type="button"
+                      class="shrink-0 rounded-full px-2 py-0.5 text-[12px] text-v2-text-text-muted transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+                      onClick={ctrl.retryProjects}
+                    >
+                      {language.t("secondBrain.error.retry")}
+                    </button>
+                  </div>
+                </Show>
+                <Show when={!ctrl.loading() && !ctrl.failed() && ctrl.projects().length === 0}>
+                  <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">
+                    {language.t("secondBrain.sidebar.noProjectFolders")}
                   </p>
-                  <button
-                    type="button"
-                    class="shrink-0 rounded-full px-2 py-0.5 text-[12px] text-v2-text-text-muted transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
-                    onClick={ctrl.retryProjects}
-                  >
-                    {language.t("secondBrain.error.retry")}
-                  </button>
-                </div>
+                </Show>
+                <ThreadGroup
+                  ctrl={ctrl}
+                  id={BRAIN_GROUP}
+                  label={language.t("secondBrain.sidebar.workspaceThreads")}
+                  threads={ctrl.groups().workspace}
+                  onNewThread={ctrl.newBrainThread}
+                />
               </Show>
-              <Show when={!ctrl.loading() && !ctrl.failed() && ctrl.projects().length === 0}>
-                <p class="px-3 py-1 text-[12px] text-v2-text-text-faint">
-                  {language.t("secondBrain.sidebar.noProjectFolders")}
-                </p>
-              </Show>
-              <ThreadGroup
-                ctrl={ctrl}
-                id={BRAIN_GROUP}
-                label={language.t("secondBrain.sidebar.workspaceThreads")}
-                threads={ctrl.groups().workspace}
-                onNewThread={ctrl.newBrainThread}
-              />
             </Show>
           </div>
         </Show>
@@ -199,6 +204,31 @@ function RailItem(props: { id: string; icon: string; label: string; active?: boo
   )
 }
 
+/** Shown in place of the Project list when the selected workspace's folder was moved or deleted. */
+function MissingFolder(props: { ctrl: SidebarController; directory: string }) {
+  const language = useLanguage()
+  const action =
+    "rounded-full px-2 py-0.5 text-[12px] text-v2-text-text-muted transition-colors duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus motion-reduce:transition-none"
+  return (
+    <div role="alert" data-sidebar-item="folder-missing" class="flex flex-col gap-1 px-3 py-1">
+      <p class="text-[12px] text-v2-text-text-critical [font-weight:600]">
+        {language.t("secondBrain.sidebar.folderMissing")}
+      </p>
+      <p class="break-all text-[12px] text-v2-text-text-faint">
+        {language.t("secondBrain.sidebar.folderMissingDescription", { path: props.directory })}
+      </p>
+      <div class="-ml-2 flex flex-wrap gap-1">
+        <button type="button" class={action} onClick={() => props.ctrl.locateWorkspace(props.directory)}>
+          {language.t("secondBrain.sidebar.locateFolder")}
+        </button>
+        <button type="button" class={action} onClick={() => props.ctrl.removeWorkspace(props.directory)}>
+          {language.t("secondBrain.sidebar.removeWorkspace")}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** The workspace switcher that heads the sidebar, with the workspace's Project actions. */
 function WorkspaceHeader(props: { ctrl: SidebarController }) {
   const language = useLanguage()
@@ -209,6 +239,11 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
   const addProject = () => {
     const current = server.current
     if (current) void dialog.show(() => <DialogAddProject server={current} onAdd={props.ctrl.addProject} />)
+  }
+  // Project actions need the folder; a missing one gets locate or remove in the sidebar instead.
+  const present = () => {
+    const directory = props.ctrl.brainDirectory()
+    return directory && props.ctrl.folderMissing(directory) !== true ? directory : undefined
   }
   const name = (directory: string) => {
     const item = props.ctrl.workspaces().find((workspace) => workspace.worktree === directory)
@@ -245,12 +280,17 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
                     <span class="min-w-0 truncate" title={workspace.worktree}>
                       {name(workspace.worktree)}
                     </span>
+                    <Show when={props.ctrl.folderMissing(workspace.worktree)}>
+                      <span class="shrink-0 text-[12px] text-v2-text-text-faint">
+                        {language.t("secondBrain.sidebar.folderMissing")}
+                      </span>
+                    </Show>
                   </span>
                 </MenuV2.Item>
               )}
             </For>
             <MenuV2.Item onSelect={props.ctrl.chooseFolder}>{language.t("secondBrain.command.openFolder")}</MenuV2.Item>
-            <Show when={props.ctrl.brainDirectory()}>
+            <Show when={present()}>
               {(directory) => (
                 <>
                   <MenuV2.Separator />
@@ -279,7 +319,7 @@ function WorkspaceHeader(props: { ctrl: SidebarController }) {
         </MenuV2.Portal>
       </MenuV2>
       <div class="flex-1" />
-      <Show when={props.ctrl.brainDirectory()}>
+      <Show when={present()}>
         <TooltipV2 placement="right" value={language.t("secondBrain.sidebar.addProject")}>
           <IconButtonV2
             type="button"

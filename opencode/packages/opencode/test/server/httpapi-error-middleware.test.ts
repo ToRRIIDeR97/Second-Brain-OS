@@ -3,6 +3,8 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { describe, expect } from "bun:test"
 import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
 import { Effect, Layer } from "effect"
+import os from "node:os"
+import path from "node:path"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { errorLayer } from "../../src/server/routes/instance/httpapi/middleware/error"
 import { NotFoundError } from "../../src/storage/storage"
@@ -96,6 +98,49 @@ describe("HttpApi error middleware", () => {
 
       expect(response.status).toBe(500)
       expectUnknownErrorBody(body)
+    }),
+  )
+
+  it.live("returns a typed 404 when the request's workspace folder is missing", () =>
+    Effect.gen(function* () {
+      yield* HttpRouter.add("GET", "/folder", Effect.die(new Error("ENOENT realPath"))).pipe(
+        Layer.provide(errorLayer),
+        HttpRouter.serve,
+        Layer.build,
+      )
+      const missing = path.join(os.tmpdir(), `tenon-missing-${crypto.randomUUID()}`)
+
+      const query = yield* HttpClientRequest.get(`/folder?directory=${encodeURIComponent(missing)}`).pipe(
+        HttpClient.execute,
+      )
+      expect(query.status).toBe(404)
+      expect(yield* query.json).toEqual({
+        name: "WorkspaceFolderNotFoundError",
+        data: { message: "The workspace folder was not found." },
+      })
+
+      const header = yield* HttpClientRequest.get("/folder").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", encodeURIComponent(missing)),
+        HttpClient.execute,
+      )
+      expect(header.status).toBe(404)
+    }),
+  )
+
+  it.live("keeps the 500 when the request's workspace folder exists", () =>
+    Effect.gen(function* () {
+      yield* HttpRouter.add("GET", "/present", Effect.die(new Error("secret stack marker"))).pipe(
+        Layer.provide(errorLayer),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.get(`/present?directory=${encodeURIComponent(os.tmpdir())}`).pipe(
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(500)
+      expectUnknownErrorBody(yield* response.json)
     }),
   )
 })

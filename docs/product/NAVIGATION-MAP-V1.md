@@ -3,7 +3,7 @@
 - Status: implemented (sidebar-only navigation, roadmap Phase 4)
 - Companion: [`PRODUCT-BRIEF-V1.md`](./PRODUCT-BRIEF-V1.md)
 - Roadmap: [`t3-parity-roadmap`](../../implementations/t3-parity-roadmap/implementation.md)
-- Updated: 2026-10-24
+- Updated: 2026-10-30
 
 ## Navigation model
 
@@ -14,6 +14,12 @@ notes, Project cards and calendar live in that folder. The workspace's Projects 
 case) plus folders linked from elsewhere on the computer. A Project's threads
 run in its folder. Threads from other workspaces never show. The left sidebar
 is the only navigation. There is no tab strip and no separate workspace page.
+
+When a workspace's folder was moved or deleted, the dropdown marks it **Folder
+not found**. Selecting it shows the missing path in the sidebar with **Locate
+folder…** (pick the folder's new place; it replaces the workspace) and **Remove
+from list** (drops the workspace; nothing on disk changes). Threads stay with
+the old path, so a relocated workspace starts without them.
 
 ```mermaid
 flowchart LR
