@@ -28,4 +28,9 @@ describe("harnessEnvironment", () => {
     const env = harnessEnvironment({ ACME_KEY: "configured", LANG: "" }, { PATH: "/usr/bin", LANG: "en_US.UTF-8" })
     expect(env).toEqual({ PATH: "/usr/bin", LANG: "en_US.UTF-8", ACME_KEY: "configured" })
   })
+
+  test("passes the user name keychain-backed sign-ins look up", () => {
+    const env = harnessEnvironment({}, { PATH: "/usr/bin", USER: "me", LOGNAME: "me", USERNAME: "me", SECRET: "x" })
+    expect(env).toEqual({ PATH: "/usr/bin", USER: "me", LOGNAME: "me", USERNAME: "me" })
+  })
 })

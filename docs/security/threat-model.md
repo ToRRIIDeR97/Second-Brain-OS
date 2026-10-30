@@ -385,8 +385,11 @@ from an ACP agent as untrusted model output.
 
 Known gap (partially closed): ACP and Codex harness processes no longer inherit
 the app's full environment; they get a small launch allowlist (`PATH`, `HOME`,
-locale, temp and terminal variables, `XDG_*`, Windows system variables) plus the
-`env` set in user configuration for that harness. However, any API key or token
+the user name `USER`/`LOGNAME`/`USERNAME`, locale, temp and terminal variables,
+`XDG_*`, Windows system variables) plus the
+`env` set in user configuration for that harness. The user name is not a
+secret; CLIs that keep their sign-in in the OS keychain need it to find it
+(Claude Code on macOS reports itself signed out without `USER`). However, any API key or token
 the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.

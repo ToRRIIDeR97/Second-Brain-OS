@@ -8,6 +8,11 @@ export * as HarnessEnv from "./env"
 const allowlist = [
   "PATH",
   "HOME",
+  // Account names, not secrets. Harness CLIs that keep their sign-in in the OS keychain look it up by user name:
+  // without USER, Claude Code on macOS can't find its keychain login and reports itself signed out.
+  "USER",
+  "LOGNAME",
+  "USERNAME",
   "LANG",
   "LC_ALL",
   "TMPDIR",
