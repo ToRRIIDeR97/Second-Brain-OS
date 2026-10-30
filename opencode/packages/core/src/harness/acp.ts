@@ -632,6 +632,22 @@ export function parseAcpNotification(
   return []
 }
 
+// ACP's auth_required error code.
+const AUTH_REQUIRED = -32000
+
+/**
+ * The error a failed turn shows. A signed-out agent answers with `auth_required` (or, from older agents, a "not
+ * logged in" message); the raw protocol text doesn't say what to do, so the error names where to sign in.
+ */
+function turnError(error: ProtocolError | undefined) {
+  if (!error) return "The ACP agent failed."
+  const signedOut =
+    error.code === AUTH_REQUIRED ||
+    /auth(entication)?[ _-]required|not (logged|signed) in|please (run \/login|log ?in|sign in)/i.test(error.message)
+  if (!signedOut) return error.message
+  return `The agent isn't signed in (${error.message}). Sign in from Settings → Harnesses, or run the agent's own login, then send again.`
+}
+
 export function finishAcpTurn(exit: Exit.Exit<unknown, ProtocolError>, state: AcpState): ReadonlyArray<LLMEvent> {
   state.finished = true
   const closed = closeBlocks(state)
@@ -639,7 +655,7 @@ export function finishAcpTurn(exit: Exit.Exit<unknown, ProtocolError>, state: Ac
     const error = Option.getOrUndefined(Exit.findErrorOption(exit))
     return [
       ...closed,
-      LLMEvent.providerError({ message: error?.message ?? "The ACP agent failed." }),
+      LLMEvent.providerError({ message: turnError(error) }),
       LLMEvent.stepFinish({ index: 0, reason: "error" }),
       LLMEvent.finish({ reason: "error" }),
     ]

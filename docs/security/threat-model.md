@@ -422,10 +422,19 @@ from an ACP agent as untrusted model output.
 Known gap (partially closed): ACP and Codex harness processes no longer inherit
 the app's full environment; they get a small launch allowlist (`PATH`, `HOME`,
 the user name `USER`/`LOGNAME`/`USERNAME`, locale, temp and terminal variables,
-`XDG_*`, Windows system variables) plus the
+`XDG_*`, Windows system variables, proxy and CA settings, each CLI's config
+folder (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`), provider routing (`*_BASE_URL`,
+Bedrock and Vertex switches, `AWS_PROFILE`/`AWS_REGION`,
+`GOOGLE_APPLICATION_CREDENTIALS` as a path), `SHELL`, `SSH_AUTH_SOCK`,
+`EDITOR`/`VISUAL`; `core/src/harness/env.ts`) plus the
 `env` set in user configuration for that harness. The user name is not a
 secret; CLIs that keep their sign-in in the OS keychain need it to find it
-(Claude Code on macOS reports itself signed out without `USER`). However, any API key or token
+(Claude Code on macOS reports itself signed out without `USER`). API keys and
+tokens from the app's environment (`*_API_KEY`, `*_TOKEN`,
+`AWS_SECRET_ACCESS_KEY`) are still not passed; `SSH_AUTH_SOCK` lets a harness
+use the user's loaded SSH keys, as the app terminal already can. When a proxy
+variable is set, `127.0.0.1`, `localhost` and `::1` are added to
+`NO_PROXY`/`no_proxy` so the app's MCP endpoint is never proxied. However, any API key or token
 the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.

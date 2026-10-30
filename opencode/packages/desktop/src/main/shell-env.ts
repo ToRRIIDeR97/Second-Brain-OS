@@ -94,10 +94,8 @@ export async function loadShellEnv(shell: string, logger: ShellEnvLogger, timeou
     logger.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
     return interactive.value
   }
-  if (interactive.type === "Timeout") {
-    logger.log(`[server] Interactive shell env probe timed out: ${shell}`)
-    return null
-  }
+  // A slow `.zshrc` (nvm, conda, prompt frameworks) can time out the interactive probe; a login shell skips it.
+  if (interactive.type === "Timeout") logger.log(`[server] Interactive shell env probe timed out: ${shell}`)
 
   const login = await probe(shell, "-l", timeout)
   if (login.type === "Loaded") {
@@ -107,6 +105,23 @@ export async function loadShellEnv(shell: string, logger: ShellEnvLogger, timeou
 
   logger.log(`[server] Falling back to app environment: ${shell}`)
   return null
+}
+
+/**
+ * PATH with the common install folders for CLIs and package managers appended when missing, for when no shell
+ * environment loaded: a GUI app otherwise has only `/usr/bin:/bin:/usr/sbin:/sbin`, and every harness CLI looks
+ * uninstalled. Existing entries keep their order.
+ */
+export function fallbackPath(path: string, home: string) {
+  const entries = path.split(":").filter(Boolean)
+  const extra = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    `${home}/.local/bin`,
+    `${home}/.bun/bin`,
+    `${home}/.opencode/bin`,
+  ]
+  return [...entries, ...extra.filter((dir) => !entries.includes(dir))].join(":")
 }
 
 export function mergeShellEnv(shell: Record<string, string> | null, env: Record<string, string>) {
