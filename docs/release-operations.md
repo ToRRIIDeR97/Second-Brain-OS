@@ -145,6 +145,17 @@ Builds that include `core/src/legacy-storage.ts` store core data under
 
 Upstream OpenCode keeps using its `opencode` folders.
 
+The thread database lives in the data folder. Installed builds pin its name
+by desktop channel (`desktop/src/main/database-name.ts`): `opencode-dev.db`
+for dev, `opencode-beta.db` for beta and `opencode.db` for prod. Without the
+pin, the server names it after the channel it was built with, which falls back
+to the git branch (`opencode-<branch>.db`), so each build from another branch
+showed an empty thread list. Builds before this change left their threads in
+those branch-named files; they stay on disk and are not merged. Unpackaged
+`bun run dev` runs keep the per-branch name, so they never write to an
+installed build's database. A set `OPENCODE_DB` (environment or login shell)
+overrides the pin.
+
 On the first start of such a build, the server copies each legacy `opencode`
 data, config and state folder to its `tenon-workbench` path, then starts
 normally:

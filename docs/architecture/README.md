@@ -391,7 +391,11 @@ Tenon Workbench's core `Global` paths use the app name `tenon-workbench`
 Electron `userData`), cache in `$XDG_CACHE_HOME/tenon-workbench`, and temp files
 in `os.tmpdir()/tenon-workbench`. Database filenames are unchanged (`opencode.db`
 on latest, beta and prod, `opencode-<channel>.db` otherwise; `path()` in
-`core/src/database/database.ts`).
+`core/src/database/database.ts`). An unset build channel falls back to the git
+branch, so the installed desktop app sets `OPENCODE_DB` by its own channel
+instead (`opencode-dev.db`, `opencode-beta.db`, `opencode.db`;
+`desktop/src/main/database-name.ts`). See
+[release operations](../release-operations.md).
 
 On first start, `LegacyStorage.migrate` (`core/src/legacy-storage.ts`, called
 from `global.ts` before folders are created; skipped when `NODE_ENV=test`)
