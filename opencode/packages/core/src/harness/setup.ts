@@ -4,6 +4,7 @@ import { Harness } from "@opencode-ai/schema/harness"
 import { Effect, Option, Schema, Semaphore } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import fs from "fs/promises"
+import { parse } from "jsonc-parser"
 import os from "os"
 import path from "path"
 import type { AppProcess } from "../process"
@@ -161,8 +162,38 @@ export const writeKey = (
 /** The environment a stored key adds to its harness process. */
 export function keyEnvironment(item: Recipe | undefined, stored: Keys[string] | undefined): Record<string, string> {
   const env = item?.apiKeys.find((option) => option.id === stored?.option)?.env
-  return env && stored ? { [env]: stored.key } : {}
+  if (!env || !stored) return {}
+  // Claude Code passes its environment to the commands it runs; with this flag it strips credentials from them,
+  // so a project script or test suite can't read or bill the key the app injected.
+  return item?.id === Harness.ClaudeCode
+    ? { [env]: stored.key, CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1" }
+    : { [env]: stored.key }
 }
+
+// OpenCode's own default lets edits and shell commands run without asking; Codex runs with on-request approvals.
+const OPENCODE_ASK = JSON.stringify({ permission: { edit: "ask", bash: "ask" } })
+
+/**
+ * Launch environment that makes the OpenCode harness ask (through Tenon's approvals) before edits and shell
+ * commands. A `permission` the user set in their global OpenCode config wins, so nothing is added then.
+ * `userConfig` is that file's text (JSON or JSONC), or undefined when there is none.
+ */
+export function openCodeLaunchEnv(userConfig: string | undefined): Record<string, string> {
+  const parsed: unknown = userConfig === undefined ? undefined : parse(userConfig, [], { allowTrailingComma: true })
+  if (isRecord(parsed) && parsed.permission !== undefined) return {}
+  return { OPENCODE_CONFIG_CONTENT: OPENCODE_ASK }
+}
+
+/** The user's global OpenCode config text: `opencode.jsonc`, `opencode.json` or `config.json`, the first that exists. */
+export const readOpenCodeUserConfig = (env: Readonly<Record<string, string | undefined>> = process.env) =>
+  Effect.promise(async () => {
+    const dir = path.join(env.XDG_CONFIG_HOME ?? path.join(env.HOME ?? os.homedir(), ".config"), "opencode")
+    for (const name of ["opencode.jsonc", "opencode.json", "config.json"]) {
+      const text = await fs.readFile(path.join(dir, name), "utf8").catch(() => undefined)
+      if (text !== undefined) return text
+    }
+    return undefined
+  })
 
 async function writeAtomic(file: string, content: string) {
   await fs.mkdir(path.dirname(file), { recursive: true })
