@@ -7,7 +7,7 @@ import {
   type FileReferenceActions,
   type FileReferencePreview,
 } from "@opencode-ai/session-ui/context"
-import { resolveFileReferencePath } from "@opencode-ai/session-ui/markdown-file-reference"
+import { listedEntryPath, resolveFileReferencePath } from "@opencode-ai/session-ui/markdown-file-reference"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
@@ -67,7 +67,8 @@ export function SessionFileReferences(props: ParentProps) {
 
   const entryType = async (path: string) => {
     const nodes = await listed(path.split("/").slice(0, -1).join("/"))
-    return nodes?.find((node) => file.normalize(node.path).replaceAll("\\", "/") === path)?.type
+    // The server lists folders as `name/`; the tree store lists them without the slash.
+    return nodes?.find((node) => listedEntryPath(file.normalize(node.path)) === path)?.type
   }
 
   // Listed directly so a missing folder stays quiet instead of raising the tree's error toast.
@@ -96,7 +97,7 @@ export function SessionFileReferences(props: ParentProps) {
           return new Set(
             (nodes ?? [])
               .filter((node) => node.type === "directory")
-              .map((node) => file.normalize(node.path).replaceAll("\\", "/")),
+              .map((node) => listedEntryPath(file.normalize(node.path))),
           )
         }),
       }

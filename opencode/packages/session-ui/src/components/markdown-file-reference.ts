@@ -66,6 +66,14 @@ export function resolveFileReferencePath(input: string, directory: string) {
   return segments.join("/")
 }
 
+/**
+ * A listed entry's path in the form `resolveFileReferencePath` returns: forward slashes and no trailing slash. The
+ * server lists folders as `name/`, so comparing without this misses every folder.
+ */
+export function listedEntryPath(path: string) {
+  return path.replaceAll("\\", "/").replace(/\/+$/, "")
+}
+
 function absolute(path: string) {
   return path.startsWith("/") || /^[A-Za-z]:\//.test(path)
 }
