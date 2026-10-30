@@ -486,10 +486,14 @@ describe("ACP harness", () => {
 
   test("keeps built-in harnesses out of the registry", () => {
     const entry = Schema.decodeUnknownSync(ConfigHarness.Instance)
-    const instances = configuredInstances([], {
-      codex: entry({ driver: "acp", config: { command: "/tmp/other" } }),
-      "custom-agent": entry({ driver: "acp", name: "Custom Agent", config: { command: "custom-agent" } }),
-    })
+    const instances = configuredInstances(
+      [],
+      {
+        codex: entry({ driver: "acp", config: { command: "/tmp/other" } }),
+        "custom-agent": entry({ driver: "acp", name: "Custom Agent", config: { command: "custom-agent" } }),
+      },
+      "/g",
+    )
     expect(instances.map((instance) => `${instance.id}:${instance.driver}`)).toEqual([
       "opencode:opencode",
       "codex:codex",
@@ -512,7 +516,8 @@ describe("ACP harness", () => {
         },
       },
     } as unknown as Config.Entry
-    const instances = configuredInstances([document], {})
+    // Global config may still define harnesses; the path places this document there.
+    const instances = configuredInstances([{ ...document, path: "/g/opencode.json" } as Config.Entry], {}, "/g")
     expect(instances.map((instance) => `${instance.id}:${instance.driver}`)).toEqual([
       "opencode:opencode",
       "codex:codex",

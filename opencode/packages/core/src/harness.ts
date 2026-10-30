@@ -181,8 +181,17 @@ const layer = Layer.effect(
     const entries = yield* config.entries()
     const layerScope = yield* Effect.scope
     // Registry entries and setup API keys can change while the location is open, so instances are re-read per call.
-    const load = Effect.all([HarnessRegistry.read(global.config), HarnessSetup.readKeys(global.data)]).pipe(
-      Effect.map(([registry, keys]) => withSetupKeys(configuredInstances(entries, registry), keys)),
+    const load = Effect.all([
+      HarnessRegistry.read(global.config),
+      HarnessSetup.readKeys(global.data),
+      HarnessSetup.readOpenCodeUserConfig(),
+    ]).pipe(
+      Effect.map(([registry, keys, openCodeConfig]) =>
+        withOpenCodePermissions(
+          withSetupKeys(configuredInstances(entries, registry, global.config), keys),
+          HarnessSetup.openCodeLaunchEnv(openCodeConfig),
+        ),
+      ),
     )
     let latest = yield* load
     let loadedKeys = HarnessSetup.keysVersion()
@@ -336,7 +345,9 @@ const layer = Layer.effect(
     )
 
     const settings = () =>
-      HarnessRegistry.read(global.config).pipe(Effect.map((registry) => settingsEntries(entries, registry)))
+      HarnessRegistry.read(global.config).pipe(
+        Effect.map((registry) => settingsEntries(entries, registry, global.config)),
+      )
     // Only harnesses.json entries are editable; config-file entries shadow them and stay read-only.
     const editable = (id: string) =>
       settings().pipe(
@@ -1069,12 +1080,13 @@ export const node = makeLocationNode({
 /** Harnesses as Settings lists them, in picker order, labeled by where each one is defined. */
 export function settingsEntries(
   entries: ReadonlyArray<Config.Entry>,
-  registry: Readonly<Record<string, ConfigHarness.Instance>> = {},
+  registry: Readonly<Record<string, ConfigHarness.Instance>>,
+  globalConfig: string,
 ): ReadonlyArray<Harness.SettingsEntry> {
   const fromConfig = new Set(
-    entries.flatMap((entry) => (entry.type === "document" ? Object.keys(entry.info.harnesses ?? {}) : [])),
+    harnessDocuments(entries, globalConfig).flatMap((entry) => Object.keys(entry.info.harnesses ?? {})),
   )
-  return configuredInstances(entries, registry).map((instance) => {
+  return configuredInstances(entries, registry, globalConfig).map((instance) => {
     const source = HarnessRegistry.reserved.has(instance.id)
       ? "built-in"
       : fromConfig.has(instance.id)
@@ -1096,6 +1108,16 @@ export function settingsEntries(
 }
 
 /** Adds each built-in harness's stored setup API key to its process environment. */
+/** Adds the OpenCode harness's permission defaults, unless its configured env already sets that variable. */
+function withOpenCodePermissions(instances: ReadonlyArray<InstanceConfig>, env: Record<string, string>) {
+  return instances.map((instance) => {
+    if (instance.id !== Harness.OpenCodeAcp || Object.keys(env).length === 0) return instance
+    const current = isRecord(instance.config.env) ? instance.config.env : {}
+    if (current.OPENCODE_CONFIG_CONTENT !== undefined) return instance
+    return { ...instance, config: { ...instance.config, env: { ...current, ...env } } }
+  })
+}
+
 function withSetupKeys(instances: ReadonlyArray<InstanceConfig>, keys: HarnessSetup.Keys) {
   return instances.map((instance) => {
     const env = HarnessSetup.keyEnvironment(HarnessSetup.recipe(instance.id), keys[instance.id])
@@ -1105,9 +1127,24 @@ function withSetupKeys(instances: ReadonlyArray<InstanceConfig>, keys: HarnessSe
   })
 }
 
+/**
+ * Config documents that may define harnesses: only those in the global config folder. A harness is a command the
+ * app runs, and checking availability runs it, so a cloned repo's `opencode.json` or `.opencode/` must not add one.
+ */
+function harnessDocuments(entries: ReadonlyArray<Config.Entry>, globalConfig: string) {
+  const root = path.resolve(globalConfig)
+  return entries.filter(
+    (entry): entry is Config.Document =>
+      entry.type === "document" &&
+      // No path means inline config the user set (OPENCODE_CONFIG_CONTENT), not a file found in a folder.
+      (entry.path === undefined || path.resolve(entry.path).startsWith(root + path.sep)),
+  )
+}
+
 export function configuredInstances(
   entries: ReadonlyArray<Config.Entry>,
-  registry: Readonly<Record<string, ConfigHarness.Instance>> = {},
+  registry: Readonly<Record<string, ConfigHarness.Instance>>,
+  globalConfig: string,
 ) {
   const instances = new Map<Harness.InstanceID, InstanceConfig>([
     [
@@ -1151,8 +1188,8 @@ export function configuredInstances(
       config: value.config ?? {},
     })
   }
-  for (const entry of entries) {
-    if (entry.type !== "document" || !entry.info.harnesses) continue
+  for (const entry of harnessDocuments(entries, globalConfig)) {
+    if (!entry.info.harnesses) continue
     for (const [rawID, value] of Object.entries(entry.info.harnesses)) {
       const id = Option.getOrUndefined(decodeID(rawID))
       // Reserved IDs must not be replaced from config files either; only the

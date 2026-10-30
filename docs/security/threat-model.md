@@ -269,8 +269,11 @@ The setup dialog ([ADR-013](../adr/ADR-013-built-in-harness-setup.md),
   - Claude Code and OpenCode keys are stored in plain text in
     `harness-credentials.json` (`0600`, atomic write) in the data folder, like
     provider keys in `auth.json`.
+  - Claude Code also gets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` with a stored
+    key, so the commands it runs don't inherit the key. OpenCode has no such
+    switch; its commands can still read a stored key.
   - A key is added only to its own harness's environment, under one fixed
-    variable name. No other harness or child process receives it.
+    variable name. No other harness receives it.
   - The settings and setup routes never return a key, only which key option is
     stored.
   - Keys aren't validated when saved.
@@ -341,6 +344,28 @@ the workspace as its working directory. Harnesses are registered only by the
 user in Settings → Harnesses, through the authenticated local HTTP API
 (`/api/harness/discover` and `/api/harness/registry`). Agents have no
 registration tool, so workspace content or model output can't add a harness.
+
+Config files can also define harnesses (`harnesses` in `opencode.json`), but
+only files in the global config folder count (`harnessDocuments` in
+`core/src/harness.ts`). Project files found by walking up from the opened
+folder (`opencode.json`, `.opencode/`) are ignored for harnesses, because
+listing harnesses runs each one's availability check, so a cloned repo could
+otherwise run its own command just by being opened. Inline config without a
+file (`OPENCODE_CONFIG_CONTENT` set by the user) still counts.
+
+Permission behavior differs per harness, and the app evens it out where the
+CLI allows:
+
+- Codex runs with `workspace-write` and `on-request` approvals.
+- OpenCode's own default lets edits and shell commands run without asking.
+  The app launches it with `OPENCODE_CONFIG_CONTENT` setting `edit` and
+  `bash` to `ask` (requests reach Tenon's approvals over ACP), unless the
+  user's global OpenCode config sets `permission` or the harness's configured
+  `env` sets that variable.
+- Claude Code starts in the user's `defaultMode`. When a new session reports
+  `bypassPermissions`, the app switches it to `default` with
+  `session/set_mode` (`safeAcpMode` in `core/src/harness/acp.ts`), so its
+  tools ask too. Other modes (`acceptEdits`, `plan`, `auto`) are left as set.
 
 Test and Save run the typed command. The local API already lets authenticated
 clients start processes through its PTY routes, so this adds no new kind of
