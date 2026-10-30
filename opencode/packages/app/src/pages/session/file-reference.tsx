@@ -8,8 +8,10 @@ import {
   type FileReferencePreview,
 } from "@opencode-ai/session-ui/context"
 import { listedEntryPath, resolveFileReferencePath } from "@opencode-ai/session-ui/markdown-file-reference"
+import { mediaKindFromPath } from "@opencode-ai/session-ui/pierre/media"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { SESSION_OPEN_FILE_TAB } from "@/context/layout-tabs"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -48,6 +50,7 @@ export function SessionFileReferences(props: ParentProps) {
   const file = useFile()
   const sdk = useSDK()
   const language = useLanguage()
+  const platform = usePlatform()
   const { tabs, view } = useSessionLayout()
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -119,9 +122,22 @@ export function SessionFileReferences(props: ParentProps) {
     return { status: "found", path, start, lines: content.content.split(/\r?\n/).slice(start - 1, last) }
   }
 
+  // A file the viewer can't show (a .docx, .xlsx, .zip …) opens in its default app on desktop instead of the
+  // panel's "binary file" placeholder. Main still reveals executables rather than running them.
+  const opensExternally = async (path: string) => {
+    if (!platform.openLocalFile || mediaKindFromPath(path)) return false
+    const content = file.get(path)?.content ?? (await sdk().client.file.read({ path })).data
+    return content?.type === "binary"
+  }
+  const openExternally = (directory: string, path: string) => {
+    const url = new URL("file:///")
+    url.pathname = `${directory.replaceAll("\\", "/").replace(/\/+$/, "")}/${path}`
+    platform.openLocalFile?.(url.href)
+  }
+
   const onFileReference = (reference: FileReference) => {
     const directory = sdk().directory
-    void locate(reference).then((found) => {
+    void locate(reference).then(async (found) => {
       if (sdk().directory !== directory) return
       if (!found) {
         showToast({
@@ -136,6 +152,10 @@ export function SessionFileReferences(props: ParentProps) {
         return
       }
       const path = found.path
+      if (!found.folder && (await opensExternally(path).catch(() => false))) {
+        if (sdk().directory === directory) openExternally(directory, path)
+        return
+      }
       view().reviewPanel.open()
       // Expanding each ancestor lists it, so the tree can find, scroll to and select the row. A folder
       // itself is expanded by the tree once its row is in view.

@@ -21,7 +21,7 @@ const referencePattern = /^(.+?)(?::(\d{1,7})(?:-(\d{1,7})|:\d{1,7})?|#L(\d{1,7}
  * and no extension, so it may be either; a line range makes it a file. Dotted identifiers stay plain code.
  */
 export function parseFileReference(text: string): FileReference | undefined {
-  const match = referencePattern.exec(text.trim())
+  const match = referencePattern.exec(localPath(text.trim()) ?? text.trim())
   if (!match) return
   const path = match[1]
   if (inlineCodeKind(path) !== "path") return
@@ -32,6 +32,57 @@ export function parseFileReference(text: string): FileReference | undefined {
   const file = hasPathExtension(name) || hasPathFileName(name)
   if (start < 1) return file ? { path } : { path, kind: "either" }
   return { path, start, end: end >= start ? end : start }
+}
+
+/** A `file://` URL as a plain path, or undefined for anything else. Only local (hostless) URLs count. */
+function localPath(text: string) {
+  if (!/^file:\/\//i.test(text) || !URL.canParse(text)) return
+  const url = new URL(text)
+  if (url.hostname) return
+  const path = decodeURIComponent(url.pathname)
+  // `file:///C:/x` has the pathname `/C:/x`; the drive letter starts the Windows path.
+  return /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path
+}
+
+/**
+ * The file path a Markdown link points at when it targets a local file: a relative path (`report.docx`,
+ * `docs/a.md#intro`) or a `file://` URL. Web, mail and other scheme links, and in-page `#anchors`, are not files.
+ */
+export function localLinkTarget(href: string) {
+  const value = href.trim()
+  if (!value || value.startsWith("#") || value.startsWith("//")) return
+  if (/^file:/i.test(value)) return localPath(value)
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value) && !/^[A-Za-z]:[\\/]/.test(value)) return
+  const path = value.replace(/[?#].*$/, "")
+  if (!path) return
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
+const citationPattern = /:{1,2}codex-file-citation\{([^}\n]*)\}/g
+
+/**
+ * Rewrites Codex's file citation directives (`:codex-file-citation{path="…" line_range_start=… …}`, which only the
+ * Codex app renders) as inline code, so they become file chips like any other cited path.
+ */
+export function fileCitations(text: string) {
+  if (!text.includes("codex-file-citation")) return text
+  return text.replace(citationPattern, (whole, attributes: string) => {
+    const read = (name: string) => new RegExp(`\\b${name}=(?:"([^"]*)"|'([^']*)'|([^\\s"']+))`).exec(attributes)
+    const value = (name: string) => {
+      const match = read(name)
+      return match ? (match[1] ?? match[2] ?? match[3]) : undefined
+    }
+    const path = value("path")
+    if (!path || path.includes("`")) return whole
+    const start = Number(value("line_range_start") ?? 0)
+    const end = Number(value("line_range_end") ?? start)
+    const range = start > 0 ? (end > start ? `:${start}-${end}` : `:${start}`) : ""
+    return `\`${path}${range}\``
+  })
 }
 
 /**
