@@ -37,6 +37,8 @@ export interface Client {
   ) => Effect.Effect<unknown, ProtocolError>
   readonly notify: (method: string, params?: unknown) => Effect.Effect<void, ProtocolError>
   readonly notifications: Stream.Stream<Notification, ProtocolError>
+  /** True once the process's output ended or failed: requests then fail at once, so callers can replace it. */
+  readonly closed: Effect.Effect<boolean>
 }
 
 export interface Connection {
@@ -66,9 +68,12 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
   const notifications = yield* Queue.unbounded<Notification, ProtocolError>()
   const pending = yield* Ref.make(new Map<string, Pending>())
   const nextID = yield* Ref.make(1)
+  // Set once the connection is gone. A request made after that has nobody to answer it, so it fails at once.
+  const closedBy = yield* Ref.make<ProtocolError | undefined>(undefined)
 
   const fail = (error: ProtocolError) =>
-    Ref.modify(pending, (current) => [current, new Map()] as const).pipe(
+    Ref.update(closedBy, (current) => current ?? error).pipe(
+      Effect.andThen(Ref.modify(pending, (current) => [current, new Map()] as const)),
       Effect.flatMap((current) =>
         Effect.forEach(current.values(), (item) => Deferred.fail(item.deferred, error), { discard: true }),
       ),
@@ -184,9 +189,17 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
 
   const request = (method: string, params?: unknown, timeout?: Duration.Input) =>
     Effect.gen(function* () {
+      const closed = yield* Ref.get(closedBy)
+      if (closed) return yield* Effect.fail(closed)
       const id = yield* Ref.modify(nextID, (current) => [current, current + 1] as const)
       const deferred = yield* Deferred.make<unknown, ProtocolError>()
       yield* Ref.update(pending, (current) => new Map(current).set(String(id), { method, deferred }))
+      // The connection can close between the check above and this registration; fail rather than wait forever.
+      const lost = yield* Ref.get(closedBy)
+      if (lost) {
+        yield* removePending(String(id))
+        return yield* Effect.fail(lost)
+      }
       yield* send({ id, method, ...(params === undefined ? {} : { params }) }).pipe(
         Effect.tapError(() => removePending(String(id))),
       )
@@ -209,6 +222,7 @@ export const make = Effect.fn("CodexAppServer.make")(function* (input: {
     request,
     notify: (method: string, params?: unknown) => send({ method, ...(params === undefined ? {} : { params }) }),
     notifications: Stream.fromQueue(notifications),
+    closed: Ref.get(closedBy).pipe(Effect.map((error) => error !== undefined)),
   } satisfies Client
 })
 

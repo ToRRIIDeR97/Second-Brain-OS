@@ -67,10 +67,38 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
+// Longest tool output kept when another provider's tool call is replayed as text.
+const REPLAYED_OUTPUT_LIMIT = 2_000
+
+/**
+ * A tool call another provider ran (a hosted search, or a Codex or Claude Code tool, recorded under its harness)
+ * as text. A different provider can't take it as a provider-executed part: Anthropic, OpenAI Chat and Gemini
+ * reject server-tool results they don't know, which failed every later request on the thread.
+ */
+const replayedTool = (tool: SessionMessage.AssistantTool): ContentPart => {
+  const input = toolInput(tool)
+  const target =
+    typeof input === "object" && input !== null
+      ? Object.values(input).find((value): value is string => typeof value === "string" && value.length > 0)
+      : undefined
+  const output =
+    tool.state.status === "pending"
+      ? ""
+      : tool.state.content
+          .flatMap((part) => (part.type === "text" ? [part.text] : []))
+          .join("\n")
+          .trim()
+  const detail = tool.state.status === "error" ? tool.state.error.message : output
+  const clipped = detail.length > REPLAYED_OUTPUT_LIMIT ? `${detail.slice(0, REPLAYED_OUTPUT_LIMIT)}…` : detail
+  const head = `[Tool ${tool.name}${target ? ` ${target.slice(0, 200)}` : ""}: ${tool.state.status}]`
+  return { type: "text", text: clipped ? `${head}\n${clipped}` : head }
+}
+
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
+  const sameProvider = String(message.model.providerID) === String(model.provider)
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
@@ -85,6 +113,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
+    if (item.provider?.executed === true && !sameProvider) return [replayedTool(item)]
     const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
     if (item.provider?.executed !== true) return [call]
     const result = toolResult(
