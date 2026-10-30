@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  listedEntryPath,
   fileReferenceRangeLabel,
   parseFileReference,
   resolveFileReferencePath,
@@ -125,5 +126,15 @@ describe("fileReferenceRangeLabel", () => {
     expect(fileReferenceRangeLabel({})).toBe("")
     expect(fileReferenceRangeLabel({ start: 27, end: 27 })).toBe("L27")
     expect(fileReferenceRangeLabel({ start: 27, end: 29 })).toBe("L27\u201329")
+  })
+})
+
+describe("listedEntryPath", () => {
+  test("matches a listed folder to the path a reference resolves to", () => {
+    expect(listedEntryPath("research/")).toBe("research")
+    expect(listedEntryPath("docs/research//")).toBe("docs/research")
+    expect(listedEntryPath("docs\\research\\")).toBe("docs/research")
+    expect(listedEntryPath("src/index.ts")).toBe("src/index.ts")
+    expect(resolveFileReferencePath("research/", "/repo")).toBe(listedEntryPath("research/"))
   })
 })
