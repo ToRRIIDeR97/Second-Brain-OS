@@ -60,9 +60,41 @@ export interface Session {
   readonly closed: Effect.Effect<boolean>
   readonly turn: (input: {
     readonly text: string
+    readonly media?: ReadonlyArray<Media>
     readonly model?: string
     readonly reasoningEffort?: string
   }) => Stream.Stream<LLMEvent, LLMError>
+}
+
+/** An attachment on the user message: `data` is a `data:` URL (pasted) or a `file://` URL (picked file). */
+export interface Media {
+  readonly mediaType: string
+  readonly data: string
+  readonly filename?: string
+}
+
+/**
+ * The prompt for one ACP turn: the text, then each attachment the agent can take. A pasted image (`data:image/…`)
+ * becomes an `image` block when the agent advertises `promptCapabilities.image`; a local file becomes a
+ * `resource_link`, which every ACP agent must accept. Anything else is left out; the text still names it.
+ */
+export function acpPromptBlocks(text: string, media: ReadonlyArray<Media>, capabilities: { readonly image?: boolean }) {
+  return [
+    { type: "text", text },
+    ...media.flatMap((item): Record<string, unknown>[] => {
+      if (item.data.startsWith("file://"))
+        return [
+          {
+            type: "resource_link",
+            uri: item.data,
+            name: item.filename ?? item.data.split("/").pop() ?? "file",
+            mimeType: item.mediaType,
+          },
+        ]
+      const inline = /^data:(image\/[^;,]+);base64,(.*)$/s.exec(item.data)
+      return inline && capabilities.image === true ? [{ type: "image", mimeType: inline[1], data: inline[2] }] : []
+    }),
+  ]
 }
 
 /**
@@ -276,6 +308,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   )
   const capabilities = isRecord(initialize.agentCapabilities) ? initialize.agentCapabilities : {}
   const http = isRecord(capabilities.mcpCapabilities) && capabilities.mcpCapabilities.http === true
+  const promptCapabilities = isRecord(capabilities.promptCapabilities) ? capabilities.promptCapabilities : {}
   const params = { cwd: input.directory, mcpServers: http ? (input.mcpServers ?? []) : [] }
   const loaded =
     input.continuation && capabilities.loadSession === true
@@ -343,7 +376,12 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
         )
     })
 
-  const turn = (turnInput: { readonly text: string; readonly model?: string; readonly reasoningEffort?: string }) =>
+  const turn = (turnInput: {
+    readonly text: string
+    readonly media?: ReadonlyArray<Media>
+    readonly model?: string
+    readonly reasoningEffort?: string
+  }) =>
     Stream.unwrap(
       Effect.gen(function* () {
         // A folded level is sent as its `<base>/<level>` model; otherwise as the agent's level option.
@@ -353,7 +391,10 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
         yield* Queue.clear(items)
         const parser = acpState(state.sessionCost)
         yield* client
-          .request("session/prompt", { sessionId: session.sessionId, prompt: [{ type: "text", text: turnInput.text }] })
+          .request("session/prompt", {
+            sessionId: session.sessionId,
+            prompt: acpPromptBlocks(turnInput.text, turnInput.media ?? [], promptCapabilities),
+          })
           .pipe(
             Effect.exit,
             Effect.flatMap((exit) => Queue.offer(items, { type: "done", exit })),
@@ -489,6 +530,8 @@ export interface AcpState {
   sessionCost?: number
   /** Slash commands the agent reported through `available_commands_update`. */
   commands?: AcpCommand[]
+  /** Plan updates shown so far this turn; each becomes its own todo call. */
+  plans: number
 }
 
 export const acpState = (previousCost?: number): AcpState => ({
@@ -497,6 +540,7 @@ export const acpState = (previousCost?: number): AcpState => ({
   blocks: 0,
   finished: false,
   previousCost,
+  plans: 0,
 })
 
 export function parseAcpNotification(
@@ -513,6 +557,23 @@ export function parseAcpNotification(
   // `_meta["opencode/child-session"]`. They belong to the subagent's row, not the parent turn.
   const child = childSession(update)
   if (child && child.id !== sessionId) return recordChild(state, child, kind, update)
+  // Claude Code marks a subagent's own updates with the Task/Agent call that started it.
+  const claudeParent = claudeSubagent(update, state)
+  if (claudeParent) {
+    const id = `claude:${claudeParent}`
+    state.children.set(id, claudeParent)
+    return recordChild(state, { id }, kind, update)
+  }
+  if (kind === "plan") {
+    const entries = Array.isArray(update.entries) ? update.entries.filter(isRecord) : []
+    return [
+      ...closeBlocks(state),
+      ...planEvents(
+        state,
+        entries.map((entry) => ({ content: string(entry.content) ?? "", status: string(entry.status) ?? "pending" })),
+      ),
+    ]
+  }
   if (kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
     const content = isRecord(update.content) ? update.content : undefined
     const text = content?.type === "text" ? string(content.text) : undefined
@@ -555,11 +616,7 @@ export function parseAcpNotification(
         name: tool.name,
         providerExecuted: true,
         result: status === "failed" ? { type: "error", value } : { type: "text", value },
-        ...(tool.name === "acp_subagent"
-          ? { providerMetadata: { acp: subagentSnapshot(tool) } }
-          : tool.steps.size === 0
-            ? {}
-            : { providerMetadata: { acp: { steps: [...tool.steps.values()] } } }),
+        ...resultMetadata(tool, update),
       }),
     ]
   }
@@ -691,8 +748,9 @@ function permissionResources(tool: Record<string, unknown>, title: string) {
 
 function toolName(update: Record<string, unknown>) {
   // OpenCode reports its subagent tool with the generic `think` kind; its own tool name is clearer.
-  const name = string(update.name)
-  if (name === "subagent" || name === "task") return "acp_subagent"
+  // Claude Code names its subagent tool `Task` or `Agent`.
+  const name = string(update.name)?.toLowerCase()
+  if (name === "subagent" || name === "task" || name === "agent") return "acp_subagent"
   const kind = string(update.kind)
   return kind ? `acp_${kind}` : "acp_tool"
 }
@@ -883,7 +941,68 @@ function toolOutput(update: Record<string, unknown>) {
   })
   const output =
     parts.length > 0 ? parts.join("\n") : update.rawOutput === undefined ? "Completed" : json(update.rawOutput)
-  return output.length > 32_000 ? `${output.slice(0, 32_000)}\n[Output truncated]` : output
+  return clipToolOutput(output)
+}
+
+const OUTPUT_HEAD = 8_000
+const OUTPUT_TAIL = 24_000
+
+/**
+ * Bounds harness tool output to 32,000 characters, keeping the start and the end: the end of a build or test run
+ * is usually where the failure and the summary are.
+ */
+export function clipToolOutput(output: string) {
+  if (output.length <= OUTPUT_HEAD + OUTPUT_TAIL) return output
+  const omitted = output.length - OUTPUT_HEAD - OUTPUT_TAIL
+  return `${output.slice(0, OUTPUT_HEAD)}\n… ${omitted} characters omitted …\n${output.slice(-OUTPUT_TAIL)}`
+}
+
+/** A provider-executed `todowrite` call and result for a plan, the shape the built-in todo list uses. */
+export function planEvents(
+  state: { plans: number },
+  todos: ReadonlyArray<{ readonly content: string; readonly status: string }>,
+): ReadonlyArray<LLMEvent> {
+  state.plans += 1
+  const id = `plan-${state.plans}-${Date.now().toString(36)}`
+  const input = { todos: todos.filter((todo) => todo.content) }
+  const done = input.todos.filter((todo) => todo.status === "completed").length
+  return [
+    LLMEvent.toolCall({ id, name: "todowrite", input, providerExecuted: true }),
+    LLMEvent.toolResult({
+      id,
+      name: "todowrite",
+      providerExecuted: true,
+      result: { type: "text", value: `${done}/${input.todos.length} done` },
+    }),
+  ]
+}
+
+function claudeSubagent(update: Record<string, unknown>, state: AcpState) {
+  const meta = isRecord(update._meta) && isRecord(update._meta.claudeCode) ? update._meta.claudeCode : undefined
+  const parent = string(meta?.parentToolUseId)
+  return parent && state.tools.get(parent)?.name === "acp_subagent" ? parent : undefined
+}
+
+/** Diffs an edit reported, kept so the edit view can show them; the output text only names the files. */
+function acpDiffs(update: Record<string, unknown>) {
+  const content = Array.isArray(update.content) ? update.content.filter(isRecord) : []
+  return content.flatMap((item) => {
+    const path = string(item.path)
+    if (item.type !== "diff" || !path) return []
+    return [
+      { path, oldText: typeof item.oldText === "string" ? item.oldText : "", newText: string(item.newText) ?? "" },
+    ]
+  })
+}
+
+function resultMetadata(tool: AcpTool, update: Record<string, unknown>) {
+  if (tool.name === "acp_subagent") return { providerMetadata: { acp: subagentSnapshot(tool) } }
+  const diffs = acpDiffs(update)
+  const acp = {
+    ...(tool.steps.size === 0 ? {} : { steps: [...tool.steps.values()] }),
+    ...(diffs.length === 0 ? {} : { diffs }),
+  }
+  return Object.keys(acp).length === 0 ? {} : { providerMetadata: { acp } }
 }
 
 function finishReason(stopReason: string | undefined): FinishReason {

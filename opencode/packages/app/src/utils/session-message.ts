@@ -26,7 +26,12 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeToolInput(name: string, input: Record<string, unknown>) {
-  if (!["edit", "write"].includes(name) || typeof input.path !== "string" || typeof input.filePath === "string")
+  // ACP edits render with the edit view, which reads `filePath`.
+  if (
+    !["edit", "write", "acp_edit"].includes(name) ||
+    typeof input.path !== "string" ||
+    typeof input.filePath === "string"
+  )
     return input
   return { ...input, filePath: input.path }
 }
@@ -372,13 +377,21 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
           ]
         : [],
     )
+    const edit = acpEdit(tool)
     return {
       status: "completed" as const,
-      input: normalizeToolInput(tool.name, tool.state.input),
+      input: edit
+        ? { ...normalizeToolInput(tool.name, tool.state.input), filePath: edit.path }
+        : normalizeToolInput(tool.name, tool.state.input),
       output: tool.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n"),
       title: tool.name,
       // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
-      metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
+      metadata: edit
+        ? {
+            ...normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
+            filediff: { file: edit.path, before: edit.oldText, after: edit.newText },
+          }
+        : normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
       time: { start, end: tool.time.completed ?? start },
       attachments: attachments.length ? attachments : undefined,
     }
@@ -397,6 +410,19 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       ...(acpSteps(tool) ? { acpSteps: acpSteps(tool) } : {}),
       ...(acpSubagent(tool) ? { acpSubagent: acpSubagent(tool) } : {}),
     },
+  }
+}
+
+/** The one diff an ACP edit reported, for the edit view; an edit of several files keeps the generic view. */
+function acpEdit(tool: SessionMessageAssistantTool) {
+  if (tool.name !== "acp_edit") return undefined
+  const diffs = acpPick(tool, (acp) => (Array.isArray(acp.diffs) ? acp.diffs.filter(record) : undefined))
+  const diff = diffs?.length === 1 ? diffs[0] : undefined
+  if (!diff || typeof diff.path !== "string") return undefined
+  return {
+    path: diff.path,
+    oldText: typeof diff.oldText === "string" ? diff.oldText : "",
+    newText: typeof diff.newText === "string" ? diff.newText : "",
   }
 }
 
