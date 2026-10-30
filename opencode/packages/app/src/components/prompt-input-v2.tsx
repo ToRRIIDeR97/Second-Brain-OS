@@ -562,26 +562,29 @@ function PromptStashMenu(props: { stash: PromptInputV2ComposerController["stash"
           />
           <MenuV2.Portal>
             <MenuV2.Content style={{ "min-width": "220px", "max-width": "320px" }}>
-              <MenuV2.GroupLabel>{language.t("secondBrain.composer.stash.title")}</MenuV2.GroupLabel>
-              <For each={props.stash.entries()}>
-                {(entry) => (
-                  <MenuV2.Sub gutter={0}>
-                    <MenuV2.SubTrigger data-stash-id={entry.id}>
-                      <span class="truncate">{preview(entry)}</span>
-                    </MenuV2.SubTrigger>
-                    <MenuV2.Portal>
-                      <MenuV2.SubContent>
-                        <MenuV2.Item onSelect={() => props.stash.restore(entry.id)}>
-                          {language.t("secondBrain.composer.stash.restore")}
-                        </MenuV2.Item>
-                        <MenuV2.Item onSelect={() => props.stash.remove(entry.id)}>
-                          {language.t("secondBrain.composer.stash.delete")}
-                        </MenuV2.Item>
-                      </MenuV2.SubContent>
-                    </MenuV2.Portal>
-                  </MenuV2.Sub>
-                )}
-              </For>
+              {/* Kobalte throws for a group label outside a group, which took down the whole window. */}
+              <MenuV2.Group>
+                <MenuV2.GroupLabel>{language.t("secondBrain.composer.stash.title")}</MenuV2.GroupLabel>
+                <For each={props.stash.entries()}>
+                  {(entry) => (
+                    <MenuV2.Sub gutter={0}>
+                      <MenuV2.SubTrigger data-stash-id={entry.id}>
+                        <span class="truncate">{preview(entry)}</span>
+                      </MenuV2.SubTrigger>
+                      <MenuV2.Portal>
+                        <MenuV2.SubContent>
+                          <MenuV2.Item onSelect={() => props.stash.restore(entry.id)}>
+                            {language.t("secondBrain.composer.stash.restore")}
+                          </MenuV2.Item>
+                          <MenuV2.Item onSelect={() => props.stash.remove(entry.id)}>
+                            {language.t("secondBrain.composer.stash.delete")}
+                          </MenuV2.Item>
+                        </MenuV2.SubContent>
+                      </MenuV2.Portal>
+                    </MenuV2.Sub>
+                  )}
+                </For>
+              </MenuV2.Group>
             </MenuV2.Content>
           </MenuV2.Portal>
         </MenuV2>
