@@ -148,6 +148,60 @@ describe("readClaudeToken", () => {
   })
 })
 
+describe("readClaudeToken on macOS", () => {
+  const home = async (credentials?: unknown) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-usage-mac-"))
+    if (credentials !== undefined) {
+      await fs.mkdir(path.join(dir, ".claude"))
+      await fs.writeFile(path.join(dir, ".claude", ".credentials.json"), JSON.stringify(credentials))
+    }
+    return dir
+  }
+  const entry = (accessToken: string, expiresAt: number) =>
+    JSON.stringify({ claudeAiOauth: { accessToken, expiresAt } })
+  const read = (
+    env: Record<string, string | undefined>,
+    keychain: (account: string) => Promise<string | undefined>,
+    platform: NodeJS.Platform = "darwin",
+  ) => Effect.runPromise(HarnessUsage.readClaudeToken(env, 1_000, keychain, platform))
+
+  test("prefers the keychain entry for the user over a stale credentials file", async () => {
+    const accounts: string[] = []
+    const keychain = async (account: string) => {
+      accounts.push(account)
+      return entry("tok-live", 5_000)
+    }
+    const dir = await home({ claudeAiOauth: { accessToken: "tok-old", expiresAt: 999 } })
+    expect(await read({ HOME: dir, USER: "me" }, keychain)).toEqual({ status: "valid", token: "tok-live" })
+    expect(accounts).toEqual(["me"])
+  })
+
+  test("falls back to the file when the keychain has no usable token", async () => {
+    const dir = await home({ claudeAiOauth: { accessToken: "tok-file", expiresAt: 5_000 } })
+    expect(await read({ HOME: dir, USER: "me" }, async () => undefined)).toEqual({ status: "valid", token: "tok-file" })
+    expect(await read({ HOME: dir, USER: "me" }, async () => "not json")).toEqual({
+      status: "valid",
+      token: "tok-file",
+    })
+    expect(await read({ HOME: await home(), USER: "me" }, async () => entry("tok-old", 999))).toEqual({
+      status: "expired",
+    })
+  })
+
+  test("skips the keychain off macOS, with CLAUDE_CONFIG_DIR, or without a user name", async () => {
+    const accounts: string[] = []
+    const keychain = async (account: string) => {
+      accounts.push(account)
+      return entry("tok-live", 5_000)
+    }
+    const dir = await home()
+    expect(await read({ HOME: dir, USER: "me" }, keychain, "linux")).toEqual({ status: "missing" })
+    expect(await read({ HOME: dir, USER: "me", CLAUDE_CONFIG_DIR: dir }, keychain)).toEqual({ status: "missing" })
+    expect(await read({ HOME: dir }, keychain)).toEqual({ status: "missing" })
+    expect(accounts).toEqual([])
+  })
+})
+
 describe("fetchClaudeUsage", () => {
   test("sends the token only in the Authorization header and parses the windows", async () => {
     const calls: { url: string; headers: Headers }[] = []

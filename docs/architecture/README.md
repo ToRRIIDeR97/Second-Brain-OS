@@ -1151,13 +1151,14 @@ CLIs refresh tokens themselves.
 - Codex: `account/read`, then `account/rateLimits/read` on an open thread's
   app-server connection or a short-lived one. `null` account is signed out; an
   API-key account is unsupported.
-- Claude Code: the OAuth token from `$CLAUDE_CONFIG_DIR/.credentials.json` (or
-  `~/.claude/.credentials.json`) goes to
+- Claude Code: the OAuth token from the macOS keychain entry
+  `Claude Code-credentials` (read with `/usr/bin/security`, macOS only and only
+  without `CLAUDE_CONFIG_DIR`), else from `$CLAUDE_CONFIG_DIR/.credentials.json`
+  (or `~/.claude/.credentials.json`), goes to
   `GET https://api.anthropic.com/api/oauth/usage` (`claudeUsage`). When that
   token is missing, expired or rejected, the `oauthAccount` sign-in in
   `.claude.json` decides: present is unsupported ("keeps its sign-in where the
-  app can't read it"; on macOS the live token is in the keychain and the file
-  can be a stale leftover), absent is signed out. A stored Anthropic API key
+  app can't read it"), absent is signed out. A stored Anthropic API key
   is unsupported.
 - Command Code (an ACP entry whose command is `command-code`, `commandcode`,
   `cmdc` or a path into its npm package): the key from `COMMAND_CODE_API_KEY`,

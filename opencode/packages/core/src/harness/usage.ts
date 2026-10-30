@@ -1,6 +1,7 @@
 export * as HarnessUsage from "./usage"
 
 import { Cause, Clock, Effect, Option, Schema } from "effect"
+import { execFile } from "child_process"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -79,23 +80,52 @@ export function parseCodexRateLimits(body: unknown): UsageWindow[] {
   })
 }
 
+type ClaudeToken = { readonly status: "valid"; readonly token: string } | { readonly status: "missing" | "expired" }
+
 /**
- * The Claude Code OAuth access token from `$CLAUDE_CONFIG_DIR/.credentials.json` or `~/.claude/.credentials.json`.
- * The token stays in the server process: callers pass it only to the usage request, never to a response or a log.
+ * The Claude Code OAuth access token. On macOS without `CLAUDE_CONFIG_DIR`, Claude Code keeps its live sign-in in
+ * the keychain entry `Claude Code-credentials` (account: the user name), so that is read first, with the system
+ * `security` tool the way the CLI reads it. Otherwise, or when the keychain has no usable token, the token comes
+ * from `$CLAUDE_CONFIG_DIR/.credentials.json` or `~/.claude/.credentials.json`. The token stays in the server
+ * process: callers pass it only to the usage request, never to a response or a log.
  */
-export const readClaudeToken = (env: Readonly<Record<string, string | undefined>> = process.env, now = Date.now()) =>
-  Effect.promise(
-    async (): Promise<
-      { readonly status: "valid"; readonly token: string } | { readonly status: "missing" | "expired" }
-    > => {
-      const dir = env.CLAUDE_CONFIG_DIR || path.join(env.HOME ?? os.homedir(), ".claude")
-      const value = await readCredentialFile(path.join(dir, ".credentials.json"))
-      const oauth = isRecord(value) && isRecord(value.claudeAiOauth) ? value.claudeAiOauth : undefined
-      if (!oauth || typeof oauth.accessToken !== "string" || !oauth.accessToken) return { status: "missing" }
-      if (finite(oauth.expiresAt) && oauth.expiresAt <= now) return { status: "expired" }
-      return { status: "valid", token: oauth.accessToken }
-    },
-  )
+export const readClaudeToken = (
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  now = Date.now(),
+  keychain: (account: string) => Promise<string | undefined> = readClaudeKeychain,
+  platform: NodeJS.Platform = process.platform,
+) =>
+  Effect.promise(async (): Promise<ClaudeToken> => {
+    const account = env.USER || env.LOGNAME
+    const stored =
+      platform === "darwin" && !env.CLAUDE_CONFIG_DIR && account
+        ? claudeToken(Option.getOrUndefined(decodeJson((await keychain(account).catch(() => undefined)) ?? "")), now)
+        : undefined
+    if (stored?.status === "valid") return stored
+    const dir = env.CLAUDE_CONFIG_DIR || path.join(env.HOME ?? os.homedir(), ".claude")
+    const file = claudeToken(await readCredentialFile(path.join(dir, ".credentials.json")), now)
+    // An expired keychain token says more than a missing file: the CLI refreshes it on its next run.
+    return file.status === "missing" && stored ? stored : file
+  })
+
+function claudeToken(value: unknown, now: number): ClaudeToken {
+  const oauth = isRecord(value) && isRecord(value.claudeAiOauth) ? value.claudeAiOauth : undefined
+  if (!oauth || typeof oauth.accessToken !== "string" || !oauth.accessToken) return { status: "missing" }
+  if (finite(oauth.expiresAt) && oauth.expiresAt <= now) return { status: "expired" }
+  return { status: "valid", token: oauth.accessToken }
+}
+
+/** Reads Claude Code's keychain entry with `/usr/bin/security`; undefined when it is absent, too large or slow. */
+function readClaudeKeychain(account: string) {
+  return new Promise<string | undefined>((resolve) => {
+    execFile(
+      "/usr/bin/security",
+      ["find-generic-password", "-a", account, "-s", "Claude Code-credentials", "-w"],
+      { timeout: 5_000, maxBuffer: MAX_CREDENTIAL_BYTES, env: {} },
+      (error, stdout) => resolve(error ? undefined : stdout.trim()),
+    )
+  })
+}
 
 /** Asks Anthropic for the subscription usage behind a Claude Code OAuth token. */
 export const fetchClaudeUsage = (token: string, request: typeof fetch = fetch) =>

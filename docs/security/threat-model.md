@@ -285,9 +285,13 @@ the desktop main process.
 `HarnessRuntime.usage`) reports plan usage windows. It takes no input beyond
 the location query and has the same auth as the other harness routes.
 
-- **Claude credential read.** The server reads `claudeAiOauth.accessToken` and
+- **Claude credential read.** On macOS without `CLAUDE_CONFIG_DIR`, the server
+  first reads Claude Code's keychain entry (`Claude Code-credentials`, account
+  `$USER`) with `/usr/bin/security find-generic-password -w`, the same way the
+  CLI reads it, with an empty environment, a 5 s timeout and a 64 KiB output
+  cap. When that has no usable token, it reads `claudeAiOauth.accessToken` and
   `expiresAt` from `$CLAUDE_CONFIG_DIR/.credentials.json` or
-  `~/.claude/.credentials.json` on each uncached call. The token stays in the
+  `~/.claude/.credentials.json`. Both happen on each uncached call. The token stays in the
   server process. It is never returned to the renderer, logged, written to disk
   or put in a URL; it is sent only in the `Authorization` header of the usage
   request. Expired tokens are not refreshed, and the app never writes the file.
@@ -326,7 +330,9 @@ the location query and has the same auth as the other harness routes.
 
 Known gap: anything that can read the user's home folder can read the same
 Claude, Command Code and OpenCode credential files. The app adds no new copy
-of them.
+of them. On macOS, the app's server can also read Claude Code's keychain
+entry, as any process running as the user can when the entry's access list
+allows `/usr/bin/security` (it does for entries Claude Code writes).
 
 ## Harness registration
 
