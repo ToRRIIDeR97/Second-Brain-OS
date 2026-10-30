@@ -56,6 +56,8 @@ export interface Session {
   readonly mcpAttached: boolean
   readonly agent: { readonly name?: string; readonly version?: string }
   readonly models: ReadonlyArray<Harness.Model>
+  /** True once the agent process has exited; the runtime must then be replaced. */
+  readonly closed: Effect.Effect<boolean>
   readonly turn: (input: {
     readonly text: string
     readonly model?: string
@@ -365,6 +367,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
     sessionId: session.sessionId,
     resumed: loaded !== undefined,
     mcpAttached: params.mcpServers.length > 0,
+    closed: client.closed,
     agent: agentInfo(initialize),
     models: selector.models,
     turn,

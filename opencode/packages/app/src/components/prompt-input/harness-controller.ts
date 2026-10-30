@@ -31,6 +31,22 @@ export const defaultModel = (instance: Harness.Instance) => {
     : undefined
 }
 
+/**
+ * Whether the thread's model should change for the selected harness. The built-in loop clears a harness model.
+ * An external harness keeps the current model while its list is empty (still loading, or refreshing) and while a
+ * turn runs; it moves to the harness default only when the harness lists models and none is the current one.
+ */
+export function reconcileHarnessModel(input: {
+  selected: Harness.Instance
+  current: { id: string } | undefined
+  running: boolean
+}): { keep: true } | { set: ReturnType<typeof defaultModel> } {
+  if (input.selected.driver === Harness.OpenCodeDriver) return input.current ? { set: undefined } : { keep: true }
+  if (input.running || input.selected.models.length === 0) return { keep: true }
+  if (input.selected.models.some((model) => model.id === input.current?.id)) return { keep: true }
+  return { set: defaultModel(input.selected) }
+}
+
 // Background checks run at most this often; each can start every harness CLI on the server.
 const REVALIDATE_MS = 60_000
 // Listing Claude Code's models takes about 10s, longer on a cold start.
@@ -138,13 +154,12 @@ export function createPromptHarnessController(selection: HarnessSelection) {
       selection.set(selected.id, defaultModel(selected))
       return
     }
-    if (selected.driver === Harness.OpenCodeDriver) {
-      if (selection.model.current()) selection.model.set(undefined)
-      return
-    }
-    const currentModel = selection.model.current()
-    if (selected.models.some((model) => model.id === currentModel?.id)) return
-    selection.model.set(defaultModel(selected))
+    const next = reconcileHarnessModel({
+      selected,
+      current: selection.model.current(),
+      running: selection.disabled?.() ?? false,
+    })
+    if ("set" in next) selection.model.set(next.set)
   })
 
   return {

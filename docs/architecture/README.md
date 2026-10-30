@@ -507,6 +507,9 @@ handoff. Codex and ACP keep their own native thread or session, so
   the driver records the ID of the user message it answered as
   `lastSeenMessageID`.
 - A fresh thread, or one whose resume failed, gets the bounded full history.
+  Any failed Codex `thread/resume` (missing or corrupt rollout, timeout, or
+  new error wording) starts a new thread (`openCodexThread`); the warning is
+  logged and the new `nativeID` replaces the old continuation.
 - A resumed thread gets only the messages after its `lastSeenMessageID`,
   skipping its own reply to that message. If that message is no longer in the
   request (for example after compaction), it gets the bounded full history.
@@ -542,7 +545,22 @@ handoff. Codex and ACP keep their own native thread or session, so
 
 `metadata.harnessRevision` still increases on every switch to a different
 instance. It keys the in-memory runtimes, so a harness that is switched back
-in reopens its thread and gets the delta. The old single-slot
+in reopens its thread and gets the delta. A cached runtime whose process exited (the
+JSON-RPC client's `closed`, set when its stdout ends or fails) is closed and
+reopened instead of reused; requests on a closed client fail at once rather
+than wait.
+
+When the built-in loop reads a thread that earlier ran on another provider
+or a harness, `toLLMMessages` replays provider-executed tool calls as
+provider parts only to the provider that ran them. For any other provider
+they become text (`[Tool <name> <target>: <status>]` plus up to 2,000
+characters of output), because Anthropic, OpenAI Chat and Gemini reject
+server-tool results they don't know. Harness turns record the harness
+instance ID as their provider, so they always take the text form.
+
+The composer keeps a thread's harness model while that harness reports an
+empty model list or a turn runs (`reconcileHarnessModel`); it falls back to
+the harness default only when a non-empty list lacks the current model. The old single-slot
 `metadata.harnessContinuation` is read only when it matches the current
 revision (resumed with no history, as before) and is dropped on the next
 `HarnessContinuationSet`. That event's `revision` field is now ignored.

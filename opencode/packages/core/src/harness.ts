@@ -413,31 +413,7 @@ const layer = Layer.effect(
           developerInstructions: renderCodexInstructions(input.request),
           ephemeral: false,
         }
-        const thread = continuation
-          ? yield* opened.client
-              .request(
-                "thread/resume",
-                {
-                  threadId: continuation.nativeID,
-                  ...params,
-                  excludeTurns: true,
-                },
-                THREAD_SETUP_TIMEOUT,
-              )
-              .pipe(
-                Effect.map((response) => ({ response, resumed: true })),
-                Effect.catch((error) =>
-                  recoverableResume(error)
-                    ? opened.client
-                        .request("thread/start", params, THREAD_SETUP_TIMEOUT)
-                        .pipe(Effect.map((response) => ({ response, resumed: false })))
-                    : Effect.fail(error),
-                ),
-              )
-          : {
-              response: yield* opened.client.request("thread/start", params, THREAD_SETUP_TIMEOUT),
-              resumed: false,
-            }
+        const thread = yield* openCodexThread(opened.client, continuation?.nativeID, params)
         const threadID = responseThreadID(thread.response)
         if (!threadID) return yield* Effect.fail(new ProtocolError("Codex did not return a thread ID."))
         if (threadID !== continuation?.nativeID) {
@@ -472,7 +448,8 @@ const layer = Layer.effect(
     ) {
       const key = `${instance.id}:${input.sessionID}:${input.revision ?? 0}`
       const current = runtimes.get(key)
-      if (current) return current
+      // A process that exited while the thread was idle is replaced, not reused: its client can't answer.
+      if (current && !(yield* current.client.closed)) return current
       const prefix = `${instance.id}:${input.sessionID}:`
       for (const [candidate, runtime] of runtimes) {
         if (!candidate.startsWith(prefix)) continue
@@ -555,7 +532,7 @@ const layer = Layer.effect(
     ) {
       const key = `${instance.id}:${input.sessionID}:${input.revision ?? 0}`
       const current = acpRuntimes.get(key)
-      if (current) return current
+      if (current && !(yield* current.session.closed)) return current
       const prefix = `${instance.id}:${input.sessionID}:`
       for (const [candidate, runtime] of acpRuntimes) {
         if (!candidate.startsWith(prefix)) continue
@@ -2004,10 +1981,31 @@ function readVersion(value: unknown) {
   return userAgent?.match(/\/([^\s]+)/)?.[1]
 }
 
-function recoverableResume(error: unknown) {
-  const message = errorMessage(error).toLowerCase()
-  return ["not found", "missing thread", "no such thread", "unknown thread", "does not exist", "no rollout"].some(
-    (part) => message.includes(part),
+/**
+ * Resumes the thread's Codex conversation, or starts a new one. Any failed resume (a missing or corrupt rollout,
+ * a timeout on a large one, or wording a Codex update changed) starts a new thread instead: it gets the full
+ * conversation handed over, where a failed turn would leave the thread stuck on the same resume every time.
+ */
+export const openCodexThread = (
+  client: Pick<CodexClient, "request">,
+  continuationID: string | undefined,
+  params: Record<string, unknown>,
+) => {
+  const start = Effect.suspend(() =>
+    client
+      .request("thread/start", params, THREAD_SETUP_TIMEOUT)
+      .pipe(Effect.map((response) => ({ response, resumed: false }))),
+  )
+  if (!continuationID) return start
+  return Effect.suspend(() =>
+    client.request("thread/resume", { threadId: continuationID, ...params, excludeTurns: true }, THREAD_SETUP_TIMEOUT),
+  ).pipe(
+    Effect.map((response) => ({ response, resumed: true })),
+    Effect.catch((error) =>
+      Effect.logWarning("Codex thread resume failed; starting a new thread", { error: errorMessage(error) }).pipe(
+        Effect.andThen(start),
+      ),
+    ),
   )
 }
 
