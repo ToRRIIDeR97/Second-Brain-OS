@@ -2,6 +2,8 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
+import { CHANNEL } from "./constants"
+import { stableDatabaseName } from "./database-name"
 import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
@@ -50,6 +52,10 @@ export async function preferAppEnv(userDataPath: string) {
     OPENCODE_CLIENT: "desktop",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
+  // A set OPENCODE_DB wins: the onboarding test uses ":memory:", and a user may pick their own file. Assigning
+  // undefined to process.env would store the string "undefined", so it is set only when there is a name.
+  const database = stableDatabaseName(CHANNEL, app.isPackaged)
+  if (!process.env.OPENCODE_DB && database) process.env.OPENCODE_DB = database
   return shellEnv
 }
 
