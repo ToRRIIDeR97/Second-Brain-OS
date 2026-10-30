@@ -97,6 +97,10 @@ export const install = Effect.fn("HarnessSetup.install")(function* (
  * the signed-in account as `oauthAccount` in `.claude.json` on every platform (the token itself may sit
  * in the macOS keychain). Nothing here reads a token.
  */
+/** The OpenCode CLI's data folder, where its `auth.json` keeps provider keys. */
+export const openCodeDataDir = (env: Readonly<Record<string, string | undefined>> = process.env) =>
+  path.join(env.XDG_DATA_HOME ?? path.join(env.HOME ?? os.homedir(), ".local", "share"), "opencode")
+
 export const signedIn = (item: Recipe, env: Readonly<Record<string, string | undefined>> = process.env) =>
   Effect.promise(async (): Promise<"signed-in" | "signed-out" | "unknown"> => {
     const home = env.HOME ?? os.homedir()
@@ -108,9 +112,7 @@ export const signedIn = (item: Recipe, env: Readonly<Record<string, string | und
       return isRecord(value) && isRecord(value.oauthAccount) ? "signed-in" : "signed-out"
     }
     if (item.id === Harness.OpenCodeAcp) {
-      const value = await readJson(
-        path.join(env.XDG_DATA_HOME ?? path.join(home, ".local", "share"), "opencode", "auth.json"),
-      )
+      const value = await readJson(path.join(openCodeDataDir(env), "auth.json"))
       return isRecord(value) && Object.keys(value).length > 0 ? "signed-in" : "signed-out"
     }
     return "unknown"

@@ -436,13 +436,9 @@ function UsageLimits(props: { open: boolean; directory: string; harness?: Compos
     const timer = setInterval(load, USAGE_REFRESH_MS)
     onCleanup(() => clearInterval(timer))
   })
-  // Only the thread's own harness; one that doesn't report usage (the built-in agent, OpenCode) shows nothing.
+  // Only the thread's own harness; one that doesn't report usage (OpenCode without a Go plan) shows nothing.
   const report = createMemo(() => threadUsage(state.reports ?? [], props.harness?.current()))
-  const shown = () => {
-    if (state.reports) return !!report()
-    const current = props.harness?.current()
-    return !!current && current !== Harness.OpenCode
-  }
+  const shown = () => (state.reports ? !!report() : !!props.harness?.current())
   const name = () => props.harness?.instances()?.find((item) => item.id === props.harness?.current())?.name ?? ""
 
   return (

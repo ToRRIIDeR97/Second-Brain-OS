@@ -116,6 +116,120 @@ export const fetchClaudeUsage = (token: string, request: typeof fetch = fetch) =
     catch: () => new Error("Could not reach api.anthropic.com."),
   })
 
+/**
+ * Claude Code usage under the rule every harness follows: a harness is signed out only when its provider rejects
+ * the credential and nothing else shows a sign-in, or when no sign-in exists at all. A local token's expiry date is
+ * not proof: the CLI refreshes tokens itself, and on macOS it keeps the live sign-in in the keychain, so
+ * `.credentials.json` can be a stale leftover. Any token that can't be used falls back to `signedIn`, Claude Code's
+ * own sign-in marker.
+ */
+export const claudeUsage = (input: {
+  readonly token: Effect.Effect<
+    { readonly status: "valid"; readonly token: string } | { readonly status: "missing" | "expired" }
+  >
+  readonly fetch: (token: string) => Effect.Effect<Result, Error>
+  readonly signedIn: Effect.Effect<"signed-in" | "signed-out" | "unknown">
+}) =>
+  Effect.gen(function* () {
+    const token = yield* input.token
+    const result = token.status === "valid" ? yield* input.fetch(token.token) : undefined
+    if (result && result.status !== "signed-out") return result
+    return (yield* input.signedIn) === "signed-in"
+      ? unsupported("Claude Code keeps its sign-in where the app can't read it.")
+      : ({ status: "signed-out", windows: [], reason: result?.reason } satisfies Result)
+  })
+
+const openCodeGoWindows = [
+  { key: "rolling", id: "five_hour", label: "5-hour" },
+  { key: "weekly", id: "weekly", label: "Weekly" },
+  { key: "monthly", id: "monthly", label: "Monthly" },
+] as const
+
+/**
+ * Reads OpenCode Go's usage response: `{ usage: { rolling, weekly, monthly } }`, each `{ status, percent, resetsAt }`
+ * with `percent` the share of that window's budget used. `resetsAt` may be an ISO instant or epoch seconds or
+ * milliseconds. Missing windows are left out; malformed input yields `[]`.
+ */
+export function parseOpenCodeGoUsage(body: unknown): UsageWindow[] {
+  const usage = isRecord(body) && isRecord(body.usage) ? body.usage : undefined
+  if (!usage) return []
+  return openCodeGoWindows.flatMap((window) => {
+    const value = usage[window.key]
+    if (!isRecord(value) || !finite(value.percent)) return []
+    const resetsAt =
+      typeof value.resetsAt === "string"
+        ? Date.parse(value.resetsAt)
+        : finite(value.resetsAt)
+          ? value.resetsAt < 1e12
+            ? value.resetsAt * 1000
+            : value.resetsAt
+          : Number.NaN
+    return [
+      {
+        id: window.id,
+        label: window.label,
+        usedPercent: clamp(value.percent),
+        ...(Number.isFinite(resetsAt) ? { resetsAt } : {}),
+      },
+    ]
+  })
+}
+
+/**
+ * The OpenCode Go API key from an OpenCode data folder's `auth.json` (`{ "opencode-go": { type: "api", key } }`):
+ * the OpenCode CLI's folder for the OpenCode harness, the app's own for the built-in agent. The key stays in the
+ * server process.
+ */
+export const readOpenCodeGoKey = (dataDir: string) =>
+  Effect.promise(async () => {
+    const value = await readCredentialFile(path.join(dataDir, "auth.json"))
+    const entry = isRecord(value) && isRecord(value["opencode-go"]) ? value["opencode-go"] : undefined
+    return entry && typeof entry.key === "string" && entry.key ? entry.key : undefined
+  })
+
+/**
+ * Asks OpenCode for the Go subscription's usage windows. `GET /zen/go/v1/usage` is not in OpenCode's documentation;
+ * it reads the key only from a Bearer `Authorization` header. A 401 is a rejected or expired key, a 403 a key
+ * without a Go subscription.
+ */
+export const fetchOpenCodeGoUsage = (key: string, request: typeof fetch = fetch) =>
+  Effect.tryPromise({
+    try: async (signal): Promise<Result> => {
+      const response = await request("https://opencode.ai/zen/go/v1/usage", {
+        headers: { Authorization: `Bearer ${key}` },
+        signal,
+      })
+      if (response.status === 401) {
+        const body = await readBody(response)
+        const error = body && isRecord(body.value) && isRecord(body.value.error) ? body.value.error : undefined
+        return {
+          status: "signed-out",
+          windows: [],
+          reason:
+            error?.code === "api_key_expired"
+              ? "The OpenCode Go API key has expired. Create a new one in the OpenCode Console."
+              : "OpenCode rejected the OpenCode Go API key.",
+        }
+      }
+      if (response.status === 403) return unsupported("This OpenCode key has no OpenCode Go subscription.")
+      if (!response.ok)
+        return { status: "error", windows: [], reason: `Usage request failed (HTTP ${response.status}).` }
+      const body = await readBody(response)
+      if (!body) return badBody
+      return { status: "available", windows: parseOpenCodeGoUsage(body.value) }
+    },
+    catch: () => new Error("Could not reach opencode.ai."),
+  })
+
+/** OpenCode Go usage for an OpenCode data folder; without a Go key there is no plan to report. */
+export const openCodeGoUsage = (dataDir: string, request: typeof fetch = fetch) =>
+  readOpenCodeGoKey(dataDir).pipe(
+    Effect.flatMap(
+      (key): Effect.Effect<Result, Error> =>
+        key ? fetchOpenCodeGoUsage(key, request) : Effect.succeed(unsupported("No OpenCode Go key is connected.")),
+    ),
+  )
+
 const commandCodeWindows = [
   { key: "fiveHour", id: "five_hour", label: "5-hour" },
   { key: "weekly", id: "weekly", label: "Weekly" },
