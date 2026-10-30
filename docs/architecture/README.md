@@ -965,6 +965,16 @@ characters, a Windows drive-relative path (`D:x.ts`), or an absolute path
 outside the thread folder stay plain code; absolute paths inside it become
 relative.
 
+Agents also cite files in other forms, and each becomes the same chip:
+inline code with a `file://` URL; a Markdown link whose target is a relative
+path or a `file://` URL (`localLinkTarget`; the chip is the link itself); and
+Codex's `:codex-file-citation{path="…" line_range_start=… line_range_end=…}`
+directive, which `fileCitations` rewrites to an inline-code path before the
+Markdown worker parses the text. The sanitizer keeps `file:` hrefs for this.
+On desktop, opening a file the server reads as binary and that isn't media (a
+`.docx`, `.xlsx`, `.zip` …) hands it to its default app through
+`platform.openLocalFile` instead of showing the panel's binary placeholder.
+
 - Hover or focus shows a peek with up to 12 lines, read through the Files
   tab's own APIs (cached `file.get`, else `file.read`; existence and kind
   checked with `file.list` on the parent, because `/file/content` returns

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
+  fileCitations,
+  localLinkTarget,
   listedEntryPath,
   fileReferenceRangeLabel,
   parseFileReference,
@@ -136,5 +138,58 @@ describe("listedEntryPath", () => {
     expect(listedEntryPath("docs\\research\\")).toBe("docs/research")
     expect(listedEntryPath("src/index.ts")).toBe("src/index.ts")
     expect(resolveFileReferencePath("research/", "/repo")).toBe(listedEntryPath("research/"))
+  })
+})
+
+describe("fileCitations", () => {
+  test("rewrites Codex citation directives as cited paths", () => {
+    expect(fileCitations('Done.\n\n:codex-file-citation{path="/repo/report.docx" purpose="output"}\n')).toBe(
+      "Done.\n\n`/repo/report.docx`\n",
+    )
+    expect(fileCitations('See ::codex-file-citation{path="src/a.ts" line_range_start=10 line_range_end=12}.')).toBe(
+      "See `src/a.ts:10-12`.",
+    )
+    expect(fileCitations("::codex-file-citation{path='src/a.ts' line_range_start=4}")).toBe("`src/a.ts:4`")
+  })
+
+  test("leaves text without a usable path unchanged", () => {
+    expect(fileCitations("no citations here")).toBe("no citations here")
+    expect(fileCitations(':codex-file-citation{purpose="output"}')).toBe(':codex-file-citation{purpose="output"}')
+    expect(fileCitations(':codex-file-citation{path="a`b"}')).toBe(':codex-file-citation{path="a`b"}')
+  })
+})
+
+describe("localLinkTarget", () => {
+  test("reads relative paths and file URLs as local files", () => {
+    expect(localLinkTarget("pragma-project-report.docx")).toBe("pragma-project-report.docx")
+    expect(localLinkTarget("docs/My%20Notes.md#intro")).toBe("docs/My Notes.md")
+    expect(localLinkTarget("file:///Users/me/repo/report.docx")).toBe("/Users/me/repo/report.docx")
+    expect(localLinkTarget("file:///C:/repo/a.ts")).toBe("C:/repo/a.ts")
+    expect(localLinkTarget("/Users/me/repo/a.ts")).toBe("/Users/me/repo/a.ts")
+  })
+
+  test("ignores web, mail, other schemes, anchors and remote file URLs", () => {
+    for (const href of [
+      "https://example.com/a.ts",
+      "mailto:a@b.c",
+      "javascript:alert(1)",
+      "#section",
+      "//host/a",
+      "file://server/share/a.ts",
+      "",
+    ])
+      expect(localLinkTarget(href)).toBeUndefined()
+  })
+})
+
+describe("parseFileReference with file URLs", () => {
+  test("cites the path of a local file URL", () => {
+    expect(parseFileReference("file:///Users/me/repo/notes.md")).toEqual({ path: "/Users/me/repo/notes.md" })
+    // An extension outside the known list is settled by the folder listing, like any extensionless path.
+    expect(parseFileReference("file:///Users/me/repo/report.docx")).toEqual({
+      path: "/Users/me/repo/report.docx",
+      kind: "either",
+    })
+    expect(resolveFileReferencePath("/Users/me/repo/report.docx", "/Users/me/repo")).toBe("report.docx")
   })
 })

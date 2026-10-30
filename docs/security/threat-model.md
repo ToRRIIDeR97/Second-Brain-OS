@@ -689,6 +689,22 @@ listing, never from the model's text; it is plain code until that listing (of
 a top-level folder named by its first segment, then its parent) finds it, and
 a missing entry opens nothing.
 
+The same chips also come from Markdown links to local files (a relative path
+or a `file://` URL) and from Codex's `:codex-file-citation{path=…}`
+directive, which is rewritten to an inline-code path before parsing. To keep
+those link targets, the sanitizer's URI allowlist adds `file:` to DOMPurify's
+default list. A `file:` link that isn't a chip (outside the thread folder)
+opens nothing: the desktop window refuses to navigate to it
+(`openExternalURL` accepts only `http`, `https` and `mailto`).
+
+On desktop, a referenced file that the server reads as binary and that isn't
+an image or other media type opens in its default app instead of the panel
+(`platform.openLocalFile` → `openLocalFileURL` in the main process). Main
+stats the path first, and executables, or anything it can't stat, are
+revealed in the file manager, never run. The path is the thread folder plus
+the checked relative path, so a reply can't open a file outside its thread
+folder.
+
 ## Checks
 
 From the repository root, `bun run typecheck` checks every workspace package

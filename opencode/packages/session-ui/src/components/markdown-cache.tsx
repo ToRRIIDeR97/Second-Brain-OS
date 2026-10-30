@@ -18,6 +18,10 @@ const config = {
   FORBID_CONTENTS: ["style", "script"],
   ADD_TAGS: ["svg", "path"],
   ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
+  // DOMPurify's default list plus `file:`, so links to local files keep their target. A click becomes a file chip
+  // (checked against the thread folder); the desktop window never navigates to a file: URL.
+  ALLOWED_URI_REGEXP:
+    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix|file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
 }
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {

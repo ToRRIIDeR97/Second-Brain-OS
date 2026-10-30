@@ -6,6 +6,7 @@ import type { UiI18n } from "@opencode-ai/ui/context/i18n"
 import type { FileReferenceActions } from "../context/file-reference"
 import {
   fileReferenceRangeLabel,
+  localLinkTarget,
   parseFileReference,
   resolveFileReferencePath,
   settleFileReference,
@@ -44,7 +45,7 @@ const SHOW_DELAY = 300
 const HIDE_DELAY = 150
 const PREVIEW_LINES = 12
 const LINE_CHARS = 240
-const chipSelector = "code[data-file-reference]"
+const chipSelector = "code[data-file-reference], a[data-file-reference]"
 const chipAttributes = [
   "data-file-reference",
   "data-file-reference-start",
@@ -68,6 +69,19 @@ const entries = new Map<string, "file" | "directory" | "missing" | "pending">()
  * code until `lookup` finds it in the thread folder; `root` is then marked again.
  */
 export function markFileReferences(root: Element, directory: string | undefined, lookup?: FileReferenceEntryLookup) {
+  // A Markdown link to a local file (`[report](report.docx)`, `[x](file:///…/x.md)`) is a chip on the link itself.
+  root.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((link) => {
+    const target = directory ? localLinkTarget(link.getAttribute("href") ?? "") : undefined
+    const path = target && resolveFileReferencePath(target, directory!)
+    if (!path) {
+      if (!link.hasAttribute("data-file-reference")) return
+      chipAttributes.forEach((name) => link.removeAttribute(name))
+      return
+    }
+    link.dataset.fileReference = path
+    link.removeAttribute("data-file-reference-kind")
+    if (/[/\\]$/.test(target)) link.dataset.fileReferenceKind = "folder"
+  })
   root.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((code) => {
     const parsed = directory && !code.closest("a") ? parseFileReference(code.textContent ?? "") : undefined
     const path = parsed && resolveFileReferencePath(parsed.path, directory!)

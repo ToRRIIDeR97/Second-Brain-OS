@@ -8,6 +8,7 @@ import {
 } from "./markdown-worker-protocol"
 import { createWorkerTransport } from "./markdown-worker-transport"
 import type { Projection } from "./markdown-stream"
+import { fileCitations } from "./markdown-file-reference"
 
 type HighlightPending = {
   key: string
@@ -60,7 +61,8 @@ export function parseMarkdown(text: string) {
   const id = ++nextID
   return new Promise<string>((resolve, reject) => {
     parses.set(id, { resolve, reject })
-    instance.postMessage({ type: "parse", id, text } satisfies MarkdownWorkerRequest)
+    // Codex file citations are rewritten as cited paths, so they render as file chips.
+    instance.postMessage({ type: "parse", id, text: fileCitations(text) } satisfies MarkdownWorkerRequest)
   })
 }
 
