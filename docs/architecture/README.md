@@ -1125,11 +1125,13 @@ counts without bars or shares.
 Under the details a "Usage limits · <harness>" section (`UsageLimits`) shows
 the thread's own harness only, with one bar per plan window ("N% used",
 "resets in …" from `Intl.RelativeTimeFormat`). A harness that doesn't report
-usage (the built-in agent, OpenCode) hides the section. It calls
+usage (OpenCode or the built-in agent without an OpenCode Go key, other ACP
+agents) hides the section. It calls
 `GET /api/harness/usage` (`listHarnessUsage` in `app/src/utils/server.ts`)
 when the sheet opens and at most once a minute while it stays open. The
-section reads "Sign in to see usage", "No usage limits on this plan" or
-"Couldn't load usage" for the other report states.
+section reads "No usage limits on this plan" or "Couldn't load usage" for
+those states, and a signed-out report shows the server's reason (for example
+an expired OpenCode Go key) or "Sign in to see usage" when there is none.
 
 Settings → Harnesses asks the same route once when the tab opens. Each harness
 in the list shows its fullest window as a slim bar with its percentage, and the
@@ -1137,19 +1139,27 @@ selected harness's details list every window above Models. Both places render
 reports with `HarnessUsageWindows` (`app/src/components/harness-usage.tsx`).
 
 `HarnessRuntime.usage` (`core/src/harness.ts`) builds the reports with
-`core/src/harness/usage.ts`. Each enabled instance except the in-process
-`opencode` loop is read in parallel with an 8 s timeout and cached per instance
+`core/src/harness/usage.ts`. Each enabled instance, the in-process `opencode`
+loop included, is read in parallel with an 8 s timeout and cached per instance
 for 60 s in the location's runtime:
+
+Every harness follows one sign-in rule: a report is signed out only when the
+provider rejects the credential and nothing else shows a sign-in, or when no
+sign-in exists at all. A local token's expiry date never counts, because the
+CLIs refresh tokens themselves.
 
 - Codex: `account/read`, then `account/rateLimits/read` on an open thread's
   app-server connection or a short-lived one. `null` account is signed out; an
   API-key account is unsupported.
-- Claude Code: the OAuth token from `$CLAUDE_CONFIG_DIR/.credentials.json` (or
-  `~/.claude/.credentials.json`) goes to
-  `GET https://api.anthropic.com/api/oauth/usage`. A missing or expired token
-  is signed out; a stored Anthropic API key is unsupported. A sign-in recorded
-  in `.claude.json` without a credentials file (macOS keeps the token in the
-  keychain) is unsupported.
+- Claude Code: the OAuth token from the macOS keychain entry
+  `Claude Code-credentials` (read with `/usr/bin/security`, macOS only and only
+  without `CLAUDE_CONFIG_DIR`), else from `$CLAUDE_CONFIG_DIR/.credentials.json`
+  (or `~/.claude/.credentials.json`), goes to
+  `GET https://api.anthropic.com/api/oauth/usage` (`claudeUsage`). When that
+  token is missing, expired or rejected, the `oauthAccount` sign-in in
+  `.claude.json` decides: present is unsupported ("keeps its sign-in where the
+  app can't read it"), absent is signed out. A stored Anthropic API key
+  is unsupported.
 - Command Code (an ACP entry whose command is `command-code`, `commandcode`,
   `cmdc` or a path into its npm package): the key from `COMMAND_CODE_API_KEY`,
   else `apiKey` in `~/.commandcode/auth.json`, the way its CLI finds it.
@@ -1159,8 +1169,17 @@ for 60 s in the location's runtime:
   These are the undocumented `/alpha` routes the CLI's `/usage` overlay calls,
   read from its bundle (v1.88.1), so they may change without notice. No key is
   signed out.
-- OpenCode and other ACP agents: unsupported. OpenCode exposes no plan usage
-  over ACP or an endpoint in its installed CLI.
+- OpenCode Go, for the OpenCode harness and the built-in agent
+  (`openCodeGoUsage`): the `opencode-go` key in `auth.json` (the OpenCode
+  CLI's data folder for the harness, the app's data folder for the built-in
+  agent) goes to `GET https://opencode.ai/zen/go/v1/usage`, which returns
+  `usage.rolling` (5-hour), `weekly` and `monthly`, each `{ status, percent,
+  resetsAt }`. The endpoint is not in OpenCode's documentation, and the success
+  body was checked against a third-party client, not a live response. A 401 is
+  signed out (an `api_key_expired` code says to create a new key in the
+  OpenCode Console), a 403 is a key without Go (unsupported), and no Go key is
+  unsupported.
+- Other ACP agents: unsupported.
 
 ### Composer delivery, background send and stash
 

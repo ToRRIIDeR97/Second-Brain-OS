@@ -65,7 +65,8 @@ export function HarnessUsageWindows(props: { report: Harness.UsageReport; now: n
         <span>{language.t("secondBrain.contextStrip.usage.noLimits")}</span>
       </Match>
       <Match when={props.report.status === "signed-out"}>
-        <span>{language.t("secondBrain.contextStrip.usage.signedOut")}</span>
+        {/* The server's reason says what to do, e.g. replace an expired API key; signing in doesn't fix that. */}
+        <span>{props.report.reason ?? language.t("secondBrain.contextStrip.usage.signedOut")}</span>
       </Match>
       <Match when={props.report.status === "error"}>
         <span title={props.report.reason}>{language.t("secondBrain.contextStrip.usage.error")}</span>

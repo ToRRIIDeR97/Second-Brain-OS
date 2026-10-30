@@ -205,8 +205,9 @@ on its own. Removed in the T3 parity Phase 1 cleanup:
 
 Still outbound: the configured LLM providers (including the `opencode` Zen
 provider when the user selects it), the `models.dev` catalog, Google APIs,
-`api.anthropic.com/api/oauth/usage` and `api.commandcode.ai/alpha/*` for
-Claude Code and Command Code usage limits (see
+`api.anthropic.com/api/oauth/usage`, `api.commandcode.ai/alpha/*` and
+`opencode.ai/zen/go/v1/usage` for Claude Code, Command Code and OpenCode Go
+usage limits (see
 [Harness usage limits](#harness-usage-limits)), and links the user opens. `$schema` URLs in config files are identifiers, not
 fetches. Known remaining references: upstream agent prompts that point the
 model at `opencode.ai/docs`, the MCP OAuth `client_uri` metadata value, and
@@ -284,12 +285,18 @@ the desktop main process.
 `HarnessRuntime.usage`) reports plan usage windows. It takes no input beyond
 the location query and has the same auth as the other harness routes.
 
-- **Claude credential read.** The server reads `claudeAiOauth.accessToken` and
+- **Claude credential read.** On macOS without `CLAUDE_CONFIG_DIR`, the server
+  first reads Claude Code's keychain entry (`Claude Code-credentials`, account
+  `$USER`) with `/usr/bin/security find-generic-password -w`, the same way the
+  CLI reads it, with an empty environment, a 5 s timeout and a 64 KiB output
+  cap. When that has no usable token, it reads `claudeAiOauth.accessToken` and
   `expiresAt` from `$CLAUDE_CONFIG_DIR/.credentials.json` or
-  `~/.claude/.credentials.json` on each uncached call. The token stays in the
+  `~/.claude/.credentials.json`. Both happen on each uncached call. The token stays in the
   server process. It is never returned to the renderer, logged, written to disk
   or put in a URL; it is sent only in the `Authorization` header of the usage
   request. Expired tokens are not refreshed, and the app never writes the file.
+  An unusable token is checked against `oauthAccount` in `~/.claude.json`
+  (presence only) before the report says signed out.
 - **Outbound call.** `GET https://api.anthropic.com/api/oauth/usage` with
   `anthropic-beta: oauth-2025-04-20`, at most once a minute per location
   runtime (the server caches each report for 60 s; the sheet asks at most once
@@ -305,13 +312,27 @@ the location query and has the same auth as the other harness routes.
   account's non-secret `orgId` in the query when it has one), under the same
   60 s cache. These are undocumented endpoints; only the 5-hour and weekly
   `used`, `cap` and `resetAt` values are kept from the responses.
+- **OpenCode Go key read.** For the OpenCode harness and the built-in agent,
+  the server reads only the `opencode-go` entry's `key` from `auth.json` in the
+  OpenCode CLI's data folder (`$XDG_DATA_HOME/opencode` or
+  `~/.local/share/opencode`) or the app's data folder, on each uncached call.
+  Other providers' keys in the same file are not used. The key is handled like
+  the Claude token: only in the `Authorization` header, never returned, logged,
+  written or put in a URL.
+- **Outbound call (OpenCode Go).** `GET https://opencode.ai/zen/go/v1/usage`,
+  under the same 60 s cache. The endpoint is undocumented; only each window's
+  `percent` and `resetsAt` are kept, and a 401's `error.code` is read only to
+  pick a fixed reason string.
 - **Codex.** `account/read` and `account/rateLimits/read` go to the user's own
   `codex app-server`, which holds its own credentials; no token reaches the app.
 - **Reports.** Error reasons are fixed strings or a short protocol message from
   the harness, never a token or response body.
 
 Known gap: anything that can read the user's home folder can read the same
-Claude and Command Code credential files. The app adds no new copy of them.
+Claude, Command Code and OpenCode credential files. The app adds no new copy
+of them. On macOS, the app's server can also read Claude Code's keychain
+entry, as any process running as the user can when the entry's access list
+allows `/usr/bin/security` (it does for entries Claude Code writes).
 
 ## Harness registration
 
@@ -370,8 +391,11 @@ from an ACP agent as untrusted model output.
 
 Known gap (partially closed): ACP and Codex harness processes no longer inherit
 the app's full environment; they get a small launch allowlist (`PATH`, `HOME`,
-locale, temp and terminal variables, `XDG_*`, Windows system variables) plus the
-`env` set in user configuration for that harness. However, any API key or token
+the user name `USER`/`LOGNAME`/`USERNAME`, locale, temp and terminal variables,
+`XDG_*`, Windows system variables) plus the
+`env` set in user configuration for that harness. The user name is not a
+secret; CLIs that keep their sign-in in the OS keychain need it to find it
+(Claude Code on macOS reports itself signed out without `USER`). However, any API key or token
 the user puts in that per-harness `env` is still visible to that harness, and
 agent CLIs often need their own credentials that way. Register only agents
 you'd trust with the credentials you configure for them.

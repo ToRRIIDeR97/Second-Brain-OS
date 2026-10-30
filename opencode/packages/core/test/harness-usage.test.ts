@@ -148,6 +148,60 @@ describe("readClaudeToken", () => {
   })
 })
 
+describe("readClaudeToken on macOS", () => {
+  const home = async (credentials?: unknown) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-usage-mac-"))
+    if (credentials !== undefined) {
+      await fs.mkdir(path.join(dir, ".claude"))
+      await fs.writeFile(path.join(dir, ".claude", ".credentials.json"), JSON.stringify(credentials))
+    }
+    return dir
+  }
+  const entry = (accessToken: string, expiresAt: number) =>
+    JSON.stringify({ claudeAiOauth: { accessToken, expiresAt } })
+  const read = (
+    env: Record<string, string | undefined>,
+    keychain: (account: string) => Promise<string | undefined>,
+    platform: NodeJS.Platform = "darwin",
+  ) => Effect.runPromise(HarnessUsage.readClaudeToken(env, 1_000, keychain, platform))
+
+  test("prefers the keychain entry for the user over a stale credentials file", async () => {
+    const accounts: string[] = []
+    const keychain = async (account: string) => {
+      accounts.push(account)
+      return entry("tok-live", 5_000)
+    }
+    const dir = await home({ claudeAiOauth: { accessToken: "tok-old", expiresAt: 999 } })
+    expect(await read({ HOME: dir, USER: "me" }, keychain)).toEqual({ status: "valid", token: "tok-live" })
+    expect(accounts).toEqual(["me"])
+  })
+
+  test("falls back to the file when the keychain has no usable token", async () => {
+    const dir = await home({ claudeAiOauth: { accessToken: "tok-file", expiresAt: 5_000 } })
+    expect(await read({ HOME: dir, USER: "me" }, async () => undefined)).toEqual({ status: "valid", token: "tok-file" })
+    expect(await read({ HOME: dir, USER: "me" }, async () => "not json")).toEqual({
+      status: "valid",
+      token: "tok-file",
+    })
+    expect(await read({ HOME: await home(), USER: "me" }, async () => entry("tok-old", 999))).toEqual({
+      status: "expired",
+    })
+  })
+
+  test("skips the keychain off macOS, with CLAUDE_CONFIG_DIR, or without a user name", async () => {
+    const accounts: string[] = []
+    const keychain = async (account: string) => {
+      accounts.push(account)
+      return entry("tok-live", 5_000)
+    }
+    const dir = await home()
+    expect(await read({ HOME: dir, USER: "me" }, keychain, "linux")).toEqual({ status: "missing" })
+    expect(await read({ HOME: dir, USER: "me", CLAUDE_CONFIG_DIR: dir }, keychain)).toEqual({ status: "missing" })
+    expect(await read({ HOME: dir }, keychain)).toEqual({ status: "missing" })
+    expect(accounts).toEqual([])
+  })
+})
+
 describe("fetchClaudeUsage", () => {
   test("sends the token only in the Authorization header and parses the windows", async () => {
     const calls: { url: string; headers: Headers }[] = []
@@ -188,6 +242,152 @@ describe("fetchClaudeUsage", () => {
     }) as unknown as typeof fetch
     const error = await Effect.runPromise(Effect.flip(HarnessUsage.fetchClaudeUsage("tok-1", offline)))
     expect(error.message).toBe("Could not reach api.anthropic.com.")
+  })
+})
+
+describe("claudeUsage", () => {
+  const run = (input: {
+    token: { status: "valid"; token: string } | { status: "missing" | "expired" }
+    fetched?: HarnessUsage.Result
+    marker: "signed-in" | "signed-out" | "unknown"
+  }) => {
+    const sent: string[] = []
+    return Effect.runPromise(
+      HarnessUsage.claudeUsage({
+        token: Effect.succeed(input.token),
+        fetch: (token) => {
+          sent.push(token)
+          return Effect.succeed(input.fetched ?? { status: "available", windows: [] })
+        },
+        signedIn: Effect.succeed(input.marker),
+      }),
+    ).then((result) => ({ result, sent }))
+  }
+  const cantRead = HarnessUsage.unsupported("Claude Code keeps its sign-in where the app can't read it.")
+
+  test("uses a valid token and never consults the marker when the provider accepts it", async () => {
+    const windows = [{ id: "five_hour", label: "5-hour", usedPercent: 12 }]
+    const { result, sent } = await run({
+      token: { status: "valid", token: "tok-1" },
+      fetched: { status: "available", windows },
+      marker: "signed-out",
+    })
+    expect(result).toEqual({ status: "available", windows })
+    expect(sent).toEqual(["tok-1"])
+  })
+
+  test("does not call a stale, missing or rejected token signed out while Claude Code is signed in", async () => {
+    expect((await run({ token: { status: "expired" }, marker: "signed-in" })).result).toEqual(cantRead)
+    expect((await run({ token: { status: "missing" }, marker: "signed-in" })).result).toEqual(cantRead)
+    const rejected = await run({
+      token: { status: "valid", token: "tok-old" },
+      fetched: { status: "signed-out", windows: [], reason: "Claude Code sign-in has expired." },
+      marker: "signed-in",
+    })
+    expect(rejected.result).toEqual(cantRead)
+    expect((await run({ token: { status: "expired" }, marker: "signed-in" })).sent).toEqual([])
+  })
+
+  test("reports signed out only when nothing shows a sign-in, keeping the provider's reason", async () => {
+    expect((await run({ token: { status: "missing" }, marker: "signed-out" })).result).toEqual({
+      status: "signed-out",
+      windows: [],
+      reason: undefined,
+    })
+    const rejected = await run({
+      token: { status: "valid", token: "tok-old" },
+      fetched: { status: "signed-out", windows: [], reason: "Claude Code sign-in has expired." },
+      marker: "signed-out",
+    })
+    expect(rejected.result).toEqual({ status: "signed-out", windows: [], reason: "Claude Code sign-in has expired." })
+  })
+
+  test("passes other failures through without consulting the marker", async () => {
+    const failed: HarnessUsage.Result = { status: "error", windows: [], reason: "Usage request failed (HTTP 500)." }
+    expect(
+      (await run({ token: { status: "valid", token: "tok-1" }, fetched: failed, marker: "signed-in" })).result,
+    ).toEqual(failed)
+  })
+})
+
+describe("OpenCode Go usage", () => {
+  const dataDir = async (auth?: unknown) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-usage-go-"))
+    if (auth !== undefined) await fs.writeFile(path.join(dir, "auth.json"), JSON.stringify(auth))
+    return dir
+  }
+  const respond = (status: number, body: unknown, calls: { url: string; headers: Headers }[] = []) =>
+    (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: new Headers(init?.headers) })
+      return Response.json(body, { status })
+    }) as typeof fetch
+
+  test("reads the 5-hour, weekly and monthly windows with clamped percents and ms reset times", () => {
+    expect(
+      HarnessUsage.parseOpenCodeGoUsage({
+        usage: {
+          rolling: { status: "ok", percent: 37, resetsAt: "2026-10-30T08:00:00.000Z" },
+          weekly: { status: "ok", percent: 120, resetsAt: 1_793_400_000 },
+          monthly: { status: "rate-limited", percent: -5, resetsAt: 1_793_400_000_000 },
+        },
+      }),
+    ).toEqual([
+      { id: "five_hour", label: "5-hour", usedPercent: 37, resetsAt: Date.parse("2026-10-30T08:00:00.000Z") },
+      { id: "weekly", label: "Weekly", usedPercent: 100, resetsAt: 1_793_400_000_000 },
+      { id: "monthly", label: "Monthly", usedPercent: 0, resetsAt: 1_793_400_000_000 },
+    ])
+  })
+
+  test("leaves out missing windows and returns none for malformed input", () => {
+    expect(HarnessUsage.parseOpenCodeGoUsage({ usage: { weekly: { percent: 4 } } })).toEqual([
+      { id: "weekly", label: "Weekly", usedPercent: 4 },
+    ])
+    for (const body of [undefined, null, "x", { usage: [] }, { usage: { rolling: { percent: "5" } } }])
+      expect(HarnessUsage.parseOpenCodeGoUsage(body)).toEqual([])
+  })
+
+  test("reads only the opencode-go key from auth.json", async () => {
+    const read = async (auth?: unknown) => Effect.runPromise(HarnessUsage.readOpenCodeGoKey(await dataDir(auth)))
+    expect(await read({ "opencode-go": { type: "api", key: "go-key" }, openrouter: { key: "or" } })).toBe("go-key")
+    expect(await read({ openrouter: { type: "api", key: "or" } })).toBeUndefined()
+    expect(await read()).toBeUndefined()
+  })
+
+  test("sends the key only in the Authorization header and reads the windows", async () => {
+    const calls: { url: string; headers: Headers }[] = []
+    const result = await Effect.runPromise(
+      HarnessUsage.fetchOpenCodeGoUsage("go-key", respond(200, { usage: { rolling: { percent: 10 } } }, calls)),
+    )
+    expect(result).toEqual({ status: "available", windows: [{ id: "five_hour", label: "5-hour", usedPercent: 10 }] })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toBe("https://opencode.ai/zen/go/v1/usage")
+    expect(calls[0]!.headers.get("authorization")).toBe("Bearer go-key")
+  })
+
+  test("explains an expired or rejected key, a key without Go, and other failures", async () => {
+    const fetchWith = (status: number, body: unknown) =>
+      Effect.runPromise(HarnessUsage.fetchOpenCodeGoUsage("go-key", respond(status, body)))
+    expect(await fetchWith(401, { error: { code: "api_key_expired", message: "expired" } })).toEqual({
+      status: "signed-out",
+      windows: [],
+      reason: "The OpenCode Go API key has expired. Create a new one in the OpenCode Console.",
+    })
+    expect((await fetchWith(401, {})).reason).toBe("OpenCode rejected the OpenCode Go API key.")
+    expect(await fetchWith(403, {})).toEqual(
+      HarnessUsage.unsupported("This OpenCode key has no OpenCode Go subscription."),
+    )
+    expect(await fetchWith(500, {})).toEqual({
+      status: "error",
+      windows: [],
+      reason: "Usage request failed (HTTP 500).",
+    })
+  })
+
+  test("reports no plan without a Go key and never calls OpenCode", async () => {
+    const calls: { url: string; headers: Headers }[] = []
+    const result = await Effect.runPromise(HarnessUsage.openCodeGoUsage(await dataDir({}), respond(200, {}, calls)))
+    expect(result).toEqual(HarnessUsage.unsupported("No OpenCode Go key is connected."))
+    expect(calls).toHaveLength(0)
   })
 })
 

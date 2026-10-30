@@ -850,26 +850,16 @@ const layer = Layer.effect(
       )
     }
     // The OAuth token is read here and sent only to api.anthropic.com; it never leaves this process otherwise.
-    const claudeUsage = (keys: HarnessSetup.Keys) =>
-      keys[Harness.ClaudeCode]
+    const claudeUsage = (keys: HarnessSetup.Keys) => {
+      const recipe = HarnessSetup.recipe(Harness.ClaudeCode)
+      return keys[Harness.ClaudeCode]
         ? Effect.succeed(HarnessUsage.unsupported("Usage limits apply to Claude sign-ins, not API keys."))
-        : HarnessUsage.readClaudeToken().pipe(
-            Effect.flatMap((token): Effect.Effect<HarnessUsage.Result, Error> => {
-              if (token.status === "valid") return HarnessUsage.fetchClaudeUsage(token.token)
-              if (token.status === "expired")
-                return Effect.succeed({ status: "signed-out", windows: [], reason: "Claude Code sign-in has expired." })
-              // Signed in without a credentials file: on macOS Claude Code keeps the token in the keychain.
-              const recipe = HarnessSetup.recipe(Harness.ClaudeCode)
-              return (recipe ? HarnessSetup.signedIn(recipe) : Effect.succeed("signed-out" as const)).pipe(
-                Effect.map(
-                  (auth): HarnessUsage.Result =>
-                    auth === "signed-in"
-                      ? HarnessUsage.unsupported("Claude Code keeps its sign-in where the app can't read it.")
-                      : { status: "signed-out", windows: [] },
-                ),
-              )
-            }),
-          )
+        : HarnessUsage.claudeUsage({
+            token: HarnessUsage.readClaudeToken(),
+            fetch: (token) => HarnessUsage.fetchClaudeUsage(token),
+            signedIn: recipe ? HarnessSetup.signedIn(recipe) : Effect.succeed("signed-out" as const),
+          })
+    }
     const usageSource = (instance: InstanceConfig, keys: HarnessSetup.Keys) => {
       if (instance.driver === Harness.CodexDriver) return codexUsage(instance)
       if (instance.id === Harness.ClaudeCode) return claudeUsage(keys)
@@ -884,7 +874,11 @@ const layer = Layer.effect(
               key ? HarnessUsage.fetchCommandCodeUsage(key) : Effect.succeed({ status: "signed-out", windows: [] }),
           ),
         )
-      // Neither OpenCode nor other ACP agents report plan usage to the app.
+      // OpenCode Go is a plan on an OpenCode key: the built-in agent reads the app's own keys, the OpenCode
+      // harness the OpenCode CLI's. Each key is sent only to opencode.ai.
+      if (instance.driver === Harness.OpenCodeDriver) return HarnessUsage.openCodeGoUsage(global.data)
+      if (instance.id === Harness.OpenCodeAcp) return HarnessUsage.openCodeGoUsage(HarnessSetup.openCodeDataDir())
+      // Other ACP agents don't report plan usage to the app.
       return Effect.succeed(HarnessUsage.unsupported(`${instance.name} doesn't report usage limits.`))
     }
     // Only one browser login at a time: Codex's callback listens on a fixed local port.
@@ -957,13 +951,13 @@ const layer = Layer.effect(
           yield* instances
           return yield* setupChanged(item)
         }),
-      // The in-process default agent runs on provider API keys, so it has no harness plan to report.
+      // The built-in agent reports its OpenCode Go plan when one is connected.
       usage: () =>
         Effect.all([instances, HarnessSetup.readKeys(global.data)]).pipe(
           Effect.flatMap(([current, keys]) =>
             usageCache(
               current
-                .filter((instance) => instance.enabled && instance.driver !== Harness.OpenCodeDriver)
+                .filter((instance) => instance.enabled)
                 .map((instance) => ({ instanceID: instance.id, read: usageSource(instance, keys) })),
             ),
           ),

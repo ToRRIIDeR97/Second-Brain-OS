@@ -1,6 +1,7 @@
 export * as HarnessUsage from "./usage"
 
 import { Cause, Clock, Effect, Option, Schema } from "effect"
+import { execFile } from "child_process"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -79,23 +80,52 @@ export function parseCodexRateLimits(body: unknown): UsageWindow[] {
   })
 }
 
+type ClaudeToken = { readonly status: "valid"; readonly token: string } | { readonly status: "missing" | "expired" }
+
 /**
- * The Claude Code OAuth access token from `$CLAUDE_CONFIG_DIR/.credentials.json` or `~/.claude/.credentials.json`.
- * The token stays in the server process: callers pass it only to the usage request, never to a response or a log.
+ * The Claude Code OAuth access token. On macOS without `CLAUDE_CONFIG_DIR`, Claude Code keeps its live sign-in in
+ * the keychain entry `Claude Code-credentials` (account: the user name), so that is read first, with the system
+ * `security` tool the way the CLI reads it. Otherwise, or when the keychain has no usable token, the token comes
+ * from `$CLAUDE_CONFIG_DIR/.credentials.json` or `~/.claude/.credentials.json`. The token stays in the server
+ * process: callers pass it only to the usage request, never to a response or a log.
  */
-export const readClaudeToken = (env: Readonly<Record<string, string | undefined>> = process.env, now = Date.now()) =>
-  Effect.promise(
-    async (): Promise<
-      { readonly status: "valid"; readonly token: string } | { readonly status: "missing" | "expired" }
-    > => {
-      const dir = env.CLAUDE_CONFIG_DIR || path.join(env.HOME ?? os.homedir(), ".claude")
-      const value = await readCredentialFile(path.join(dir, ".credentials.json"))
-      const oauth = isRecord(value) && isRecord(value.claudeAiOauth) ? value.claudeAiOauth : undefined
-      if (!oauth || typeof oauth.accessToken !== "string" || !oauth.accessToken) return { status: "missing" }
-      if (finite(oauth.expiresAt) && oauth.expiresAt <= now) return { status: "expired" }
-      return { status: "valid", token: oauth.accessToken }
-    },
-  )
+export const readClaudeToken = (
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  now = Date.now(),
+  keychain: (account: string) => Promise<string | undefined> = readClaudeKeychain,
+  platform: NodeJS.Platform = process.platform,
+) =>
+  Effect.promise(async (): Promise<ClaudeToken> => {
+    const account = env.USER || env.LOGNAME
+    const stored =
+      platform === "darwin" && !env.CLAUDE_CONFIG_DIR && account
+        ? claudeToken(Option.getOrUndefined(decodeJson((await keychain(account).catch(() => undefined)) ?? "")), now)
+        : undefined
+    if (stored?.status === "valid") return stored
+    const dir = env.CLAUDE_CONFIG_DIR || path.join(env.HOME ?? os.homedir(), ".claude")
+    const file = claudeToken(await readCredentialFile(path.join(dir, ".credentials.json")), now)
+    // An expired keychain token says more than a missing file: the CLI refreshes it on its next run.
+    return file.status === "missing" && stored ? stored : file
+  })
+
+function claudeToken(value: unknown, now: number): ClaudeToken {
+  const oauth = isRecord(value) && isRecord(value.claudeAiOauth) ? value.claudeAiOauth : undefined
+  if (!oauth || typeof oauth.accessToken !== "string" || !oauth.accessToken) return { status: "missing" }
+  if (finite(oauth.expiresAt) && oauth.expiresAt <= now) return { status: "expired" }
+  return { status: "valid", token: oauth.accessToken }
+}
+
+/** Reads Claude Code's keychain entry with `/usr/bin/security`; undefined when it is absent, too large or slow. */
+function readClaudeKeychain(account: string) {
+  return new Promise<string | undefined>((resolve) => {
+    execFile(
+      "/usr/bin/security",
+      ["find-generic-password", "-a", account, "-s", "Claude Code-credentials", "-w"],
+      { timeout: 5_000, maxBuffer: MAX_CREDENTIAL_BYTES, env: {} },
+      (error, stdout) => resolve(error ? undefined : stdout.trim()),
+    )
+  })
+}
 
 /** Asks Anthropic for the subscription usage behind a Claude Code OAuth token. */
 export const fetchClaudeUsage = (token: string, request: typeof fetch = fetch) =>
@@ -115,6 +145,120 @@ export const fetchClaudeUsage = (token: string, request: typeof fetch = fetch) =
     },
     catch: () => new Error("Could not reach api.anthropic.com."),
   })
+
+/**
+ * Claude Code usage under the rule every harness follows: a harness is signed out only when its provider rejects
+ * the credential and nothing else shows a sign-in, or when no sign-in exists at all. A local token's expiry date is
+ * not proof: the CLI refreshes tokens itself, and on macOS it keeps the live sign-in in the keychain, so
+ * `.credentials.json` can be a stale leftover. Any token that can't be used falls back to `signedIn`, Claude Code's
+ * own sign-in marker.
+ */
+export const claudeUsage = (input: {
+  readonly token: Effect.Effect<
+    { readonly status: "valid"; readonly token: string } | { readonly status: "missing" | "expired" }
+  >
+  readonly fetch: (token: string) => Effect.Effect<Result, Error>
+  readonly signedIn: Effect.Effect<"signed-in" | "signed-out" | "unknown">
+}) =>
+  Effect.gen(function* () {
+    const token = yield* input.token
+    const result = token.status === "valid" ? yield* input.fetch(token.token) : undefined
+    if (result && result.status !== "signed-out") return result
+    return (yield* input.signedIn) === "signed-in"
+      ? unsupported("Claude Code keeps its sign-in where the app can't read it.")
+      : ({ status: "signed-out", windows: [], reason: result?.reason } satisfies Result)
+  })
+
+const openCodeGoWindows = [
+  { key: "rolling", id: "five_hour", label: "5-hour" },
+  { key: "weekly", id: "weekly", label: "Weekly" },
+  { key: "monthly", id: "monthly", label: "Monthly" },
+] as const
+
+/**
+ * Reads OpenCode Go's usage response: `{ usage: { rolling, weekly, monthly } }`, each `{ status, percent, resetsAt }`
+ * with `percent` the share of that window's budget used. `resetsAt` may be an ISO instant or epoch seconds or
+ * milliseconds. Missing windows are left out; malformed input yields `[]`.
+ */
+export function parseOpenCodeGoUsage(body: unknown): UsageWindow[] {
+  const usage = isRecord(body) && isRecord(body.usage) ? body.usage : undefined
+  if (!usage) return []
+  return openCodeGoWindows.flatMap((window) => {
+    const value = usage[window.key]
+    if (!isRecord(value) || !finite(value.percent)) return []
+    const resetsAt =
+      typeof value.resetsAt === "string"
+        ? Date.parse(value.resetsAt)
+        : finite(value.resetsAt)
+          ? value.resetsAt < 1e12
+            ? value.resetsAt * 1000
+            : value.resetsAt
+          : Number.NaN
+    return [
+      {
+        id: window.id,
+        label: window.label,
+        usedPercent: clamp(value.percent),
+        ...(Number.isFinite(resetsAt) ? { resetsAt } : {}),
+      },
+    ]
+  })
+}
+
+/**
+ * The OpenCode Go API key from an OpenCode data folder's `auth.json` (`{ "opencode-go": { type: "api", key } }`):
+ * the OpenCode CLI's folder for the OpenCode harness, the app's own for the built-in agent. The key stays in the
+ * server process.
+ */
+export const readOpenCodeGoKey = (dataDir: string) =>
+  Effect.promise(async () => {
+    const value = await readCredentialFile(path.join(dataDir, "auth.json"))
+    const entry = isRecord(value) && isRecord(value["opencode-go"]) ? value["opencode-go"] : undefined
+    return entry && typeof entry.key === "string" && entry.key ? entry.key : undefined
+  })
+
+/**
+ * Asks OpenCode for the Go subscription's usage windows. `GET /zen/go/v1/usage` is not in OpenCode's documentation;
+ * it reads the key only from a Bearer `Authorization` header. A 401 is a rejected or expired key, a 403 a key
+ * without a Go subscription.
+ */
+export const fetchOpenCodeGoUsage = (key: string, request: typeof fetch = fetch) =>
+  Effect.tryPromise({
+    try: async (signal): Promise<Result> => {
+      const response = await request("https://opencode.ai/zen/go/v1/usage", {
+        headers: { Authorization: `Bearer ${key}` },
+        signal,
+      })
+      if (response.status === 401) {
+        const body = await readBody(response)
+        const error = body && isRecord(body.value) && isRecord(body.value.error) ? body.value.error : undefined
+        return {
+          status: "signed-out",
+          windows: [],
+          reason:
+            error?.code === "api_key_expired"
+              ? "The OpenCode Go API key has expired. Create a new one in the OpenCode Console."
+              : "OpenCode rejected the OpenCode Go API key.",
+        }
+      }
+      if (response.status === 403) return unsupported("This OpenCode key has no OpenCode Go subscription.")
+      if (!response.ok)
+        return { status: "error", windows: [], reason: `Usage request failed (HTTP ${response.status}).` }
+      const body = await readBody(response)
+      if (!body) return badBody
+      return { status: "available", windows: parseOpenCodeGoUsage(body.value) }
+    },
+    catch: () => new Error("Could not reach opencode.ai."),
+  })
+
+/** OpenCode Go usage for an OpenCode data folder; without a Go key there is no plan to report. */
+export const openCodeGoUsage = (dataDir: string, request: typeof fetch = fetch) =>
+  readOpenCodeGoKey(dataDir).pipe(
+    Effect.flatMap(
+      (key): Effect.Effect<Result, Error> =>
+        key ? fetchOpenCodeGoUsage(key, request) : Effect.succeed(unsupported("No OpenCode Go key is connected.")),
+    ),
+  )
 
 const commandCodeWindows = [
   { key: "fiveHour", id: "five_hour", label: "5-hour" },
