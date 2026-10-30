@@ -457,7 +457,28 @@ stream events. A tool call is published at `in_progress` (or when it finishes),
 because agents announce calls before their arguments exist: OpenCode's
 `pending` update carries only `cwd`, and the command or path follows. OpenCode
 forwards a subagent's updates under the parent session ID, marked with
-`_meta["opencode/child-session"]`. Those updates never reach the parent turn.
+`_meta["opencode/child-session"]`; Claude Code marks them with
+`_meta.claudeCode.parentToolUseId`, and its subagent tool is named `Task` or
+`Agent` (matched in any case). Those updates never reach the parent turn.
+
+Other harness output is mapped onto the built-in views:
+
+- ACP `plan` updates and Codex `turn/plan/updated` become provider-executed
+  `todowrite` calls (`planEvents`; Codex `inProgress` → `in_progress`), so
+  they show as the todo list.
+- ACP `diff` content is kept as `providerMetadata.acp.diffs`
+  (`{ path, oldText, newText }`). In the app, `acp_edit` renders with the
+  `edit` view, which gets `filePath` and, for one diff, `filediff`.
+- `command_execution` (Codex) and `acp_execute` render with the `shell` view
+  (`session-ui/src/components/tool-alias.ts`): plain text, ANSI stripped.
+- A Codex `fileChange` is shown as each file's path, kind and diff text.
+- Harness tool output is clipped to the first 8,000 and last 24,000
+  characters with a count of what was left out (`clipToolOutput`).
+- The latest user message's attachments are sent as input: Codex gets
+  pasted images as `image` and local images as `localImage`
+  (`codexInputItems`); an ACP agent gets local files as `resource_link` and,
+  when it advertises `promptCapabilities.image`, pasted images as `image`
+  blocks (`acpPromptBlocks`). Other attachments stay a text mention.
 The child's updates are attached to the subagent call (`acp_subagent`) that
 started it:
 

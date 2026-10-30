@@ -71,6 +71,7 @@ import { motionDuration, prefersReducedMotion } from "@opencode-ai/ui/v2/motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
+import { toolRendererName } from "./tool-alias"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -1548,7 +1549,7 @@ export function registerTool(input: { name: string; render?: ToolComponent }) {
 }
 
 export function getTool(name: string) {
-  return state[name === "apply_patch" ? "patch" : name === "bash" ? "shell" : name]?.render
+  return state[toolRendererName(name)]?.render
 }
 
 export const ToolRegistry = {

@@ -569,7 +569,12 @@ const layer = Layer.effect(
             runtime.handoff = "none"
             return onTurnSuccess(
               runtime.session
-                .turn({ text, model: input.model?.id, reasoningEffort: input.model?.reasoningEffort })
+                .turn({
+                  text,
+                  media: latestMedia(input.request),
+                  model: input.model?.id,
+                  reasoningEffort: input.model?.reasoningEffort,
+                })
                 .pipe(
                   // However the turn ends, a question it left open in the dock has nobody waiting.
                   Stream.ensuring(runtime.endTurn),
@@ -1395,7 +1400,7 @@ function codexStream(
             runtime.client
               .request("turn/start", {
                 threadId: runtime.threadID,
-                input: [{ type: "text", text: prompt, text_elements: [] }],
+                input: codexInputItems(prompt, latestMedia(input.request)),
                 cwd: input.directory,
                 runtimeWorkspaceRoots: [input.directory],
                 model: input.model?.id,
@@ -1450,6 +1455,8 @@ export interface CodexState {
   readonly startedReasoning: Set<string>
   readonly emittedReasoning: Set<string>
   readonly startedTools: Set<string>
+  /** Plan updates shown so far this turn; each becomes its own todo call. */
+  plans: number
   usage?: ReturnType<typeof normalizeUsage>
   finished: boolean
   failed: boolean
@@ -1461,6 +1468,7 @@ export const codexState = (): CodexState => ({
   startedReasoning: new Set(),
   emittedReasoning: new Set(),
   startedTools: new Set(),
+  plans: 0,
   finished: false,
   failed: false,
 })
@@ -1506,6 +1514,16 @@ export function parseCodexNotification(
     state.failed = true
     const error = isRecord(params.error) ? params.error : undefined
     return [LLMEvent.providerError({ message: string(error?.message) ?? "Codex failed." })]
+  }
+  if (notification.method === "turn/plan/updated") {
+    const plan = Array.isArray(params.plan) ? params.plan.filter(isRecord) : []
+    return AcpHarness.planEvents(
+      state,
+      plan.map((step) => ({
+        content: string(step.step) ?? "",
+        status: step.status === "inProgress" ? "in_progress" : (string(step.status) ?? "pending"),
+      })),
+    )
   }
   if (notification.method === "turn/completed") {
     state.finished = true
@@ -1992,9 +2010,51 @@ function codexToolInput(item: Record<string, unknown>) {
 }
 
 function codexToolOutput(item: Record<string, unknown>) {
-  const value = item.aggregatedOutput ?? item.result ?? item.changes ?? item.error ?? "Completed"
-  const output = typeof value === "string" ? value : json(value)
-  return output.length > 32_000 ? `${output.slice(0, 32_000)}\n[Output truncated]` : output
+  // A file change is each file's path, kind and unified diff, readable as text rather than escaped JSON.
+  const changes = Array.isArray(item.changes) ? item.changes.filter(isRecord) : undefined
+  const value =
+    item.aggregatedOutput ??
+    item.result ??
+    (changes
+      ? changes
+          .map((change) => {
+            const kind = isRecord(change.kind) ? string(change.kind.type) : string(change.kind)
+            const head = `${string(change.path) ?? "file"}${kind ? ` (${kind})` : ""}`
+            const diff = string(change.diff)
+            return diff ? `${head}\n${diff}` : head
+          })
+          .join("\n\n")
+      : undefined) ??
+    item.error ??
+    "Completed"
+  return AcpHarness.clipToolOutput(typeof value === "string" ? value : json(value))
+}
+
+/** The latest user message's attachments, for harnesses that can take them as input. */
+function latestMedia(request: LLMRequest): ReadonlyArray<AcpHarness.Media> {
+  const user = request.messages.findLast((message) => message.role === "user")
+  return (user?.content ?? []).flatMap((part) =>
+    part.type === "media" && typeof part.data === "string"
+      ? [{ mediaType: part.mediaType, data: part.data, filename: part.filename }]
+      : [],
+  )
+}
+
+/**
+ * Codex `turn/start` input: the prompt text, then each image attachment, a pasted one (`data:image/…`) as `image`
+ * and a local file as `localImage`. Codex takes no other attachment types; the text still names them.
+ */
+export function codexInputItems(prompt: string, media: ReadonlyArray<AcpHarness.Media>) {
+  return [
+    { type: "text", text: prompt, text_elements: [] },
+    ...media.flatMap((item): Record<string, unknown>[] => {
+      if (!item.mediaType.startsWith("image/")) return []
+      if (item.data.startsWith("data:image/")) return [{ type: "image", url: item.data }]
+      if (item.data.startsWith("file://") && URL.canParse(item.data))
+        return [{ type: "localImage", path: decodeURIComponent(new URL(item.data).pathname) }]
+      return []
+    }),
+  ]
 }
 
 function responseThreadID(value: unknown) {

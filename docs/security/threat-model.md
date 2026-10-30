@@ -353,6 +353,11 @@ listing harnesses runs each one's availability check, so a cloned repo could
 otherwise run its own command just by being opened. Inline config without a
 file (`OPENCODE_CONFIG_CONTENT` set by the user) still counts.
 
+Attachments on a harness turn now leave the app: Codex and ACP agents get
+pasted images as image data, which their provider receives, and local files
+as `file://` links or paths, which the agent then reads with its own file
+access. Before this, harnesses saw only the text `[Attached name]`.
+
 Permission behavior differs per harness, and the app evens it out where the
 CLI allows:
 
