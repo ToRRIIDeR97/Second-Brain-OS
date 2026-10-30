@@ -5,7 +5,7 @@ import type { Details } from "electron"
 import { CHANNEL } from "./constants"
 import { stableDatabaseName } from "./database-name"
 import { getLogger } from "./logging"
-import { getUserShell, loadShellEnv } from "./shell-env"
+import { fallbackPath, getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
 
@@ -52,6 +52,10 @@ export async function preferAppEnv(userDataPath: string) {
     OPENCODE_CLIENT: "desktop",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
+  // Without a shell environment the bare GUI PATH hides Homebrew, npm and bun installs, so harness CLIs and npm
+  // look uninstalled. Not on Windows, whose PATH isn't colon-separated.
+  if (!shellEnv && process.platform !== "win32")
+    process.env.PATH = fallbackPath(process.env.PATH ?? "", app.getPath("home"))
   // A set OPENCODE_DB wins: the onboarding test uses ":memory:", and a user may pick their own file. Assigning
   // undefined to process.env would store the string "undefined", so it is set only when there is a name.
   const database = stableDatabaseName(CHANNEL, app.isPackaged)

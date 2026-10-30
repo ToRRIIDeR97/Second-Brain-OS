@@ -217,8 +217,12 @@ Start the app.
   start itself can take up to the 60 s stall timeout, for example during the
   first-start storage copy.
 - The login-shell environment probe runs in the background with a 5 s timeout.
-  It tries `-il` and falls back to `-l` only when `-il` fails; after a timeout
-  the app environment is used. The server is spawned after the probe finishes.
+  It tries `-il`, then `-l` when `-il` fails or times out (a login shell skips
+  `.zshrc`), so a slow interactive config can add up to 5 s more. When neither
+  loads, the app environment is used and PATH gets `/opt/homebrew/bin`,
+  `/usr/local/bin`, `~/.local/bin`, `~/.bun/bin` and `~/.opencode/bin` appended
+  (`fallbackPath`), so harness CLIs and npm are still found. The server is
+  spawned after the probe finishes.
 - If the server exits after it was ready, it is restarted on the same port and
   password after 1, 2, 4, 8 and 16 s, at most 5 times in 10 minutes. Restarts
   are logged in the `utility` log; no IPC event tells the renderer, which
