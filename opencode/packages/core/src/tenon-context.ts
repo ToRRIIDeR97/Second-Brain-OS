@@ -23,6 +23,8 @@ export interface InstructionFile {
 export interface Context {
   readonly workspace?: Workspace
   readonly askUser?: boolean
+  /** Codex already has the AGENTS.md text in its developer instructions, so the block doesn't repeat it. */
+  readonly instructionsInDeveloper?: boolean
 }
 
 export const INSTRUCTIONS_TOKEN_BUDGET = 4_000
@@ -48,7 +50,9 @@ export function render(request: LLMRequest, context: Context = {}, budget = INST
     ...(context.workspace ? ["", "## Workspace", ...workspaceLines(context.workspace).map(escape)] : []),
     "",
     "## Instructions",
-    renderInstructions(instructionFiles(request), budget),
+    context.instructionsInDeveloper
+      ? "The AGENTS.md files in effect are in your developer instructions."
+      : renderInstructions(instructionFiles(request), budget),
     "",
     "## Abilities",
     ChatDisplay.abilities(context.askUser ? "harness" : "reply"),

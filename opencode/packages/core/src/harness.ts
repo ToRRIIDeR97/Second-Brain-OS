@@ -13,7 +13,7 @@ import {
 import { Harness } from "@opencode-ai/schema/harness"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { SessionID } from "@opencode-ai/schema/session-id"
-import { Context, DateTime, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Context, DateTime, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { eq } from "drizzle-orm"
 import os from "os"
@@ -256,6 +256,8 @@ const layer = Layer.effect(
     const cachedProbe = (instance: InstanceConfig, probe: Probe) => probeCached(instanceKey(instance), instance, probe)
     // Listing an ACP agent's models opens a session and switches to each model once (about 10s for
     // Claude Code), so it runs beside the listing; its result reaches the picker on the next list.
+    const discoveryDirectory = path.join(global.state, "harness-discovery")
+    yield* Effect.promise(() => fs.mkdir(discoveryDirectory, { recursive: true })).pipe(Effect.ignore)
     const discovering = new Set<string>()
     const discoverAcpModels = (instance: InstanceConfig, settings: AcpHarness.Settings) => {
       const key = instanceKey(instance)
@@ -272,7 +274,8 @@ const layer = Layer.effect(
     const discoverModels = (instance: InstanceConfig, settings: AcpHarness.Settings) => {
       const key = instanceKey(instance)
       const started = Date.now()
-      return AcpHarness.discover(process, settings, location.directory).pipe(
+      // Discovery opens a real agent session; in the thread folder those would fill the CLI's own history.
+      return AcpHarness.discover(process, settings, discoveryDirectory).pipe(
         Effect.tap((agent) =>
           Effect.logInfo("harness model discovery", {
             instanceID: instance.id,
@@ -301,6 +304,31 @@ const layer = Layer.effect(
           ),
         { discard: true },
       )
+    // When each thread's harness runtime was last used and how many turns run on it, for closing idle ones.
+    const activity = new Map<string, { lastUsed: number; busy: number }>()
+    const tracked = <A, E, R>(key: string, stream: Stream.Stream<A, E, R>) =>
+      Stream.unwrap(
+        Effect.sync(() => {
+          const item = activity.get(key) ?? { lastUsed: Date.now(), busy: 0 }
+          item.busy += 1
+          item.lastUsed = Date.now()
+          activity.set(key, item)
+          return stream.pipe(
+            Stream.ensuring(
+              Effect.sync(() => {
+                item.busy = Math.max(0, item.busy - 1)
+                item.lastUsed = Date.now()
+              }),
+            ),
+          )
+        }),
+      )
+    yield* Effect.suspend(() => {
+      const idle = new Set(idleRuntimeKeys(activity, Date.now(), RUNTIME_IDLE_TTL))
+      for (const key of idle) activity.delete(key)
+      return idle.size === 0 ? Effect.void : closeRuntimesWhere((key) => idle.has(key))
+    }).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.forkScoped)
+
     const forget = (id?: string) => {
       const matches = (key: string) => id === undefined || key.startsWith(`${id}:`)
       for (const key of probes.keys()) if (matches(key)) probes.delete(key)
@@ -670,11 +698,14 @@ const layer = Layer.effect(
             : unavailable(instance, "Disabled in configuration.", customModels(settings.customModels)),
           stream: (input) =>
             instance.enabled
-              ? codexStream(
-                  getRuntime(instance, input),
-                  input,
-                  (runtime) => discardRuntime(instance, input, runtime),
-                  (runtime) => markSeen(instance, input, runtime.threadID),
+              ? tracked(
+                  `${instance.id}:${input.sessionID}:${input.revision ?? 0}`,
+                  codexStream(
+                    getRuntime(instance, input),
+                    input,
+                    (runtime) => discardRuntime(instance, input, runtime),
+                    (runtime) => markSeen(instance, input, runtime.threadID),
+                  ),
                 )
               : Stream.fail(llmError("CodexHarness", "stream", `${instance.name} is disabled.`)),
           complete: (input) => codexComplete(settings, input),
@@ -701,7 +732,10 @@ const layer = Layer.effect(
             : unavailable(instance, "Disabled in configuration.", AcpHarness.configuredModels(settings.models)),
           stream: (input) =>
             instance.enabled
-              ? acpStream(instance, settings, input)
+              ? tracked(
+                  `${instance.id}:${input.sessionID}:${input.revision ?? 0}`,
+                  acpStream(instance, settings, input),
+                )
               : Stream.fail(llmError("AcpHarness", "stream", `${instance.name} is disabled.`)),
           complete: (input) =>
             Effect.scoped(
@@ -1392,7 +1426,10 @@ function codexStream(
     runtime.pipe(
       Effect.flatMap((runtime) =>
         Effect.sync(() => {
-          const prompt = renderHarnessPrompt(input.request, runtime.handoff, runtime)
+          const prompt = renderHarnessPrompt(input.request, runtime.handoff, {
+            ...runtime,
+            instructionsInDeveloper: true,
+          })
           runtime.handoff = "none"
           return prompt
         }).pipe(
@@ -1827,7 +1864,35 @@ export function continuationFor(
 
 /** Codex's developerInstructions: the request's system text, without the native agents' chat abilities. */
 export function renderCodexInstructions(request: LLMRequest) {
-  return harnessSystem(request).join("\n\n")
+  return harnessSystem(request)
+    .map((text) =>
+      text
+        .replace(skillGuidance, "")
+        .replace(referenceGuidance, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim(),
+    )
+    .filter(Boolean)
+    .join("\n\n")
+}
+
+// The skill and project-reference guidance tell the built-in agent to use its `skill` tool and references,
+// which Codex doesn't have (skill/guidance.ts, reference/guidance.ts).
+const skillGuidance =
+  /Skills provide specialized instructions and workflows for specific tasks\.[\s\S]*?(?:<\/available_skills>|No skills are currently available\.)/g
+const referenceGuidance =
+  /Project references provide additional directories that can be accessed when relevant\.[\s\S]*?<\/available_references>/g
+
+/** The idle time after which a thread's harness process is closed; its next message reconnects. */
+const RUNTIME_IDLE_TTL = 30 * 60_000
+
+/** Runtime keys idle longer than `ttl` with no turn running. */
+export function idleRuntimeKeys(
+  activity: ReadonlyMap<string, { readonly lastUsed: number; readonly busy: number }>,
+  now: number,
+  ttl: number,
+) {
+  return [...activity].filter(([, item]) => item.busy === 0 && now - item.lastUsed > ttl).map(([key]) => key)
 }
 
 /**

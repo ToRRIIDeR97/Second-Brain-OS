@@ -548,8 +548,11 @@ handoff. Codex and ACP keep their own native thread or session, so
   with one `<tenon-context trust="data">` block (`renderHarnessPrompt`,
   built by `core/src/tenon-context.ts`). ACP agents get no system context;
   Codex gets it as `developerInstructions` (`renderCodexInstructions`) with
-  the `core/chat-display` entry cut out, so the block is its only abilities
-  text. It holds the workspace root, the Project folder
+  the `core/chat-display` entry and the skill and project-reference guidance
+  cut out (Codex has no `skill` tool), so the block is its only abilities
+  text. Codex's AGENTS.md text stays in the developer instructions, so its
+  block's Instructions section only points there (`instructionsInDeveloper`);
+  ACP blocks carry the `<agents-md>` elements. It holds the workspace root, the Project folder
   (a linked folder or `projects/<name>`, named by its folder) and the thread
   folder; the `Instructions from:` sections of the request's system context
   (the AGENTS.md files in effect, most specific first, 4,000 estimated
@@ -569,7 +572,13 @@ instance. It keys the in-memory runtimes, so a harness that is switched back
 in reopens its thread and gets the delta. A cached runtime whose process exited (the
 JSON-RPC client's `closed`, set when its stdout ends or fails) is closed and
 reopened instead of reused; requests on a closed client fail at once rather
-than wait.
+than wait. A runtime idle for 30 minutes with no turn running is
+closed by a sweep that runs every minute (`idleRuntimeKeys`); its thread
+reconnects on the next message. ACP model discovery runs in
+`<state>/harness-discovery`, so the sessions it opens don't land in the
+thread folder's history. When an ACP session is reopened with
+`session/load`, the last replayed `usage_update` cost is the baseline
+(`replayedCost`), so the next turn records only its own cost.
 
 When the built-in loop reads a thread that earlier ran on another provider
 or a harness, `toLLMMessages` replays provider-executed tool calls as

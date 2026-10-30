@@ -317,8 +317,12 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
           Effect.catch(() => Effect.succeed(undefined)),
         )
       : undefined
-  // A load replays history as updates before it responds; none of it belongs to the next turn.
-  yield* Queue.clear(items)
+  // A load replays history as updates before it responds; none of it belongs to the next turn. The last
+  // replayed cost is the session's running total, so the next turn records only its own share.
+  const replayed = yield* Queue.clear(items)
+  const baseline = loaded
+    ? replayedCost(replayed.flatMap((item) => (item.type === "update" ? [item.notification] : [])))
+    : undefined
   const session = loaded ?? (yield* createSession(client, params))
   const mode = safeAcpMode(isRecord(session.response) ? session.response.modes : undefined)
   if (mode)
@@ -332,6 +336,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
   const state: { currentModel: string | undefined; effort?: EffortOption; sessionCost?: number } = {
     currentModel: selector.current,
     effort: selector.effort,
+    sessionCost: baseline,
   }
   // set_config_option answers with every option, and a model switch can change or drop the levels.
   const readEffort = (response: unknown) =>
@@ -646,6 +651,19 @@ function turnError(error: ProtocolError | undefined) {
     /auth(entication)?[ _-]required|not (logged|signed) in|please (run \/login|log ?in|sign in)/i.test(error.message)
   if (!signedOut) return error.message
   return `The agent isn't signed in (${error.message}). Sign in from Settings → Harnesses, or run the agent's own login, then send again.`
+}
+
+/** The USD cost of the last `usage_update` among replayed updates: an agent's cost is cumulative per session. */
+export function replayedCost(notifications: ReadonlyArray<Notification>) {
+  return notifications
+    .flatMap((notification) => {
+      const params = isRecord(notification.params) ? notification.params : {}
+      const update = isRecord(params.update) ? params.update : {}
+      if (update.sessionUpdate !== "usage_update" || !isRecord(update.cost) || update.cost.currency !== "USD") return []
+      const amount = number(update.cost.amount)
+      return amount === undefined ? [] : [amount]
+    })
+    .at(-1)
 }
 
 export function finishAcpTurn(exit: Exit.Exit<unknown, ProtocolError>, state: AcpState): ReadonlyArray<LLMEvent> {
