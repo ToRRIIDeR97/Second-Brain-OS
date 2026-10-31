@@ -313,3 +313,19 @@ test("a heading title is read in linear time and keeps CommonMark closing rules"
   expect(KnowledgeNote.titleFromBody("# a" + " ".repeat(100_000) + "x")).toStartWith("a")
   expect(performance.now() - started).toBeLessThan(100)
 })
+
+test("a save that would push the file past the read limit is refused", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const directory = AbsolutePath.make(tmp.path)
+  // Fits the 5 MB body check alone; the front matter added on save takes the file over.
+  const body = "x".repeat(5 * 1024 * 1024 - 10)
+  const failure = await Effect.runPromise(
+    KnowledgeNote.write("notes/big.md", { body, title: "Big", create: true }).pipe(
+      provideNoteServices(directory),
+      Effect.flip,
+    ),
+  )
+  expect(failure).toMatchObject({ reason: "too_large" })
+  expect(await stat(path.join(tmp.path, "notes", "big.md")).then(() => true, () => false)).toBe(false)
+})

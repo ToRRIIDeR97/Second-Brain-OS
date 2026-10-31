@@ -127,6 +127,7 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
     const files = yield* FileMutation.Service
     const target = yield* mutation.resolve({ path: normalizedPath, kind: "file" })
     const source = encode(info, {}, input.body, false)
+    yield* requireWritableSize(source)
     yield* files
       .create({ target, content: source })
       .pipe(
@@ -153,6 +154,7 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
     catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_note" })),
   })
   const source = encode(info, card.data, input.body, card.bom)
+  yield* requireWritableSize(source)
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
   const target = yield* mutation.resolve({ path: normalizedPath, kind: "file" })
@@ -208,6 +210,10 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   // The exact bytes read are the compare-and-swap baseline for a later save.
   return { ...card, bytes }
 })
+
+/** Reads refuse a note above the size cap, so a save (body plus front matter) must not produce one. */
+const requireWritableSize = (source: string) =>
+  Buffer.byteLength(source, "utf8") > maxBytes ? Effect.fail(new InvalidError({ reason: "too_large" })) : Effect.void
 
 /** Refuse a note above the size cap before reading it, so one huge file cannot stall a list. */
 const requireReadableSize = Effect.fnUntraced(function* (canonical: string, path: string) {

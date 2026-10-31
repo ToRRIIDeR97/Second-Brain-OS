@@ -12,6 +12,7 @@ import { HarnessDelegation } from "./delegation"
 export const MAX_DEPTH = 2
 /** Delegated tasks one Run may have running at once. */
 export const MAX_RUNNING = 4
+const FINISHED_RETENTION_MS = 10 * 60_000
 const OUTPUT_LIMIT = 100_000
 
 interface Running {
@@ -32,6 +33,9 @@ export const layer = Layer.effectDiscard(
     const locations = yield* LocationServiceMap.Service
     const run = Effect.runPromiseWith(yield* Effect.context())
     const running = new Map<string, Running>()
+    // Tasks a thread is starting but hasn't registered yet; counted against the limit so a batch of
+    // calls can't all pass the check before any of them registers.
+    const starting = new Map<string, number>()
 
     const harnesses = (session: SessionSchema.Info) =>
       Effect.gen(function* () {
@@ -125,54 +129,69 @@ export const layer = Layer.effectDiscard(
             const session = yield* caller(sessionID)
             if ((yield* depth(session)) >= MAX_DEPTH)
               return yield* Effect.fail(new Error("Delegated agents cannot delegate further from this thread."))
-            const active = [...running.values()].filter(
-              (entry) => entry.parentID === sessionID && !entry.finished,
-            ).length
+            const active =
+              [...running.values()].filter((entry) => entry.parentID === sessionID && !entry.finished).length +
+              (starting.get(sessionID) ?? 0)
             if (active >= MAX_RUNNING)
               return yield* Effect.fail(
                 new Error(`This thread already has ${MAX_RUNNING} delegated tasks running; wait for one first.`),
               )
-            const instances = yield* harnesses(session)
-            const target = instances.find((instance) => instance.id === input.agent)
-            if (!target) return yield* Effect.fail(new Error(`Unknown agent ${input.agent}; call list_agents.`))
-            if (target.status !== "available")
-              return yield* Effect.fail(new Error(`${target.name} is not available: ${target.error ?? "not ready"}.`))
-            const model = input.model ? target.models.find((item) => item.id === input.model) : undefined
-            if (input.model && target.models.length > 0 && !model)
-              return yield* Effect.fail(new Error(`${target.name} has no model ${input.model}; call list_agents.`))
-            if (input.reasoningEffort && model && !model.reasoningEfforts.includes(input.reasoningEffort))
-              return yield* Effect.fail(
-                new Error(`${model.name} supports reasoning efforts: ${model.reasoningEfforts.join(", ") || "none"}.`),
+            // Reserved in the same step as the check, before anything yields.
+            starting.set(sessionID, (starting.get(sessionID) ?? 0) + 1)
+            const release = Effect.sync(() => {
+              const left = (starting.get(sessionID) ?? 1) - 1
+              if (left > 0) starting.set(sessionID, left)
+              else starting.delete(sessionID)
+            })
+            const child = yield* Effect.gen(function* () {
+              const instances = yield* harnesses(session)
+              const target = instances.find((instance) => instance.id === input.agent)
+              if (!target) return yield* Effect.fail(new Error(`Unknown agent ${input.agent}; call list_agents.`))
+              if (target.status !== "available")
+                return yield* Effect.fail(new Error(`${target.name} is not available: ${target.error ?? "not ready"}.`))
+              const model = input.model ? target.models.find((item) => item.id === input.model) : undefined
+              if (input.model && target.models.length > 0 && !model)
+                return yield* Effect.fail(new Error(`${target.name} has no model ${input.model}; call list_agents.`))
+              if (input.reasoningEffort && model && !model.reasoningEfforts.includes(input.reasoningEffort))
+                return yield* Effect.fail(
+                  new Error(
+                    `${model.name} supports reasoning efforts: ${model.reasoningEfforts.join(", ") || "none"}.`,
+                  ),
+                )
+              const from = instances.find((instance) => instance.id === session.harnessInstanceID)
+              const child = yield* sessions.create({
+                parentID: session.id,
+                title: input.title?.slice(0, 120) ?? `${target.name}: ${input.task.split("\n")[0].slice(0, 80)}`,
+                harnessInstanceID: target.id,
+                ...(input.model
+                  ? {
+                      harnessModel: {
+                        id: input.model,
+                        ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
+                      },
+                    }
+                  : {}),
+                location: session.location,
+              })
+              yield* sessions.prompt({
+                sessionID: child.id,
+                prompt: { text: framedTask(from?.name ?? "another agent", input.task) },
+                resume: false,
+              })
+              const done = run(sessions.resume(child.id)).then(
+                () => ({}),
+                (cause) => ({ error: cause instanceof Error ? cause.message : String(cause) }),
               )
-            const from = instances.find((instance) => instance.id === session.harnessInstanceID)
-            const child = yield* sessions.create({
-              parentID: session.id,
-              title: input.title?.slice(0, 120) ?? `${target.name}: ${input.task.split("\n")[0].slice(0, 80)}`,
-              harnessInstanceID: target.id,
-              ...(input.model
-                ? {
-                    harnessModel: {
-                      id: input.model,
-                      ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
-                    },
-                  }
-                : {}),
-              location: session.location,
-            })
-            yield* sessions.prompt({
-              sessionID: child.id,
-              prompt: { text: framedTask(from?.name ?? "another agent", input.task) },
-              resume: false,
-            })
-            const done = run(sessions.resume(child.id)).then(
-              () => ({}),
-              (cause) => ({ error: cause instanceof Error ? cause.message : String(cause) }),
-            )
-            const entry: Running = { parentID: sessionID, agent: target.id, done, cancelled: false, finished: false }
-            running.set(child.id, entry)
-            void done.then(() => {
-              entry.finished = true
-            })
+              const entry: Running = { parentID: sessionID, agent: target.id, done, cancelled: false, finished: false }
+              running.set(child.id, entry)
+              void done.then(() => {
+                entry.finished = true
+                // Kept a while so a late read still reports cancellation and errors; after that a read
+                // falls back to what the child recorded, as after a restart.
+                setTimeout(() => running.delete(child.id), FINISHED_RETENTION_MS).unref?.()
+              })
+              return child
+            }).pipe(Effect.ensuring(release))
             return yield* settle(child, input.waitSeconds)
           }),
         ),

@@ -334,6 +334,13 @@ const main = Effect.gen(function* () {
     receiveDeepLinks([url], "open-url")
   })
 
+  // A link that starts the app arrives in this process's own argv on Windows and Linux (macOS uses
+  // open-url). It waits in the deep-link queue until a window subscribes.
+  if (process.platform !== "darwin") {
+    const urls = process.argv.filter((arg) => arg.startsWith(`${DEEP_LINK_SCHEME}://`))
+    if (urls.length) receiveDeepLinks(urls, "argv")
+  }
+
   // The first quit waits (bounded) for the sidecar to stop, then quits again.
   let quitStop: Promise<void> | undefined
   let quitStopped = false

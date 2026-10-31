@@ -17,8 +17,16 @@ export function checkAppExists(appName: string) {
 }
 
 export function resolveAppPath(appName: string) {
-  if (process.platform !== "win32") return appName
-  return resolveWindowsAppPath(appName)
+  if (process.platform === "win32") return resolveWindowsAppPath(appName)
+  // Callers run the result directly, so Linux resolves the command to its absolute path too.
+  if (process.platform === "linux") return resolveLinuxAppPath(appName)
+  return appName
+}
+
+async function resolveLinuxAppPath(appName: string): Promise<string | null> {
+  return execFilePromise("which", [appName])
+    .then((result) => result.stdout.toString().split("\n")[0]?.trim() || null)
+    .catch(() => null)
 }
 
 async function checkMacosApp(appName: string) {

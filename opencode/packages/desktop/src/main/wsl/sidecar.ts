@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import { app } from "electron"
 import { checkHealth } from "../server"
-import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./runtime"
+import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs, wslExecutable } from "./runtime"
 import { pollWslHealth } from "./startup"
 import { nativeT } from "../native-translations"
 
@@ -37,7 +37,7 @@ export async function spawnWslSidecar(
     'export XDG_STATE_HOME="$HOME/.local/state"',
     `exec ${shellEscape(opencode)} --print-logs --log-level ${app.isPackaged ? "WARN" : "INFO"} serve --hostname 127.0.0.1 --port ${port}`,
   ].join("\n")
-  const child = spawn("wsl", wslArgs(["bash", "-se"], distro), {
+  const child = spawn(wslExecutable(), wslArgs(["bash", "-se"], distro), {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   })

@@ -851,11 +851,30 @@ const layer = Layer.effect(
       untracked: "preserve" | "remove"
     }) {
       const scope = path.relative(input.repository.worktree, input.path).replaceAll("\\", "/") || "."
+      if (input.index === "reset") {
+        // Unstage first: `checkout HEAD` would leave a staged new file staged, so `clean` couldn't remove it.
+        const unstage = yield* execute(
+          input.repository.worktree,
+          proc,
+          timeout("checkout"),
+        )(["reset", "-q", "HEAD", "--", scope]).pipe(
+          Effect.mapError(
+            (cause) => new PatchError({ operation: "reset", directory: input.path, message: cause.message, cause }),
+          ),
+        )
+        if (unstage.exitCode !== 0) {
+          return yield* new PatchError({
+            operation: "reset",
+            directory: input.path,
+            message: unstage.stderr.trim() || unstage.text.trim() || "Failed to unstage changes",
+          })
+        }
+      }
       const restore = yield* execute(
         input.repository.worktree,
         proc,
         timeout("checkout"),
-      )(input.index === "reset" ? ["checkout", "HEAD", "--", scope] : ["checkout", "--", scope]).pipe(
+      )(["checkout", "--", scope]).pipe(
         Effect.mapError(
           (cause) => new PatchError({ operation: "reset", directory: input.path, message: cause.message, cause }),
         ),

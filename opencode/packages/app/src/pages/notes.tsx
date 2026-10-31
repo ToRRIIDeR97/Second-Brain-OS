@@ -183,6 +183,29 @@ export default function NotesPage() {
     })
   }
 
+  // After a save, the server copy becomes the base. A field edited while the request ran keeps its
+  // newer text (and stays unsaved); the others take the server copy, which may be normalized.
+  const applySaved = (
+    document: NoteDocument,
+    sent: { body: string; title: string; projectIds: string; tags: string },
+  ) => {
+    const projectIds = [...document.info.projectIds]
+    const tags = document.info.tags.join(", ")
+    setState({
+      ...(state.body === sent.body ? { body: document.body } : {}),
+      ...(state.title === sent.title ? { title: document.info.title } : {}),
+      ...(state.projectIds.join("\0") === sent.projectIds ? { projectIds } : {}),
+      ...(state.tags === sent.tags ? { tags } : {}),
+      baseBody: document.body,
+      baseTitle: document.info.title,
+      baseProjectIds: projectIds,
+      baseTags: tags,
+      revision: document.revision,
+      error: "",
+      conflict: false,
+    })
+  }
+
   createEffect(
     on(
       () => (loadedNote.error ? undefined : loadedNote()),
@@ -312,6 +335,7 @@ export default function NotesPage() {
       return
     }
     const directory = state.directory
+    const sent = { body: state.body, title: state.title, projectIds: state.projectIds.join("\0"), tags: state.tags }
     setState({ saving: true, error: "" })
     try {
       const document = await writeNote(client(directory), {
@@ -325,7 +349,8 @@ export default function NotesPage() {
           .filter(Boolean),
         expectedRevision: state.revision,
       })
-      applyDocument(document)
+      // Skip if the user opened another note while this one was saving.
+      if (state.directory === directory && state.path === document.info.path) applySaved(document, sent)
       storeSummary(directory, document.info)
       // Patch the open search results in place instead of re-reading every note file.
       if (state.directory === directory)

@@ -41,6 +41,7 @@ import {
 
 const emptyDraft = () => ({ name: "", outcome: "", instructions: "", tags: "", locationId: "" })
 type PageState = {
+  directory: string
   filter: ProjectStatus
   selectedId: string
   view: ProjectView
@@ -78,6 +79,7 @@ export default function ProjectsPage() {
   const brainProjects = useBrainProjects()
   const [search, setSearch] = useSearchParams<{ project?: string; new?: string }>()
   const [state, setState] = createStore<PageState>({
+    directory: layout.home.workspace() ?? "",
     filter: "active" as ProjectStatus,
     selectedId: "",
     view: "overview",
@@ -107,9 +109,10 @@ export default function ProjectsPage() {
     target: { directory },
   })
 
-  // The sidebar workspace switcher owns this choice; the page only follows it.
-  const brainDirectory = () => layout.home.workspace() ?? ""
-  createEffect(on(brainDirectory, () => setState({ selectedId: "", creating: false, error: "" }), { defer: true }))
+  // The sidebar workspace switcher owns this choice. The page follows it, but holds the open Project's
+  // workspace while its overview has unsaved edits (the switch is not a route change, so
+  // useBeforeLeave can't catch it), and catches up once they are saved or discarded.
+  const brainDirectory = () => state.directory
 
   const [projects, projectActions] = createResource(
     () => brainDirectory() || undefined,
@@ -178,26 +181,55 @@ export default function ProjectsPage() {
     )
   })
 
+  createEffect(() => {
+    const directory = layout.home.workspace() ?? ""
+    if (directory === state.directory) return
+    if (overviewDirty()) return setState("error", language.t("secondBrain.projects.error.unsaved"))
+    setState({ directory, selectedId: "", creating: false, error: "" })
+  })
+
   useBeforeLeave((event) => {
     if (!overviewDirty()) return
     event.preventDefault()
     setState("error", language.t("secondBrain.projects.error.unsaved"))
   })
 
-  const applyProject = (project: ProjectRecord) =>
-    setState({
-      progress: project.progressPercent,
-      nextMilestone: project.nextMilestone ?? "",
-      blocker: project.blocker ?? "",
-      outcome: project.outcome,
-      instructions: project.instructions,
-      tags: project.tags.join(", "),
-      error: "",
-    })
-  createEffect(() => {
-    const project = selected()
-    if (project) applyProject(project)
+  const formFields = (project: ProjectRecord) => ({
+    progress: project.progressPercent,
+    nextMilestone: project.nextMilestone ?? "",
+    blocker: project.blocker ?? "",
+    outcome: project.outcome,
+    instructions: project.instructions,
+    tags: project.tags.join(", "),
   })
+  type FormFields = ReturnType<typeof formFields>
+  const applyProject = (project: ProjectRecord) => setState({ ...formFields(project), error: "" })
+  const formState = (): FormFields => ({
+    progress: state.progress,
+    nextMilestone: state.nextMilestone,
+    blocker: state.blocker,
+    outcome: state.outcome,
+    instructions: state.instructions,
+    tags: state.tags,
+  })
+  // Fields whose form value still equals `from` take the value in `to`; edited fields are kept.
+  const followUnedited = (from: FormFields, to: FormFields) => {
+    const current = formState()
+    setState(
+      Object.fromEntries(
+        (Object.keys(to) as (keyof FormFields)[]).filter((key) => current[key] === from[key]).map((key) => [key, to[key]]),
+      ) as Partial<FormFields>,
+    )
+  }
+  createEffect(
+    on(selected, (project, previous) => {
+      if (!project) return
+      // Another Project: load its overview.
+      if (!previous || previous.id !== project.id) return applyProject(project)
+      // A newer record of the same Project (a save, a status change, a refresh) mustn't drop edits.
+      followUnedited(formFields(previous), formFields(project))
+    }),
+  )
 
   const report = (error: unknown) => {
     setState({
@@ -254,10 +286,10 @@ export default function ProjectsPage() {
       setState("error", language.t("secondBrain.projects.error.required"))
       return
     }
+    const sent = formState()
     setState({ saving: true, error: "" })
     try {
-      replace(
-        await updateProject(client(brainDirectory()), project.id, {
+      const updated = await updateProject(client(brainDirectory()), project.id, {
           expectedUpdatedAt: project.updatedAt,
           outcome: state.outcome.trim(),
           instructions: state.instructions.trim(),
@@ -268,8 +300,10 @@ export default function ProjectsPage() {
           progressPercent: state.progress,
           nextMilestone: state.nextMilestone.trim() || null,
           blocker: state.blocker.trim() || null,
-        }),
-      )
+        })
+      replace(updated)
+      // Fields saved as typed take the server's normalized copy; ones edited during the save stay unsaved.
+      if (selected()?.id === updated.id) followUnedited(sent, formFields(updated))
     } catch (error) {
       report(error)
     } finally {

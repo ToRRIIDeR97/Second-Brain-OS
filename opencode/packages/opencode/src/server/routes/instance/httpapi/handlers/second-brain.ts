@@ -298,6 +298,9 @@ const saveCalendar = Effect.fn("SecondBrain.saveCalendar")(function* (input: Pla
         ? error
         : new PlannerCalendar.InvalidError({ reason: "invalid_document" }),
   })
+  // Reads refuse a file above the limit, so a save must not produce one.
+  if (Buffer.byteLength(next.source, "utf8") > CALENDAR_LIMIT)
+    return yield* new PlannerCalendar.InvalidError({ reason: "too_large" })
   const current = yield* decodeCalendar(file.bytes).pipe(
     Effect.catchIf(
       // Only a file that is not a calendar document at all is moved aside; a document

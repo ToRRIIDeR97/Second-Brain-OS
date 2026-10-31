@@ -7,6 +7,7 @@ import { Git } from "../git"
 import { Location } from "../location"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
+import { SessionExecution } from "../session/execution"
 import { SessionEvent } from "../session/event"
 import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
@@ -59,6 +60,7 @@ export type Error =
   | CaptureChangesError
   | ApplyChangesError
   | ResetSourceChangesError
+  | SessionV2.OperationUnavailableError
 
 export interface Interface {
   readonly moveSession: (input: Input) => Effect.Effect<void, Error>
@@ -73,12 +75,16 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const project = yield* ProjectV2.Service
     const sessions = yield* SessionStore.Service
+    const execution = yield* SessionExecution.Service
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
       const current = yield* sessions.get(input.sessionID)
       if (!current) return yield* new SessionV2.NotFoundError({ sessionID: input.sessionID })
       const directory = AbsolutePath.make(input.destination.directory)
       if (current.location.directory === directory) return
+      // A running agent keeps writing in the source while its changes are captured and discarded.
+      if ((yield* execution.active).has(input.sessionID))
+        return yield* new SessionV2.OperationUnavailableError({ operation: "move" })
 
       const source = yield* project.resolve(current.location.directory)
       const destination = yield* project.resolve(directory)
@@ -121,7 +127,8 @@ const layer = Layer.effect(
           .discard({
             repository,
             path: current.location.directory,
-            index: "preserve",
+            // The captured patch is `git diff HEAD`, so staged changes moved too and are unstaged here.
+            index: "reset",
             untracked: "remove",
           })
           .pipe(
@@ -144,5 +151,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node],
+  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node, SessionExecution.node],
 })

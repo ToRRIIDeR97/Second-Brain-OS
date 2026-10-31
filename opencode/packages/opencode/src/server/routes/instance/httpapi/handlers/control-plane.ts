@@ -29,6 +29,7 @@ export const controlPlaneHandlers = HttpApiBuilder.group(RootHttpApi, "controlPl
 
 function message(error: MoveSession.Error) {
   if (error instanceof SessionV2.NotFoundError) return `Session not found: ${error.sessionID}`
+  if (error instanceof SessionV2.OperationUnavailableError) return "Stop the session before moving it"
   if (error instanceof MoveSession.DestinationProjectMismatchError)
     return "Destination directory belongs to another project"
   if (error instanceof MoveSession.ApplyChangesError)

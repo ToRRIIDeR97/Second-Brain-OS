@@ -1,4 +1,4 @@
-import { For, Index, createEffect, createMemo, on } from "solid-js"
+import { For, Index, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 
 const TRACK = Array.from({ length: 30 }, (_, index) => index % 10)
@@ -22,6 +22,15 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
   const step = () => state.step
   const animating = () => state.animating
   let last = props.value
+  let fallback: ReturnType<typeof setTimeout> | undefined
+  // Brings the strip back to its middle copy so the offset never runs past the 30 cells.
+  const settle = () => {
+    clearTimeout(fallback)
+    fallback = undefined
+    setState("animating", false)
+    setState("step", (value) => normalize(value) + 10)
+  }
+  onCleanup(() => clearTimeout(fallback))
 
   createEffect(
     on(
@@ -37,6 +46,10 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
 
         setState("animating", true)
         setState("step", (value) => value + delta)
+        // transitionend never fires for a 0ms transition (reduced motion) or while the element is hidden.
+        if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return settle()
+        clearTimeout(fallback)
+        fallback = setTimeout(settle, DURATION * 2)
       },
       { defer: true },
     ),
@@ -47,10 +60,7 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
       <span
         data-slot="animated-number-strip"
         data-animating={animating() ? "true" : "false"}
-        onTransitionEnd={() => {
-          setState("animating", false)
-          setState("step", (value) => normalize(value) + 10)
-        }}
+        onTransitionEnd={settle}
         style={{
           "--animated-number-offset": `${step()}`,
           "--animated-number-duration": `var(--tool-motion-odometer-ms, ${DURATION}ms)`,
