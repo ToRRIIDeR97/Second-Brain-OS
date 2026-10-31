@@ -600,8 +600,12 @@ export default function CalendarPage() {
   }
 
   const persistTasks = async (tasks: ReadonlyArray<PlannerTask>) => {
-    if (!directory()) return
-    const current = snapshot()?.tasks ?? []
+    // Captured before the Google round trip: the user can switch workspace while it runs, and the
+    // result belongs to the calendar these tasks came from.
+    const workspace = directory()
+    const base = snapshot()
+    if (!workspace) return
+    const current = base?.tasks ?? []
     const removed = current.find((task) => task.source === "google" && !tasks.some((next) => next.id === task.id))
     const changed = tasks.find((task) => {
       if (task.source !== "google") return false
@@ -653,8 +657,8 @@ export default function CalendarPage() {
       }
       await googleActions.refetch()
     }
-    const saved = await writeCalendar(client(directory()), snapshot()?.events ?? [], snapshot()?.revision, next)
-    eventActions.mutate(saved)
+    const saved = await writeCalendar(client(workspace), base?.events ?? [], base?.revision, next)
+    if (directory() === workspace) eventActions.mutate(saved)
   }
 
   const toggleTask = async (task: PlannerTask) => {
