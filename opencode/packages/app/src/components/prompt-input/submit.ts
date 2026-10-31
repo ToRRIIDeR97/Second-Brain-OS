@@ -18,6 +18,7 @@ import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
+import { promptSkills } from "@/utils/skill-reference"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
@@ -66,6 +67,7 @@ type FollowupSendInput = {
   messageID?: string
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
+  skill?: (name: string) => string | undefined
 }
 
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
@@ -92,7 +94,8 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   }
 
   const [head, ...tail] = text.split(" ")
-  const cmd = head?.startsWith("/") ? head.slice(1) : undefined
+  // Skill chips go out as one prompt with their instructions, never as a single slash command.
+  const cmd = head?.startsWith("/") && promptSkills(input.draft.prompt).length === 0 ? head.slice(1) : undefined
   if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
     setBusy()
     try {
@@ -142,6 +145,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     sessionID: input.draft.sessionID,
     messageID,
     sessionDirectory: input.draft.sessionDirectory,
+    skill: input.skill,
   })
 
   const message: Message = {
@@ -258,6 +262,8 @@ type PromptSubmitInput = {
   /** Called with the harness a new thread starts on, for Settings' "start from the last one I used". */
   onNewSessionHarness?: (choice: { harnessID: string; model?: Harness.ModelSelection }) => void
   model?: ModelSelection
+  /** A Tenon skill's instructions by name, for skill chips. */
+  skill?: (name: string) => string | undefined
 }
 
 export function createPromptSubmit(input: PromptSubmitInput) {
@@ -566,7 +572,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    if (text.startsWith("/")) {
+    if (text.startsWith("/") && promptSkills(currentPrompt).length === 0) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)
       const customCommand = sync().data.command.find((c) => c.name === commandName)
@@ -689,6 +695,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     void sendFollowupDraft({
+      skill: input.skill,
       api: sdk().api.session,
       sync: sync(),
       serverSync: serverSync(),

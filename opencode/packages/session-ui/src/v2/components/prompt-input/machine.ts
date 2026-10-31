@@ -5,7 +5,8 @@ export type PromptInputV2InteractionState = {
   popover:
     | { type: "closed" }
     | { type: "context"; query: string; activeID?: string }
-    | { type: "command-inline"; query: string; activeID?: string }
+    // `skills`: the `/` follows other text, so only skills (which become chips) can be picked.
+    | { type: "command-inline"; query: string; activeID?: string; skills?: boolean }
     | { type: "command-menu"; query: string; activeID?: string }
   drag: "idle" | "active"
   focus: "editor" | "command-search" | "external"
@@ -34,8 +35,8 @@ export type PromptInputV2InteractionEvent =
 
 export type PromptInputV2InteractionCommand =
   | { type: "draft.setText"; value: string }
-  | { type: "mention.add"; item: PromptInputV2Suggestion }
-  | { type: "popover.filter"; popover: "command" | "context"; query: string }
+  | { type: "mention.add"; item: PromptInputV2Suggestion; trigger?: "@" | "/" }
+  | { type: "popover.filter"; popover: "command" | "context" | "skill"; query: string }
   | { type: "suggestion.select"; id: string }
   | { type: "focus.editor" }
   | { type: "focus.command-search" }
@@ -133,6 +134,15 @@ function inputChanged(
     ])
   }
 
+  const skill = value.slice(0, cursor ?? value.length).match(/(?:^|\s)\/([^\s/]*)$/)
+  if (skill) {
+    const query = skill[1] ?? ""
+    return changed({ ...state, popover: { type: "command-inline", query, skills: true }, focus: "editor" }, [
+      ...setText,
+      { type: "popover.filter", popover: "skill", query },
+    ])
+  }
+
   return changed(
     { ...state, popover: state.popover.type === "command-menu" ? state.popover : { type: "closed" }, focus: "editor" },
     setText,
@@ -169,7 +179,12 @@ function openContext(
 
 function queryChanged(state: PromptInputV2InteractionState, query: string): PromptInputV2Transition {
   if (state.popover.type === "closed") return unchanged(state)
-  const popover = state.popover.type === "context" ? "context" : "command"
+  const popover =
+    state.popover.type === "context"
+      ? "context"
+      : state.popover.type === "command-inline" && state.popover.skills
+        ? "skill"
+        : "command"
   return changed({ ...state, popover: { ...state.popover, query, activeID: undefined } }, [
     { type: "popover.filter", popover, query },
   ])
@@ -194,7 +209,9 @@ function suggestionSelected(
 ): PromptInputV2Transition {
   const current = promptText(persisted)
   const commands: PromptInputV2InteractionCommand[] = []
-  if (item.kind === "command") {
+  if (item.kind === "skill") {
+    commands.push({ type: "mention.add", item, trigger: state.popover.type === "command-menu" ? undefined : "/" })
+  } else if (item.kind === "command") {
     commands.push({
       type: "draft.setText",
       value:

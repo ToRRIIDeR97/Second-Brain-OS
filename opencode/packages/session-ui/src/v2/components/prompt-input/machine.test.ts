@@ -17,13 +17,43 @@ function persisted(value = ""): PromptInputV2PersistedState {
 }
 
 describe("prompt input v2 interaction machine", () => {
-  test("opens inline commands only when slash is the entire prompt", () => {
+  test("opens all commands for a leading slash and only skills after other text", () => {
     const state = createPromptInputV2InteractionState()
     const open = transitionPromptInputV2(state, { type: "input.changed", value: "/re" }, persisted())
-    const closed = transitionPromptInputV2(state, { type: "input.changed", value: "explain /re" }, persisted())
+    const skills = transitionPromptInputV2(
+      state,
+      { type: "input.changed", value: "explain /re" },
+      persisted("explain /re"),
+    )
+    const path = transitionPromptInputV2(state, { type: "input.changed", value: "see a/re" }, persisted("see a/re"))
 
     expect(open.state.popover).toEqual({ type: "command-inline", query: "re" })
-    expect(closed.state.popover).toEqual({ type: "closed" })
+    expect(skills.state.popover).toEqual({ type: "command-inline", query: "re", skills: true })
+    expect(skills.commands).toContainEqual({ type: "popover.filter", popover: "skill", query: "re" })
+    expect(path.state.popover).toEqual({ type: "closed" })
+  })
+
+  test("adds a picked skill as a chip in place of its slash query", () => {
+    const skill: PromptInputV2Suggestion = {
+      id: "custom.review",
+      kind: "skill",
+      label: "/review",
+      mention: { type: "file", path: "review", content: "/review", start: 0, end: 0 },
+    }
+    const open = transitionPromptInputV2(
+      createPromptInputV2InteractionState(),
+      { type: "input.changed", value: "fix this /rev" },
+      persisted("fix this /rev"),
+    )
+    const selected = transitionPromptInputV2(
+      open.state,
+      { type: "popover.select", item: skill },
+      persisted("fix this /rev"),
+    )
+
+    expect(selected.commands).toContainEqual({ type: "mention.add", item: skill, trigger: "/" })
+    expect(selected.commands.some((command) => command.type === "draft.setText")).toBe(false)
+    expect(selected.state.popover).toEqual({ type: "closed" })
   })
 
   test("completes nested slash command names", () => {

@@ -1,8 +1,49 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
 import { buildRequestParts } from "./build-request-parts"
+import { SKILL_REFERENCE_MIME } from "@/utils/skill-reference"
 
 describe("buildRequestParts", () => {
+  test("turns skill chips into synthetic instructions instead of files", () => {
+    // "missing" stands for a harness's own skill: no content here, so the harness is asked to load it.
+    const skill = (name: string, start: number) => ({
+      type: "file" as const,
+      path: name,
+      content: `/${name}`,
+      start,
+      end: start + name.length + 1,
+      mime: SKILL_REFERENCE_MIME,
+      url: `tenon-skill://${name}`,
+    })
+    const prompt: Prompt = [
+      { type: "text", content: "fix ", start: 0, end: 4 },
+      skill("review", 4),
+      { type: "text", content: " ", start: 11, end: 12 },
+      skill("design", 12),
+      skill("review", 19),
+      skill("missing", 26),
+    ]
+
+    const result = buildRequestParts({
+      prompt,
+      context: [],
+      images: [],
+      text: "fix /review /design/review/missing",
+      messageID: "msg_1",
+      sessionID: "ses_1",
+      sessionDirectory: "/repo",
+      skill: (name) => ({ review: "Review carefully.", design: "Design well." })[name],
+    })
+
+    const synthetic = result.requestParts.flatMap((part) => (part.type === "text" && part.synthetic ? [part.text] : []))
+    expect(result.requestParts.some((part) => part.type === "file")).toBe(false)
+    expect(synthetic).toHaveLength(3)
+    expect(synthetic[0]).toContain('<skill name="review">\nReview carefully.\n</skill>')
+    expect(synthetic[1]).toContain('<skill name="design">')
+    expect(synthetic[2]).toContain('your "missing" skill')
+    expect(synthetic[2]).not.toContain("<skill")
+  })
+
   test("builds typed request and optimistic parts without cast path", () => {
     const prompt: Prompt = [
       { type: "text", content: "hello", start: 0, end: 5 },

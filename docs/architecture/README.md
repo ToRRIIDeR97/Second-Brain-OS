@@ -976,6 +976,19 @@ The app's vendored client predates these endpoints, so `listSkillCatalog` and
 `setSkillEnabled` (`app/src/utils/server.ts`) call them directly with the same
 location query and auth as other calls.
 
+The composer uses the same catalog for skill chips. Typing `/` at the start of
+a prompt lists commands and skills; a `/` after other text lists skills only
+(`session-ui/src/v2/components/prompt-input/machine.ts`). The list is Tenon's
+switched-on skills plus the active harness's own (`usePromptInputV2Controller`
+in `app/src/components/prompt-input-v2.tsx`). A picked skill becomes a chip, a
+file mention with MIME `application/x-tenon-skill` and URL
+`tenon-skill://<name>` (`app/src/utils/skill-reference.ts`), so a prompt can hold
+any number. On send, `buildRequestParts` turns each distinct chip into a
+synthetic text part instead of a file part: a Tenon skill carries its
+`SKILL.md` body, read from `GET /api/skill` (`listSkills`), so every harness
+reads the same text; a harness-only skill is named for that harness to load
+itself. A prompt with chips is never sent as a single slash command.
+
 ## Chat diagram windows
 
 Agents draw diagrams in chat by writing a fenced code block tagged `svg`. The

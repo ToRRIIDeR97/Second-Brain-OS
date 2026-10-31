@@ -221,6 +221,7 @@ export const dict: Record<string, string> = {
   "secondBrain.message.svg.preview": "Preview",
   "secondBrain.message.svg.source": "Source",
   "secondBrain.message.svg.download": "Download",
+  "secondBrain.message.svg.drawing": "Drawing diagram…",
   "secondBrain.fileReference.open": "Open in Files",
   "secondBrain.fileReference.copyPath": "Copy path",
   "secondBrain.fileReference.loading": "Loading preview…",

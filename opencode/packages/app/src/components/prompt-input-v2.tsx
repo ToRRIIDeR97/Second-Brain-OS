@@ -1,4 +1,8 @@
 import { THREAD_REFERENCE_MIME, threadReferenceURI } from "@/utils/thread-reference"
+import { SKILL_REFERENCE_MIME, skillReferenceURI } from "@/utils/skill-reference"
+import { listSkillCatalog, listSkills } from "@/utils/server"
+import { useServerSDK } from "@/context/server-sdk"
+import type { Skill } from "@opencode-ai/schema/skill"
 import { sessionTitle } from "@/utils/session-title"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
@@ -10,7 +14,7 @@ import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
-import { createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import type { PromptInputProps } from "@/components/prompt-input/contracts"
@@ -125,6 +129,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const serverSdk = useServerSDK()
   const settings = useSettings()
   const prompt = props.state ?? usePrompt()
   let editor: HTMLDivElement | undefined
@@ -149,6 +154,29 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     }, [])
   })
   const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
+  // Tenon's switched-on skills, then the active harness's own. Only Tenon skills carry their instructions.
+  const [skillData, setSkillData] = createSignal<[Skill.Catalog, Skill.Info[]]>()
+  createEffect(
+    on(
+      () => sdk().directory,
+      (directory) => {
+        const server = { server: serverSdk().server.http, fetch: platform.fetch }
+        void Promise.all([listSkillCatalog(server, directory), listSkills(server, directory)])
+          .then((data) => {
+            if (sdk().directory === directory) setSkillData([data[0], [...data[1]]])
+          })
+          .catch(() => setSkillData(undefined))
+      },
+    ),
+  )
+  const skills = createMemo(() => {
+    const catalog = skillData()?.[0]
+    if (!catalog) return []
+    const harness = props.newSessionHarness ?? (info() as { harnessInstanceID?: string } | undefined)?.harnessInstanceID
+    const tenon = catalog.tenon.filter((skill) => skill.enabled !== false)
+    const own = catalog.harnesses.find((entry) => entry.id === harness)?.skills ?? []
+    return [...tenon, ...own.filter((skill) => !tenon.some((item) => item.name === skill.name))]
+  })
   const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
   const attachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
@@ -234,6 +262,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   })
   const submission = createPromptSubmit({
     onNewSessionHarness: (choice) => settings.harnesses.setLastUsed(choice),
+    skill: (name) => skillData()?.[1].find((skill) => skill.name === name)?.content,
     prompt,
     info,
     imageAttachments: attachments,
@@ -375,17 +404,39 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         type: "builtin" as const,
       })),
   ])
-  const commands = createMemo<PromptInputV2Suggestion[]>(() =>
-    slashCommands().map((item) => ({
-      id: item.id,
-      kind: "command",
-      label: `/${item.trigger}`,
-      trigger: item.trigger,
-      title: item.title,
-      description: item.description,
-      keybind: command.keybindParts(item.id),
+  const commands = createMemo<PromptInputV2Suggestion[]>(() => [
+    // A skill becomes a chip, so any number of them can join one message.
+    ...skills().map((skill) => ({
+      id: `skill.${skill.name}`,
+      kind: "skill" as const,
+      label: `/${skill.name}`,
+      trigger: skill.name,
+      title: skill.name,
+      description: skill.description,
+      mention: {
+        type: "file" as const,
+        path: skill.name,
+        content: `/${skill.name}`,
+        start: 0,
+        end: 0,
+        mime: SKILL_REFERENCE_MIME,
+        filename: skill.name,
+        url: skillReferenceURI(skill.name),
+      },
     })),
-  )
+    // The v1 server also lists skills as commands; the chip replaces those.
+    ...slashCommands()
+      .filter((item) => item.type === "builtin" || !skills().some((skill) => skill.name === item.trigger))
+      .map((item) => ({
+        id: item.id,
+        kind: "command" as const,
+        label: `/${item.trigger}`,
+        trigger: item.trigger,
+        title: item.title,
+        description: item.description,
+        keybind: command.keybindParts(item.id),
+      })),
+  ])
   // Agents and providers load per directory, so they read as empty while a session switch or a first
   // load is in flight. Keep the last resolved list in place (disabled) instead of unmounting the
   // control, which made the toolbar jump.

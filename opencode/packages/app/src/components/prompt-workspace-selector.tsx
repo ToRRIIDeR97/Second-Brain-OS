@@ -1,111 +1,39 @@
-import { For, Show } from "solid-js"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { Show } from "solid-js"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useLanguage } from "@/context/language"
-import { menuSurfaceClass } from "./surface-classes"
 
+/** Worktree on/off. On creates a git worktree for the thread; an existing one picked elsewhere also reads as on. */
 export function PromptWorkspaceSelector(props: {
   value: string
   projectRoot: string
-  workspaces: string[]
   branch?: string
   onChange: (value: string) => void
   onDone: () => void
 }) {
   const language = useLanguage()
-  let pending: string | undefined
-  const selected = () => (props.value === props.projectRoot ? "main" : props.value)
-  const icon = () => {
-    if (selected() === "main") return "monitor"
-    if (selected() === "create") return "workspace-new"
-    return "workspace"
-  }
-  const select = (value: string) => {
-    pending = value
-  }
-  const onOpenChange = (open: boolean) => {
-    if (open) return
-    const value = pending
-    pending = undefined
-    if (value) props.onChange(value)
-    props.onDone()
-  }
-  const label = () => {
-    if (selected() === "main") return language.t("secondBrain.composer.runIn.folder")
-    if (props.value === "create") return language.t("secondBrain.composer.runIn.copy")
-    return getFilename(props.value)
-  }
+  const on = () => props.value !== props.projectRoot && props.value !== "main"
+  const label = () =>
+    on() && props.value !== "create" ? getFilename(props.value) : language.t("secondBrain.composer.worktree")
 
   return (
     <>
       <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
-      <MenuV2 placement="bottom" gutter={4} onOpenChange={onOpenChange}>
-        <MenuV2.Trigger class="flex h-8 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full px-2.5 transition-[background-color,border-radius] duration-short ease-standard hover:bg-v2-overlay-simple-overlay-hover active:rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted motion-reduce:transition-none">
-          <Icon name={icon()} class="shrink-0 text-v2-icon-icon-muted" />
-          <span class="min-w-0 truncate">{label()}</span>
-          <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-        </MenuV2.Trigger>
-        <MenuV2.Portal>
-          <MenuV2.Content class={`w-[220px] ${menuSurfaceClass}`}>
-            <MenuV2.Group>
-              <MenuV2.GroupLabel>{language.t("secondBrain.composer.runIn")}</MenuV2.GroupLabel>
-              <MenuV2.Item data-checked={selected() === "main" ? "" : undefined} onSelect={() => select("main")}>
-                <Icon name="monitor" />
-                <span class="flex min-w-0 flex-1 flex-col">
-                  <span class="truncate">{language.t("secondBrain.composer.runIn.folder")}</span>
-                  <span class="truncate text-11-regular text-v2-text-text-weak">
-                    {language.t("secondBrain.composer.runIn.folder.description")}
-                  </span>
-                </span>
-                <Show when={selected() === "main"}>
-                  <Icon name="check" size="small" class="shrink-0" />
-                </Show>
-              </MenuV2.Item>
-              <MenuV2.Item data-checked={selected() === "create" ? "" : undefined} onSelect={() => select("create")}>
-                <Icon name="workspace-new" />
-                <span class="flex min-w-0 flex-1 flex-col">
-                  <span class="truncate">{language.t("secondBrain.composer.runIn.copy")}</span>
-                  <span class="truncate text-11-regular text-v2-text-text-weak">
-                    {language.t("secondBrain.composer.runIn.copy.description")}
-                  </span>
-                </span>
-                <Show when={selected() === "create"}>
-                  <Icon name="check" size="small" class="shrink-0" />
-                </Show>
-              </MenuV2.Item>
-            </MenuV2.Group>
-            <Show when={props.workspaces.length > 0}>
-              <MenuV2.Separator />
-              <MenuV2.Sub gutter={0} overlap overflowPadding={8}>
-                <MenuV2.SubTrigger>
-                  <Icon name="workspace" />
-                  {language.t("secondBrain.composer.runIn.existing")}
-                </MenuV2.SubTrigger>
-                <MenuV2.Portal>
-                  <MenuV2.SubContent class={`max-w-[220px] ${menuSurfaceClass}`}>
-                    <For each={props.workspaces}>
-                      {(workspace) => (
-                        <MenuV2.Item
-                          data-checked={selected() === workspace ? "" : undefined}
-                          onSelect={() => select(workspace)}
-                        >
-                          <Icon name="workspace-isolated" />
-                          <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
-                          <Show when={selected() === workspace}>
-                            <Icon name="check" size="small" class="shrink-0" />
-                          </Show>
-                        </MenuV2.Item>
-                      )}
-                    </For>
-                  </MenuV2.SubContent>
-                </MenuV2.Portal>
-              </MenuV2.Sub>
-            </Show>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
+      <TooltipV2 placement="top" value={language.t("secondBrain.composer.worktree.description")}>
+        <Switch
+          size="small"
+          checked={on()}
+          class="flex h-8 min-w-0 max-w-[220px] items-center gap-2 px-2.5 [&_[data-slot=switch-label]]:truncate"
+          onChange={(checked: boolean) => {
+            props.onChange(checked ? "create" : "main")
+            props.onDone()
+          }}
+        >
+          {label()}
+        </Switch>
+      </TooltipV2>
       <PromptGitStatus branch={props.branch} />
     </>
   )

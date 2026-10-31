@@ -199,7 +199,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             spellcheck={state.mode === "normal"}
             // @ts-expect-error
             autocomplete="off"
-            class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-5 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+            class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-5 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=skill]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
             onInput={(event) => syncEditor(event.currentTarget)}
             // A thread reference switches between its summary and the full thread on click.
@@ -342,6 +342,7 @@ function renderPromptInputV2Editor(
         // A thread reference (tenon-thread://) or MCP resource is addressed by URL, not by path.
         if (part.url) mention.dataset.url = part.url
         // The mode shows after the pill without joining its text, which is the part's content.
+        if (part.mime === "application/x-tenon-skill") mention.dataset.mention = "skill"
         if (part.mime === "application/x-tenon-thread") {
           mention.dataset.mention = "thread"
           mention.dataset.modeLabel = part.url?.includes("full=1") ? labels.full : labels.summary
@@ -826,6 +827,8 @@ export function PromptInputV2SubmitButton(props: {
 function PromptInputV2SuggestionIcon(props: { item: PromptInputV2Suggestion }) {
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-v2-icon-icon-accent" />
   if (props.item.kind === "command") return null
+  if (props.item.kind === "skill")
+    return <Icon name="checklist" size="small" class="shrink-0 text-v2-icon-icon-muted" />
   if (props.item.kind === "thread") return <Icon name="link" size="small" class="shrink-0 text-v2-icon-icon-muted" />
   return (
     <FileIcon
