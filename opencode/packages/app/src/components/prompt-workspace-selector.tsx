@@ -33,8 +33,8 @@ export function PromptWorkspaceSelector(props: {
     props.onDone()
   }
   const label = () => {
-    if (selected() === "main") return language.t("session.new.workspace.triggerLocal")
-    if (props.value === "create") return language.t("workspace.new")
+    if (selected() === "main") return language.t("secondBrain.composer.runIn.folder")
+    if (props.value === "create") return language.t("secondBrain.composer.runIn.copy")
     return getFilename(props.value)
   }
 
@@ -50,17 +50,27 @@ export function PromptWorkspaceSelector(props: {
         <MenuV2.Portal>
           <MenuV2.Content class={`w-[220px] ${menuSurfaceClass}`}>
             <MenuV2.Group>
-              <MenuV2.GroupLabel>{language.t("session.new.workspace.runIn")}</MenuV2.GroupLabel>
+              <MenuV2.GroupLabel>{language.t("secondBrain.composer.runIn")}</MenuV2.GroupLabel>
               <MenuV2.Item data-checked={selected() === "main" ? "" : undefined} onSelect={() => select("main")}>
                 <Icon name="monitor" />
-                <span class="min-w-0 flex-1 truncate">{language.t("session.new.workspace.local")}</span>
+                <span class="flex min-w-0 flex-1 flex-col">
+                  <span class="truncate">{language.t("secondBrain.composer.runIn.folder")}</span>
+                  <span class="truncate text-11-regular text-v2-text-text-weak">
+                    {language.t("secondBrain.composer.runIn.folder.description")}
+                  </span>
+                </span>
                 <Show when={selected() === "main"}>
                   <Icon name="check" size="small" class="shrink-0" />
                 </Show>
               </MenuV2.Item>
               <MenuV2.Item data-checked={selected() === "create" ? "" : undefined} onSelect={() => select("create")}>
                 <Icon name="workspace-new" />
-                <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
+                <span class="flex min-w-0 flex-1 flex-col">
+                  <span class="truncate">{language.t("secondBrain.composer.runIn.copy")}</span>
+                  <span class="truncate text-11-regular text-v2-text-text-weak">
+                    {language.t("secondBrain.composer.runIn.copy.description")}
+                  </span>
+                </span>
                 <Show when={selected() === "create"}>
                   <Icon name="check" size="small" class="shrink-0" />
                 </Show>
@@ -71,7 +81,7 @@ export function PromptWorkspaceSelector(props: {
               <MenuV2.Sub gutter={0} overlap overflowPadding={8}>
                 <MenuV2.SubTrigger>
                   <Icon name="workspace" />
-                  {language.t("session.new.workspace.existing")}
+                  {language.t("secondBrain.composer.runIn.existing")}
                 </MenuV2.SubTrigger>
                 <MenuV2.Portal>
                   <MenuV2.SubContent class={`max-w-[220px] ${menuSurfaceClass}`}>
