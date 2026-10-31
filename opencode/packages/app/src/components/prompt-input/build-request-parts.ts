@@ -5,6 +5,7 @@ import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
+import { SKILL_REFERENCE_MIME, promptSkills, skillInstruction } from "@/utils/skill-reference"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -27,6 +28,8 @@ type BuildRequestPartsInput = {
   messageID: string
   sessionID: string
   sessionDirectory: string
+  /** A Tenon skill's instructions by name; undefined for a skill the harness loads itself. */
+  skill?: (name: string) => string | undefined
 }
 
 const absolute = (directory: string, path: string) => {
@@ -49,7 +52,9 @@ const parseCommentMentions = (comment: string) => {
   })
 }
 
-const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
+// Skill chips are file mentions too, but they go out as instructions, never as files.
+const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart =>
+  part.type === "file" && part.mime !== SKILL_REFERENCE_MIME
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
 
 const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID: string): Part => {
@@ -98,6 +103,16 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
         },
       ]
     : []
+
+  const skills = promptSkills(input.prompt).map(
+    (name) =>
+      ({
+        id: Identifier.ascending("part"),
+        type: "text",
+        text: skillInstruction(name, input.skill?.(name)),
+        synthetic: true,
+      }) satisfies PromptRequestPart,
+  )
 
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
@@ -204,7 +219,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
     } satisfies PromptRequestPart
   })
 
-  requestParts.push(...files, ...context, ...agents, ...images)
+  requestParts.push(...skills, ...files, ...context, ...agents, ...images)
 
   return {
     requestParts,

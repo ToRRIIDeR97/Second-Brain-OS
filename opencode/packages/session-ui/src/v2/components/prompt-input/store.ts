@@ -73,12 +73,13 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
     },
-    addMention(mention: PromptInputV2FilePart | PromptInputV2AgentPart) {
+    /** Replaces the `trigger` and the query typed after it (before the cursor) with the mention. */
+    addMention(mention: PromptInputV2FilePart | PromptInputV2AgentPart, trigger: "@" | "/" = "@") {
       const text = store()
         .prompt.map((part) => ("content" in part ? part.content : ""))
         .join("")
       const end = store().cursor ?? text.length
-      const start = text.slice(0, end).lastIndexOf("@")
+      const start = text.slice(0, end).lastIndexOf(trigger)
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
       setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
     },

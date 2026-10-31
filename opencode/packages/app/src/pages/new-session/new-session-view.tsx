@@ -2,7 +2,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { pagePanelClass } from "@/components/page"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Show, createMemo, createSignal, type Accessor } from "solid-js"
+import { Show, createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
@@ -25,6 +25,10 @@ import type { NewSessionWorkspaceController } from "./new-session-workspace-cont
 import { Harness } from "@opencode-ai/schema/harness"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
+// Local, single-user app for now; replace with the signed-in profile name when there is one.
+const userName = "Nat"
+const greetingPrompts = [1, 2, 3, 4, 5] as const
+const greetingInterval = 6000
 
 export function NewSessionView(props: {
   input: NewSessionDraftController["input"]
@@ -39,6 +43,7 @@ export function NewSessionView(props: {
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             {/* The composer's own 0.5px border-muted edge vanishes on the dark panel; give it a 1px ring here. */}
             <div class="flex flex-col gap-6 [&_[data-component=prompt-input-v2]]:shadow-[0_0_0_1px_var(--v2-border-border-base),0_8px_24px_-12px_rgb(0_0_0/0.18)]">
+              <Greeting />
               <PromptInputV2Composer controller={props.input} harness={props.harness} />
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
@@ -55,7 +60,6 @@ export function NewSessionView(props: {
                     <PromptWorkspaceSelector
                       value={props.workspace.selection.value()}
                       projectRoot={props.workspace.project.root()}
-                      workspaces={props.workspace.project.workspaces()}
                       branch={props.workspace.bar.branch()}
                       onChange={props.workspace.selection.set}
                       onDone={props.input.restoreFocus}
@@ -70,6 +74,28 @@ export function NewSessionView(props: {
           <ProviderTip />
         </Show>
       </div>
+    </div>
+  )
+}
+
+function Greeting() {
+  const language = useLanguage()
+  const [index, setIndex] = createSignal(Math.floor(Math.random() * greetingPrompts.length))
+  const timer = setInterval(() => setIndex((value) => (value + 1) % greetingPrompts.length), greetingInterval)
+  onCleanup(() => clearInterval(timer))
+
+  return (
+    <div data-component="new-thread-greeting" class="flex flex-col items-center gap-1 text-center">
+      <p class="text-[14px] text-v2-text-text-faint">
+        {language.t("secondBrain.newThread.welcome", { name: userName })}
+      </p>
+      <Show when={greetingPrompts[index()]} keyed>
+        {(prompt) => (
+          <h1 class="animate-enter text-[28px] leading-9 tracking-[-0.4px] text-v2-text-text-base [font-weight:500]">
+            {language.t(`secondBrain.newThread.prompt.${prompt}`)}
+          </h1>
+        )}
+      </Show>
     </div>
   )
 }

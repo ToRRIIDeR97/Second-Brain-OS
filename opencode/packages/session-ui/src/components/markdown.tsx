@@ -553,6 +553,7 @@ export function Markdown(
       preview: i18n.t("secondBrain.message.svg.preview"),
       source: i18n.t("secondBrain.message.svg.source"),
       download: i18n.t("secondBrain.message.svg.download"),
+      drawing: i18n.t("secondBrain.message.svg.drawing"),
     }
     const designLabels = {
       title: i18n.t("secondBrain.message.design.title"),

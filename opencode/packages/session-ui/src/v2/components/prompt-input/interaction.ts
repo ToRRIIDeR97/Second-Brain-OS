@@ -155,7 +155,16 @@ export function createPromptInputV2Controller(input: {
     key: (item) => item.id,
     filterKeys: ["trigger", "title"],
   })
-  const list = () => (state.popover.type === "context" ? contextList : commandList)
+  const skillList = useFilteredList<PromptInputV2Suggestion>({
+    items: () => input.commands().filter((item) => item.kind === "skill"),
+    key: (item) => item.id,
+    filterKeys: ["trigger", "title"],
+  })
+  const list = () => {
+    if (state.popover.type === "context") return contextList
+    if (state.popover.type === "command-inline" && state.popover.skills) return skillList
+    return commandList
+  }
   const suggestions = () => list().flat()
 
   const execute = (command: PromptInputV2InteractionCommand) => {
@@ -164,11 +173,13 @@ export function createPromptInputV2Controller(input: {
       return
     }
     if (command.type === "mention.add") {
-      if (command.item.mention) draft.addMention(command.item.mention)
+      if (command.item.mention) draft.addMention(command.item.mention, command.trigger)
       return
     }
     if (command.type === "popover.filter") {
-      ;(command.popover === "command" ? commandList : contextList).onInput(command.query)
+      ;(command.popover === "command" ? commandList : command.popover === "skill" ? skillList : contextList).onInput(
+        command.query,
+      )
       return
     }
     if (command.type === "suggestion.select") {

@@ -548,6 +548,14 @@ serialized, never overwriting a malformed file). Harness skill folders are
 never written. Switching a skill off only hides it from Tenon's agent; it isn't
 a security control, since the skill file stays readable on disk.
 
+Composer skill chips read Tenon's skill bodies through the existing
+`GET /api/skill` (same location scope and auth). A body leaves the renderer
+only as a synthetic text part of a prompt the user sends with that chip, to
+the harness the user picked, which may be an external CLI. The user choosing
+the chip is what trusts the skill as instructions; nothing is attached
+without a chip, and skill text is never logged. Harness-only skills send just
+their name.
+
 ### ACP subagent transcripts
 
 An ACP agent's subagent text, reasoning and tool output are now stored on the

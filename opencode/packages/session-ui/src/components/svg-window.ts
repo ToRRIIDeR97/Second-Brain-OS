@@ -14,6 +14,7 @@ export type SvgWindowLabels = {
   preview: string
   source: string
   download: string
+  drawing: string
 }
 
 export type SvgTheme = {
@@ -42,7 +43,10 @@ const themeTokens: Record<Exclude<keyof SvgTheme, "font" | "scheme">, string> = 
 
 /** Intrinsic size from a viewBox, else from numeric (or px) width and height attributes. */
 export function svgSize(attrs: { viewBox?: string | null; width?: string | null; height?: string | null }) {
-  const box = attrs.viewBox?.trim().split(/[\s,]+/).map(Number)
+  const box = attrs.viewBox
+    ?.trim()
+    .split(/[\s,]+/)
+    .map(Number)
   if (box?.length === 4 && box[2]! > 0 && box[3]! > 0) return { width: box[2]!, height: box[3]!, viewBox: true }
   const width = length(attrs.width)
   const height = length(attrs.height)
@@ -134,6 +138,7 @@ function button(label: string, action: string) {
 function unmount(wrapper: HTMLElement) {
   wrapper.querySelector(':scope > [data-slot="svg-window-bar"]')?.remove()
   wrapper.querySelector(':scope > [data-slot="svg-window-frame"]')?.remove()
+  wrapper.querySelector(':scope > [data-slot="svg-window-skeleton"]')?.remove()
   delete wrapper.dataset.svgWindow
   mounted.delete(wrapper)
 }
@@ -184,7 +189,27 @@ function mount(wrapper: HTMLElement, pre: HTMLElement, source: string, labels: S
   wrapper.insertBefore(frame, pre)
 }
 
-/** Mounts a window on every completed ```svg block under `root`; open (streaming) blocks stay as code. */
+/** While a block streams, a skeleton of the window stands in for the half-written source. */
+function mountSkeleton(wrapper: HTMLElement, pre: HTMLElement, labels: SvgWindowLabels) {
+  // Morphing a streamed block can drop the inserted nodes, so check for them rather than the flag.
+  if (wrapper.querySelector(':scope > [data-slot="svg-window-skeleton"]')) return
+  unmount(wrapper)
+  const bar = document.createElement("div")
+  bar.dataset.slot = "svg-window-bar"
+  const title = document.createElement("span")
+  title.textContent = labels.drawing
+  bar.append(title)
+  const skeleton = document.createElement("div")
+  skeleton.dataset.slot = "svg-window-skeleton"
+  skeleton.setAttribute("role", "status")
+  skeleton.setAttribute("aria-label", labels.drawing)
+  for (let i = 0; i < 4; i++) skeleton.append(document.createElement("span"))
+  wrapper.dataset.svgWindow = "loading"
+  wrapper.insertBefore(bar, pre)
+  wrapper.insertBefore(skeleton, pre)
+}
+
+/** Mounts a window on every completed ```svg block under `root`; open (streaming) blocks show a skeleton. */
 export function mountSvgWindows(root: HTMLElement, labels: SvgWindowLabels) {
   for (const code of root.querySelectorAll<HTMLElement>("pre > code.language-svg")) {
     const pre = code.parentElement
@@ -192,7 +217,7 @@ export function mountSvgWindows(root: HTMLElement, labels: SvgWindowLabels) {
     if (!pre || !wrapper || wrapper.dataset.component !== "markdown-code") continue
     const complete = wrapper.closest<HTMLElement>("[data-markdown-block]")?.dataset.markdownComplete !== "false"
     if (!complete) {
-      if (mounted.has(wrapper)) unmount(wrapper)
+      mountSkeleton(wrapper, pre, labels)
       continue
     }
     const source = code.textContent ?? ""

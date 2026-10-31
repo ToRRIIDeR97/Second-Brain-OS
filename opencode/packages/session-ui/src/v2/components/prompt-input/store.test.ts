@@ -96,6 +96,14 @@ describe("prompt input v2 store", () => {
     ])
     expect(prompt.state.model?.variant).toBe("thinking")
 
+    prompt.setPrompt([{ type: "text", content: "fix /rev", start: 0, end: 8 }], 8)
+    prompt.addMention({ type: "file", path: "review", content: "/review", start: 0, end: 0 }, "/")
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "fix ", start: 0, end: 4 },
+      { type: "file", path: "review", content: "/review", start: 4, end: 11 },
+      { type: "text", content: " ", start: 11, end: 12 },
+    ])
+
     prompt.removeContext(context.key)
     prompt.setPrompt([{ type: "text", content: "old", start: 0, end: 3 }], 3)
     prompt.setModel(undefined)

@@ -228,6 +228,8 @@
     border-radius: 0;
   }
 
+  [data-component="markdown-code"][data-svg-window="loading"] pre,
+  [data-component="markdown-code"][data-svg-window="loading"] [data-slot="markdown-copy-button"],
   [data-component="markdown-code"][data-svg-window="preview"] pre,
   [data-component="markdown-code"][data-svg-window="source"] [data-slot="svg-window-frame"] {
     display: none;
@@ -269,6 +271,67 @@
     box-sizing: border-box;
     border: 0;
     background: transparent;
+  }
+
+  /* Placeholder boxes and a connector, shimmering while the diagram streams. */
+  [data-slot="svg-window-skeleton"] {
+    position: relative;
+    height: 180px;
+    overflow: hidden;
+  }
+
+  [data-slot="svg-window-skeleton"] > span {
+    position: absolute;
+    width: 22%;
+    height: 36px;
+    border-radius: var(--v2-radius-md);
+    background: var(--v2-background-bg-layer-02);
+  }
+
+  [data-slot="svg-window-skeleton"] > span:nth-child(1) {
+    left: 8%;
+    top: 24px;
+  }
+
+  [data-slot="svg-window-skeleton"] > span:nth-child(2) {
+    left: 42%;
+    top: 72px;
+  }
+
+  [data-slot="svg-window-skeleton"] > span:nth-child(3) {
+    left: 8%;
+    top: 120px;
+  }
+
+  [data-slot="svg-window-skeleton"] > span:nth-child(4) {
+    left: 30%;
+    top: 41px;
+    width: 12%;
+    height: 2px;
+  }
+
+  [data-slot="svg-window-skeleton"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--v2-background-bg-layer-01), transparent);
+    animation: svg-window-shimmer 1.4s var(--v2-ease-standard) infinite;
+  }
+
+  @keyframes svg-window-shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="svg-window-skeleton"]::after {
+      animation: none;
+      opacity: 0;
+    }
   }
 
   [data-component="markdown-code"][data-svg-window] [data-slot="markdown-copy-button"] {

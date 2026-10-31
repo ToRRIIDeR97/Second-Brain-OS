@@ -182,7 +182,8 @@ function RailItem(props: { id: string; icon: string; label: string; active?: boo
       type="button"
       data-sidebar-item={props.id}
       data-selected={props.active ? "" : undefined}
-      class="group/rail flex w-full flex-col items-center gap-1 text-[12px] text-v2-text-text-muted [font-weight:500] focus-visible:outline-none data-[selected]:text-v2-text-text-base data-[selected]:[font-weight:600]"
+      class="group/rail relative flex w-full justify-center focus-visible:outline-none"
+      aria-label={props.label}
       aria-current={props.active ? "page" : undefined}
       onClick={props.onClick}
     >
@@ -200,7 +201,13 @@ function RailItem(props: { id: string; icon: string; label: string; active?: boo
           <Icon name={props.icon} size="large" />
         </span>
       </span>
-      <span class="max-w-full truncate px-1">{props.label}</span>
+      {/* The name slides out to the right on hover or keyboard focus; the button's aria-label carries it. */}
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute left-[calc(50%+32px)] top-1/2 z-50 -translate-x-2 -translate-y-1/2 scale-90 whitespace-nowrap rounded-full bg-v2-background-bg-layer-01 px-2.5 py-1 text-[12px] text-v2-text-text-base opacity-0 shadow-[var(--v2-elevation-floating)] [font-weight:500] transition-[opacity,transform] duration-short ease-standard group-hover/rail:translate-x-0 group-hover/rail:scale-100 group-hover/rail:opacity-100 group-focus-visible/rail:translate-x-0 group-focus-visible/rail:scale-100 group-focus-visible/rail:opacity-100 motion-reduce:transition-none"
+      >
+        {props.label}
+      </span>
     </button>
   )
 }

@@ -236,6 +236,13 @@ const decodeSkillEnabled = Schema.decodeUnknownSync(
   Location.response(Schema.Struct({ name: Schema.String, enabled: Schema.Boolean })),
 )
 
+const decodeSkills = Schema.decodeUnknownSync(Location.response(Schema.Array(SkillSchema.Info)))
+
+/** Tenon's skills with their instructions; a skill chip in the composer sends them with the prompt. */
+export async function listSkills(input: HarnessServer, directory: string) {
+  return decodeSkills(await locationRequest(input, directory, "/api/skill", "Skills request failed")).data
+}
+
 /** Switches one of Tenon's skills on or off; harness skills can't be switched. */
 export async function setSkillEnabled(input: HarnessServer, directory: string, name: string, enabled: boolean) {
   return decodeSkillEnabled(
