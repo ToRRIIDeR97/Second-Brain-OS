@@ -1,8 +1,10 @@
+import { useProjectThreads } from "@/components/sidebar/sidebar-controller"
+import { useLanguage } from "@/context/language"
 import { createQuery } from "@tanstack/solid-query"
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { type Accessor, createMemo } from "solid-js"
 import type { PromptInputControls } from "@/components/prompt-input/contracts"
-import type { PromptProjectControls } from "@/components/prompt-project-selector"
+import type { PromptProject, PromptProjectControls } from "@/components/prompt-project-selector"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { useGlobal } from "@/context/global"
 import { useLayout } from "@/context/layout"
@@ -72,8 +74,26 @@ export function createPromptProjectControls() {
   const [search] = useSearchParams<{ draftId?: string }>()
   const projectServer = () => serverSDK().server
   const projectServerCtx = createMemo(() => global.ensureServerCtx(projectServer()))
+  const language = useLanguage()
+  const navigate = useNavigate()
+  const projectThreads = useProjectThreads()
+  // With one server, the picker lists what the sidebar lists: the workspace's Projects, plus General for
+  // threads in the workspace folder itself. Each starts the thread in that Project's thread folder.
+  const workspaceProjects = createMemo((): PromptProject[] => {
+    const brain = layout.home.workspace()
+    if (!brain) return []
+    const entries = projectThreads.status === "success" ? projectThreads.data : []
+    return [
+      { worktree: brain, name: language.t("secondBrain.sidebar.workspaceThreads") },
+      ...entries
+        .filter((entry) => entry.project.status === "active")
+        .map((entry) => ({ worktree: entry.threadDirectory, name: entry.project.name, id: entry.project.id }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    ]
+  })
   const projects = createMemo(() => {
     if (server.list.length <= 1) {
+      if (layout.home.workspace()) return workspaceProjects()
       return search.draftId ? projectServerCtx().projects.list() : layout.projects.list()
     }
     return server.list.flatMap((conn) => {
@@ -85,6 +105,13 @@ export function createPromptProjectControls() {
     })
   })
   const selectProject = (worktree: string, serverKey?: string) => {
+    if (!serverKey && layout.home.workspace()) {
+      const project = workspaceProjects().find((item) => item.worktree === worktree)
+      if (search.draftId)
+        drafts.update(search.draftId, { server: server.key, directory: worktree, projectID: project?.id })
+      else void drafts.create({ server: server.key, directory: worktree, projectID: project?.id })
+      return
+    }
     const conn = serverKey ? server.list.find((conn) => ServerConnection.key(conn) === serverKey) : projectServer()
     if (search.draftId) {
       if (!conn) return
@@ -111,6 +138,8 @@ export function createPromptProjectControls() {
   }
 
   const addProject = (title: string, serverKey?: string) => {
+    // Projects are created on the Projects page, as from the sidebar.
+    if (server.list.length <= 1 && layout.home.workspace()) return void navigate("/projects")
     const conn = serverKey ? server.list.find((conn) => ServerConnection.key(conn) === serverKey) : projectServer()
     if (!conn) return
     pickDirectory({
