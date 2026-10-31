@@ -1599,6 +1599,34 @@ test("public provider info omits invalid models", () => {
   expect(result.models.invalid).toBeUndefined()
 })
 
+test("renderer provider info carries no key, token or header values", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "test",
+    name: "Test",
+    env: [],
+    models: {
+      valid: {
+        id: "valid",
+        name: "Valid",
+        cost: { input: 1, output: 1 },
+        limit: { context: 128_000, output: 16_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider)
+  provider.key = "sk-secret"
+  provider.options = { baseURL: "https://example.test", apiKey: "sk-secret", headers: { Authorization: "Bearer x" } }
+  provider.models.valid = { ...provider.models.valid, headers: { "x-api-key": "sk-secret" }, options: { token: "t" } }
+
+  const result = Provider.toRendererInfo(provider)
+
+  expect(JSON.stringify(result)).not.toContain("sk-secret")
+  expect(result.key).toBeUndefined()
+  expect(result.options).toEqual({ baseURL: "https://example.test" })
+  expect(result.models.valid.options).toEqual({})
+  // Internal callers still get the full copy.
+  expect(Provider.toPublicInfo(provider).key).toBe("sk-secret")
+})
+
 test("models.dev catalog is derived once per snapshot", () => {
   const snapshot = () =>
     ({

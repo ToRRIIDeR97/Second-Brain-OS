@@ -1,6 +1,7 @@
 export * as BashTool from "./bash"
 
 import path from "path"
+import { Wildcard } from "../util/wildcard"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
@@ -142,7 +143,7 @@ const layer = Layer.effectDiscard(
               yield* permission.assert({
                 action: name,
                 resources: [input.command],
-                save: [input.command],
+                save: [Wildcard.literal(input.command)],
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source,

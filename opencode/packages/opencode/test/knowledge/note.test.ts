@@ -304,3 +304,12 @@ test("search reads a note again only after it changes", async () => {
   expect(await search("first-needle")).toEqual([])
   expect((await search("second-needle")).map((note) => note.title)).toEqual(["Cached"])
 })
+
+test("a heading title is read in linear time and keeps CommonMark closing rules", () => {
+  expect(KnowledgeNote.titleFromBody("intro\n# Plan ##\nbody")).toBe("Plan")
+  expect(KnowledgeNote.titleFromBody("# Learn C#")).toBe("Learn C#")
+  expect(KnowledgeNote.titleFromBody("#\nNot a heading")).toBe("")
+  const started = performance.now()
+  expect(KnowledgeNote.titleFromBody("# a" + " ".repeat(100_000) + "x")).toStartWith("a")
+  expect(performance.now() - started).toBeLessThan(100)
+})

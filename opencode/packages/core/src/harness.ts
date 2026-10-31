@@ -1,5 +1,6 @@
 export * as HarnessRuntime from "./harness"
 
+import { Wildcard } from "./util/wildcard"
 import {
   InvalidProviderOutputReason,
   LLMClient,
@@ -556,7 +557,7 @@ const layer = Layer.effect(
                   sessionID: input.sessionID,
                   action: request.action,
                   resources: [...request.resources],
-                  save: [...request.resources],
+                  save: request.resources.map(Wildcard.literal),
                   metadata: {
                     harness: instance.id,
                     title: request.title,
@@ -1729,7 +1730,7 @@ export function handleCodexRequest(
         sessionID,
         action: "bash",
         resources: [command],
-        save: [command],
+        save: [Wildcard.literal(command)],
         metadata: {
           harness: "codex",
           cwd: string(params.cwd) ?? directory,
@@ -1746,7 +1747,7 @@ export function handleCodexRequest(
         sessionID,
         action: "edit",
         resources: [resource],
-        save: [resource],
+        save: [Wildcard.literal(resource)],
         metadata: {
           harness: "codex",
           ...(string(params.reason) ? { reason: string(params.reason) } : {}),
@@ -1763,7 +1764,7 @@ export function handleCodexRequest(
         sessionID,
         action: "request_permissions",
         resources: [resource],
-        save: [resource],
+        save: [Wildcard.literal(resource)],
         metadata: {
           harness: "codex",
           cwd: string(params.cwd) ?? directory,

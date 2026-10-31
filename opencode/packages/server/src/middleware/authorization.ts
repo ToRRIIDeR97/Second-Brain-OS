@@ -3,6 +3,8 @@ import { UnauthorizedError } from "@opencode-ai/protocol/errors"
 import { Authorization } from "@opencode-ai/protocol/middleware/authorization"
 export { Authorization } from "@opencode-ai/protocol/middleware/authorization"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 
@@ -40,12 +42,22 @@ export const authorizationLayer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* ServerAuth.Config
     if (!ServerAuth.required(config)) return Authorization.of((effect) => effect)
+    const tickets = yield* PtyTicket.Service
     return Authorization.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
+        const url = new URL(request.url, "http://localhost")
         // Browsers cannot set headers on WebSocket upgrades, so a ticketed PTY connect skips
-        // credential checks here; the connect handler consumes and validates the ticket.
-        if (hasPtyConnectTicketURL(new URL(request.url, "http://localhost"))) return yield* effect
+        // credential checks. The ticket (not consumed here) and Origin are checked before routing;
+        // the connect handler consumes the ticket against its full scope.
+        if (hasPtyConnectTicketURL(url)) {
+          const ptyID = url.pathname.split("/")[3] ?? ""
+          const allowed =
+            isAllowedRequestOrigin(request.headers.origin, request.headers.host, yield* CorsConfig) &&
+            (yield* tickets.check({ ticket: url.searchParams.get("ticket") ?? "", ptyID }))
+          if (allowed) return yield* effect
+          return yield* new UnauthorizedError({ message: "Authentication required" })
+        }
         const credential = yield* credentialFromRequest(request)
         if (ServerAuth.authorized(credential, config)) return yield* effect
         yield* HttpEffect.appendPreResponseHandler((_request, response) =>

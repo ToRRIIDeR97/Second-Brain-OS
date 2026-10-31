@@ -1,4 +1,5 @@
 import { Config } from "@/config/config"
+import { redactSecrets } from "@/config/redact"
 import { Provider } from "@/provider/provider"
 import * as InstanceState from "@/effect/instance-state"
 import { Effect } from "effect"
@@ -12,7 +13,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
     const configSvc = yield* Config.Service
 
     const get = Effect.fn("ConfigHttpApi.get")(function* () {
-      return yield* configSvc.get()
+      return redactSecrets(yield* configSvc.get())
     })
 
     const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
@@ -24,7 +25,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
       const providers = yield* providerSvc.list()
       return {
-        providers: Object.values(providers).map(Provider.toPublicInfo),
+        providers: Object.values(providers).map(Provider.toRendererInfo),
         default: Provider.defaultModelIDs(providers),
       }
     })

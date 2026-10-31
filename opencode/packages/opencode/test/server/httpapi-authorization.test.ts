@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi"
 import { ServerAuth } from "../../src/server/auth"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import {
   Authorization,
   authorizationLayer,
@@ -32,6 +33,11 @@ const ServerApi = HttpApi.make("test-server-authorization").add(
       HttpApiEndpoint.get("probe", "/api/probe", {
         success: Schema.String,
       }),
+      // Stands in for the PTY connect route so requests reach the middleware.
+      HttpApiEndpoint.get("connect", "/api/pty/:ptyID/connect", {
+        params: Schema.Struct({ ptyID: Schema.String }),
+        success: Schema.String,
+      }),
     )
     .middleware(ServerAuthorization),
 )
@@ -43,7 +49,7 @@ const handlers = HttpApiBuilder.group(Api, "test", (handlers) =>
 )
 
 const serverHandlers = HttpApiBuilder.group(ServerApi, "test.v2", (handlers) =>
-  handlers.handle("probe", () => Effect.succeed("ok")),
+  handlers.handle("probe", () => Effect.succeed("ok")).handle("connect", () => Effect.succeed("connected")),
 )
 
 const apiLayer = HttpRouter.serve(
@@ -63,7 +69,8 @@ const kitSecretLayer = ServerAuth.Config.configLayer({ password: Option.some("se
 const it = testEffect(apiLayer.pipe(Layer.provide(noAuthLayer)))
 const itSecret = testEffect(apiLayer.pipe(Layer.provide(secretLayer)))
 const itKitSecret = testEffect(apiLayer.pipe(Layer.provide(kitSecretLayer)))
-const itV2Secret = testEffect(v2ApiLayer.pipe(Layer.provide(secretLayer)))
+const ticketLayer = Layer.effect(PtyTicket.Service, PtyTicket.make())
+const itV2Secret = testEffect(v2ApiLayer.pipe(Layer.provide(secretLayer), Layer.provideMerge(ticketLayer)))
 
 const basic = (username: string, password: string) => ServerAuth.header({ username, password }) ?? ""
 
@@ -158,6 +165,20 @@ describe("HttpApi authorization middleware", () => {
       const response = yield* HttpClient.get("/probe?auth_token=not-base64")
 
       expect(response.status).toBe(401)
+    }),
+  )
+
+  itV2Secret.live("refuses a PTY connect with an unknown ticket before routing", () =>
+    Effect.gen(function* () {
+      const tickets = yield* PtyTicket.Service
+      const unknown = yield* HttpClient.get("/api/pty/pty_1/connect?ticket=bogus")
+      expect(unknown.status).toBe(401)
+
+      const { ticket } = yield* tickets.issue({ ptyID: "pty_1" as never })
+      const otherPty = yield* HttpClient.get(`/api/pty/pty_2/connect?ticket=${ticket}`)
+      expect(otherPty.status).toBe(401)
+      const valid = yield* HttpClient.get(`/api/pty/pty_1/connect?ticket=${ticket}`)
+      expect(valid.status).toBe(200)
     }),
   )
 
