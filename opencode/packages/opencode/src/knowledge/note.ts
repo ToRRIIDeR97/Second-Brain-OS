@@ -78,21 +78,13 @@ export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
     },
   )
   const query = search.trim().toLowerCase()
-  // Read every candidate so search sees all notes; keep only matching summaries in memory.
+  // Check every candidate so search sees all notes; only notes changed since the last query are read.
   // One unreadable, oversized or malformed note is skipped so it cannot hide the rest.
   const notes = yield* Effect.forEach(
     paths.map((path) => path.replaceAll("\\", "/")).filter(isNotePath),
     (path) =>
       (query
-        ? readCard(path).pipe(
-            Effect.map((note) =>
-              [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
-                value.toLowerCase().includes(query),
-              )
-                ? note.info
-                : undefined,
-            ),
-          )
+        ? cachedSearchEntry(path).pipe(Effect.map((entry) => (entry.text.includes(query) ? entry.info : undefined)))
         : cachedSummary(path)
       ).pipe(
         Effect.catch((error) =>
@@ -176,6 +168,29 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
   return decode(normalizedPath, source)
 })
 
+export const DeleteInput = Schema.Struct({
+  expectedRevision: Schema.String,
+})
+export type DeleteInput = typeof DeleteInput.Type
+
+/** Removes a note only while it still has the revision the caller last read. */
+export const remove = Effect.fn("KnowledgeNote.remove")(function* (path: string, input: DeleteInput) {
+  const normalizedPath = yield* notePath(path)
+  const card = yield* readCard(normalizedPath)
+  if (input.expectedRevision !== card.revision) return yield* new ConflictError({ reason: "stale" })
+  const mutation = yield* LocationMutation.Service
+  const files = yield* FileMutation.Service
+  const target = yield* mutation.resolve({ path: normalizedPath, kind: "file" })
+  yield* files.remove({ target })
+  summaries.delete(target.canonical)
+  const searched = searchEntries.get(target.canonical)
+  if (searched) {
+    searchEntries.delete(target.canonical)
+    searchTextSize -= searched.text.length
+  }
+  return card.info
+})
+
 const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   const mutation = yield* LocationMutation.Service
   const fs = yield* FSUtil.Service
@@ -227,6 +242,46 @@ const cachedSummary = Effect.fnUntraced(function* (path: string) {
   const oldest = summaries.keys().next()
   if (summaries.size > summaryLimit && !oldest.done) summaries.delete(oldest.value)
   return card.info
+})
+
+// Searchable text per note, kept while its mtime and size are unchanged, so a query reads only notes that
+// changed since the last one. Bounded by total characters; the least recently used notes are dropped first.
+const searchEntries = new Map<string, { mtime: number; size: number; info: Info; text: string }>()
+const searchTextLimit = 32 * 1024 * 1024
+let searchTextSize = 0
+
+const cachedSearchEntry = Effect.fnUntraced(function* (path: string) {
+  const mutation = yield* LocationMutation.Service
+  const target = yield* mutation.resolve({ path, kind: "file" })
+  const stat = yield* requireReadableSize(target.canonical, path)
+  const mtime = Option.match(stat.mtime, { onNone: () => -1, onSome: (date) => date.getTime() })
+  const size = Number(stat.size)
+  const cached = searchEntries.get(target.canonical)
+  if (cached) {
+    searchEntries.delete(target.canonical)
+    searchTextSize -= cached.text.length
+  }
+  const entry =
+    cached && mtime >= 0 && cached.mtime === mtime && cached.size === size
+      ? cached
+      : yield* readCard(path).pipe(
+          Effect.map((card) => ({
+            mtime,
+            size,
+            info: card.info,
+            text: [card.body, card.info.title, card.info.path, ...card.info.tags, ...card.info.links]
+              .join("\n")
+              .toLowerCase(),
+          })),
+        )
+  searchEntries.set(target.canonical, entry)
+  searchTextSize += entry.text.length
+  for (const [key, value] of searchEntries) {
+    if (searchTextSize <= searchTextLimit || key === target.canonical) break
+    searchEntries.delete(key)
+    searchTextSize -= value.text.length
+  }
+  return entry
 })
 
 const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {

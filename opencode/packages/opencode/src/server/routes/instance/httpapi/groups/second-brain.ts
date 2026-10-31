@@ -76,6 +76,11 @@ export const SecondBrainApi = HttpApi.make("secondBrain").add(
         success: described(KnowledgeNote.Document, "Note saved"),
         error: errors,
       }),
+      HttpApiEndpoint.delete("deleteNote", SecondBrainPaths.note, {
+        query: Schema.Struct({ ...NoteQuery.fields, expectedRevision: Schema.String }),
+        success: described(KnowledgeNote.Info, "Note deleted"),
+        error: errors,
+      }),
       HttpApiEndpoint.get("readCalendar", SecondBrainPaths.calendar, {
         query: Schema.Struct(WorkspaceRoutingQueryFields),
         success: described(PlannerCalendar.Snapshot, "Calendar"),

@@ -1,5 +1,7 @@
 import { useBeforeLeave, useNavigate, useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
@@ -18,6 +20,7 @@ import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { focusWhenConnected } from "@/utils/focus-when-connected"
 import {
+  deleteNote,
   listNotes,
   readNote,
   SecondBrainRequestError,
@@ -54,6 +57,7 @@ type State = {
 
 export default function NotesPage() {
   const language = useLanguage()
+  const dialog = useDialog()
   const navigate = useNavigate()
   const layout = useLayout()
   const platform = usePlatform()
@@ -333,6 +337,64 @@ export default function NotesPage() {
     }
   }
 
+  // Deleting sends the revision last read, so a note changed elsewhere is not removed unseen.
+  const removeNote = async () => {
+    const directory = state.directory
+    const path = state.path
+    if (!directory || !path || !state.revision) return
+    setState({ saving: true, error: "" })
+    try {
+      await deleteNote(client(directory), { path, expectedRevision: state.revision })
+      if (state.directory === directory) {
+        noteActions.mutate((items) => items?.filter((item) => item.path !== path))
+        matchActions.mutate((items) => items?.filter((item) => item.path !== path))
+      }
+      if (state.path === path)
+        setState({
+          path: "",
+          body: "",
+          baseBody: "",
+          title: "",
+          baseTitle: "",
+          projectIds: [],
+          baseProjectIds: [],
+          tags: "",
+          baseTags: "",
+          revision: "",
+        })
+    } catch (error) {
+      report(error)
+    } finally {
+      setState("saving", false)
+    }
+  }
+
+  const confirmDelete = () =>
+    dialog.show(() => (
+      <DialogV2 fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup
+            title={language.t("secondBrain.notes.delete.title")}
+            description={language.t("secondBrain.notes.delete.confirm", { name: state.title || state.path })}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </ButtonV2>
+          <ButtonV2
+            variant="danger"
+            onClick={() => {
+              dialog.close()
+              void removeNote()
+            }}
+          >
+            {language.t("secondBrain.notes.delete.button")}
+          </ButtonV2>
+        </DialogFooter>
+      </DialogV2>
+    ))
+
   // Save from anywhere on the page: the preview, the toolbar or fullscreen, not only the textarea.
   command.register("notes", () => [
     {
@@ -586,6 +648,9 @@ export default function NotesPage() {
                       {language.t("secondBrain.notes.discard")}
                     </ButtonV2>
                   </Show>
+                  <ButtonV2 size="small" variant="ghost" disabled={state.saving || !state.revision} onClick={confirmDelete}>
+                    {language.t("common.delete")}
+                  </ButtonV2>
                   {saveButton()}
                 </header>
 

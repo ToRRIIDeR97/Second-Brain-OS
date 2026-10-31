@@ -177,6 +177,13 @@ export const listNotes = (client: Client, search = "") =>
 export const readNote = (client: Client, path: string) =>
   request<NoteDocument>(client, `/second-brain/note?path=${encodeURIComponent(path)}`)
 
+export const deleteNote = (client: Client, input: { path: string; expectedRevision: string }) =>
+  request<NoteSummary>(
+    client,
+    `/second-brain/note?path=${encodeURIComponent(input.path)}&expectedRevision=${encodeURIComponent(input.expectedRevision)}`,
+    { method: "DELETE" },
+  )
+
 export const writeNote = (
   client: Client,
   input: {

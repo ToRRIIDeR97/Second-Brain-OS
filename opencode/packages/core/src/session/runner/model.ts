@@ -169,8 +169,15 @@ export const fromCatalogModel = (
   )
 }
 
+// The resolved route has no field for prices, so they are kept beside it for step cost reporting.
+const prices = new WeakMap<Model, ReadonlyArray<typeof ModelV2.Cost.Type>>()
+export const pricing = (model: Model) => prices.get(model)
+
 export const resolve = (session: SessionSchema.Info, model: ModelV2.Info, credential?: Credential.Value) =>
-  withVariant(model, session.model?.variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential)))
+  withVariant(model, session.model?.variant).pipe(
+    Effect.flatMap((model) => fromCatalogModel(model, credential)),
+    Effect.tap((resolved) => Effect.sync(() => prices.set(resolved, model.cost))),
+  )
 
 export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&

@@ -32,6 +32,8 @@ export interface PermissionRequest {
   readonly resources: ReadonlyArray<string>
   readonly title: string
   readonly kind?: string
+  /** The agent's toolCallId, which its tool events also carry. */
+  readonly callID?: string
 }
 
 export interface OpenInput {
@@ -753,14 +755,21 @@ function closeBlocks(state: AcpState): ReadonlyArray<LLMEvent> {
   return events
 }
 
-function handleRequest(request: ServerRequest, approve: OpenInput["approve"]) {
+export function handleRequest(request: ServerRequest, approve: OpenInput["approve"]) {
   if (request.method !== "session/request_permission") return Effect.fail(unsupported(request.method))
   const params = isRecord(request.params) ? request.params : {}
   const tool = isRecord(params.toolCall) ? params.toolCall : {}
   const options = Array.isArray(params.options) ? params.options.filter(isRecord) : []
   const kind = string(tool.kind)
   const title = string(tool.title) ?? "Tool"
-  return approve({ action: permissionAction(kind), resources: permissionResources(tool, title), title, kind }).pipe(
+  const callID = string(tool.toolCallId)
+  return approve({
+    action: permissionAction(kind),
+    resources: permissionResources(tool, title),
+    title,
+    kind,
+    ...(callID ? { callID } : {}),
+  }).pipe(
     Effect.map((allowed) => {
       const option = allowed
         ? pickOption(options, "allow_once", "allow_always")

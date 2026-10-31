@@ -508,6 +508,11 @@ old one, and the end of the harness turn (finished, failed or stopped) or
 closing the runtime withdraws what is still open. An answer the agent didn't
 collect in that turn is dropped, so it can't answer a later turn's question.
 
+A harness approval carries the tool call it gates as its `source` (the ACP
+`toolCallId` or Codex `itemId`), so the dock can link the request to the call.
+A declined harness approval is returned to the agent, which decides what to do
+next; unlike a local tool, it doesn't end the turn.
+
 Known gaps: interrupting a Run doesn't stop the tasks it delegated. An ACP
 agent without HTTP MCP support gets neither delegation nor `ask_user`.
 
@@ -853,7 +858,9 @@ fix lands.
 - Server authorization also accepts an `auth_token` query parameter, so the
   credential can appear in URLs. Desktop main-process logs record only the
   scheme and host of blocked and rejected URLs, never the query string. The
-  parameter is not yet restricted to SSE and WebSocket routes. The
+  parameter remains for v1 PTY WebSockets, which can't send headers; the web
+  entry strips it from the address bar on load, the workspace proxy never
+  forwards it, and v2 PTY sockets use one-time tickets instead. The
   desktop no longer records a Chromium NetLog, which captured full URLs, and
   the debug-log export skips any `.netlog` file. Packaged builds don't copy
   renderer console output into the log files, and no terminal console
@@ -864,4 +871,8 @@ fix lands.
   `disable-executable-page-protection`, `allow-dyld-environment-variables` and
   `disable-library-validation`; check which ones the runtime and native modules
   need before removing any.
-- `drafts.sqlite` stores unsent draft content unencrypted in the profile.
+- `drafts.sqlite` stores unsent draft content unencrypted in the profile, the
+  same as the session database next to it. The file and its `-wal`/`-shm`
+  companions are owner-only (`0600`) on macOS and Linux (`draft-store.ts`).
+  Encrypting drafts alone would not protect conversations already stored in
+  the session database.

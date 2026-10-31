@@ -260,3 +260,47 @@ test("the unfiltered list re-reads only notes whose size or time changed", async
   await utimes(second, later, later)
   expect((await run()).map((note) => note.title).toSorted()).toEqual(["Changed title", "First"])
 })
+
+test("a note is deleted only while it still has the revision the caller read", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const file = path.join(tmp.path, "notes", "old.md")
+  await writeFile(file, "# Old\n\nFirst\n")
+  const directory = AbsolutePath.make(tmp.path)
+  const read = await Effect.runPromise(KnowledgeNote.read("notes/old.md").pipe(provideNoteServices(directory)))
+  await writeFile(file, "# Old\n\nEdited elsewhere\n")
+  const stale = await Effect.runPromise(
+    KnowledgeNote.remove("notes/old.md", { expectedRevision: read.revision }).pipe(
+      provideNoteServices(directory),
+      Effect.flip,
+    ),
+  )
+  expect(stale).toBeInstanceOf(KnowledgeNote.ConflictError)
+  expect(await readFile(file, "utf8")).toContain("Edited elsewhere")
+
+  const fresh = await Effect.runPromise(KnowledgeNote.read("notes/old.md").pipe(provideNoteServices(directory)))
+  await Effect.runPromise(
+    KnowledgeNote.remove("notes/old.md", { expectedRevision: fresh.revision }).pipe(provideNoteServices(directory)),
+  )
+  expect(await stat(file).then(() => true, () => false)).toBe(false)
+})
+
+test("search reads a note again only after it changes", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const file = path.join(tmp.path, "notes", "cached.md")
+  await writeFile(file, "# Cached\n\nfirst-needle")
+  const directory = AbsolutePath.make(tmp.path)
+  const search = (query: string) =>
+    Effect.runPromise(
+      KnowledgeNote.list(query).pipe(
+        Effect.provide(LocationMutation.locationLayer),
+        Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
+        Effect.provide(LayerNode.compile(FSUtil.node)),
+      ),
+    )
+  expect((await search("first-needle")).map((note) => note.title)).toEqual(["Cached"])
+  await writeFile(file, "# Cached\n\nsecond-needle, a longer body")
+  expect(await search("first-needle")).toEqual([])
+  expect((await search("second-needle")).map((note) => note.title)).toEqual(["Cached"])
+})

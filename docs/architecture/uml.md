@@ -269,23 +269,24 @@ The following were inferred from source and haven't been confirmed at runtime.
 - **Second Brain middleware order.** The middleware order for Second Brain
   routes (authorization outermost) was inferred from Effect layer types.
 - **Process-local write lock.** File compare-and-swap uses a process-local
-  mutex. A second process writing the same workspace isn't excluded.
+  mutex. A second process writing the same workspace isn't excluded, but
+  writes go through a synced temp file and a rename, so a crash can't
+  truncate a file.
 - **Harness skill folders.** The folder lists in `core/src/harness/skills.ts`
   were checked against the Codex, OpenCode and Claude Code docs on
   2026-10-22. They will drift if those tools change their conventions.
 - **Per-subagent usage.** Whether an ACP agent sends `usage_update` for a
   child session at all is up to the agent. Upstream OpenCode's behavior wasn't
   confirmed; the agent tab shows "Not reported" when it doesn't.
-- **Dead ACP runtimes.** An ACP agent that exits mid-turn is turned into
-  error events, not a stream error. The dead runtime may stay cached until
-  the harness revision changes.
-- **v2 CLI daemon.** The v2 CLI daemon isn't stopped by `killSidecar`. On
-  packaged beta or production builds it would also be missing, because only
-  the development channel bundles it.
-- **Server health checks.** A health-check failure after the server reports
-  ready is only logged. The renderer isn't told. A server that exits after
-  ready is restarted on the same port and password with backoff
-  (`desktop/src/main/sidecar-supervisor.ts`); no IPC event announces it.
+- **v2 CLI daemon.** The opt-in v2 sidecar is upstream's `opencode-cli`
+  background service. It is allowed only on the development channel, the
+  only one that bundles the CLI, and it outlives the app by design
+  (`opencode-cli service stop` ends it).
+- **Server health checks.** A server that exits after ready is restarted on
+  the same port and password with backoff
+  (`desktop/src/main/sidecar-supervisor.ts`); the renderer's status popover
+  polls server health. If the first start fails because another process took
+  the picked port, a new port is picked (up to three tries).
 
 ## Not drawn
 

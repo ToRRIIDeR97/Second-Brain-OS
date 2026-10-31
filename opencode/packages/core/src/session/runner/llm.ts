@@ -342,6 +342,7 @@ const layer = Layer.effect(
         harnessInstanceID: session.harnessInstanceID,
         harnessModel: session.harnessModel,
         snapshot: startSnapshot,
+        ...(usesHostModel ? { pricing: SessionRunnerModel.pricing(model) } : {}),
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
@@ -356,6 +357,10 @@ const layer = Layer.effect(
           request,
           model: session.harnessModel,
           revision: session.harnessRevision ?? 0,
+          permissionSource: (callID) =>
+            withPublication(publisher.startAssistant()).pipe(
+              Effect.map((messageID) => ({ type: "tool" as const, messageID, callID })),
+            ),
         }),
       ).pipe(
         Stream.runForEach((event) =>

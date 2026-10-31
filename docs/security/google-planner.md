@@ -36,3 +36,25 @@ again to the same address renews the account and keeps its outbox.
 Disconnecting an account revokes its token and removes its items from the
 planner. Recorded API compatibility tests are still missing; domain logic is
 covered by `google-calendar-domain.test.ts`.
+
+## Sync state lifecycle
+
+Events and tasks carry a `syncState`. The server stores the calendar document
+and checks only invariants (`opencode/packages/opencode/src/planner/calendar.ts`):
+local items stay `local`, Google items are never `local`, and a `synced` item
+has no outbox reference. It does not enforce transitions, because it does not
+own sync. The renderer and the desktop outbox do:
+
+| State | Set by | Meaning |
+| --- | --- | --- |
+| `local` | renderer | A local-only item. It never changes state. |
+| `pending` | renderer | A Google item edited locally and queued in the outbox. |
+| `synced` | renderer, after a read sync or an outbox success | Matches the provider copy. |
+| `offline` | desktop outbox (`outboxFailureState`) | A retryable failure, such as no network or a token error. |
+| `failed` | desktop outbox | A permanent failure, such as a missing scope or a disabled API. |
+| `conflict` | desktop outbox | The provider copy changed since the base ETag. |
+| `stale` | nothing yet | Reserved; the calendar shows it if a document carries it. |
+
+Any writer of the calendar document can set any state the invariants allow.
+That is accepted: the document lives in the workspace, so a client that can
+write it could edit the file directly anyway.

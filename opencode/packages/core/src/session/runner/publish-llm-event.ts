@@ -14,6 +14,8 @@ type Input = {
   readonly harnessInstanceID?: Harness.InstanceID
   readonly harnessModel?: Harness.ModelSelection
   readonly snapshot?: string
+  /** The catalog prices of a host model, used when the provider reports no cost. */
+  readonly pricing?: ReadonlyArray<typeof ModelV2.Cost.Type>
 }
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
@@ -33,7 +35,27 @@ const tokens = (usage: Usage | undefined) => {
 /** Harness drivers that know the turn's cost put it in `usage.providerMetadata.harness.cost` (USD). */
 const harnessCost = (usage: Usage | undefined) => {
   const cost = usage?.providerMetadata?.harness?.cost
-  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : 0
+  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : undefined
+}
+
+/**
+ * USD from catalog prices per million tokens, as the V1 runtime computes it: the largest context tier
+ * the prompt exceeds applies, and reasoning is charged at the output rate.
+ */
+export const pricedCost = (pricing: ReadonlyArray<typeof ModelV2.Cost.Type> | undefined, used: ReturnType<typeof tokens>) => {
+  if (!pricing?.length) return 0
+  const context = used.input + used.cache.read + used.cache.write
+  const price =
+    pricing
+      .filter((item) => item.tier !== undefined && context > item.tier.size)
+      .toSorted((a, b) => b.tier!.size - a.tier!.size)[0] ?? pricing.find((item) => item.tier === undefined)
+  if (!price) return 0
+  const total =
+    used.input * price.input +
+    (used.output + used.reasoning) * price.output +
+    used.cache.read * price.cache.read +
+    used.cache.write * price.cache.write
+  return safe(total / 1_000_000)
 }
 
 /** Harness drivers that know the model's context window put it in `usage.providerMetadata.harness.contextSize`. */
@@ -443,7 +465,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         stepSettlement = {
           finish: event.reason,
           tokens: tokens(event.usage),
-          cost: harnessCost(event.usage),
+          cost: harnessCost(event.usage) ?? pricedCost(input.pricing, tokens(event.usage)),
           contextWindow: harnessContextWindow(event.usage),
           contextUsed: harnessContextUsed(event.usage),
         }
