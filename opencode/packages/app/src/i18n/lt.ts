@@ -86,6 +86,12 @@ const desktop = [
   "Nepavyko gauti prievado",
   "Failas nebuvo pasirinktas failų parinkiklyje",
   "Pasirinkti priedai viršija {{limit}} MB ribą",
+  "Atidaryti šį aplanką kaip darbo sritį?",
+  "Nuoroda paprašė Tenon Workbench atidaryti:\n{{path}}\n\nTęskite tik jei šią nuorodą atidarėte patys iš patikimo šaltinio.",
+  "Pradėti naują seansą šiame aplanke?",
+  "Nuoroda paprašė Tenon Workbench pradėti seansą:\n{{path}}\n\nBet kokia užklausa iš nuorodos įdedama į įvesties lauką ir nesiunčiama. Tęskite tik jei šią nuorodą atidarėte patys iš patikimo šaltinio.",
+  "Atidaryti",
+  "Atšaukti",
 ]
 
 export const dict = {

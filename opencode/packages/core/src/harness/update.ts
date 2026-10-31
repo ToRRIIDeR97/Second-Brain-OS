@@ -48,9 +48,22 @@ const brewName = /^[a-z0-9][a-z0-9@._+-]*$/
 // Latest-version lookups are network calls, so one result per executable is reused for a few hours.
 const checks = new Map<string, { readonly expires: number; readonly check: Check }>()
 
-/** Reads the install source from an executable's resolved path. */
-export function sourceFromPath(file: string): Source | undefined {
+/**
+ * Reads the install source from an executable's resolved path. `expected` is the npm package the command comes
+ * from, when known: on Windows npm installs a global command as a `.cmd`/`.ps1` shim beside `node_modules`, so the
+ * resolved path never passes through the package folder.
+ */
+export function sourceFromPath(file: string, expected?: string): Source | undefined {
   const normalized = file.replaceAll("\\", "/")
+  const slash = normalized.lastIndexOf("/")
+  const folder = normalized.slice(0, slash)
+  if (
+    expected &&
+    packageName.test(expected) &&
+    /\/(npm|nodejs)$/i.test(folder) &&
+    /^[^./]+(\.(cmd|ps1))?$/i.test(normalized.slice(slash + 1))
+  )
+    return { method: "npm", packageName: expected, packageDir: `${folder}/node_modules/${expected}`, prefix: folder }
   const cellar = normalized.match(/^(.*)\/(Cellar|Caskroom)\/([^/]+)\/([^/]+)\//)
   if (cellar && brewName.test(cellar[3])) {
     return {
@@ -91,20 +104,21 @@ export function newer(latest: string, current: string) {
   return false
 }
 
-export const resolve = (command: string) =>
+export const resolve = (command: string, expected?: string) =>
   Effect.promise(async () => {
     const found = command.includes("/") || command.includes("\\") ? command : which(command)
     if (!found) return
     const real = await fs.realpath(found).catch(() => undefined)
-    return real ? { path: real, source: sourceFromPath(real) } : undefined
+    return real ? { path: real, source: sourceFromPath(real, expected) } : undefined
   })
 
 export const check = Effect.fn("HarnessUpdate.check")(function* (
   process: Pick<AppProcess.Interface, "run">,
   command: string,
   fallbackVersion?: string,
+  expected?: string,
 ) {
-  const resolved = yield* resolve(command)
+  const resolved = yield* resolve(command, expected)
   if (!resolved) return { version: fallbackVersion, updateAvailable: false } satisfies Check
   const cached = checks.get(resolved.path)
   if (cached && cached.expires > Date.now()) return cached.check

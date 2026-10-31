@@ -900,6 +900,7 @@ export type SessionsContextOutput = {
         readonly finish?: string
         readonly cost?: number
         readonly contextWindow?: number
+        readonly contextUsed?: number
         readonly tokens?: {
           readonly input: number
           readonly output: number
@@ -1246,6 +1247,7 @@ export type SessionsHistoryOutput = {
                 readonly finish?: string
                 readonly cost?: number
                 readonly contextWindow?: number
+                readonly contextUsed?: number
                 readonly tokens?: {
                   readonly input: number
                   readonly output: number
@@ -1339,6 +1341,7 @@ export type SessionsHistoryOutput = {
           readonly finish: string
           readonly cost: number
           readonly contextWindow?: number
+          readonly contextUsed?: number
           readonly tokens: {
             readonly input: number
             readonly output: number
@@ -1942,6 +1945,7 @@ export type SessionsEventsOutput =
               readonly finish?: string
               readonly cost?: number
               readonly contextWindow?: number
+              readonly contextUsed?: number
               readonly tokens?: {
                 readonly input: number
                 readonly output: number
@@ -2035,6 +2039,7 @@ export type SessionsEventsOutput =
         readonly finish: string
         readonly cost: number
         readonly contextWindow?: number
+        readonly contextUsed?: number
         readonly tokens: {
           readonly input: number
           readonly output: number
@@ -2461,6 +2466,7 @@ export type SessionsMessageOutput = {
         readonly finish?: string
         readonly cost?: number
         readonly contextWindow?: number
+        readonly contextUsed?: number
         readonly tokens?: {
           readonly input: number
           readonly output: number
@@ -2640,6 +2646,7 @@ export type MessagesListOutput = {
         readonly finish?: string
         readonly cost?: number
         readonly contextWindow?: number
+        readonly contextUsed?: number
         readonly tokens?: {
           readonly input: number
           readonly output: number

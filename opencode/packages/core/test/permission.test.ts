@@ -177,6 +177,25 @@ describe("PermissionV2", () => {
     }),
   )
 
+  // AC-23 (implementations/harness-integration-hardening): a harness turn that ends interrupts its open approval.
+  it.effect("withdraws an interrupted request with a reject reply", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const events = yield* EventV2.Service
+      const replied = yield* Deferred.make<{ requestID: string; reply: string }>()
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Replied.type
+          ? Deferred.succeed(replied, event.data as { requestID: string; reply: string }).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const { service, fiber, request } = yield* waitForRequest()
+      yield* Fiber.interrupt(fiber)
+      expect(yield* Deferred.await(replied)).toMatchObject({ requestID: request.id, reply: "reject" })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("allows managed output reads without granting external directory access", () =>
     Effect.gen(function* () {
       yield* setup([

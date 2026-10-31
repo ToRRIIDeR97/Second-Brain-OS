@@ -337,6 +337,34 @@ of them. On macOS, the app's server can also read Claude Code's keychain
 entry, as any process running as the user can when the entry's access list
 allows `/usr/bin/security` (it does for entries Claude Code writes).
 
+## Harness lifecycle and undo
+
+- **Approvals after Stop.** Codex and ACP approvals run through a per-turn gate
+  (`turnGate` in `core/src/harness.ts`). When the turn ends first, the wait is
+  interrupted, `PermissionV2.assert` publishes a `reject` reply so the dock
+  drops the prompt, and the agent gets a denial. A late click can no longer
+  approve a request the agent abandoned.
+- **Leftover processes.** Harnesses run in their own process group. Each one's
+  PID, command and owning server PID are written to
+  `<state>/harness-pids/<pid>.json` and removed when it closes
+  (`core/src/harness/pids.ts`). At the first location start of a server run,
+  entries from earlier runs are read; a PID still running its recorded command
+  (checked with `ps`) has its process group sent `SIGTERM`, and the files are
+  removed. Entries owned by the running server are never touched, and Windows
+  is skipped.
+- **Sign-in restarts.** When a setup read sees a harness change from signed
+  out to signed in or API key, its open runtimes are closed and its cached
+  checks cleared, so the next message starts a process with the new login.
+- **Snapshots outside git.** A thread folder outside any git repository is
+  snapshotted in a private git folder under the data folder
+  (`snapshot/<project>/<hash>`), so file contents of that folder are copied
+  there, as they already were for git folders. The home folder and a
+  filesystem root are excluded (`isBroadFolder`), and untracked files over
+  2 MiB are skipped. The file watcher follows the same rule.
+- **Revert guard.** A revert leaves out any file whose current content differs
+  from the end snapshot of this thread's latest step that touched it, so it
+  can't undo another thread's later edit; the skipped files are logged.
+
 ## Harness registration
 
 A registered harness is a command that the app later runs as the user, with

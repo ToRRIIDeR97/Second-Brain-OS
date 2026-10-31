@@ -86,6 +86,12 @@ const desktop = [
   "Ekki tókst að sækja gátt",
   "Skráin var ekki valin í skráavalinu",
   "Valin viðhengi fara yfir {{limit}} MB hámarkið",
+  "Opna þessa möppu sem vinnusvæði?",
+  "Tengill bað Tenon Workbench að opna:\n{{path}}\n\nHaltu aðeins áfram ef þú opnaðir þennan tengil frá uppruna sem þú treystir.",
+  "Hefja nýja setu í þessari möppu?",
+  "Tengill bað Tenon Workbench að hefja setu í:\n{{path}}\n\nFyrirmæli úr tenglinum eru sett í innsláttarreitinn og ekki send. Haltu aðeins áfram ef þú opnaðir þennan tengil frá uppruna sem þú treystir.",
+  "Opna",
+  "Hætta við",
 ]
 
 export const dict = {

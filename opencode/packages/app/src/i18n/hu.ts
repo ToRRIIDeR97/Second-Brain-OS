@@ -86,6 +86,12 @@ const desktop = [
   "A port lekérése sikertelen",
   "A fájl nem lett kiválasztva a választóban",
   "A kiválasztott mellékletek meghaladják a(z) {{limit}} MB-os korlátot",
+  "Megnyitja ezt a mappát munkaterületként?",
+  "Egy hivatkozás arra kérte a Tenon Workbench alkalmazást, hogy nyissa meg ezt:\n{{path}}\n\nCsak akkor folytassa, ha ezt a hivatkozást Ön nyitotta meg egy megbízható forrásból.",
+  "Új munkamenetet indít ebben a mappában?",
+  "Egy hivatkozás arra kérte a Tenon Workbench alkalmazást, hogy indítson munkamenetet itt:\n{{path}}\n\nA hivatkozásból származó kérés a beviteli mezőbe kerül, és nem lesz elküldve. Csak akkor folytassa, ha ezt a hivatkozást Ön nyitotta meg egy megbízható forrásból.",
+  "Megnyitás",
+  "Mégsem",
 ]
 
 export const dict = {

@@ -115,9 +115,10 @@ const layer = Layer.effect(
           yield* syncFile(temp)
           if (existing) yield* fs.chmod(temp, existing.mode & 0o7777)
           // Windows refuses a rename while an indexer, antivirus or editor briefly holds the target.
-          yield* fs
-            .rename(temp, path)
-            .pipe(Effect.retry({ while: isTransientLock, schedule: Schedule.exponential("25 millis"), times: 4 }))
+          // Suspended so each retry calls rename again, whatever the filesystem implementation does at call time.
+          yield* Effect.suspend(() => fs.rename(temp, path)).pipe(
+            Effect.retry({ while: isTransientLock, schedule: Schedule.exponential("25 millis"), times: 4 }),
+          )
         }).pipe(Effect.onError(removeTemp))
         return existing !== undefined
       })

@@ -1,7 +1,7 @@
 import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
 import { Harness } from "@opencode-ai/schema/harness"
 
-type HarnessAssistant = AssistantMessage & { harnessInstanceID?: string; contextWindow?: number }
+type HarnessAssistant = AssistantMessage & { harnessInstanceID?: string; contextWindow?: number; contextUsed?: number }
 
 type Provider = {
   id: string
@@ -68,7 +68,8 @@ const build = (messages: Message[] = [], providers: Provider[] = [], selectedHar
     limit,
     input: message.tokens.input,
     total,
-    usage: limit ? Math.round((total / limit) * 100) : null,
+    // A harness's reported context in use wins: its token counts add up every model call in the turn.
+    usage: limit ? Math.round((((message as HarnessAssistant).contextUsed ?? total) / limit) * 100) : null,
   }
 }
 

@@ -220,6 +220,7 @@ export namespace Step {
       finish: Schema.String,
       cost: Schema.Finite,
       contextWindow: Schema.Finite.pipe(optional),
+      contextUsed: Schema.Finite.pipe(optional),
       tokens: Schema.Struct({
         input: Schema.Finite,
         output: Schema.Finite,

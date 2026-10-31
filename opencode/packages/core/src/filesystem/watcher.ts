@@ -16,6 +16,8 @@ import { Location } from "../location"
 import { lazy } from "../util/lazy"
 import { Ignore } from "./ignore"
 import { Protected } from "./protected"
+import os from "os"
+import { isBroadFolder } from "../util/broad-folder"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -106,7 +108,11 @@ const layer = Layer.effect(
     const config = (yield* (yield* Config.Service).entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
-    if (location.vcs && (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER)) {
+    // Git folders are watched as before; a folder outside git too, unless it is the home folder or a root.
+    if (
+      (location.vcs || !isBroadFolder(location.directory, os.homedir())) &&
+      (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER)
+    ) {
       yield* Effect.forkScoped(
         subscribe(location.directory, [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)]),
       )

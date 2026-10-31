@@ -11,6 +11,8 @@ import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath, RelativePath } from "./schema"
 import { Hash } from "./util/hash"
+import os from "os"
+import { isBroadFolder } from "./util/broad-folder"
 
 export const ID = Schema.String.pipe(Schema.brand("Snapshot.ID"))
 export type ID = typeof ID.Type
@@ -92,9 +94,12 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     let source = yield* git.repo.discover(location.project.directory)
+    // A folder outside any git repository is snapshotted on its own, in the same private git folder layout, unless
+    // it is the home folder or a filesystem root.
+    const standalone = !isBroadFolder(location.directory, os.homedir())
     let worktree = source
       ? AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
-      : location.project.directory
+      : AbsolutePath.make(yield* fs.realPath(location.directory).pipe(Effect.orElseSucceed(() => location.directory)))
     let gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
 
     const scope = Effect.fnUntraced(function* () {
@@ -105,7 +110,8 @@ const layer = Layer.effect(
     })
 
     const repository = Effect.fnUntraced(function* () {
-      if (!source) return yield* new Error({ operation: "capture", message: "Project is not a Git repository" })
+      if (!source && !standalone)
+        return yield* new Error({ operation: "capture", message: "Project is not a Git repository" })
       if (yield* fs.existsSafe(path.join(gitDirectory, "HEAD")))
         return new Git.Repository({
           worktree,
@@ -116,7 +122,7 @@ const layer = Layer.effect(
         .create({
           worktree,
           gitDirectory,
-          seed: source,
+          ...(source ? { seed: source } : {}),
         })
         .pipe(Effect.mapError((cause) => failure("capture", cause)))
     })
@@ -126,7 +132,7 @@ const layer = Layer.effect(
       // Git can be initialized after this Location was opened.
       if (!source) {
         source = yield* git.repo.discover(location.directory)
-        if (!source) return false
+        if (!source) return standalone
         worktree = AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
         gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
       }

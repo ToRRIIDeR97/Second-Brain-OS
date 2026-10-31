@@ -538,6 +538,7 @@ const layer = Layer.effect(
                 finish: stepSettlement.finish,
                 cost: stepSettlement.cost,
                 contextWindow: stepSettlement.contextWindow,
+                contextUsed: stepSettlement.contextUsed,
                 tokens: stepSettlement.tokens,
                 snapshot: endSnapshot,
                 files,

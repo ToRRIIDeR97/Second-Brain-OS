@@ -168,12 +168,16 @@ describeWatcher("Watcher", () => {
     ),
   )
 
-  it.live("skips non-git roots", () =>
+  // A folder outside git is watched too (only the home folder and a filesystem root are left out).
+  it.live("watches a plain folder outside git", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const fs = yield* FSUtil.Service
         const file = path.join(directory, "plain.txt")
-        yield* noUpdate((event) => event.file === file, fs.writeFileString(file, "plain"))
+        yield* eventuallyUpdate(
+          (event) => event.file === file,
+          () => fs.writeFileString(file, `plain-${Math.random()}`),
+        )
       }),
     ),
   )

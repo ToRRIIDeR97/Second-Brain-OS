@@ -48,14 +48,27 @@ const plan = Effect.fn("SessionRevert.plan")(function* (input: BoundaryInput) {
     .pipe(Effect.orDie)
   const decode = Schema.decodeUnknownEffect(SessionMessage.Message)
   const files = new Map<RelativePath, Snapshot.ID>()
+  // The end snapshot of the latest step that touched each file: what this thread last left there.
+  const ends = new Map<RelativePath, Snapshot.ID>()
   for (const row of rows) {
     const message = yield* decode({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie)
     if (message.type !== "assistant" || !message.snapshot?.start) continue
-    for (const file of message.snapshot.files ?? [])
+    for (const file of message.snapshot.files ?? []) {
       if (!files.has(file)) files.set(file, Snapshot.ID.make(message.snapshot.start))
+      if (message.snapshot.end) ends.set(file, Snapshot.ID.make(message.snapshot.end))
+    }
   }
-  return files
+  return { files, ends }
 })
+
+/**
+ * Leaves out of a restore the files changed since this thread last touched them: another thread or harness working
+ * in the same folder made those edits, and restoring would silently undo them.
+ */
+export function withoutChangedFiles<T>(restore: ReadonlyMap<RelativePath, T>, changed: ReadonlySet<RelativePath>) {
+  const kept = new Map([...restore].filter(([file]) => !changed.has(file)))
+  return { restore: kept, skipped: [...restore.keys()].filter((file) => changed.has(file)) }
+}
 
 export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   readonly session: SessionSchema.Info
@@ -67,7 +80,24 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   const original = input.session.revert?.snapshot
     ? Snapshot.ID.make(input.session.revert.snapshot)
     : yield* snapshot.capture()
-  const next = yield* plan({ sessionID: input.session.id, messageID: input.messageID })
+  const planned = yield* plan({ sessionID: input.session.id, messageID: input.messageID })
+  // Compare each file with what this thread last left there; a file that differs was changed elsewhere since.
+  const byEnd = new Map<Snapshot.ID, RelativePath[]>()
+  for (const [file, end] of planned.ends) byEnd.set(end, [...(byEnd.get(end) ?? []), file])
+  const changed = new Set<RelativePath>()
+  if (original && input.files !== false)
+    for (const [end, paths] of byEnd) {
+      const diffs = yield* snapshot
+        .diff({ from: end, to: original, paths })
+        .pipe(Effect.catch(() => Effect.succeed([] as const)))
+      for (const diff of diffs) changed.add(RelativePath.make(diff.path))
+    }
+  const guarded = withoutChangedFiles(planned.files, changed)
+  if (guarded.skipped.length > 0)
+    yield* Effect.logWarning("revert left files changed elsewhere since this thread edited them", {
+      files: guarded.skipped,
+    })
+  const next = guarded.restore
   const restore = new Map<RelativePath, Snapshot.ID>()
   if (original) {
     for (const file of input.session.revert?.files ?? []) restore.set(file.path, original)

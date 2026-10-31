@@ -86,6 +86,12 @@ const desktop = [
   "Nije uspjelo dohvaćanje priključka",
   "Datoteka nije odabrana u izborniku",
   "Odabrani prilozi premašuju ograničenje od {{limit}} MB",
+  "Otvoriti ovu mapu kao radni prostor?",
+  "Poveznica je zatražila da Tenon Workbench otvori:\n{{path}}\n\nNastavite samo ako ste ovu poveznicu sami otvorili iz izvora kojem vjerujete.",
+  "Započeti novu sesiju u ovoj mapi?",
+  "Poveznica je zatražila da Tenon Workbench započne sesiju u:\n{{path}}\n\nSvaki upit iz poveznice stavlja se u polje za unos i ne šalje se. Nastavite samo ako ste ovu poveznicu sami otvorili iz izvora kojem vjerujete.",
+  "Otvoriti",
+  "Otkazati",
 ]
 
 export const dict = {
