@@ -146,6 +146,26 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
 
     const isActive = (draftID: string) => location.pathname === NEW_THREAD_PATH && location.query.draftId === draftID
 
+    // No text and no attached context: reusing or dropping the draft loses nothing.
+    const isEmpty = async (draftID: string) => {
+      const session = memory.ensure(draftStateKey(draftID), "prompt", () => createDraftPromptSession(draftID))
+      await session.ready.promise
+      return !session.dirty() && session.context.items().length === 0
+    }
+
+    // Every New thread used to leave a draft behind; drop the empty ones once per launch.
+    let pruned = false
+    createEffect(() => {
+      if (pruned || !ready()) return
+      pruned = true
+      void (async () => {
+        for (const draft of [...store]) {
+          if (isActive(draft.draftID) || pendingSend.has(draft.draftID)) continue
+          if (await isEmpty(draft.draftID)) removeDraft(draft.draftID)
+        }
+      })()
+    })
+
     return {
       ready,
       list: store,
@@ -160,6 +180,19 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
         harnessInstanceID?: Harness.InstanceID,
         options?: { send?: boolean; harnessModel?: Harness.ModelSelection },
       ) {
+        // A plain New thread reopens an empty draft for the same place instead of adding another.
+        if (!prompt?.trim() && !model && !harnessInstanceID && !options) {
+          for (const existing of [...store].reverse()) {
+            const same =
+              existing.server === input.server &&
+              existing.directory === input.directory &&
+              existing.projectID === input.projectID &&
+              existing.worktree === input.worktree
+            if (!same || !(await isEmpty(existing.draftID))) continue
+            await startTransition(() => navigate(draftHref(existing)))
+            return existing
+          }
+        }
         const draft: Draft = { draftID: uuid(), ...input }
         if (options?.send && prompt?.trim()) pendingSend.set(draft.draftID, harnessInstanceID)
         memory.ensure(draftStateKey(draft.draftID), "prompt", () =>

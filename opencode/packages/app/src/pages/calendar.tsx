@@ -98,6 +98,8 @@ type CalendarState = {
   googleClientSecret: string
   googleAccess: "read" | "write"
   googleBusy: boolean
+  // The browser consent is open; Connect stays clickable to reopen it (the user may have closed the tab).
+  googleConnecting: boolean
   googleError: string
   googleConfirm: "" | "save" | "delete"
   googleWriteKey: string
@@ -188,6 +190,7 @@ export default function CalendarPage() {
     googleClientSecret: "",
     googleAccess: "read",
     googleBusy: false,
+    googleConnecting: false,
     googleError: "",
     googleConfirm: "",
     googleWriteKey: "",
@@ -474,6 +477,7 @@ export default function CalendarPage() {
   // Typed credentials are needed unless the build ships its own client and the user hasn't opted out of it.
   const googleTypedClient = () => !googleConnection.latest?.builtInClient || state.googleOwnClient
 
+  let connectAttempt = 0
   const connectGoogle = async () => {
     const google = platform.googleCalendar
     if (!google) return
@@ -482,7 +486,9 @@ export default function CalendarPage() {
       setState("googleError", language.t("secondBrain.calendar.google.error.credentials"))
       return
     }
-    setState({ googleBusy: true, googleError: "" })
+    // A newer Connect cancels the pending consent in the main process; only the latest attempt reports.
+    const attempt = ++connectAttempt
+    setState({ googleConnecting: true, googleError: "" })
     let connected = false
     try {
       const connection = await google.connect(
@@ -490,13 +496,15 @@ export default function CalendarPage() {
           ? { clientId: state.googleClientId, clientSecret: state.googleClientSecret, access: state.googleAccess }
           : { access: state.googleAccess },
       )
+      if (attempt !== connectAttempt) return
       googleActions.mutate(connection)
       setState({ googleClientSecret: "", googlePanel: false, googleAdding: false })
       connected = true
     } catch (error) {
+      if (attempt !== connectAttempt) return
       setState("googleError", googleMessage(error))
     } finally {
-      setState("googleBusy", false)
+      if (attempt === connectAttempt) setState("googleConnecting", false)
     }
     if (connected) await syncGoogle()
   }
@@ -1415,7 +1423,9 @@ export default function CalendarPage() {
                               <ButtonV2 type="submit" variant="contrast" disabled={state.googleBusy}>
                                 {state.googleBusy
                                   ? language.t("secondBrain.calendar.google.waiting")
-                                  : googleTypedClient()
+                                  : state.googleConnecting
+                                    ? language.t("secondBrain.calendar.google.reopenBrowser")
+                                    : googleTypedClient()
                                     ? language.t("secondBrain.calendar.google.openBrowser")
                                     : language.t("secondBrain.calendar.google.signIn")}
                               </ButtonV2>

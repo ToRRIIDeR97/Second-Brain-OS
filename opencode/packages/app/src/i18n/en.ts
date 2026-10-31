@@ -1269,6 +1269,7 @@ export const dict = {
   "secondBrain.calendar.google.ownClient": "Use your own OAuth client",
   "secondBrain.calendar.google.builtInClient": "Use the built-in client",
   "secondBrain.calendar.google.openBrowser": "Continue in browser",
+  "secondBrain.calendar.google.reopenBrowser": "Waiting for Google… Open again",
   "secondBrain.calendar.google.account": "Account",
   "secondBrain.calendar.google.accountFallback": "Google account",
   "secondBrain.calendar.google.lastSync": "Last sync",

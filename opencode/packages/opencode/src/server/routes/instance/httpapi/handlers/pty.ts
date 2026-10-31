@@ -227,11 +227,19 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
         // Outbound frames flow through one queue drained by a single writer so replay, live
         // output, and the close frame keep their order.
         const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+        // Bounded by bytes: a slow client is closed and resyncs from its cursor rather than growing memory.
+        const budget = PtyProtocol.pendingBudget()
+        const offerOutput = (chunk: string | Uint8Array) => {
+          const admitted = budget.admit(chunk)
+          if (admitted === "send") Queue.offerUnsafe(outbox, chunk)
+          else if (admitted === "close")
+            Queue.offerUnsafe(outbox, new Socket.CloseEvent(PtyProtocol.TOO_SLOW_CLOSE.code, PtyProtocol.TOO_SLOW_CLOSE.reason))
+        }
         const attachment = yield* pty(
           Pty.Service.use((service) =>
             service.attach(ctx.params.ptyID, {
               cursor,
-              onData: (chunk) => Queue.offerUnsafe(outbox, chunk),
+              onData: offerOutput,
               onEnd: () => Queue.offerUnsafe(outbox, new Socket.CloseEvent(1000)),
             }),
           ),
@@ -245,14 +253,15 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
         )
         if (!attachment) return HttpServerResponse.empty()
 
-        for (const chunk of PtyProtocol.chunks(attachment.replay)) Queue.offerUnsafe(outbox, chunk)
-        Queue.offerUnsafe(outbox, PtyProtocol.metaFrame(attachment.cursor))
+        for (const chunk of PtyProtocol.chunks(attachment.replay)) offerOutput(chunk)
+        offerOutput(PtyProtocol.metaFrame(attachment.cursor))
         attachment.activate()
 
         const drain = Effect.gen(function* () {
           while (true) {
             const item = yield* Queue.take(outbox)
             yield* write(item)
+            if (!(item instanceof Socket.CloseEvent)) budget.sent(item)
             if (item instanceof Socket.CloseEvent) return
           }
         })

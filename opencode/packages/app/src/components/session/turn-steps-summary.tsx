@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import type { Part, ToolPart } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
@@ -222,20 +222,20 @@ export function TurnStepsSummary(props: {
               </div>
             )}
           </Show>
-          <For each={lanes()}>
+          <Index each={lanes()}>
             {(lane) => {
               const content = () => (
                 <>
                   <div class="flex min-w-0 items-center gap-2">
-                    <span class="shrink-0 [font-weight:500]">{label(lane.part)}</span>
-                    <Show when={stepOf(lane.part).target}>
+                    <span class="shrink-0 [font-weight:500]">{label(lane().part)}</span>
+                    <Show when={stepOf(lane().part).target}>
                       {(target) => <span class="min-w-0 truncate text-v2-text-text-muted">{target()}</span>}
                     </Show>
                     <span class="flex-1" />
-                    <Show when={lane.steps.length > 0}>
+                    <Show when={lane().steps.length > 0}>
                       <span class="shrink-0 tabular-nums text-[12px] text-v2-text-text-muted">
-                        {language.plural("secondBrain.turnSteps.laneSteps", lane.steps.length, {
-                          count: lane.steps.length.toLocaleString(language.intl()),
+                        {language.plural("secondBrain.turnSteps.laneSteps", lane().steps.length, {
+                          count: lane().steps.length.toLocaleString(language.intl()),
                         })}
                       </span>
                     </Show>
@@ -243,7 +243,7 @@ export function TurnStepsSummary(props: {
                   <div data-slot="turn-steps-lane-bar">
                     <div data-slot="turn-steps-lane-fill" />
                   </div>
-                  <Show when={lane.current} keyed>
+                  <Show when={lane().current} keyed>
                     {(step) => {
                       const current = toolStep(step.tool, { title: step.title })
                       return (
@@ -268,11 +268,11 @@ export function TurnStepsSummary(props: {
               )
               return (
                 <Show
-                  when={openable(lane.part)}
+                  when={openable(lane().part)}
                   fallback={
                     <div
                       data-slot="turn-steps-lane"
-                      data-running={lane.running ? "" : undefined}
+                      data-running={lane().running ? "" : undefined}
                       class="flex flex-col gap-1"
                     >
                       {content()}
@@ -283,10 +283,10 @@ export function TurnStepsSummary(props: {
                     <button
                       type="button"
                       data-slot="turn-steps-lane"
-                      data-running={lane.running ? "" : undefined}
-                      aria-label={language.t("secondBrain.agentTab.open", { agent: label(lane.part) })}
+                      data-running={lane().running ? "" : undefined}
+                      aria-label={language.t("secondBrain.agentTab.open", { agent: label(lane().part) })}
                       class="-mx-1.5 flex w-[calc(100%+12px)] cursor-pointer flex-col gap-1 rounded-[8px] px-1.5 py-0.5 text-left transition-colors hover:bg-v2-background-bg-layer-02 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
-                      onClick={() => open()(lane.part)}
+                      onClick={() => open()(lane().part)}
                     >
                       {content()}
                     </button>
@@ -294,7 +294,7 @@ export function TurnStepsSummary(props: {
                 </Show>
               )
             }}
-          </For>
+          </Index>
         </div>
       </Show>
     </div>

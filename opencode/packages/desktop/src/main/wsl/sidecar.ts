@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import { app } from "electron"
 import { checkHealth } from "../server"
-import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs, wslExecutable } from "./runtime"
+import { type WslCommandLine, resolveWslOpencode, runWsl, shellEscape, wslArgs, wslExecutable } from "./runtime"
 import { pollWslHealth } from "./startup"
 import { nativeT } from "../native-translations"
 
@@ -81,7 +81,14 @@ export async function spawnWslSidecar(
     })
   return {
     listener: {
-      stop: () => child.kill(),
+      stop: () => {
+        child.kill()
+        // Ending the wsl.exe client doesn't reliably end the Linux process, which would keep the port
+        // and credential alive. The command line is unique by port, so end exactly this server.
+        void runWsl(wslArgs(["pkill", "-f", `serve --hostname 127.0.0.1 --port ${port}$`], distro)).catch(
+          () => undefined,
+        )
+      },
       onExit: (cb) => child.once("exit", cb),
     },
     url,

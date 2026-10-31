@@ -131,7 +131,8 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
               .filter((value: string) => /[a-z0-9]/i.test(value))
               .map((value: string) => value.toLowerCase())
               .join("")
-            if (name.includes(key) || key.includes(name)) return candidate
+            // Exact stem only: a loose match could launch an unrelated executable near the hit.
+            if (name === key) return candidate
           }
         } catch {
           continue
@@ -140,5 +141,6 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
     }
   }
 
-  return paths[0] ?? null
+  // An unresolved .cmd/.bat can't be run with execFile, and nothing better was found.
+  return null
 }

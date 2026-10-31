@@ -1,8 +1,9 @@
 import { MainLogger } from "electron-log"
 import log from "electron-log/main.js"
 import { app, crashReporter, shell } from "electron"
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
-import { ZipWriter, BlobWriter, BlobReader } from "@zip.js/zip.js"
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs"
+import { ZipWriter, Uint8ArrayReader } from "@zip.js/zip.js"
+import { Writable } from "node:stream"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
 
@@ -53,7 +54,8 @@ export async function exportDebugLogs() {
     { name: "manifest.json", data: Buffer.from(JSON.stringify(manifest(), null, 2)) },
     ...collect(root, "desktop"),
     ...serverLogRoots().flatMap((dir, i) => collect(dir, `server-${i + 1}`)),
-    ...collect(app.getPath("crashDumps"), "crashpad"),
+    // Minidumps hold process memory (secrets, note text), so only their names, sizes and times go in.
+    { name: "crashpad.json", data: Buffer.from(JSON.stringify(crashDumpIndex(app.getPath("crashDumps")), null, 2)) },
   ])
   shell.showItemInFolder(output)
   return output
@@ -149,7 +151,9 @@ function collect(dir: string, prefix: string): Entry[] {
   const walk = (current: string) => {
     for (const entry of readdirSync(current)) {
       const file = join(current, entry)
-      const info = statSync(file)
+      // A log can rotate away between the listing and the stat.
+      const info = statSync(file, { throwIfNoEntry: false })
+      if (!info) continue
       if (info.isDirectory()) {
         walk(file)
         continue
@@ -164,14 +168,26 @@ function collect(dir: string, prefix: string): Entry[] {
   return result
 }
 
+function crashDumpIndex(dir: string) {
+  return collect(dir, "crashpad").map((entry) => {
+    const info = statSync(entry.path!, { throwIfNoEntry: false })
+    return { name: entry.name, size: info?.size ?? 0, modified: info ? new Date(info.mtimeMs).toISOString() : null }
+  })
+}
+
+// Streams to disk, so the archive is never held in memory; a file removed since it was listed is skipped.
 async function writeZip(output: string, entries: Entry[]) {
-  const writer = new ZipWriter(new BlobWriter("application/zip"))
+  const writer = new ZipWriter(Writable.toWeb(createWriteStream(output)) as WritableStream)
   for (const entry of entries) {
-    const data = entry.data ?? readFileSync(entry.path!)
-    await writer.add(entry.name, new BlobReader(new Blob([new Uint8Array(data)])))
+    let data: Buffer
+    try {
+      data = entry.data ?? readFileSync(entry.path!)
+    } catch {
+      continue
+    }
+    await writer.add(entry.name, new Uint8ArrayReader(new Uint8Array(data)))
   }
-  const zip = await writer.close()
-  writeFileSync(output, Buffer.from(await zip.arrayBuffer()))
+  await writer.close()
 }
 
 function initConsoleTransport() {

@@ -1376,6 +1376,7 @@ export const dict = {
     "Usa un cliente OAuth de Google creado para una aplicación de escritorio. Los permisos de lectura y escritura se conceden por separado.",
   "secondBrain.calendar.google.waiting": "Esperando a Google…",
   "secondBrain.calendar.google.openBrowser": "Continuar en el navegador",
+  "secondBrain.calendar.google.reopenBrowser": "Esperando a Google… Abrir de nuevo",
   "secondBrain.calendar.google.account": "Cuenta",
   "secondBrain.calendar.google.accountFallback": "Cuenta de Google",
   "secondBrain.calendar.google.lastSync": "Última sincronización",
