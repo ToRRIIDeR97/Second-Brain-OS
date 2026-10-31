@@ -10,6 +10,7 @@ import { usePlatform } from "./platform"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
 import { ServerConnection, useServer } from "./server"
 import { createStateMemory } from "./state-memory"
+import { useSettings } from "./settings"
 
 /** An unsent thread: the composer state lives in the draft store, keyed by `draftID`. */
 export type Draft = {
@@ -98,6 +99,7 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
   init: () => {
     const server = useServer()
     const platform = usePlatform()
+    const settings = useSettings()
     const navigate = useNavigate()
     const location = useLocation()
     const memory = createStateMemory(getOwner(), STATE_MEMORY_LIMIT)
@@ -189,8 +191,25 @@ export const { use: useDrafts, provider: DraftsProvider } = createSimpleContext(
               existing.projectID === input.projectID &&
               existing.worktree === input.worktree
             if (!same || !(await isEmpty(existing.draftID))) continue
+            // A reused empty draft follows the current default, which may have changed since it was made.
+            const choice = settings.harnesses.newThreadChoice()
+            if (choice) {
+              const session = memory.ensure(draftStateKey(existing.draftID), "prompt", () =>
+                createDraftPromptSession(existing.draftID),
+              )
+              session.harness.set(choice.harnessID as Harness.InstanceID)
+              session.harness.model.set(choice.model as Harness.ModelSelection | undefined)
+            }
             await startTransition(() => navigate(draftHref(existing)))
             return existing
+          }
+        }
+        // A new thread starts on the harness chosen in Settings › Harnesses, unless the caller picked one.
+        if (!harnessInstanceID) {
+          const choice = settings.harnesses.newThreadChoice()
+          if (choice) {
+            harnessInstanceID = choice.harnessID as Harness.InstanceID
+            options = { ...options, harnessModel: options?.harnessModel ?? (choice.model as Harness.ModelSelection) }
           }
         }
         const draft: Draft = { draftID: uuid(), ...input }

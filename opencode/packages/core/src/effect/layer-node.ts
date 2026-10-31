@@ -326,6 +326,14 @@ export function hasUnbound(root: Node<unknown, unknown, any>, source: AnyNode): 
   })
 }
 
+/** Whether `source` appears anywhere in `root`'s graph. */
+export function contains(root: AnyNode, source: AnyNode): boolean {
+  return walk<boolean>(root, (node, context) => {
+    if (node === source || node.name === source.name) return true
+    return node.dependencies.some(context.visit)
+  })
+}
+
 function flatten(node: AnyNode): readonly AnyNode[] {
   return node.kind === "group" ? node.dependencies.flatMap(flatten) : [node]
 }

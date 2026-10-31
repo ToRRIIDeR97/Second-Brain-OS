@@ -9,6 +9,7 @@ import {
 } from "@opencode-ai/session-ui/context"
 import { listedEntryPath, resolveFileReferencePath } from "@opencode-ai/session-ui/markdown-file-reference"
 import { mediaKindFromPath } from "@opencode-ai/session-ui/pierre/media"
+import { viewerKind } from "@/pages/session/file-viewer"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -125,7 +126,7 @@ export function SessionFileReferences(props: ParentProps) {
   // A file the viewer can't show (a .docx, .xlsx, .zip …) opens in its default app on desktop instead of the
   // panel's "binary file" placeholder. Main still reveals executables rather than running them.
   const opensExternally = async (path: string) => {
-    if (!platform.openLocalFile || mediaKindFromPath(path)) return false
+    if (!platform.openLocalFile || mediaKindFromPath(path) || viewerKind(path)) return false
     const content = file.get(path)?.content ?? (await sdk().client.file.read({ path })).data
     return content?.type === "binary"
   }

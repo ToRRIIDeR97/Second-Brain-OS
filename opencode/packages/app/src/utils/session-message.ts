@@ -233,24 +233,39 @@ function userMessage(
 function userParts(sessionID: string, message: SessionMessageUser): Part[] {
   return [
     textPart(sessionID, message.id, 0, message.text),
-    ...(message.files ?? []).map(
-      (file, index): FilePart => ({
+    ...(message.files ?? []).map((file, index): FilePart => {
+      // Servers send either { uri, source: mention } or the older { source: { type: "uri" }, data, mention }.
+      // An attachment the server added (a referenced thread) has no mention at all.
+      const raw = file as unknown as {
+        uri?: string
+        data?: string
+        source?: { type?: string; uri?: string; start?: number; end?: number; text?: string }
+        mention?: { start: number; end: number; text: string }
+      }
+      const mention =
+        raw.mention ??
+        (raw.source && raw.source.type === undefined && typeof raw.source.text === "string"
+          ? { start: raw.source.start ?? 0, end: raw.source.end ?? 0, text: raw.source.text }
+          : undefined)
+      return {
         id: `${message.id}:file:${index}`,
         sessionID,
         messageID: message.id,
         type: "file",
         mime: file.mime,
         filename: file.name,
-        url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-        source: file.mention
+        url:
+          raw.uri ??
+          (raw.source?.type === "uri" && raw.source.uri ? raw.source.uri : `data:${file.mime};base64,${raw.data}`),
+        source: mention
           ? {
               type: "file",
-              text: { value: file.mention.text, start: file.mention.start, end: file.mention.end },
-              path: file.mention.text.startsWith("@") ? file.mention.text.slice(1) : (file.name ?? file.mention.text),
+              text: { value: mention.text, start: mention.start, end: mention.end },
+              path: mention.text.startsWith("@") ? mention.text.slice(1) : (file.name ?? mention.text),
             }
           : undefined,
-      }),
-    ),
+      }
+    }),
     ...(message.agents ?? []).map(
       (item, index): Part => ({
         id: `${message.id}:agent:${index}`,

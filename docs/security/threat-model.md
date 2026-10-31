@@ -225,9 +225,13 @@ runs only from source for development (`serve`, `generate`, `mcp`, `debug`,
 Checking and installing harness CLI updates adds two capabilities:
 
 - **Outbound calls.** The server fetches `<registry>/<pkg>/latest` from the
-  user's configured npm registry, or runs `brew info`, for each enabled Codex
-  or ACP harness, about once every six hours.
-- **Package-manager runs.** The server runs `npm`, `bun`, or `brew` as the user.
+  user's configured npm registry, PyPI's JSON API, or runs `brew info` or
+  `winget show`, for each enabled Codex or ACP harness, about once every six
+  hours. Scoop versions come from its local bucket manifests.
+- **Package-manager runs.** The server runs `npm`, `bun`, `pnpm`, `brew`,
+  `winget`, `scoop`, `pipx`, `uv`, or the CLI's own updater (`claude update`,
+  `codex update`, `opencode upgrade`) as the user. Chocolatey is never run: it
+  needs an elevated prompt, so the app shows the command instead.
 
 The renderer sends only a harness ID to `POST /api/harness/upgrade/:id`. The
 server derives the package name, prefix, and package manager from the resolved
@@ -779,6 +783,36 @@ stats the path first, and executables, or anything it can't stat, are
 revealed in the file manager, never run. The path is the thread folder plus
 the checked relative path, so a reply can't open a file outside its thread
 folder.
+
+## Workbench panel tools
+
+- **`tenon-file://`.** The renderer names a folder and a relative path; main
+  refuses paths that leave the folder and non-files, then issues an opaque URL.
+  The protocol serves only issued URLs (the most recent 500), read-only, and
+  sub-frames may load only those URLs and Chromium's PDF viewer. `plugins: true`
+  is set on app windows for that viewer. Word documents are converted to HTML
+  and passed through the markdown sanitizer before they reach the page.
+- **Embedded browser.** Pages run in a `WebContentsView` in the
+  `persist:tenon-browser` session: no cookies or storage shared with the app,
+  every permission denied, `window.open` loads in place, and only http(s)
+  navigations. Requests to the app's own server origin are cancelled, so a page
+  can't reach its API. The element picker and snapshots run in an isolated
+  world the page can't see.
+- **Agent bridge.** A loopback HTTP server in main (`127.0.0.1:0`) takes
+  browser and device tool calls. It requires a 256-bit bearer token passed only
+  in the server process's environment (harness processes get an allow-listed
+  environment without it) and refuses any request with an `Origin` header.
+  Bodies are capped at 64 KB. Agents always have these tools; navigating to a
+  site other than localhost needs the user's yes in a native dialog.
+- **Device tools.** `adb`, `emulator`, `xcrun simctl` and `idb` run with fixed
+  argument lists and no shell. Text for `adb shell input text` is escaped;
+  AVD names and app IDs are checked against simple patterns. `device_install`
+  takes any path the agent names, like the agent's own shell would.
+- **Thread references.** A referenced thread is rendered into the prompt as a
+  `<referenced-thread>` block marked as data with instructions not to follow
+  it, and its closing tag is escaped inside. It can carry anything the other
+  thread contained, so it is subject to the same prompt-injection limits as
+  workspace content.
 
 ## Checks
 

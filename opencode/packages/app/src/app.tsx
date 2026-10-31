@@ -33,6 +33,7 @@ import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider } from "@/context/server-sdk"
 import { HarnessUpdateNotifier } from "@/components/harness-update-notifier"
+import { CalendarAutoSync } from "@/features/second-brain/calendar-auto-sync"
 import { ServerSyncProvider } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
@@ -234,6 +235,7 @@ function ServerScopedProviders(props: ServerScopedShellProps) {
     <LayoutProvider>
       {props.serverScoped}
       <HarnessUpdateNotifier />
+      <CalendarAutoSync />
       <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
     </LayoutProvider>
   )

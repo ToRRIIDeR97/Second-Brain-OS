@@ -10,6 +10,7 @@ import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import { SettingsHarnessesV2 } from "./harnesses"
 import { SettingsSkillsV2 } from "./skills"
+import { SettingsCalendarV2 } from "./calendar"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -67,6 +68,10 @@ export const DialogSettings: Component<{
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="calendar">
+                      <Icon name="calendar" />
+                      {language.t("secondBrain.settings.tab.calendar")}
+                    </TabsV2.Trigger>
                   </div>
                 </div>
 
@@ -108,6 +113,9 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds />
+        </TabsV2.Content>
+        <TabsV2.Content value="calendar" class="settings-v2-panel">
+          <SettingsCalendarV2 />
         </TabsV2.Content>
         <TabsV2.Content value="servers" class="settings-v2-panel">
           <SettingsServersV2 />

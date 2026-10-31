@@ -335,6 +335,10 @@ export const DESKTOP_NATIVE_ENGLISH = {
     "A link asked Tenon Workbench to start a session in:\n{{path}}\n\nAny prompt from the link is placed in the composer and is not sent. Continue only if you opened this link yourself from a source you trust.",
   "secondBrain.desktop.deepLink.open": "Open",
   "secondBrain.desktop.deepLink.cancel": "Cancel",
+  "secondBrain.desktop.browser.agentNavigate.title": "Open a website?",
+  "secondBrain.desktop.browser.agentNavigate.message": "An agent wants to open {{host}} in the Workbench browser.",
+  "secondBrain.desktop.browser.agentNavigate.allow": "Open",
+  "secondBrain.desktop.browser.agentNavigate.deny": "Don't open",
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH

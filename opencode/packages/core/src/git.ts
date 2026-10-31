@@ -190,6 +190,16 @@ const layer = Layer.effect(
 
       const cwd = path.dirname(dotgit)
       const git = run(cwd, proc)
+      // One process answers all three on a normal checkout; starting git costs most on Windows.
+      const combined = yield* git(["rev-parse", "--show-toplevel", "--git-dir", "--git-common-dir"])
+      const lines = combined.text.trim().split(/\r?\n/)
+      if (combined.exitCode === 0 && lines.length === 3)
+        return new Repository({
+          worktree: AbsolutePath.make(resolvePath(cwd, lines[0]!)),
+          gitDirectory: AbsolutePath.make(resolvePath(cwd, lines[1]!)),
+          commonDirectory: AbsolutePath.make(resolvePath(cwd, lines[2]!)),
+        })
+      // A bare repository has no top level, which fails the combined call.
       const topLevel = yield* git(["rev-parse", "--show-toplevel"])
       const gitDir = yield* git(["rev-parse", "--git-dir"])
       const commonDir = yield* git(["rev-parse", "--git-common-dir"])

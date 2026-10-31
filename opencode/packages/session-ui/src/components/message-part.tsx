@@ -1350,7 +1350,7 @@ export function UserMessageDisplay(props: {
                   clickable={!!props.actions?.openAttachment}
                   onClick={() => props.actions?.openAttachment?.(file)}
                 >
-                  {typeLabel(name, file.mime, i18n.t("ui.common.file"))}
+                  {typeLabel(name, file.mime, i18n.t("ui.common.file"), i18n.t("secondBrain.attachment.thread"))}
                 </AttachmentCardV2>
               </Show>
             )

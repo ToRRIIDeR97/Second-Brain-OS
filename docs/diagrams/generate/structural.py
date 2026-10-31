@@ -59,7 +59,7 @@ def component():
 
 
 def trust():
-    s = SVG(1000, 722, "Trust boundaries and sensitive-data flow",
+    s = SVG(1000, 842, "Trust boundaries and sensitive-data flow",
             "Trust zones of the desktop app: sandboxed renderer, privileged Electron main, loopback server, workspace "
             "files, harness child processes and external services, with the control at each crossing and known gaps in red.")
     s.heading("Trust boundaries and sensitive data", "dashed = trust zone · orange = sensitive data · red = known gap (see threat model)")
@@ -84,7 +84,7 @@ def trust():
     s.zone(300, 480, 680, 140, "External network")
     s.box(315, 512, 155, 84, "Google APIs", ["oauth2, Calendar, Tasks", "via net.fetch"], cls="ext")
     s.box(485, 512, 155, 84, "LLM providers", ["prompts include", "workspace content"], cls="ext")
-    s.box(655, 512, 155, 84, "Package registries", ["npm, Homebrew: harness", "CLI install + update"], cls="ext")
+    s.box(655, 512, 155, 84, "Package registries", ["npm, pnpm, Bun, Homebrew,", "WinGet, Scoop, PyPI:", "harness CLI updates"], cls="ext")
     s.box(825, 512, 145, 84, "System browser", ["http/https/mailto", "via openExternal"], cls="ext")
     s.edge([(230, 137), (260, 137), (260, 400), (230, 400)], "preload\nIPC", at=(280, 260))
     s.edge([(230, 120), (320, 120)], "HTTP 127.0.0.1", at=(275, 113), cls="sens", head="as")
@@ -96,7 +96,12 @@ def trust():
     s.edge([(575, 352), (575, 512)], "prompts + context", at=(520, 470), cls="sens", head="as")
     s.edge([(600, 450), (600, 470), (732, 470), (732, 512)], "update: server-chosen\nnpm / brew, user's ID only", at=(690, 456))
     s.edge([(230, 425), (282, 425), (282, 608), (897, 608), (897, 596)], "open-external", at=(560, 612))
-    s.box(20, 636, 960, 72, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted", "per-harness env visible to that harness · html design frames: WebRTC TURN over TCP from nested frames"], cls="gapz")
+    s.zone(20, 636, 960, 108, "Workbench panel tools (Electron main)")
+    s.box(40, 664, 220, 66, "Workbench browser", ["WebContentsView, persist:tenon-browser", "permissions denied, app server blocked"], cls="sub")
+    s.box(275, 664, 220, 66, "Agent bridge", ["127.0.0.1:0, bearer token in server env", "requests with an Origin refused"], cls="sub")
+    s.box(510, 664, 220, 66, "Device tools", ["adb, emulator, simctl, idb", "fixed argument lists, no shell"], cls="sub")
+    s.box(745, 664, 215, 66, "tenon-file://", ["read-only, issued URLs only", "path checked inside the folder"], cls="sub")
+    s.box(20, 756, 960, 72, "Known gaps (threat model)", ["auth_token accepted in URLs · open-path/reveal-path take absolute paths until the workspace-ID contract · drafts unencrypted", "per-harness env visible to that harness · html design frames: WebRTC TURN over TCP from nested frames"], cls="gapz")
     s.save(f"{OUT}/trust-boundaries.svg")
 
 
@@ -111,9 +116,9 @@ def deployment():
     s.box(270, 130, 200, 86, "Renderer process", ["oc://renderer/index.html", "out/preload/index.js"], stereo="process")
     s.box(60, 240, 410, 70, "Utility process “opencode server”", ["virtual:opencode-server = opencode/dist/node/node.js",
           "listens on 127.0.0.1:<ephemeral>"])
-    s.box(60, 322, 200, 64, "OAuth loopback server", ["127.0.0.1:0, ≤5 min"], cls="sub")
+    s.box(60, 322, 200, 64, "Loopback listeners", ["OAuth 127.0.0.1:0, ≤5 min", "browser bridge 127.0.0.1:0"], cls="sub")
     s.box(270, 322, 200, 64, "opencode-cli daemon", ["opt-in v2, dev channel only"], cls="sub")
-    s.box(510, 100, 230, 76, "Harness processes", ["codex app-server, opencode acp,", "other ACP agents; stdio", "cwd = workspace"], cls="proc")
+    s.box(510, 100, 230, 76, "Harness and device processes", ["codex app-server, ACP agents (stdio,", "cwd = workspace); adb, emulator,", "simctl (macOS) for the Device tab"], cls="proc")
     s.box(510, 190, 230, 50, "WSL sidecars", ["Windows only, optional"], cls="proc")
     s.box(40, 430, 230, 182, "userData = appData/<appId>", ["opencode.settings, opencode.updater", "second-brain.google",
           "drafts.sqlite (+wal/shm)", "window-state-<id>.json", "logs/<stamp>/, Crashpad/", "tenon-workbench/ server state",
@@ -125,7 +130,7 @@ def deployment():
     s.box(800, 100, 180, 60, "Google APIs", ["oauth2, calendar v3,", "tasks v1"], cls="ext")
     s.box(800, 180, 180, 60, "LLM provider APIs", ["opencode driver, agents"], cls="ext")
     s.box(800, 260, 180, 50, "System browser", [], cls="ext")
-    s.box(800, 480, 180, 60, "Package registries", ["npm, Homebrew: harness", "CLI installs, updates"], cls="ext")
+    s.box(800, 480, 180, 60, "Package registries", ["npm, Bun, Homebrew, WinGet,", "Scoop, PyPI: harness CLIs"], cls="ext")
     s.box(800, 340, 180, 118, "Build host", ["bun run desktop:build", "prebuild: build-node.ts", "electron-builder,", "publish: null →",
           "installer + SHA-256"], cls="sub")
     s.edge([(260, 172), (270, 172)])

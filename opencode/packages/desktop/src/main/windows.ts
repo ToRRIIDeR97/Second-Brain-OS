@@ -18,6 +18,7 @@ import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
 import { isSubframeDocumentURL, redactURL, resolveExternalURL, resolveLocalFilePath } from "./external-url"
 import { localFileAction } from "./local-file-policy"
+import { fileViewerScheme, isFileViewerFrameURL } from "./file-viewer"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -44,6 +45,7 @@ protocol.registerSchemesAsPrivileged([
       stream: true,
     },
   },
+  fileViewerScheme,
 ])
 
 let backgroundColor: string | undefined
@@ -204,6 +206,8 @@ export function createMainWindow(id: string = randomUUID()) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Chromium's PDF viewer for PDFs opened in the Workbench panel (tenon-file:// frames).
+      plugins: true,
     },
   })
 
@@ -280,7 +284,7 @@ function wireNavigationPolicy(win: BrowserWindow) {
   // agent-written script; it can't open popups or navigate the top window, but it can navigate
   // itself, so any subframe navigation away from its srcdoc is dropped, never opened externally.
   win.webContents.on("will-frame-navigate", (event) => {
-    if (event.isMainFrame || isSubframeDocumentURL(event.url)) return
+    if (event.isMainFrame || isSubframeDocumentURL(event.url) || isFileViewerFrameURL(event.url)) return
     event.preventDefault()
     writeLog("window", "blocked subframe navigation", { url: redactURL(event.url) }, "warn")
   })

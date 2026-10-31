@@ -14,12 +14,7 @@ import { PageEmpty, PageFrame, PageHeader, pageRowClass } from "@/components/pag
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import {
-  usePlatform,
-  type GoogleCalendarConnection,
-  type GoogleCalendarProviderEvent,
-  type GoogleTaskProviderTask,
-} from "@/context/platform"
+import { usePlatform, type GoogleCalendarConnection, type GoogleCalendarProviderEvent } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
 import {
@@ -27,7 +22,6 @@ import {
   eventCoversDay,
   eventLastDay,
   localDateKey,
-  mergeProviderEvents,
   monthGrid,
   providerEvent,
   shiftDate,
@@ -39,6 +33,7 @@ import { CalendarPeek, TaskCheck } from "@/features/second-brain/calendar-peek"
 import { CalendarTasks, type CalendarTaskFilter } from "@/features/second-brain/calendar-tasks"
 import { revealSidePanel, SidePanel, sidePanelGridClass } from "@/features/second-brain/side-panel"
 import { focusWhenConnected } from "@/utils/focus-when-connected"
+import { calendarSync, providerTask, syncGoogleCalendar } from "@/features/second-brain/calendar-sync"
 import {
   listProjects,
   readCalendar,
@@ -137,26 +132,6 @@ const unavailableGoogle: GoogleCalendarConnection = {
   failedWrites: 0,
   accounts: [],
 }
-
-const providerTask = (task: GoogleTaskProviderTask, local?: PlannerTask): PlannerTask => ({
-  id: `google-task:${task.accountId}:${task.taskListId}:${task.providerId}`,
-  title: task.title,
-  ...(task.notes ? { notes: task.notes } : {}),
-  ...(local?.projectId ? { projectId: local.projectId } : {}),
-  ...(task.dueDate ? { dueDate: task.dueDate } : {}),
-  ...(local?.scheduledDate ? { scheduledDate: local.scheduledDate } : {}),
-  ...(local?.start ? { start: local.start, end: local.end } : {}),
-  ...(task.completedAt ? { completedAt: task.completedAt } : {}),
-  accountId: task.accountId,
-  providerId: task.providerId,
-  taskListId: task.taskListId,
-  taskListTitle: task.taskListTitle,
-  ...(task.etag ? { etag: task.etag } : {}),
-  createdAt: local?.createdAt ?? task.updatedAt,
-  updatedAt: task.updatedAt,
-  source: "google",
-  syncState: "synced",
-})
 
 export default function CalendarPage() {
   const language = useLanguage()
@@ -515,43 +490,10 @@ export default function CalendarPage() {
     if (!google || !target) return
     setState({ googleBusy: true, googleError: "" })
     try {
-      const result = await google.sync()
+      const result = await syncGoogleCalendar({ google, client: client(target), current: snapshot() })
       // A sidebar workspace switch during the call leaves snapshot() pointing at another calendar.
-      if (directory() !== target) return
-      const accountOf = (accountId: string | undefined) => itemAccount(accountId, result.connection)
-      const synced = new Set(result.syncedAccounts)
-      const connected = new Set(result.connection.accounts.map((account) => account.id))
-      // A connected account that failed this sync keeps its items; disconnected accounts lose theirs.
-      const failed = (account: string | undefined) => Boolean(account && connected.has(account) && !synced.has(account))
-      const kept = (accountId: string | undefined) => failed(accountOf(accountId))
-      const merged = mergeProviderEvents(snapshot()?.events ?? [], result.events, {
-        accountOf,
-        failed,
-        synced: (account) => Boolean(account && synced.has(account)),
-      })
-      const currentTasks = snapshot()?.tasks ?? []
-      const taskKey = (task: { accountId?: string; taskListId?: string; providerId?: string }) =>
-        `${accountOf(task.accountId)}:${task.taskListId}:${task.providerId}`
-      const localByProvider = new Map(
-        currentTasks
-          .filter((task) => task.source === "google" && task.providerId && task.taskListId)
-          .map((task) => [taskKey(task), task] as const),
-      )
-      const remoteKeys = new Set(result.tasks.map(taskKey))
-      const mergedTasks = [
-        ...currentTasks.filter((task) => task.source === "local" || kept(task.accountId)),
-        ...currentTasks.filter(
-          (task) =>
-            task.source === "google" &&
-            synced.has(accountOf(task.accountId) ?? "") &&
-            Boolean(task.outboxKey) &&
-            !remoteKeys.has(taskKey(task)),
-        ),
-        ...result.tasks.map((task) => providerTask(task, localByProvider.get(taskKey(task)))),
-      ]
-      const saved = await writeCalendar(client(target), merged, snapshot()?.revision, mergedTasks)
-      if (directory() !== target) return
-      eventActions.mutate(saved)
+      if (!result || directory() !== target) return
+      eventActions.mutate(result.saved)
       googleActions.mutate(result.connection)
     } catch (error) {
       setState("googleError", googleMessage(error))
@@ -561,6 +503,18 @@ export default function CalendarPage() {
       setState("googleBusy", false)
     }
   }
+  // A background sync (Settings › Calendar) rewrote the calendar; show it.
+  createEffect(
+    on(
+      calendarSync.version,
+      () => {
+        if (state.googleBusy) return
+        void eventActions.refetch()
+        void googleActions.refetch()
+      },
+      { defer: true },
+    ),
+  )
 
   const disconnectGoogle = async (accountId: string) => {
     const google = platform.googleCalendar
@@ -1432,8 +1386,8 @@ export default function CalendarPage() {
                                   : state.googleConnecting
                                     ? language.t("secondBrain.calendar.google.reopenBrowser")
                                     : googleTypedClient()
-                                    ? language.t("secondBrain.calendar.google.openBrowser")
-                                    : language.t("secondBrain.calendar.google.signIn")}
+                                      ? language.t("secondBrain.calendar.google.openBrowser")
+                                      : language.t("secondBrain.calendar.google.signIn")}
                               </ButtonV2>
                               <Show when={googleConnection.latest?.builtInClient}>
                                 <ButtonV2

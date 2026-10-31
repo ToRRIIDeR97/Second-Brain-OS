@@ -1,3 +1,5 @@
+import { THREAD_REFERENCE_MIME, threadReferenceURI } from "@/utils/thread-reference"
+import { sessionTitle } from "@/utils/session-title"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
@@ -231,6 +233,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     return permission.isAutoAccepting(id, sdk().directory)
   })
   const submission = createPromptSubmit({
+    onNewSessionHarness: (choice) => settings.harnesses.setLastUsed(choice),
     prompt,
     info,
     imageAttachments: attachments,
@@ -307,8 +310,35 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       resource,
     })),
   )
+  // Other threads in this folder, newest first; picking one attaches it as a reference.
+  const threads = createMemo(() =>
+    sync()
+      .data.session.filter((session) => session.id !== props.controls.session.id && !session.parentID)
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .slice(0, 30)
+      .map((session) => {
+        const title = sessionTitle(session.title) || session.id
+        return {
+          id: `thread:${session.id}`,
+          kind: "thread" as const,
+          label: `@${title}`,
+          description: language.t("secondBrain.threadReference.description"),
+          mention: {
+            type: "file" as const,
+            path: title,
+            content: `@${title}`,
+            start: 0,
+            end: 0,
+            mime: THREAD_REFERENCE_MIME,
+            filename: title,
+            url: threadReferenceURI(session.id),
+          },
+        }
+      }),
+  )
   const context = createMemo<PromptInputV2Suggestion[]>(() => [
     ...references(),
+    ...threads(),
     ...props.controls.agents.available
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map((agent) => ({

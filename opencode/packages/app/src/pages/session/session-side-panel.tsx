@@ -1,4 +1,5 @@
 import { For, Match, Show, Switch, createEffect, createMemo, on, onCleanup, onMount, type JSX } from "solid-js"
+import { usePlatform } from "@/context/platform"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { DragDropProvider as DndKitProvider, PointerSensor } from "@dnd-kit/solid"
@@ -47,6 +48,8 @@ import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
   CANVAS_TAB,
+  BROWSER_TAB,
+  DEVICE_TAB,
   SESSION_OPEN_FILE_TAB,
   agentTabPartID,
   createOpenSessionFileTab,
@@ -61,6 +64,8 @@ import { panelSettled } from "@/pages/session/file-reference"
 import { pagePanelClass } from "@/components/page"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 import { SessionCanvasTab } from "@/pages/session/canvas-tab"
+import { SessionBrowserTab } from "@/pages/session/browser-tab"
+import { SessionDeviceTab } from "@/pages/session/device-tab"
 
 type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
 type RenderDiff = FileDiffInfo | (SnapshotFileDiff & { file: string }) | VcsFileDiff
@@ -95,6 +100,7 @@ export function SessionSidePanel(props: {
   const settings = useSettings()
   const file = useFile()
   const language = useLanguage()
+  const platform = usePlatform()
   const command = useCommand()
   const dialog = useDialog()
   const sdk = useSDK()
@@ -253,6 +259,8 @@ export function SessionSidePanel(props: {
       active !== "review" &&
       active !== "context" &&
       active !== CANVAS_TAB &&
+      active !== BROWSER_TAB &&
+      active !== DEVICE_TAB &&
       active !== "empty" &&
       !agentTabPartID(active)
     )
@@ -357,6 +365,102 @@ export function SessionSidePanel(props: {
           </div>
         </TabsV2.Content>
       )}
+    </Show>
+  )
+
+  const browserTrigger = () => (
+    <Show when={tabState.browserOpen()}>
+      <TabsV2.Trigger value={BROWSER_TAB} class={tabEnter()} onMiddleClick={() => tabs().close(BROWSER_TAB)}>
+        <span>{language.t("secondBrain.browser.title")}</span>
+        {closeButton(BROWSER_TAB)}
+      </TabsV2.Trigger>
+    </Show>
+  )
+
+  const browserContent = () => (
+    <Show when={activeTab() === BROWSER_TAB}>
+      <TabsV2.Content value={BROWSER_TAB} class="flex min-h-0 flex-col !overflow-hidden contain-strict">
+        <div class="relative flex-1 min-h-0 overflow-hidden pt-2">
+          <SessionBrowserTab />
+        </div>
+      </TabsV2.Content>
+    </Show>
+  )
+
+  const showBrowserTab = () => {
+    const current = tabs()
+    if (!current.all().includes(BROWSER_TAB)) current.setAll([...current.all(), BROWSER_TAB])
+    current.setActive(BROWSER_TAB)
+  }
+
+  // An agent using the browser brings its tab forward, so the user sees what it does.
+  onMount(() => {
+    const off = platform.browser?.onAgent(() => {
+      openReviewPanel()
+      showBrowserTab()
+    })
+    onCleanup(() => off?.())
+  })
+
+  const deviceTrigger = () => (
+    <Show when={tabState.deviceOpen()}>
+      <TabsV2.Trigger value={DEVICE_TAB} class={tabEnter()} onMiddleClick={() => tabs().close(DEVICE_TAB)}>
+        <span>{language.t("secondBrain.device.title")}</span>
+        {closeButton(DEVICE_TAB)}
+      </TabsV2.Trigger>
+    </Show>
+  )
+
+  const deviceContent = () => (
+    <Show when={activeTab() === DEVICE_TAB}>
+      <TabsV2.Content value={DEVICE_TAB} class="flex min-h-0 flex-col !overflow-hidden contain-strict">
+        <div class="relative flex-1 min-h-0 overflow-hidden pt-2">
+          <SessionDeviceTab />
+        </div>
+      </TabsV2.Content>
+    </Show>
+  )
+
+  const showDeviceTab = () => {
+    const current = tabs()
+    if (!current.all().includes(DEVICE_TAB)) current.setAll([...current.all(), DEVICE_TAB])
+    current.setActive(DEVICE_TAB)
+  }
+
+  onMount(() => {
+    const off = platform.device?.onAgent(() => {
+      openReviewPanel()
+      showDeviceTab()
+    })
+    onCleanup(() => off?.())
+  })
+
+  const openBrowserButton = () => (
+    <Show when={platform.browser}>
+      <div class="sticky right-8 z-10 flex h-8 shrink-0 items-center bg-v2-background-bg-base pl-1">
+        <TooltipV2 value={language.t("secondBrain.browser.open")} placement="bottom" class="flex items-center">
+          <IconButtonV2
+            icon={<Icon name="link" />}
+            variant="ghost-muted"
+            size="large"
+            data-action="open-browser-tab"
+            onClick={showBrowserTab}
+            aria-label={language.t("secondBrain.browser.open")}
+          />
+        </TooltipV2>
+        <Show when={platform.device}>
+          <TooltipV2 value={language.t("secondBrain.device.open")} placement="bottom" class="flex items-center">
+            <IconButtonV2
+              icon={<Icon name="monitor" />}
+              variant="ghost-muted"
+              size="large"
+              data-action="open-device-tab"
+              onClick={showDeviceTab}
+              aria-label={language.t("secondBrain.device.open")}
+            />
+          </TooltipV2>
+        </Show>
+      </div>
     </Show>
   )
 
@@ -545,6 +649,8 @@ export function SessionSidePanel(props: {
                               </Show>
                               {contextTrigger()}
                               {canvasTrigger()}
+                              {browserTrigger()}
+                              {deviceTrigger()}
                               {agentTriggers()}
                               <SortableProvider ids={openedTabs()}>
                                 <For each={panelTabs()}>
@@ -565,6 +671,7 @@ export function SessionSidePanel(props: {
                                   )}
                                 </For>
                               </SortableProvider>
+                              {openBrowserButton()}
                               {openFileButton(() => {
                                 void import("@/components/dialog-select-file").then((x) => {
                                   dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
@@ -578,6 +685,8 @@ export function SessionSidePanel(props: {
                           {selectToOpen()}
                           {contextContent()}
                           {canvasContent()}
+                          {browserContent()}
+                          {deviceContent()}
                           {agentContent()}
 
                           <Show when={activeFileTab()} keyed>
@@ -656,6 +765,8 @@ export function SessionSidePanel(props: {
                             </Show>
                             {contextTrigger()}
                             {canvasTrigger()}
+                            {browserTrigger()}
+                            {deviceTrigger()}
                             {agentTriggers()}
                             <For each={panelTabs()}>
                               {(tab) => (
@@ -676,6 +787,7 @@ export function SessionSidePanel(props: {
                                 </Show>
                               )}
                             </For>
+                            {openBrowserButton()}
                             {openFileButton(() => openFileBrowser())}
                           </TabsV2.List>
                           <div
@@ -698,6 +810,8 @@ export function SessionSidePanel(props: {
                           {selectToOpen()}
                           {contextContent()}
                           {canvasContent()}
+                          {browserContent()}
+                          {deviceContent()}
                           {agentContent()}
                         </ViewSwitch>
 

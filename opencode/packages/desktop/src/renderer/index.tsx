@@ -215,6 +215,11 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     openLocalFile(url: string) {
       window.api.openLocalFile(url)
     },
+    fileViewerURL(directory: string, path: string) {
+      return window.api.fileViewerURL(directory, path)
+    },
+    browser: window.api.browser,
+    device: window.api.device,
     async openPath(path: string, app?: string) {
       // Main resolves the application name itself; never hand it a path.
       return window.api.openPath(path, app)
