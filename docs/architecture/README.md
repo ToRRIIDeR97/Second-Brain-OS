@@ -1449,11 +1449,11 @@ its path: `canonicalDirectory` (`core/src/util/directory.ts`) resolves it and, o
 Windows, uses backslashes and an upper-case drive letter, so `C:/a` and `c:\a\`
 boot one set of services. A key also takes one shape: `workspaceID` is left out
 when it is undefined, since keys compare structurally. Graphs that don't replace
-location nodes share one map Layer (`buildLocationServiceMap`), built once in
-the process-wide memo map (`processLocationServiceMapLayer`); the HTTP listener,
-which builds its graph with its own memo map, is given that instance. Known gap:
-at startup the active folder can still log two boots from the same map, cause
-not yet found. The desktop starts the server in the home folder, so a request that
+location nodes share one map Layer (`buildLocationServiceMap`), so runtimes on the
+shared memo map share it. The HTTP listener builds its own instance with its own
+memo map. Handing it the process-wide instance instead stopped the session runner
+from starting turns, so that was reverted. Known gap: at startup the active
+folder can boot twice. The desktop starts the server in the home folder, so a request that
 names no folder doesn't boot a watcher over the app's working directory (a drive
 root or System32). Git discovery asks `rev-parse` for the top level, git dir
 and common dir in one process.

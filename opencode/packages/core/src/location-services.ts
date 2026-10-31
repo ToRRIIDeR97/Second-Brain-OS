@@ -1,5 +1,4 @@
-import { Effect, Layer, LayerMap, Scope } from "effect"
-import { memoMap } from "./effect/memo-map"
+import { Effect, Layer, LayerMap } from "effect"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -152,9 +151,3 @@ function canonicalKeys<I, E>(map: LayerMap.LayerMap<Location.Ref, I, E>): LayerM
 // so runtimes sharing a memo map also share the folder services.
 export const locationServiceMapLayer = buildLocationServiceMap()
 
-// The map built once in the process-wide memo map. A graph built with its own memo map (each HTTP
-// listener) provides this instead, so a folder boots one set of services for the whole process.
-const processScope = Scope.makeUnsafe()
-export const processLocationServiceMapLayer = Layer.effectContext(
-  Layer.buildWithMemoMap(locationServiceMapLayer, memoMap, processScope),
-)
