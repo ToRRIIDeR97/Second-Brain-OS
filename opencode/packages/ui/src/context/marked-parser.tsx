@@ -6,15 +6,21 @@ export function createMarkdownParser(highlight: (code: string, language: string)
   return new Marked(
     {
       renderer: {
-        link({ href, title, text }) {
-          const titleAttr = title ? ` title="${title}"` : ""
-          return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
+        link({ href, title, tokens }) {
+          // The label is rendered as inline Markdown (bold, code); attributes are escaped.
+          const titleAttr = title ? ` title="${escapeAttribute(title)}"` : ""
+          const label = this.parser.parseInline(tokens)
+          return `<a href="${escapeAttribute(href)}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${label}</a>`
         },
       },
     },
     katexExtension,
     markedShiki({ highlight }),
   )
+}
+
+function escapeAttribute(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
 const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/

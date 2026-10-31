@@ -16,6 +16,9 @@ import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { provideTmpdirInstance } from "../fixture/fixture"
+import fs from "node:fs/promises"
+import path from "node:path"
+import { Global } from "@opencode-ai/core/global"
 import { resetDatabase } from "../fixture/db"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
@@ -77,13 +80,28 @@ const seed = (url: string, org?: string) =>
     }),
   )
 
+// Share settings count only from user or admin config, never from a folder's own config, so the share
+// server is set in the (test) home's ~/.opencode for the length of a test.
+const userShareServer = <A, E, R>(effect: Effect.Effect<A, E, R>) => {
+  const dir = path.join(Global.Path.home, ".opencode")
+  const file = path.join(dir, "opencode.json")
+  return Effect.acquireUseRelease(
+    Effect.promise(async () => {
+      await fs.mkdir(dir, { recursive: true })
+      await fs.writeFile(file, JSON.stringify({ enterprise: { url: "https://legacy-share.example.com" } }))
+    }),
+    () => effect,
+    () => Effect.promise(() => fs.rm(file, { force: true })),
+  )
+}
+
 beforeEach(async () => {
   await resetDatabase()
 })
 
 describe("ShareNext", () => {
   it.live("request uses legacy share API without active org account", () =>
-    provideTmpdirInstance(
+    userShareServer(provideTmpdirInstance(
       () =>
         ShareNext.Service.use((svc) =>
           Effect.gen(function* () {
@@ -97,8 +115,7 @@ describe("ShareNext", () => {
             expect(req.headers).toEqual({})
           }),
         ).pipe(Effect.provide(requestLayer(none))),
-      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
-    ),
+    )),
   )
 
   it.live("request uses default URL when no enterprise config", () =>
@@ -136,7 +153,7 @@ describe("ShareNext", () => {
   )
 
   it.live("create posts share, persists it, and returns the result", () =>
-    provideTmpdirInstance(
+    userShareServer(provideTmpdirInstance(
       () => {
         const createRequests: HttpClientRequest.HttpClientRequest[] = []
         const client = HttpClient.make((req) => {
@@ -171,12 +188,11 @@ describe("ShareNext", () => {
           expect(createRequests[0].url).toBe("https://legacy-share.example.com/api/share")
         }).pipe(Effect.provide(integrationLayer(client)))
       },
-      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
-    ),
+    )),
   )
 
   it.live("remove deletes the persisted share and calls the delete endpoint", () =>
-    provideTmpdirInstance(
+    userShareServer(provideTmpdirInstance(
       () => {
         const seen: HttpClientRequest.HttpClientRequest[] = []
         const client = HttpClient.make((req) => {
@@ -206,8 +222,7 @@ describe("ShareNext", () => {
           ])
         }).pipe(Effect.provide(integrationLayer(client)))
       },
-      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
-    ),
+    )),
   )
 
   it.live("create fails on a non-ok response and does not persist a share", () =>
@@ -225,7 +240,7 @@ describe("ShareNext", () => {
   )
 
   it.live("ShareNext coalesces rapid diff events into one delayed sync with latest data", () =>
-    provideTmpdirInstance(
+    userShareServer(provideTmpdirInstance(
       () => {
         const seen: Array<{ url: string; body: string }> = []
         const client = HttpClient.make((req) => {
@@ -318,7 +333,6 @@ describe("ShareNext", () => {
           ])
         }).pipe(Effect.provide(integrationLayer(client)))
       },
-      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
-    ),
+    )),
   )
 })

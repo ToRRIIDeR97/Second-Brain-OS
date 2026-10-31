@@ -68,6 +68,14 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       )
     })
 
+    const deleteNote = Effect.fn("SecondBrain.deleteNote")(function* (ctx: {
+      query: { path: string; expectedRevision: string }
+    }) {
+      return yield* filesystem(
+        KnowledgeNote.remove(ctx.query.path, { expectedRevision: ctx.query.expectedRevision }),
+      ).pipe(failure("deleteNote", ctx.query.path))
+    })
+
     const readCalendar = Effect.fn("SecondBrain.readCalendar")(function* () {
       return yield* filesystem(calendarFile().pipe(Effect.flatMap((file) => decodeCalendar(file.bytes)))).pipe(
         failure("readCalendar", CALENDAR_PATH),
@@ -201,6 +209,7 @@ export const secondBrainHandlers = HttpApiBuilder.group(InstanceHttpApi, "second
       .handle("listNotes", listNotes)
       .handle("readNote", readNote)
       .handle("writeNote", writeNote)
+      .handle("deleteNote", deleteNote)
       .handle("readCalendar", readCalendar)
       .handle("writeCalendar", writeCalendar)
       .handle("listProjects", listProjects)
@@ -289,6 +298,9 @@ const saveCalendar = Effect.fn("SecondBrain.saveCalendar")(function* (input: Pla
         ? error
         : new PlannerCalendar.InvalidError({ reason: "invalid_document" }),
   })
+  // Reads refuse a file above the limit, so a save must not produce one.
+  if (Buffer.byteLength(next.source, "utf8") > CALENDAR_LIMIT)
+    return yield* new PlannerCalendar.InvalidError({ reason: "too_large" })
   const current = yield* decodeCalendar(file.bytes).pipe(
     Effect.catchIf(
       // Only a file that is not a calendar document at all is moved aside; a document

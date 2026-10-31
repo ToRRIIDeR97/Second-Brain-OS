@@ -15,9 +15,15 @@ export type Projection = {
   blocks: Block[]
 }
 
-function refs(text: string) {
-  if (!text.includes("]:")) return false
-  return /^[ \t]{0,3}\[[^\]]+\]:[ \t]*(?:\S+|\r?\n[ \t]+\S+)/m.test(text)
+// Reference definitions (`[id]: url`), including the two-line form. Each streamed block is parsed on
+// its own, so the definitions are appended to every block for its reference links to resolve.
+function definitions(text: string) {
+  if (!text.includes("]:")) return ""
+  return (text.match(/^[ \t]{0,3}\[[^\]]+\]:[ \t]*(?:\S[^\n]*|\r?\n[ \t]+\S[^\n]*)$/gm) ?? []).join("\n")
+}
+
+function withDefinitions(src: string, defs: string) {
+  return defs ? `${src}\n\n${defs}` : src
 }
 
 function language(value: string | undefined) {
@@ -52,12 +58,13 @@ function heal(text: string) {
 
 export function stream(text: string, live: boolean): Block[] {
   if (!live) return completedProjection(text).blocks
-  if (refs(text)) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
+  const defs = definitions(text)
+  const withDefs = (src: string) => withDefinitions(src, defs)
   const tokens = marked.lexer(text)
   const tail = tokens.findLastIndex((token) => token.type !== "space")
-  if (tail < 0) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
+  if (tail < 0) return [{ raw: text, src: withDefs(heal(text)), mode: "live" }] satisfies Block[]
   const last = tokens[tail]
-  if (!last) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
+  if (!last) return [{ raw: text, src: withDefs(heal(text)), mode: "live" }] satisfies Block[]
 
   const result: Block[] = []
   for (let index = 0; index < tail; index++) {
@@ -70,14 +77,14 @@ export function stream(text: string, live: boolean): Block[] {
       result.push({ raw, src: code.text, mode: "code", language: language(code.lang), complete: true })
       continue
     }
-    result.push({ raw, src: raw, mode: "full" })
+    result.push({ raw, src: withDefs(raw), mode: "full" })
   }
 
   const raw = tokens
     .slice(tail)
     .map((token) => token.raw)
     .join("")
-  if (last.type !== "code") return [...result, { raw, src: heal(raw), mode: "live" }]
+  if (last.type !== "code") return [...result, { raw, src: withDefs(heal(raw)), mode: "live" }]
 
   const code = last as Tokens.Code
   if (!open(code.raw))
@@ -94,10 +101,11 @@ export function project(previous: Projection | undefined, text: string, live: bo
           ? project(previous, text, true)
           : undefined
     if (!current) return completedProjection(text)
+    const defs = definitions(text)
     return {
       text,
       blocks: current.blocks.map((block) => {
-        if (block.mode === "live") return { raw: block.raw, src: block.raw, mode: "full" }
+        if (block.mode === "live") return { raw: block.raw, src: withDefinitions(block.raw, defs), mode: "full" }
         if (block.mode === "code" && !block.complete) return { ...block, complete: true }
         return block
       }),

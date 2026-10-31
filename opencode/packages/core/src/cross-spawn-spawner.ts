@@ -28,6 +28,8 @@ import { ChildEnv } from "./child-env"
 import { makeGlobalNode } from "./effect/app-node"
 import { filesystem, path } from "./effect/app-node-platform"
 
+const EXIT_GRACE_MS = 500
+
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
 const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
@@ -272,17 +274,24 @@ export const make = Effect.gen(function* () {
       const proc = launch(command.command, command.args, opts)
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
+      let grace: ReturnType<typeof setTimeout> | undefined
+      const finish = (result: readonly [code: number | null, signal: NodeJS.Signals | null]) => {
+        if (end) return
+        end = true
+        clearTimeout(grace)
+        Deferred.doneUnsafe(signal, Exit.succeed(result))
+      }
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
       proc.on("exit", (...args) => {
         exit = args
+        // A background child (`server &`) can hold the output pipes open long after this process
+        // exited. Wait briefly for the remaining output, then report the exit anyway.
+        grace = setTimeout(() => finish(args), EXIT_GRACE_MS)
+        grace.unref?.()
       })
-      proc.on("close", (...args) => {
-        if (end) return
-        end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
-      })
+      proc.on("close", (...args) => finish(exit ?? args))
       proc.on("spawn", () => {
         resume(Effect.succeed([proc, signal]))
       })
@@ -391,7 +400,12 @@ export const make = Effect.gen(function* () {
                 return yield* Effect.void
               }
               const send = (s: NodeJS.Signals) =>
-                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
+                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s)).pipe(
+                  // Killing a process that has already exited fails; there is nothing left to stop.
+                  Effect.catch((error) =>
+                    proc.exitCode !== null || proc.signalCode !== null ? Effect.void : Effect.fail(error),
+                  ),
+                )
               const sig = command.options.killSignal ?? "SIGTERM"
               const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
               const escalated = command.options.forceKillAfter

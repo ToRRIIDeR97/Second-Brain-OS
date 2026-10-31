@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
-import { dirname, join, relative, sep } from "node:path"
+import { basename, dirname, join, relative, sep } from "node:path"
 
 /** Written last in the new userData folder, so an interrupted copy is resumed on the next start. */
 export const marker = ".user-data-migrated"
@@ -35,6 +35,10 @@ export function migrateUserData(from: string | undefined, to: string, move = ren
   const source = realpathSync(from)
   const temp = `${to}.migrating-${randomUUID()}`
   mkdirSync(dirname(to), { recursive: true })
+  // A failed start leaves its copy behind; drop it before copying again so retries don't pile up.
+  for (const name of readdirSync(dirname(to))) {
+    if (name.startsWith(`${basename(to)}.migrating-`)) rmSync(join(dirname(to), name), { recursive: true, force: true })
+  }
   try {
     cpSync(source, temp, {
       recursive: true,

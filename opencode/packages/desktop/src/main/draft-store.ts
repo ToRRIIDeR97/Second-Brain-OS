@@ -1,3 +1,4 @@
+import { chmodSync, existsSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import { eq, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-sqlite"
@@ -36,11 +37,21 @@ export function requireDraftBlob(value: unknown) {
   return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
 }
 
+// Drafts stay unencrypted, like the session database beside them, so the files
+// are at least kept from other local users. Windows ACLs already scope userData.
+export function ownerOnly(filename: string) {
+  if (process.platform === "win32" || filename === ":memory:") return
+  for (const file of [filename, `${filename}-wal`, `${filename}-shm`]) {
+    if (existsSync(file)) chmodSync(file, 0o600)
+  }
+}
+
 export function createDesktopDraftStore(filename: string, onFlushError?: (error: unknown) => void) {
   const native = new DatabaseSync(filename)
   native.exec(
     "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS document (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS blob (id TEXT PRIMARY KEY, data BLOB NOT NULL);",
   )
+  ownerOnly(filename)
   const db = drizzle({ client: native })
   const used = new Set<string>()
   db.select({ value: documents.value })

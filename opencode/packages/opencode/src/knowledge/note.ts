@@ -78,21 +78,13 @@ export const list = Effect.fn("KnowledgeNote.list")(function* (search = "") {
     },
   )
   const query = search.trim().toLowerCase()
-  // Read every candidate so search sees all notes; keep only matching summaries in memory.
+  // Check every candidate so search sees all notes; only notes changed since the last query are read.
   // One unreadable, oversized or malformed note is skipped so it cannot hide the rest.
   const notes = yield* Effect.forEach(
     paths.map((path) => path.replaceAll("\\", "/")).filter(isNotePath),
     (path) =>
       (query
-        ? readCard(path).pipe(
-            Effect.map((note) =>
-              [note.body, note.info.title, note.info.path, ...note.info.tags, ...note.info.links].some((value) =>
-                value.toLowerCase().includes(query),
-              )
-                ? note.info
-                : undefined,
-            ),
-          )
+        ? cachedSearchEntry(path).pipe(Effect.map((entry) => (entry.text.includes(query) ? entry.info : undefined)))
         : cachedSummary(path)
       ).pipe(
         Effect.catch((error) =>
@@ -135,6 +127,7 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
     const files = yield* FileMutation.Service
     const target = yield* mutation.resolve({ path: normalizedPath, kind: "file" })
     const source = encode(info, {}, input.body, false)
+    yield* requireWritableSize(source)
     yield* files
       .create({ target, content: source })
       .pipe(
@@ -161,6 +154,7 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
     catch: (error) => (error instanceof InvalidError ? error : new InvalidError({ reason: "invalid_note" })),
   })
   const source = encode(info, card.data, input.body, card.bom)
+  yield* requireWritableSize(source)
   const mutation = yield* LocationMutation.Service
   const files = yield* FileMutation.Service
   const target = yield* mutation.resolve({ path: normalizedPath, kind: "file" })
@@ -174,6 +168,29 @@ export const write = Effect.fn("KnowledgeNote.write")(function* (path: string, i
   // A save within the same millisecond and size would otherwise keep the old summary.
   summaries.delete(target.canonical)
   return decode(normalizedPath, source)
+})
+
+export const DeleteInput = Schema.Struct({
+  expectedRevision: Schema.String,
+})
+export type DeleteInput = typeof DeleteInput.Type
+
+/** Removes a note only while it still has the revision the caller last read. */
+export const remove = Effect.fn("KnowledgeNote.remove")(function* (path: string, input: DeleteInput) {
+  const normalizedPath = yield* notePath(path)
+  const card = yield* readCard(normalizedPath)
+  if (input.expectedRevision !== card.revision) return yield* new ConflictError({ reason: "stale" })
+  const mutation = yield* LocationMutation.Service
+  const files = yield* FileMutation.Service
+  const target = yield* mutation.resolve({ path: normalizedPath, kind: "file" })
+  yield* files.remove({ target })
+  summaries.delete(target.canonical)
+  const searched = searchEntries.get(target.canonical)
+  if (searched) {
+    searchEntries.delete(target.canonical)
+    searchTextSize -= searched.text.length
+  }
+  return card.info
 })
 
 const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
@@ -193,6 +210,10 @@ const readCard = Effect.fn("KnowledgeNote.readCard")(function* (path: string) {
   // The exact bytes read are the compare-and-swap baseline for a later save.
   return { ...card, bytes }
 })
+
+/** Reads refuse a note above the size cap, so a save (body plus front matter) must not produce one. */
+const requireWritableSize = (source: string) =>
+  Buffer.byteLength(source, "utf8") > maxBytes ? Effect.fail(new InvalidError({ reason: "too_large" })) : Effect.void
 
 /** Refuse a note above the size cap before reading it, so one huge file cannot stall a list. */
 const requireReadableSize = Effect.fnUntraced(function* (canonical: string, path: string) {
@@ -227,6 +248,46 @@ const cachedSummary = Effect.fnUntraced(function* (path: string) {
   const oldest = summaries.keys().next()
   if (summaries.size > summaryLimit && !oldest.done) summaries.delete(oldest.value)
   return card.info
+})
+
+// Searchable text per note, kept while its mtime and size are unchanged, so a query reads only notes that
+// changed since the last one. Bounded by total characters; the least recently used notes are dropped first.
+const searchEntries = new Map<string, { mtime: number; size: number; info: Info; text: string }>()
+const searchTextLimit = 32 * 1024 * 1024
+let searchTextSize = 0
+
+const cachedSearchEntry = Effect.fnUntraced(function* (path: string) {
+  const mutation = yield* LocationMutation.Service
+  const target = yield* mutation.resolve({ path, kind: "file" })
+  const stat = yield* requireReadableSize(target.canonical, path)
+  const mtime = Option.match(stat.mtime, { onNone: () => -1, onSome: (date) => date.getTime() })
+  const size = Number(stat.size)
+  const cached = searchEntries.get(target.canonical)
+  if (cached) {
+    searchEntries.delete(target.canonical)
+    searchTextSize -= cached.text.length
+  }
+  const entry =
+    cached && mtime >= 0 && cached.mtime === mtime && cached.size === size
+      ? cached
+      : yield* readCard(path).pipe(
+          Effect.map((card) => ({
+            mtime,
+            size,
+            info: card.info,
+            text: [card.body, card.info.title, card.info.path, ...card.info.tags, ...card.info.links]
+              .join("\n")
+              .toLowerCase(),
+          })),
+        )
+  searchEntries.set(target.canonical, entry)
+  searchTextSize += entry.text.length
+  for (const [key, value] of searchEntries) {
+    if (searchTextSize <= searchTextLimit || key === target.canonical) break
+    searchEntries.delete(key)
+    searchTextSize -= value.text.length
+  }
+  return entry
 })
 
 const notePath = Effect.fn("KnowledgeNote.notePath")(function* (input: string) {
@@ -355,8 +416,19 @@ export function extractLinks(body: string) {
   ].slice(0, 200)
 }
 
-function titleFromBody(body: string) {
-  return body.match(/^\s{0,3}#\s+(.+?)\s*#*\s*$/m)?.[1]?.trim() ?? ""
+/**
+ * The first `# Heading` line's text. The regex has no overlapping quantifiers, so it runs in linear
+ * time; the closing `#` sequence is trimmed in code for the same reason.
+ */
+export function titleFromBody(body: string) {
+  const heading = /^ {0,3}#[ \t]+(.*)$/m.exec(body)?.[1]
+  if (!heading) return ""
+  const text = heading.slice(0, 1000).trimEnd()
+  let end = text.length
+  while (end > 0 && text[end - 1] === "#") end--
+  // A closing sequence counts only after a space, as in CommonMark: "# C#" keeps its "#".
+  const closed = end === 0 || text[end - 1] === " " || text[end - 1] === "\t"
+  return (closed ? text.slice(0, end) : text).trim()
 }
 
 function dateString(value: unknown) {

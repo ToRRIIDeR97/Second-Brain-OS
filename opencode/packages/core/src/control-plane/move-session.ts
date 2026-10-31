@@ -121,7 +121,8 @@ const layer = Layer.effect(
           .discard({
             repository,
             path: current.location.directory,
-            index: "preserve",
+            // The captured patch is `git diff HEAD`, so staged changes moved too and are unstaged here.
+            index: "reset",
             untracked: "remove",
           })
           .pipe(

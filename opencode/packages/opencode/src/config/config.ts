@@ -42,6 +42,12 @@ function mergeConfig(target: Info, source: Info): Info {
   return mergeDeep(target, source) as Info
 }
 
+// A folder's own config can't turn on auto-sharing or choose the share server.
+function withoutSharing(config: Info): Info {
+  const { share: _share, enterprise: _enterprise, ...rest } = config
+  return rest
+}
+
 function mergeConfigConcatArrays(target: Info, source: Info): Info {
   const merged = mergeConfig(target, source)
   if (target.instructions && source.instructions) {
@@ -405,7 +411,7 @@ const layer = Layer.effect(
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
-            yield* merge(file, yield* loadFile(file, authEnv), "local")
+            yield* merge(file, withoutSharing(yield* loadFile(file, authEnv)), "local")
           }
         }
 
@@ -421,12 +427,18 @@ const layer = Layer.effect(
 
         const deps: Fiber.Fiber<void>[] = []
 
+        const userDirectories = new Set([
+          Global.Path.config,
+          path.join(Global.Path.home, ".opencode"),
+          ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+        ])
         for (const dir of directories) {
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
-              yield* merge(source, yield* loadFile(source, authEnv))
+              const loaded = yield* loadFile(source, authEnv)
+              yield* merge(source, userDirectories.has(dir) ? loaded : withoutSharing(loaded))
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []

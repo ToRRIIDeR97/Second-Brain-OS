@@ -1,6 +1,7 @@
 export * as SkillTool from "./skill"
 
 import path from "path"
+import { Wildcard } from "../util/wildcard"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
@@ -76,7 +77,7 @@ const layer = Layer.effectDiscard(
                 yield* permission.assert({
                   action: name,
                   resources: [skill.name],
-                  save: [skill.name],
+                  save: [Wildcard.literal(skill.name)],
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },

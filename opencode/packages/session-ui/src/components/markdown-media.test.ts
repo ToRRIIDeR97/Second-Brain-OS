@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isLocalMediaSource, stripRemoteMedia } from "./markdown-media"
+import { isLocalMediaSource, restrictStyle, stripRemoteMedia } from "./markdown-media"
 
 function element(tagName: string, attributes: Record<string, string>) {
   const values = new Map(Object.entries(attributes))
@@ -35,4 +35,43 @@ test("remote image and media sources are removed before the HTML renders", () =>
   const link = element("A", { href: "https://example.com" })
   stripRemoteMedia(link as unknown as Element)
   expect(link.values.get("href")).toBe("https://example.com")
+})
+
+function styled(declarations: Record<string, string>) {
+  const values = new Map(Object.entries(declarations))
+  const removed: string[] = []
+  const style = new Proxy(
+    {
+      getPropertyValue: (property: string) => values.get(property) ?? "",
+      removeProperty: (property: string) => {
+        values.delete(property)
+        removed.push(property)
+        return ""
+      },
+    },
+    {
+      get: (target, key) => {
+        if (key === "length") return values.size
+        if (typeof key === "string" && /^\d+$/.test(key)) return [...values.keys()][Number(key)]
+        return target[key as keyof typeof target]
+      },
+    },
+  ) as unknown as { length: number; [index: number]: string; getPropertyValue(p: string): string; removeProperty(p: string): string }
+  let attribute = true
+  return {
+    node: { style, hasAttribute: () => attribute, removeAttribute: () => void (attribute = false) },
+    values,
+    attribute: () => attribute,
+  }
+}
+
+test("markdown keeps code colours but drops layout and url() styles", () => {
+  const code = styled({ color: "#fff", "font-style": "italic", "--shiki-dark": "#000" })
+  restrictStyle(code.node)
+  expect([...code.values.keys()]).toEqual(["color", "font-style", "--shiki-dark"])
+
+  const overlay = styled({ position: "fixed", "z-index": "9999", top: "0", "background-color": "url(https://x.test/a.png)" })
+  restrictStyle(overlay.node)
+  expect(overlay.values.size).toBe(0)
+  expect(overlay.attribute()).toBe(false)
 })

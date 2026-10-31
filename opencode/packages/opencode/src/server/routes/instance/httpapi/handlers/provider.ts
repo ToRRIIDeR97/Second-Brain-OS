@@ -100,7 +100,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         })
         const result = {
           all: Object.entries(providers).map(([id, item]) =>
-            id in connected ? encodeInfo(Provider.toPublicInfo(item)) : encodeShared(shared.database[id]),
+            id in connected ? encodeInfo(Provider.toRendererInfo(item)) : encodeShared(shared.database[id]),
           ),
           default: head.default,
           connected: head.connected,

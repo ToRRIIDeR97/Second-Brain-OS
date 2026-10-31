@@ -127,7 +127,8 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
     const reset = !previous || previous.language !== language || !request.text.startsWith(previous.source)
     const stream = reset
       ? {
-          language: label,
+          // The Shiki language, which `reset` compares against; "svg" streams as "xml".
+          language,
           source: "",
           tokenizer: new ShikiStreamTokenizer({ highlighter: instance, lang: language, theme: "OpenCode" }),
         }

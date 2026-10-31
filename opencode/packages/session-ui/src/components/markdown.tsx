@@ -343,7 +343,8 @@ function initialResult(text: string, key: string | undefined, projection: Projec
       if (block.mode === "code") return []
       const cacheKey = `${base}:${index}:${block.mode}`
       const cached = getCachedMarkdown(cacheKey)
-      if (cached?.raw !== block.raw) return []
+      // The hash covers `src`, which can change without `raw` (reference definitions arriving later).
+      if (cached?.raw !== block.raw || cached.hash !== checksum(block.src)) return []
       return [{ key: `${owner}:${cacheKey}`, mode: block.mode, ...cached }]
     })
     if (blocks.length === projection.blocks.length) return { text, blocks }
@@ -467,15 +468,15 @@ export function Markdown(
             return rendered
           }
 
+          const hash = checksum(block.src)
           if (key) {
             const cached = getCachedMarkdown(key)
-            if (cached?.raw === block.raw) {
+            if (cached?.raw === block.raw && cached.hash === hash) {
               touchCachedMarkdown(key, cached)
               return { key: blockKey, mode: block.mode, ...cached }
             }
           }
 
-          const hash = checksum(block.raw)
           const safe = sanitizeMarkdown(await parseMarkdown(block.src))
           if (key && hash) touchCachedMarkdown(key, { raw: block.raw, hash, html: safe })
           return { key: blockKey, mode: block.mode, raw: block.raw, hash: hash ?? "", html: safe }

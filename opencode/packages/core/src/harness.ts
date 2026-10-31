@@ -1,5 +1,6 @@
 export * as HarnessRuntime from "./harness"
 
+import { Wildcard } from "./util/wildcard"
 import {
   InvalidProviderOutputReason,
   LLMClient,
@@ -75,6 +76,8 @@ export interface StreamInput {
   readonly request: LLMRequest
   readonly model?: Harness.ModelSelection
   readonly revision?: number
+  /** Links an approval to the tool call it gates, by the call ID the harness's tool events use. */
+  readonly permissionSource?: (callID: string) => Effect.Effect<PermissionV2.Source>
 }
 
 export interface Interface {
@@ -452,7 +455,7 @@ const layer = Layer.effect(
           settings,
           input.directory,
           (request) =>
-            handleCodexRequest(request, input.sessionID, input.directory, permissions, questions, gate.guard),
+            handleCodexRequest(request, input, permissions, questions, gate.guard),
           delegation,
         )
         const revision = input.revision ?? 0
@@ -548,13 +551,22 @@ const layer = Layer.effect(
           }),
         approve: (request) =>
           gate.guard(
-            approve(permissions, {
-              sessionID: input.sessionID,
-              action: request.action,
-              resources: [...request.resources],
-              save: [...request.resources],
-              metadata: { harness: instance.id, title: request.title, ...(request.kind ? { kind: request.kind } : {}) },
-            }),
+            permissionSource(input, request.callID).pipe(
+              Effect.flatMap((source) =>
+                approve(permissions, {
+                  sessionID: input.sessionID,
+                  action: request.action,
+                  resources: [...request.resources],
+                  save: request.resources.map(Wildcard.literal),
+                  metadata: {
+                    harness: instance.id,
+                    title: request.title,
+                    ...(request.kind ? { kind: request.kind } : {}),
+                  },
+                  ...(source ? { source } : {}),
+                }),
+              ),
+            ),
             false,
           ),
       }).pipe(
@@ -1697,23 +1709,28 @@ function codexItemEvents(method: "item/started" | "item/completed", item: Record
   ]
 }
 
-function handleCodexRequest(
+export function handleCodexRequest(
   request: { readonly method: string; readonly params?: unknown },
-  sessionID: SessionID,
-  directory: string,
+  input: StreamInput,
   permissions: PermissionV2.Interface,
   questions: QuestionV2.Interface,
   guard: TurnGate["guard"],
 ) {
+  const { sessionID, directory } = input
   const params = isRecord(request.params) ? request.params : {}
+  // Codex approvals name the item whose tool events carry the same ID.
+  const ask = (assert: PermissionV2.AssertInput) =>
+    permissionSource(input, string(params.itemId)).pipe(
+      Effect.flatMap((source) => approve(permissions, { ...assert, ...(source ? { source } : {}) })),
+    )
   if (request.method === "item/commandExecution/requestApproval") {
     const command = string(params.command) ?? "command"
     return guard(
-      approve(permissions, {
+      ask({
         sessionID,
         action: "bash",
         resources: [command],
-        save: [command],
+        save: [Wildcard.literal(command)],
         metadata: {
           harness: "codex",
           cwd: string(params.cwd) ?? directory,
@@ -1726,11 +1743,11 @@ function handleCodexRequest(
   if (request.method === "item/fileChange/requestApproval") {
     const resource = string(params.grantRoot) ?? directory
     return guard(
-      approve(permissions, {
+      ask({
         sessionID,
         action: "edit",
         resources: [resource],
-        save: [resource],
+        save: [Wildcard.literal(resource)],
         metadata: {
           harness: "codex",
           ...(string(params.reason) ? { reason: string(params.reason) } : {}),
@@ -1743,11 +1760,11 @@ function handleCodexRequest(
     const requested = isRecord(params.permissions) ? params.permissions : {}
     const resource = json(requested)
     return guard(
-      approve(permissions, {
+      ask({
         sessionID,
         action: "request_permissions",
         resources: [resource],
-        save: [resource],
+        save: [Wildcard.literal(resource)],
         metadata: {
           harness: "codex",
           cwd: string(params.cwd) ?? directory,
@@ -1810,6 +1827,12 @@ function approve(
   options?: PermissionV2.AssertOptions,
 ) {
   return Effect.exit(permissions.assert(input, options)).pipe(Effect.map(Exit.isSuccess))
+}
+
+function permissionSource(input: StreamInput, callID: string | undefined) {
+  return callID && input.permissionSource
+    ? input.permissionSource(callID).pipe(Effect.map((source): PermissionV2.Source | undefined => source))
+    : Effect.succeed(undefined)
 }
 
 type Catalog = { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }

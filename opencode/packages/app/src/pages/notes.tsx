@@ -1,5 +1,7 @@
 import { useBeforeLeave, useNavigate, useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
@@ -18,6 +20,7 @@ import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { focusWhenConnected } from "@/utils/focus-when-connected"
 import {
+  deleteNote,
   listNotes,
   readNote,
   SecondBrainRequestError,
@@ -54,6 +57,7 @@ type State = {
 
 export default function NotesPage() {
   const language = useLanguage()
+  const dialog = useDialog()
   const navigate = useNavigate()
   const layout = useLayout()
   const platform = usePlatform()
@@ -172,6 +176,29 @@ export default function NotesPage() {
       projectIds,
       baseProjectIds: projectIds,
       tags,
+      baseTags: tags,
+      revision: document.revision,
+      error: "",
+      conflict: false,
+    })
+  }
+
+  // After a save, the server copy becomes the base. A field edited while the request ran keeps its
+  // newer text (and stays unsaved); the others take the server copy, which may be normalized.
+  const applySaved = (
+    document: NoteDocument,
+    sent: { body: string; title: string; projectIds: string; tags: string },
+  ) => {
+    const projectIds = [...document.info.projectIds]
+    const tags = document.info.tags.join(", ")
+    setState({
+      ...(state.body === sent.body ? { body: document.body } : {}),
+      ...(state.title === sent.title ? { title: document.info.title } : {}),
+      ...(state.projectIds.join("\0") === sent.projectIds ? { projectIds } : {}),
+      ...(state.tags === sent.tags ? { tags } : {}),
+      baseBody: document.body,
+      baseTitle: document.info.title,
+      baseProjectIds: projectIds,
       baseTags: tags,
       revision: document.revision,
       error: "",
@@ -308,6 +335,7 @@ export default function NotesPage() {
       return
     }
     const directory = state.directory
+    const sent = { body: state.body, title: state.title, projectIds: state.projectIds.join("\0"), tags: state.tags }
     setState({ saving: true, error: "" })
     try {
       const document = await writeNote(client(directory), {
@@ -321,7 +349,8 @@ export default function NotesPage() {
           .filter(Boolean),
         expectedRevision: state.revision,
       })
-      applyDocument(document)
+      // Skip if the user opened another note while this one was saving.
+      if (state.directory === directory && state.path === document.info.path) applySaved(document, sent)
       storeSummary(directory, document.info)
       // Patch the open search results in place instead of re-reading every note file.
       if (state.directory === directory)
@@ -332,6 +361,64 @@ export default function NotesPage() {
       setState("saving", false)
     }
   }
+
+  // Deleting sends the revision last read, so a note changed elsewhere is not removed unseen.
+  const removeNote = async () => {
+    const directory = state.directory
+    const path = state.path
+    if (!directory || !path || !state.revision) return
+    setState({ saving: true, error: "" })
+    try {
+      await deleteNote(client(directory), { path, expectedRevision: state.revision })
+      if (state.directory === directory) {
+        noteActions.mutate((items) => items?.filter((item) => item.path !== path))
+        matchActions.mutate((items) => items?.filter((item) => item.path !== path))
+      }
+      if (state.path === path)
+        setState({
+          path: "",
+          body: "",
+          baseBody: "",
+          title: "",
+          baseTitle: "",
+          projectIds: [],
+          baseProjectIds: [],
+          tags: "",
+          baseTags: "",
+          revision: "",
+        })
+    } catch (error) {
+      report(error)
+    } finally {
+      setState("saving", false)
+    }
+  }
+
+  const confirmDelete = () =>
+    dialog.show(() => (
+      <DialogV2 fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup
+            title={language.t("secondBrain.notes.delete.title")}
+            description={language.t("secondBrain.notes.delete.confirm", { name: state.title || state.path })}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </ButtonV2>
+          <ButtonV2
+            variant="danger"
+            onClick={() => {
+              dialog.close()
+              void removeNote()
+            }}
+          >
+            {language.t("secondBrain.notes.delete.button")}
+          </ButtonV2>
+        </DialogFooter>
+      </DialogV2>
+    ))
 
   // Save from anywhere on the page: the preview, the toolbar or fullscreen, not only the textarea.
   command.register("notes", () => [
@@ -586,6 +673,9 @@ export default function NotesPage() {
                       {language.t("secondBrain.notes.discard")}
                     </ButtonV2>
                   </Show>
+                  <ButtonV2 size="small" variant="ghost" disabled={state.saving || !state.revision} onClick={confirmDelete}>
+                    {language.t("common.delete")}
+                  </ButtonV2>
                   {saveButton()}
                 </header>
 

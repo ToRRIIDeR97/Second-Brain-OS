@@ -38,8 +38,14 @@ export function wslArgs(args: string[], distro?: string | null, user?: string | 
   return [...(distro ? ["-d", distro] : []), ...(user ? ["--user", user] : []), "--", ...args]
 }
 
+// Always the System32 copy: a bare name would also search the current directory (the user's home),
+// and the sidecar's wsl process receives the server password.
+export function wslExecutable() {
+  return resolveSystem32Command("wsl.exe")
+}
+
 export function runWsl(args: string[], opts: RunWslOptions = {}) {
-  return runCommand("wsl", args, opts)
+  return runCommand(wslExecutable(), args, opts)
 }
 
 function runPowerShell(command: string, opts: RunWslOptions = {}) {
@@ -257,7 +263,7 @@ export async function installWslRuntimeElevated(opts?: RunWslOptions) {
 
 export async function installWslDistro(name: string, opts?: RunWslOptions) {
   return runInteractiveCommand(
-    resolveSystem32Command("wsl.exe"),
+    wslExecutable(),
     ["--install", "-d", name, "--web-download", "--no-launch"],
     withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
     DEFAULT_WSL_INSTALL_TIMEOUT_MS,

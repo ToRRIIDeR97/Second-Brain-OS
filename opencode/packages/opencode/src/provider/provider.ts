@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { redactSecrets } from "@/config/redact"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
@@ -1101,6 +1102,25 @@ export function toPublicInfo(provider: Info): Info {
       },
     ),
   )
+}
+
+/**
+ * The copy of a provider sent to the renderer: `toPublicInfo` without the key, and without token or
+ * header values in its options or its models. Internal callers keep using `toPublicInfo`.
+ */
+export function toRendererInfo(provider: Info): Info {
+  const info = toPublicInfo(provider)
+  const { key: _key, ...rest } = info
+  return {
+    ...rest,
+    options: redactSecrets(info.options),
+    models: Object.fromEntries(
+      Object.entries(info.models).map(([id, model]) => [
+        id,
+        { ...model, headers: {}, options: redactSecrets(model.options) },
+      ]),
+    ),
+  }
 }
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {

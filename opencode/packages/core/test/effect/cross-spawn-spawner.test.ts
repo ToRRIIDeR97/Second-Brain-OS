@@ -62,6 +62,24 @@ async function gone(pid: number, timeout = 5_000) {
 describe("cross-spawn spawner", () => {
   describe("basic spawning", () => {
     fx.effect(
+      "reports the exit while a background child still holds the output pipes",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const pidFile = path.join(os.tmpdir(), `opencode-bg-${process.pid}-${Date.now()}`)
+        const started = Date.now()
+        // `sleep 30 &` inherits stdout, so the pipes stay open after sh exits.
+        const handle = yield* ChildProcess.make("sh", ["-c", `sleep 30 & echo $! > ${pidFile}; exit 3`])
+        const code = yield* handle.exitCode
+        expect(Number(code)).toBe(3)
+        expect(Date.now() - started).toBeLessThan(3_000)
+        // Clean up the background child the shell left behind.
+        const pid = Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8")))
+        if (pid && alive(pid)) process.kill(pid)
+        yield* Effect.promise(() => fs.rm(pidFile, { force: true }))
+      }),
+    )
+
+    fx.effect(
       "captures stdout",
       Effect.gen(function* () {
         const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>

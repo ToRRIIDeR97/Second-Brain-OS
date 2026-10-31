@@ -100,6 +100,9 @@ const accessTokens = createGoogleAccessTokens({
 
 export function createGoogleCalendarService(): GoogleCalendarPlatform {
   let busy = false
+  // The browser consent can take minutes; it has its own guard so syncs and writes aren't blocked, and
+  // starting Connect again cancels it (the user may have closed the Google tab).
+  let consent: AbortController | undefined
   // The last sync failure per account; in memory only, so a restart shows a clean slate until the next sync.
   const errors = new Map<string, string>()
 
@@ -142,9 +145,14 @@ export function createGoogleCalendarService(): GoogleCalendarPlatform {
     const windowId = input.windowId
     if (!Number.isSafeInteger(windowId) || windowId! <= 0) throw new Error("google_window_invalid")
     const client = resolveGoogleClient(input, builtInClient)
+    consent?.abort()
+    const controller = new AbortController()
+    consent = controller
+    const tokens = await authorize({ ...client, access: input.access, windowId: windowId!, signal: controller.signal })
+    if (consent === controller) consent = undefined
+    if (busy) throw new Error("google_operation_busy")
     busy = true
     try {
-      const tokens = await authorize({ ...client, access: input.access, windowId: windowId! })
       if (!tokens.access_token || !tokens.refresh_token) throw new Error("google_refresh_token_missing")
       const calendar = await providerJson<{ summary?: string; id?: string }>(calendarEndpoint, tokens.access_token)
       // The primary calendar's ID is the account's address, so signing in again renews that account.
@@ -414,6 +422,7 @@ async function authorize(input: {
   clientSecret: string
   access: "read" | "write"
   windowId: number
+  signal: AbortSignal
 }) {
   const verifier = randomBytes(32).toString("base64url")
   const state = `${input.windowId}.${randomBytes(24).toString("base64url")}`
@@ -464,11 +473,16 @@ async function authorize(input: {
   url.searchParams.set("state", state)
   url.searchParams.set("code_challenge", pkceChallenge(verifier))
   url.searchParams.set("code_challenge_method", "S256")
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const cancelled = () => callback.reject(new Error("google_oauth_cancelled"))
+  input.signal.addEventListener("abort", cancelled, { once: true })
   try {
     await shell.openExternal(url.href)
     const code = await Promise.race([
       callback.promise,
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("google_oauth_timeout")), oauthTimeoutMs)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("google_oauth_timeout")), oauthTimeoutMs)
+      }),
     ])
     return requestGoogleToken(netFetch, tokenEndpoint, {
       client_id: input.clientId,
@@ -479,6 +493,8 @@ async function authorize(input: {
       redirect_uri: redirectUri,
     })
   } finally {
+    clearTimeout(timer)
+    input.signal.removeEventListener("abort", cancelled)
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 }

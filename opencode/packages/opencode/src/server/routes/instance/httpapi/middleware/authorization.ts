@@ -2,7 +2,9 @@ import { ServerAuth } from "@/server/auth"
 import { Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
-import { hasPtyConnectTicketURL } from "@/server/shared/pty-ticket"
+import { hasPtyConnectTicketURL, PTY_CONNECT_TICKET_QUERY } from "@/server/shared/pty-ticket"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { CorsConfig, isAllowedRequestOrigin } from "@opencode-ai/server/cors"
 import { isPublicUIPath } from "@/server/shared/public-ui"
 export {
   Authorization as ServerAuthorization,
@@ -136,11 +138,21 @@ export const ptyConnectAuthorizationLayer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* ServerAuth.Config
     if (!ServerAuth.required(config)) return PtyConnectAuthorization.of((effect) => effect)
+    const tickets = yield* PtyTicket.Service
     return PtyConnectAuthorization.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
         const url = new URL(request.url, "http://localhost")
-        if (hasPtyConnectTicketURL(url)) return yield* effect
+        // A ticket stands in for credentials, so check it (without consuming it) and the Origin here,
+        // before routing loads an instance. The handler consumes it against the full scope.
+        if (hasPtyConnectTicketURL(url)) {
+          const ptyID = url.pathname.split("/")[2] ?? ""
+          const allowed =
+            isAllowedRequestOrigin(request.headers.origin, request.headers.host, yield* CorsConfig) &&
+            (yield* tickets.check({ ticket: url.searchParams.get(PTY_CONNECT_TICKET_QUERY) ?? "", ptyID }))
+          if (allowed) return yield* effect
+          return yield* new HttpApiError.Unauthorized({})
+        }
         return yield* credentialFromURL(url, request).pipe(
           Effect.flatMap((credential) => validateCredential(effect, credential, config)),
         )

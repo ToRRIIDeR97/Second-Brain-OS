@@ -98,6 +98,8 @@ type CalendarState = {
   googleClientSecret: string
   googleAccess: "read" | "write"
   googleBusy: boolean
+  // The browser consent is open; Connect stays clickable to reopen it (the user may have closed the tab).
+  googleConnecting: boolean
   googleError: string
   googleConfirm: "" | "save" | "delete"
   googleWriteKey: string
@@ -188,6 +190,7 @@ export default function CalendarPage() {
     googleClientSecret: "",
     googleAccess: "read",
     googleBusy: false,
+    googleConnecting: false,
     googleError: "",
     googleConfirm: "",
     googleWriteKey: "",
@@ -474,6 +477,7 @@ export default function CalendarPage() {
   // Typed credentials are needed unless the build ships its own client and the user hasn't opted out of it.
   const googleTypedClient = () => !googleConnection.latest?.builtInClient || state.googleOwnClient
 
+  let connectAttempt = 0
   const connectGoogle = async () => {
     const google = platform.googleCalendar
     if (!google) return
@@ -482,7 +486,9 @@ export default function CalendarPage() {
       setState("googleError", language.t("secondBrain.calendar.google.error.credentials"))
       return
     }
-    setState({ googleBusy: true, googleError: "" })
+    // A newer Connect cancels the pending consent in the main process; only the latest attempt reports.
+    const attempt = ++connectAttempt
+    setState({ googleConnecting: true, googleError: "" })
     let connected = false
     try {
       const connection = await google.connect(
@@ -490,13 +496,15 @@ export default function CalendarPage() {
           ? { clientId: state.googleClientId, clientSecret: state.googleClientSecret, access: state.googleAccess }
           : { access: state.googleAccess },
       )
+      if (attempt !== connectAttempt) return
       googleActions.mutate(connection)
       setState({ googleClientSecret: "", googlePanel: false, googleAdding: false })
       connected = true
     } catch (error) {
+      if (attempt !== connectAttempt) return
       setState("googleError", googleMessage(error))
     } finally {
-      setState("googleBusy", false)
+      if (attempt === connectAttempt) setState("googleConnecting", false)
     }
     if (connected) await syncGoogle()
   }
@@ -542,6 +550,7 @@ export default function CalendarPage() {
         ...result.tasks.map((task) => providerTask(task, localByProvider.get(taskKey(task)))),
       ]
       const saved = await writeCalendar(client(target), merged, snapshot()?.revision, mergedTasks)
+      if (directory() !== target) return
       eventActions.mutate(saved)
       googleActions.mutate(result.connection)
     } catch (error) {
@@ -571,6 +580,7 @@ export default function CalendarPage() {
         snapshot()?.revision,
         (snapshot()?.tasks ?? []).filter(keep),
       )
+      if (directory() !== target) return
       eventActions.mutate(saved)
       setState({ editing: false, ...(connection.connected ? {} : { googlePanel: false }) })
     } catch (error) {
@@ -581,10 +591,13 @@ export default function CalendarPage() {
   }
 
   const persist = async (next: CalendarEvent[]) => {
-    if (!directory()) return
+    const workspace = directory()
+    if (!workspace) return
     setState({ saving: true, error: "" })
     try {
-      const saved = await writeCalendar(client(directory()), next, snapshot()?.revision, snapshot()?.tasks)
+      const saved = await writeCalendar(client(workspace), next, snapshot()?.revision, snapshot()?.tasks)
+      // A workspace switch during the write leaves the view on another calendar; don't overwrite it.
+      if (directory() !== workspace) return
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft() })
     } catch (error) {
@@ -600,8 +613,12 @@ export default function CalendarPage() {
   }
 
   const persistTasks = async (tasks: ReadonlyArray<PlannerTask>) => {
-    if (!directory()) return
-    const current = snapshot()?.tasks ?? []
+    // Captured before the Google round trip: the user can switch workspace while it runs, and the
+    // result belongs to the calendar these tasks came from.
+    const workspace = directory()
+    const base = snapshot()
+    if (!workspace) return
+    const current = base?.tasks ?? []
     const removed = current.find((task) => task.source === "google" && !tasks.some((next) => next.id === task.id))
     const changed = tasks.find((task) => {
       if (task.source !== "google") return false
@@ -653,8 +670,8 @@ export default function CalendarPage() {
       }
       await googleActions.refetch()
     }
-    const saved = await writeCalendar(client(directory()), snapshot()?.events ?? [], snapshot()?.revision, next)
-    eventActions.mutate(saved)
+    const saved = await writeCalendar(client(workspace), base?.events ?? [], base?.revision, next)
+    if (directory() === workspace) eventActions.mutate(saved)
   }
 
   const toggleTask = async (task: PlannerTask) => {
@@ -920,6 +937,7 @@ export default function CalendarPage() {
               : [...current, savedEvent]
           })()
       const saved = await writeCalendar(client(target), next, snapshot()?.revision, snapshot()?.tasks)
+      if (directory() !== target) return
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft(), googleConfirm: "", googleWriteKey: "" })
       await googleActions.refetch()
@@ -1411,7 +1429,9 @@ export default function CalendarPage() {
                               <ButtonV2 type="submit" variant="contrast" disabled={state.googleBusy}>
                                 {state.googleBusy
                                   ? language.t("secondBrain.calendar.google.waiting")
-                                  : googleTypedClient()
+                                  : state.googleConnecting
+                                    ? language.t("secondBrain.calendar.google.reopenBrowser")
+                                    : googleTypedClient()
                                     ? language.t("secondBrain.calendar.google.openBrowser")
                                     : language.t("secondBrain.calendar.google.signIn")}
                               </ButtonV2>

@@ -68,7 +68,10 @@ const APP_IDS: Record<string, string> = {
 }
 const LEGACY_DEV_APP_ID = "ai.opencode.desktop.dev"
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
-const SIDECAR_VERSION = process.env.OPENCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
+// The opt-in v2 sidecar is upstream's `opencode-cli` background service. Only the dev channel bundles
+// that CLI, and the service is meant to outlive the app (`opencode-cli service stop` ends it).
+const SIDECAR_V2_REQUESTED = process.env.OPENCODE_SIDECAR_V2 === "1"
+const SIDECAR_VERSION = SIDECAR_V2_REQUESTED && CHANNEL === "dev" ? "v2" : "v1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 // Covers the sidecar's own graceful stop (6 s) before it is killed.
 const QUIT_STOP_TIMEOUT = 8_000
@@ -154,6 +157,30 @@ function consumeInitialDeepLinks(sender: WebContents) {
     sender.once("destroyed", () => deepLinks.forget(id))
   }
   return deepLinks.consume(id)
+}
+
+function freePort(hostname: string) {
+  return new Promise<number>((resolve, reject) => {
+    const socket = createServer()
+    socket.on("error", reject)
+    socket.listen(0, hostname, () => {
+      const address = socket.address()
+      if (typeof address !== "object" || !address) {
+        socket.close()
+        reject(new Error("Failed to get port"))
+        return
+      }
+      socket.close(() => resolve(address.port))
+    })
+  })
+}
+
+function isPortFree(hostname: string, port: number) {
+  return new Promise<boolean>((resolve) => {
+    const socket = createServer()
+    socket.once("error", () => resolve(false))
+    socket.listen(port, hostname, () => socket.close(() => resolve(true)))
+  })
 }
 
 async function killSidecar() {
@@ -307,6 +334,13 @@ const main = Effect.gen(function* () {
     receiveDeepLinks([url], "open-url")
   })
 
+  // A link that starts the app arrives in this process's own argv on Windows and Linux (macOS uses
+  // open-url). It waits in the deep-link queue until a window subscribes.
+  if (process.platform !== "darwin") {
+    const urls = process.argv.filter((arg) => arg.startsWith(`${DEEP_LINK_SCHEME}://`))
+    if (urls.length) receiveDeepLinks(urls, "argv")
+  }
+
   // The first quit waits (bounded) for the sidecar to stop, then quits again.
   let quitStop: Promise<void> | undefined
   let quitStopped = false
@@ -416,6 +450,8 @@ const main = Effect.gen(function* () {
 
   const loadingTask = yield* Effect.gen(function* () {
     logger.log("sidecar connection started", { version: SIDECAR_VERSION })
+    if (SIDECAR_V2_REQUESTED && SIDECAR_VERSION === "v1")
+      logger.log("v2 sidecar ignored: this channel does not bundle opencode-cli", { channel: CHANNEL })
 
     const env = yield* Effect.promise(() => shellEnv)
     ensureLoopbackNoProxy()
@@ -438,48 +474,41 @@ const main = Effect.gen(function* () {
       return
     }
 
-    const port = yield* Effect.gen(function* () {
-      const fromEnv = process.env.OPENCODE_PORT
-      if (fromEnv) {
-        const parsed = Number.parseInt(fromEnv, 10)
-        if (!Number.isNaN(parsed)) return parsed
-      }
-
-      const res = yield* Deferred.make<number, unknown>()
-      const socket = createServer()
-      socket.on("error", (e) => Deferred.failSync(res, () => e))
-      socket.listen(0, "127.0.0.1", () => {
-        const address = socket.address()
-        if (typeof address !== "object" || !address) {
-          socket.close()
-          Deferred.failSync(res, () => new Error("Failed to get port"))
-          return
-        }
-        const port = address.port
-        socket.close(() => Effect.runSync(Deferred.succeed(res, port)))
+    const parsedPort = Number.parseInt(process.env.OPENCODE_PORT ?? "", 10)
+    const fixedPort = Number.isNaN(parsedPort) ? undefined : parsedPort
+    const hostname = "127.0.0.1"
+    const password = randomUUID()
+    // Restarts after a crash reuse the port and password, so renderers reconnect to the same URL.
+    const startSidecar = (port: number) =>
+      superviseSidecar({
+        spawn: () =>
+          spawnLocalServer(hostname, port, password, {
+            userDataPath: app.getPath("userData"),
+            onStdout: (message) => writeLog("server", "stdout", { message }),
+            onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+            onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
+          }),
+        log: (message, meta) => writeLog("utility", message, meta, "warn"),
       })
 
-      return yield* Deferred.await(res)
-    })
-    const hostname = "127.0.0.1"
-    const url = `http://${hostname}:${port}`
-    const password = randomUUID()
-
-    logger.log("spawning sidecar", { url })
-    // Restarts after a crash reuse the port and password, so renderers reconnect to the same URL.
-    const sidecar = superviseSidecar({
-      spawn: () =>
-        spawnLocalServer(hostname, port, password, {
-          userDataPath: app.getPath("userData"),
-          onStdout: (message) => writeLog("server", "stdout", { message }),
-          onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
-          onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-        }),
-      log: (message, meta) => writeLog("utility", message, meta, "warn"),
-    })
+    let port = fixedPort ?? (yield* Effect.promise(() => freePort(hostname)))
+    logger.log("spawning sidecar", { url: `http://${hostname}:${port}` })
+    let sidecar = startSidecar(port)
     // Set before the start is awaited, so quitting during startup stops the child.
     server = sidecar
-    yield* Effect.promise(() => sidecar.initial.ready)
+    // The picked port is free only until the sidecar binds it. If another process took it in
+    // between, pick a new one instead of failing the launch.
+    for (let attempt = 1; ; attempt++) {
+      const failure = yield* Effect.promise(() => sidecar.initial.ready.then(() => undefined, (error: unknown) => error))
+      if (failure === undefined) break
+      const raced = fixedPort === undefined && attempt < 3 && !(yield* Effect.promise(() => isPortFree(hostname, port)))
+      if (!raced) return yield* Effect.die(failure)
+      port = yield* Effect.promise(() => freePort(hostname))
+      logger.log("sidecar port was taken, retrying", { url: `http://${hostname}:${port}`, attempt })
+      sidecar = startSidecar(port)
+      server = sidecar
+    }
+    const url = `http://${hostname}:${port}`
 
     // Windows are already open; renderers keep their splash until the server answers (or this times out).
     yield* Effect.tryPromise({ try: (signal) => sidecar.initial.waitHealthy(signal), catch: (error) => error }).pipe(

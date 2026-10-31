@@ -3,7 +3,7 @@ export * as PtyTicket from "./ticket"
 import { WorkspaceV2 } from "../workspace"
 import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import { PtyID } from "./schema"
-import { Cache, Context, Duration, Effect, Layer } from "effect"
+import { Cache, Context, Duration, Effect, Layer, Option } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
 
 const DEFAULT_TTL = Duration.seconds(60)
@@ -20,6 +20,8 @@ export type Scope = {
 export interface Interface {
   issue(input: Scope): Effect.Effect<typeof ConnectToken.Type>
   consume(input: Scope & { readonly ticket: string }): Effect.Effect<boolean>
+  /** Whether an unexpired ticket exists for this PTY, without consuming it. Auth checks it before routing. */
+  check(input: { readonly ticket: string; readonly ptyID: string }): Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PtyTicket") {}
@@ -47,6 +49,10 @@ export const make = (ttl: Duration.Input = DEFAULT_TTL) =>
       }),
       consume: Effect.fn("PtyTicket.consume")(function* (input) {
         return yield* Cache.invalidateWhen(cache, input.ticket, (stored) => matches(stored, input))
+      }),
+      check: Effect.fn("PtyTicket.check")(function* (input) {
+        const stored = yield* Cache.getOption(cache, input.ticket)
+        return Option.isSome(stored) && stored.value.ptyID === input.ptyID
       }),
     })
   })

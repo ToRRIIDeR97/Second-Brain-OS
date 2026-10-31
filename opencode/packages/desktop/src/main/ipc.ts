@@ -25,6 +25,7 @@ import {
 } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import { localFileAction } from "./local-file-policy"
 import { createDesktopDraftStore, requireDraftBlob, requireDraftKey, requireDraftValue } from "./draft-store"
 import { write as writeLog } from "./logging"
 import { saveSessionExport } from "./session-export"
@@ -306,7 +307,15 @@ export function registerIpcHandlers(deps: Deps) {
   // so a compromised renderer cannot run an arbitrary binary (issue #23).
   trustedHandle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
     if (!isAbsolute(path)) throw new Error("open-path requires an absolute path")
-    if (!app) return shell.openPath(path)
+    const info = await stat(path)
+    if (!app) {
+      // Same policy as local file links: an executable is revealed in the file manager, never run.
+      if (localFileAction(path, { isDirectory: info.isDirectory(), mode: info.mode }) === "reveal")
+        return shell.showItemInFolder(path)
+      return shell.openPath(path)
+    }
+    // "Open in" passes a project folder; a file handed to an app such as Terminal could run.
+    if (!info.isDirectory()) throw new Error("open-path with an application requires a directory")
     if (!/^[\w][\w .()-]*$/.test(app)) throw new Error("Invalid application name")
     if (process.platform === "darwin") {
       return await new Promise<void>((resolve, reject) => {

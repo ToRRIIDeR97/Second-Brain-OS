@@ -2,6 +2,8 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { describe, expect } from "bun:test"
 import path from "path"
+import { mkdir, mkdtemp, symlink } from "fs/promises"
+import { tmpdir } from "os"
 import { Effect } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import type { Tool } from "@/tool/tool"
@@ -56,6 +58,32 @@ describe("tool.assertExternalDirectory", () => {
       const { requests, ctx } = makeCtx()
 
       yield* assertExternalDirectoryEffect(ctx, path.join(test.directory, "file.txt"))
+
+      expect(requests.length).toBe(0)
+    }),
+  )
+
+  it.instance("asks for a new file under a symlink that points outside the project", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const test = yield* TestInstance
+      const outside = yield* Effect.promise(() => mkdtemp(path.join(tmpdir(), "external-target-")))
+      yield* Effect.promise(() => symlink(outside, path.join(test.directory, "linked")))
+      const { requests, ctx } = makeCtx()
+
+      yield* assertExternalDirectoryEffect(ctx, path.join(test.directory, "linked", "new.txt"))
+
+      expect(requests.length).toBe(1)
+    }),
+  )
+
+  it.instance("still allows a new file in a real project folder", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => mkdir(path.join(test.directory, "src"), { recursive: true }))
+      const { requests, ctx } = makeCtx()
+
+      yield* assertExternalDirectoryEffect(ctx, path.join(test.directory, "src", "deep", "new.txt"))
 
       expect(requests.length).toBe(0)
     }),

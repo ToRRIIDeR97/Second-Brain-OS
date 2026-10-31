@@ -35,3 +35,29 @@ export function decodeInput(message: string | Uint8Array | ArrayBuffer) {
     return undefined
   }
 }
+
+// Live output a slow client hasn't received yet. Past the limit the server closes the socket with
+// TOO_SLOW_CLOSE; the client reconnects and resumes from its cursor out of the PTY's own buffer.
+export const MAX_PENDING_BYTES = 4 * 1024 * 1024
+export const TOO_SLOW_CLOSE = { code: 4409, reason: "client too slow" } as const
+
+/** Counts queued output bytes: a chunk is sent, or the one that passes the limit closes, then the rest drop. */
+export function pendingBudget(limit = MAX_PENDING_BYTES) {
+  let pending = 0
+  let overflowed = false
+  const size = (chunk: string | Uint8Array) => (typeof chunk === "string" ? chunk.length : chunk.byteLength)
+  return {
+    admit(chunk: string | Uint8Array): "send" | "close" | "drop" {
+      if (overflowed) return "drop"
+      if (pending + size(chunk) > limit) {
+        overflowed = true
+        return "close"
+      }
+      pending += size(chunk)
+      return "send"
+    },
+    sent(chunk: string | Uint8Array) {
+      pending -= size(chunk)
+    },
+  }
+}

@@ -14,13 +14,25 @@ function requestBody(request: HttpServerRequest.HttpServerRequest) {
 export function websocket(
   request: HttpServerRequest.HttpServerRequest,
   target: string | URL,
+  extra?: HeadersInit,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, never, Socket.WebSocketConstructor> {
   return Effect.scoped(
     Effect.gen(function* () {
       const inbound = yield* Effect.orDie(request.upgrade)
+      const credentials = extra ? new Headers(extra) : undefined
       const outbound = yield* Socket.makeWebSocket(ProxyUtil.websocketTargetURL(target), {
         protocols: ProxyUtil.websocketProtocols(request.headers),
-      })
+      }).pipe(
+        // The target's configured auth headers go on the upstream upgrade too, as they do for HTTP.
+        // Bun's and Node's (undici) WebSocket take headers in an options object; browsers don't.
+        credentials && [...credentials.keys()].length > 0
+          ? Effect.provideService(
+              Socket.WebSocketConstructor,
+              (url, protocols) =>
+                new globalThis.WebSocket(url, { protocols, headers: credentials } as unknown as string[]),
+            )
+          : (effect) => effect,
+      )
       const writeInbound = yield* inbound.writer
       const writeOutbound = yield* outbound.writer
       const closeSocket = (socket: Socket.Socket, write: (event: Socket.CloseEvent) => Effect.Effect<void, unknown>) =>
@@ -103,21 +115,29 @@ export function http(
     // forward it unchanged (preserving content-type so the client can still parse
     // the structured error, e.g. its `ref`).
     if (response.status >= 500) {
-      const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
-      const contentType = response.headers["content-type"] ?? "application/json"
-      headers.delete("content-type")
-      yield* Effect.logError("workspace proxy upstream error", {
-        url: url.toString(),
-        method: request.method,
-        status: response.status,
-        body: body.slice(0, 2000),
-      })
-      return HttpServerResponse.text(body, {
-        status: response.status,
-        statusText: statusText(response),
-        headers,
-        contentType,
-      })
+      // Streamed through like any other body; only its first 2,000 characters are kept for the log.
+      const decoder = new TextDecoder()
+      let head = ""
+      const body = response.stream.pipe(
+        Stream.tap((chunk) =>
+          Effect.sync(() => {
+            if (head.length < 2000) head += decoder.decode(chunk, { stream: true })
+          }),
+        ),
+        Stream.catchCause(() => Stream.empty),
+        Stream.ensuring(
+          Effect.suspend(() =>
+            Effect.logError("workspace proxy upstream error", {
+              url: url.toString(),
+              method: request.method,
+              status: response.status,
+              body: head.slice(0, 2000),
+            }),
+          ),
+        ),
+      )
+      if (!headers.has("content-type")) headers.set("content-type", "application/json")
+      return HttpServerResponse.stream(body, { status: response.status, statusText: statusText(response), headers })
     }
 
     return HttpServerResponse.stream(response.stream.pipe(Stream.catchCause(() => Stream.empty)), {

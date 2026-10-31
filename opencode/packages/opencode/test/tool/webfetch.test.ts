@@ -44,6 +44,36 @@ const exec = Effect.fn("WebFetchToolTest.exec")(function* (args: Tool.InferParam
 })
 
 describe("tool.webfetch", () => {
+  it.instance("stops reading a chunked body without a length once it passes the limit", () =>
+    Effect.gen(function* () {
+      let sent = 0
+      const chunk = new Uint8Array(1024 * 1024).fill(97)
+      yield* withFetch(
+        () =>
+          new Response(
+            new ReadableStream({
+              async pull(controller) {
+                // Sends 6 MB with no length, then stalls without closing: only the reader's limit ends it.
+                if (sent >= 6 * chunk.byteLength) return new Promise<void>(() => {})
+                sent += chunk.byteLength
+                controller.enqueue(chunk)
+              },
+            }),
+            { status: 200, headers: { "content-type": "text/plain" } },
+          ),
+        (url) =>
+          Effect.gen(function* () {
+            const exit = yield* exec({ url: new URL("/endless", url).toString(), format: "text", timeout: 20 }).pipe(
+              Effect.exit,
+            )
+            expect(exit._tag).toBe("Failure")
+            expect(String(exit._tag === "Failure" ? exit.cause : "")).toContain("Response too large")
+            expect(sent).toBeLessThanOrEqual(6 * chunk.byteLength)
+          }),
+      )
+    }),
+  )
+
   it.instance("returns image responses as file attachments", () =>
     Effect.gen(function* () {
       const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])

@@ -260,3 +260,72 @@ test("the unfiltered list re-reads only notes whose size or time changed", async
   await utimes(second, later, later)
   expect((await run()).map((note) => note.title).toSorted()).toEqual(["Changed title", "First"])
 })
+
+test("a note is deleted only while it still has the revision the caller read", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const file = path.join(tmp.path, "notes", "old.md")
+  await writeFile(file, "# Old\n\nFirst\n")
+  const directory = AbsolutePath.make(tmp.path)
+  const read = await Effect.runPromise(KnowledgeNote.read("notes/old.md").pipe(provideNoteServices(directory)))
+  await writeFile(file, "# Old\n\nEdited elsewhere\n")
+  const stale = await Effect.runPromise(
+    KnowledgeNote.remove("notes/old.md", { expectedRevision: read.revision }).pipe(
+      provideNoteServices(directory),
+      Effect.flip,
+    ),
+  )
+  expect(stale).toBeInstanceOf(KnowledgeNote.ConflictError)
+  expect(await readFile(file, "utf8")).toContain("Edited elsewhere")
+
+  const fresh = await Effect.runPromise(KnowledgeNote.read("notes/old.md").pipe(provideNoteServices(directory)))
+  await Effect.runPromise(
+    KnowledgeNote.remove("notes/old.md", { expectedRevision: fresh.revision }).pipe(provideNoteServices(directory)),
+  )
+  expect(await stat(file).then(() => true, () => false)).toBe(false)
+})
+
+test("search reads a note again only after it changes", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const file = path.join(tmp.path, "notes", "cached.md")
+  await writeFile(file, "# Cached\n\nfirst-needle")
+  const directory = AbsolutePath.make(tmp.path)
+  const search = (query: string) =>
+    Effect.runPromise(
+      KnowledgeNote.list(query).pipe(
+        Effect.provide(LocationMutation.locationLayer),
+        Effect.provideService(Location.Service, { directory, project: { id: ProjectV2.ID.global, directory } }),
+        Effect.provide(LayerNode.compile(FSUtil.node)),
+      ),
+    )
+  expect((await search("first-needle")).map((note) => note.title)).toEqual(["Cached"])
+  await writeFile(file, "# Cached\n\nsecond-needle, a longer body")
+  expect(await search("first-needle")).toEqual([])
+  expect((await search("second-needle")).map((note) => note.title)).toEqual(["Cached"])
+})
+
+test("a heading title is read in linear time and keeps CommonMark closing rules", () => {
+  expect(KnowledgeNote.titleFromBody("intro\n# Plan ##\nbody")).toBe("Plan")
+  expect(KnowledgeNote.titleFromBody("# Learn C#")).toBe("Learn C#")
+  expect(KnowledgeNote.titleFromBody("#\nNot a heading")).toBe("")
+  const started = performance.now()
+  expect(KnowledgeNote.titleFromBody("# a" + " ".repeat(100_000) + "x")).toStartWith("a")
+  expect(performance.now() - started).toBeLessThan(100)
+})
+
+test("a save that would push the file past the read limit is refused", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "notes"))
+  const directory = AbsolutePath.make(tmp.path)
+  // Fits the 5 MB body check alone; the front matter added on save takes the file over.
+  const body = "x".repeat(5 * 1024 * 1024 - 10)
+  const failure = await Effect.runPromise(
+    KnowledgeNote.write("notes/big.md", { body, title: "Big", create: true }).pipe(
+      provideNoteServices(directory),
+      Effect.flip,
+    ),
+  )
+  expect(failure).toMatchObject({ reason: "too_large" })
+  expect(await stat(path.join(tmp.path, "notes", "big.md")).then(() => true, () => false)).toBe(false)
+})

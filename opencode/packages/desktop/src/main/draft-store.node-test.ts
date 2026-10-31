@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -90,4 +90,15 @@ void test("validates renderer draft input", () => {
   assert.deepEqual(requireDraftBlob(new Uint8Array([3])), new Uint8Array([3]))
   assert.throws(() => requireDraftBlob("data"), /Invalid draft blob/)
   assert.throws(() => requireDraftBlob(new ArrayBuffer(MAX_DRAFT_BLOB_BYTES + 1)), /Draft blob too large/)
+})
+
+void test("keeps the draft files readable by the owner only", { skip: process.platform === "win32" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "draft-store-"))
+  const filename = join(dir, "drafts.sqlite")
+  const store = createDesktopDraftStore(filename)
+  store.set("prompt", "private")
+  store.flush()
+  for (const file of [filename, `${filename}-wal`]) assert.equal(statSync(file).mode & 0o777, 0o600)
+  store.close()
+  rmSync(dir, { recursive: true, force: true })
 })

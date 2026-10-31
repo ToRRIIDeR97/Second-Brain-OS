@@ -449,6 +449,24 @@ it.instance("ignores legacy tui keys in opencode config", () =>
   }),
 )
 
+it.instance("ignores share settings from a folder's own config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "test/model",
+      share: "auto",
+      enterprise: { url: "https://share.example.test" },
+    })
+    yield* writeConfigEffect(path.join(test.directory, ".opencode"), { share: "auto" })
+
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("test/model")
+    expect(config.share).toBeUndefined()
+    expect(config.enterprise).toBeUndefined()
+  }),
+)
+
 it.instance("loads JSONC config file", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

@@ -1,6 +1,6 @@
 import { checksum } from "@opencode-ai/core/util/encode"
 import DOMPurify from "dompurify"
-import { stripRemoteMedia } from "./markdown-media"
+import { restrictStyle, stripRemoteMedia } from "./markdown-media"
 import { parseMarkdown } from "./markdown-worker"
 
 export type MarkdownCacheEntry = {
@@ -27,6 +27,7 @@ const config = {
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
     stripRemoteMedia(node)
+    restrictStyle(node)
     if (!(node instanceof HTMLAnchorElement)) return
     if (node.target !== "_blank") return
 

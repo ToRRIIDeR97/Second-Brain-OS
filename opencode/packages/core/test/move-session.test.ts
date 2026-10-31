@@ -67,6 +67,9 @@ describe("MoveSession", () => {
       const moved = abs(yield* Effect.promise(() => fs.realpath(destination)))
       yield* Effect.promise(() => fs.writeFile(path.join(source, "tracked.txt"), "changed\n"))
       yield* Effect.promise(() => fs.writeFile(path.join(source, "untracked.txt"), "new\n"))
+      // Staged changes are part of the captured patch, so they move too.
+      yield* Effect.promise(() => fs.writeFile(path.join(source, "staged.txt"), "staged\n"))
+      yield* Effect.promise(() => $`git add staged.txt`.cwd(source).quiet())
 
       const projectID = (yield* Project.Service.use((service) => service.resolve(source))).id
       const sessionID = SessionV2.ID.make("ses_move")
@@ -95,6 +98,9 @@ describe("MoveSession", () => {
         service.moveSession({ sessionID, destination: { directory: moved }, moveChanges: true }),
       )
 
+      expect(yield* Effect.promise(() => fs.readFile(path.join(moved, "staged.txt"), "utf8"))).toBe("staged\n")
+      expect(yield* Effect.promise(() => Bun.file(path.join(source, "staged.txt")).exists())).toBe(false)
+      expect((yield* Effect.promise(() => $`git status --porcelain`.cwd(source).quiet().text())).trim()).toBe("")
       expect(yield* Effect.promise(() => fs.readFile(path.join(moved, "tracked.txt"), "utf8"))).toBe("changed\n")
       expect(yield* Effect.promise(() => fs.readFile(path.join(moved, "untracked.txt"), "utf8"))).toBe("new\n")
       expect(yield* Effect.promise(() => fs.readFile(path.join(source, "tracked.txt"), "utf8"))).toBe("initial\n")
@@ -222,12 +228,11 @@ describe("MoveSession", () => {
         "initial\n",
       )
       expect(yield* Effect.promise(() => Bun.file(path.join(sourceDirectory, "untracked.txt")).exists())).toBe(false)
+      // Staged edits move with the rest (#150): the source is back at HEAD for this file, not still staged.
       expect(yield* Effect.promise(() => fs.readFile(path.join(sourceDirectory, "staged.txt"), "utf8"))).toBe(
-        "staged\n",
+        "initial\n",
       )
-      expect(yield* Effect.promise(() => $`git status --porcelain -- packages/staged.txt`.cwd(source).text())).toBe(
-        "M  packages/staged.txt\n",
-      )
+      expect(yield* Effect.promise(() => $`git status --porcelain -- packages/staged.txt`.cwd(source).text())).toBe("")
       expect(yield* Effect.promise(() => fs.readFile(path.join(source, "tracked.txt"), "utf8"))).toBe("unrelated\n")
       expect(yield* Effect.promise(() => fs.readFile(path.join(source, "untracked.txt"), "utf8"))).toBe("unrelated\n")
     }),

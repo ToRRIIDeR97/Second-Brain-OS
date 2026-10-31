@@ -10,6 +10,8 @@ import { FileSystemSearch } from "./filesystem/search"
 import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
+export const MAX_READ_FILE_BYTES = 20 * 1024 * 1024
+
 export const ReadInput = Schema.Struct({
   path: RelativePath,
 })
@@ -79,6 +81,9 @@ const baseLayer = Layer.effect(
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)
         if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+        // The whole file is returned in one response; refuse a huge one before reading it into memory.
+        if (Number(info.size) > MAX_READ_FILE_BYTES)
+          return yield* Effect.die(new Error(`File is too large to open (limit ${MAX_READ_FILE_BYTES / 1024 / 1024} MB)`))
         return {
           content: yield* fs.readFile(target.real).pipe(Effect.orDie),
           mime: FSUtil.mimeType(target.real),

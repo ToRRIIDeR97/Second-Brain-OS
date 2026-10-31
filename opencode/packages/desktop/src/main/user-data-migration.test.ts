@@ -96,6 +96,9 @@ describe("migrateUserData", () => {
     expect(() => migrateUserData(dirs.from, dirs.to, failing)).toThrow("could not move storage into")
     expect(existsSync(join(dirs.to, marker))).toBe(false)
     expect(readdirSync(dirs.root).filter((name) => name.includes(".migrating-"))).toHaveLength(1)
+    // A second failed start replaces the earlier copy instead of adding another.
+    expect(() => migrateUserData(dirs.from, dirs.to, failing)).toThrow("could not move storage into")
+    expect(readdirSync(dirs.root).filter((name) => name.includes(".migrating-"))).toHaveLength(1)
 
     expect(migrateUserData(dirs.from, dirs.to)).toBe("copied")
     expect(readFileSync(join(dirs.to, "storage/default.dat"), "utf8")).toBe("old")
