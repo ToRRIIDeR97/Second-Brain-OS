@@ -31,6 +31,16 @@
   affected diagrams in `docs/diagrams/` and views in
   `docs/architecture/uml.md` in the same change.
 
+## Platforms
+
+- Windows and macOS are both first-class. Every integration states how it
+  handles each one: paths and separators, how a CLI is found (PATH, registry,
+  install folders), starting and stopping processes, credentials, file
+  permissions, and shells. Prefer `path.win32`/`path.posix` fixtures in tests so
+  both behaviours are checked on either machine.
+- When a feature can't exist on one platform (the iOS Simulator on Windows),
+  the UI says so and offers what does work.
+
 ## Project map
 
 - `opencode/` is the active product; root Tauri/Cargo/pnpm tooling is retired.

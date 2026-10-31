@@ -36,6 +36,9 @@ It does not publish a GitHub release or configure an update feed.
 
 Locally on Windows, `bun run desktop:build` builds and packages the app with
 publishing disabled. Output is under `opencode/packages/desktop/dist/`.
+The packaged app starts its local server in the user's home folder and, on
+Windows, reads the current PATH from the registry at launch, so harness CLIs
+installed since sign-in are found without signing out.
 The build downloads the pinned upstream CLI for the optional development
 sidecar and bundles the fork's local server. These are separate runtimes.
 The local server comes from `opencode/packages/opencode/script/build-node.ts`

@@ -144,15 +144,20 @@ export const ApiKeyInput = Schema.Struct({
 }).annotate({ identifier: "Harness.ApiKeyInput" })
 export interface ApiKeyInput extends Schema.Schema.Type<typeof ApiKeyInput> {}
 
-// Installed and latest version of a harness CLI. `method` is set only when the app can update it
-// itself (a global npm or Bun package, or a Homebrew formula or cask).
+// Installed and latest version of a harness CLI. `method` names the installer the app found (a
+// package manager on macOS or Windows, or the CLI's own updater); without one the user updates it.
+// `manual` means the update needs the user (an administrator prompt), so `command` is shown instead.
 export const UpdateStatus = Schema.Struct({
   id: InstanceID,
   name: Schema.String,
   version: Schema.String.pipe(optional),
   latest: Schema.String.pipe(optional),
   updateAvailable: Schema.Boolean,
-  method: Schema.Literals(["npm", "bun", "brew"]).pipe(optional),
+  method: Schema.Literals(["npm", "bun", "pnpm", "brew", "winget", "scoop", "choco", "pipx", "uv", "self"]).pipe(
+    optional,
+  ),
+  command: Schema.String.pipe(optional),
+  manual: Schema.Boolean.pipe(optional),
   error: Schema.String.pipe(optional),
 }).annotate({ identifier: "Harness.UpdateStatus" })
 export interface UpdateStatus extends Schema.Schema.Type<typeof UpdateStatus> {}

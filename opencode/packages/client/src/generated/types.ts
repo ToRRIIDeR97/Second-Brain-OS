@@ -3138,7 +3138,9 @@ export type HarnessesUpdatesOutput = {
     readonly version?: string
     readonly latest?: string
     readonly updateAvailable: boolean
-    readonly method?: "npm" | "bun" | "brew"
+    readonly method?: "npm" | "bun" | "pnpm" | "brew" | "winget" | "scoop" | "choco" | "pipx" | "uv" | "self"
+    readonly command?: string
+    readonly manual?: boolean
     readonly error?: string
   }>
 }
@@ -3189,7 +3191,9 @@ export type HarnessesUpgradeOutput = {
     readonly version?: string
     readonly latest?: string
     readonly updateAvailable: boolean
-    readonly method?: "npm" | "bun" | "brew"
+    readonly method?: "npm" | "bun" | "pnpm" | "brew" | "winget" | "scoop" | "choco" | "pipx" | "uv" | "self"
+    readonly command?: string
+    readonly manual?: boolean
     readonly error?: string
   }
 }

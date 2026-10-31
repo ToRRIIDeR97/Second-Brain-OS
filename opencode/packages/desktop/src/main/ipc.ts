@@ -1,3 +1,13 @@
+import {
+  bootDevice,
+  deviceInput,
+  deviceScreenshot,
+  deviceStatus,
+  type DeviceInput,
+  type DevicePlatform,
+} from "./device"
+import { browserHistory, captureBrowser, navigateBrowser, pickElement, showBrowser } from "./browser"
+import { fileViewerURL } from "./file-viewer"
 import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename, isAbsolute, join } from "node:path"
@@ -302,6 +312,51 @@ export function registerIpcHandlers(deps: Deps) {
     openLocalFileURL(url)
   })
 
+  // The Workbench panel's browser. Bounds are CSS pixels in the window; undefined hides it.
+  trustedHandle(
+    "browser-show",
+    (event: IpcMainInvokeEvent, bounds?: { x: number; y: number; width: number; height: number }) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (window) showBrowser(window, bounds && Number.isFinite(bounds.width) ? bounds : undefined)
+    },
+  )
+  trustedHandle("browser-navigate", (event: IpcMainInvokeEvent, url: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    return window && typeof url === "string" ? navigateBrowser(window, url) : undefined
+  })
+  trustedHandle("browser-history", (_event: IpcMainInvokeEvent, direction: "back" | "forward" | "reload") =>
+    browserHistory(direction),
+  )
+  trustedHandle(
+    "browser-capture",
+    (_event: IpcMainInvokeEvent, rect?: { x: number; y: number; width: number; height: number }) =>
+      captureBrowser(rect),
+  )
+  trustedHandle("browser-pick", () => pickElement())
+
+  // The Device tab: Android (adb, emulator) on every desktop, the iOS Simulator on macOS.
+  trustedHandle("device-status", () => deviceStatus())
+  trustedHandle("device-boot", (_event: IpcMainInvokeEvent, platform: DevicePlatform, id: string) =>
+    isPlatform(platform) && typeof id === "string" ? bootDevice(platform, id) : undefined,
+  )
+  trustedHandle("device-screenshot", async (_event: IpcMainInvokeEvent, platform: DevicePlatform, id: string) =>
+    isPlatform(platform) && typeof id === "string"
+      ? `data:image/png;base64,${(await deviceScreenshot(platform, id)).toString("base64")}`
+      : undefined,
+  )
+  trustedHandle(
+    "device-input",
+    (_event: IpcMainInvokeEvent, platform: DevicePlatform, id: string, input: DeviceInput) =>
+      isPlatform(platform) && typeof id === "string" && input && typeof input === "object"
+        ? deviceInput(platform, id, input).then(() => undefined)
+        : undefined,
+  )
+
+  // A read-only tenon-file:// URL for a file inside an open folder, for the Workbench panel viewers.
+  trustedHandle("file-viewer-url", (_event: IpcMainInvokeEvent, directory: string, path: string) =>
+    typeof directory === "string" && typeof path === "string" ? fileViewerURL(directory, path) : undefined,
+  )
+
   // The renderer may only name an application, never hand over a path to
   // execute: main resolves the name through the registered-application lookup
   // so a compromised renderer cannot run an arbitrary binary (issue #23).
@@ -413,3 +468,5 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 export function sendDeepLinks(win: BrowserWindow, urls: string[]) {
   win.webContents.send("deep-link", urls)
 }
+
+const isPlatform = (value: unknown): value is DevicePlatform => value === "android" || value === "ios"

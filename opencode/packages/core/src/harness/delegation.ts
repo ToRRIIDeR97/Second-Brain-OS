@@ -1,5 +1,6 @@
 export * as HarnessDelegation from "./delegation"
 
+import { HarnessBrowserTools } from "./browser-tools"
 import { randomBytes, timingSafeEqual } from "node:crypto"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { Effect, Option, Schema } from "effect"
@@ -252,15 +253,44 @@ export async function handleMessage(message: Message, caller: Caller, handler: H
               "Use the task tools to delegate a task to an agent in another harness and collect its result. Call list_agents first.",
             ]
           : []),
+        ...(HarnessBrowserTools.available()
+          ? [
+              "Use the browser tools to open and test web pages in the browser the user sees in Tenon Workbench: browser_navigate, then browser_snapshot for selectors. Use the device tools to test apps on an Android emulator or iOS simulator: device_list first.",
+            ]
+          : []),
       ].join(" "),
     })
   }
   if (message.method === "ping") return reply(message.id, {})
   if (message.method === "tools/list")
-    return reply(message.id, { tools: [...(caller.ask ? [ASK_USER_TOOL] : []), ...(handler ? TOOLS : [])] })
+    return reply(message.id, {
+      tools: [
+        ...(caller.ask ? [ASK_USER_TOOL] : []),
+        ...(handler ? TOOLS : []),
+        ...(HarnessBrowserTools.available() ? HarnessBrowserTools.TOOLS : []),
+      ],
+    })
   if (message.method !== "tools/call") return error(message.id, -32601, "Method not found")
   const name = String(params.name)
   const args = isRecord(params.arguments) ? params.arguments : {}
+  if (HarnessBrowserTools.isTool(name))
+    return reply(
+      message.id,
+      await HarnessBrowserTools.call(name, args, caller.sessionID).then(
+        (value) => ({
+          content: [
+            "image" in value
+              ? { type: "image", data: value.image, mimeType: value.mimeType }
+              : { type: "text", text: value.text },
+          ],
+          isError: false,
+        }),
+        (cause) => ({
+          content: [{ type: "text", text: cause instanceof Error ? cause.message : String(cause) }],
+          isError: true,
+        }),
+      ),
+    )
   const result = await (
     name === ASK_USER_TOOL.name
       ? askUser(args, caller)

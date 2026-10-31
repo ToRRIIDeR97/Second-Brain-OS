@@ -59,6 +59,18 @@ type OpenPopover = Exclude<PromptInputV2InteractionState["popover"], { type: "cl
 
 export function PromptInputV2(props: PromptInputV2Props) {
   const i18n = useI18n()
+  const threadLabels = () => ({
+    summary: i18n.t("secondBrain.threadReference.summary"),
+    full: i18n.t("secondBrain.threadReference.full"),
+    toggle: i18n.t("secondBrain.threadReference.toggle"),
+  })
+  const syncEditor = (editor: HTMLDivElement) => {
+    const cursor = promptInputV2Cursor(editor)
+    const prompt = parsePromptInputV2Editor(editor)
+    const images = props.controller.parts().filter((part) => part.type === "image")
+    localInput = true
+    props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+  }
   const state = props.controller.state
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
@@ -85,7 +97,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
       localInput = false
       return
     }
-    renderPromptInputV2Editor(editor, parts)
+    renderPromptInputV2Editor(editor, parts, threadLabels())
   })
 
   return (
@@ -175,7 +187,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             ref={(element) => {
               editor = element
               props.controller.setEditor(element)
-              renderPromptInputV2Editor(element, props.controller.parts())
+              renderPromptInputV2Editor(element, props.controller.parts(), threadLabels())
             }}
             data-component="prompt-input"
             role="textbox"
@@ -189,12 +201,15 @@ export function PromptInputV2(props: PromptInputV2Props) {
             autocomplete="off"
             class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-5 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
-            onInput={(event) => {
-              const cursor = promptInputV2Cursor(event.currentTarget)
-              const prompt = parsePromptInputV2Editor(event.currentTarget)
-              const images = props.controller.parts().filter((part) => part.type === "image")
-              localInput = true
-              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+            onInput={(event) => syncEditor(event.currentTarget)}
+            // A thread reference switches between its summary and the full thread on click.
+            onClick={(event) => {
+              const pill = (event.target as HTMLElement).closest<HTMLElement>("[data-mention=thread]")
+              if (!pill?.dataset.url) return
+              const full = !pill.dataset.url.includes("full=1")
+              pill.dataset.url = full ? `${pill.dataset.url.split("?")[0]}?full=1` : pill.dataset.url.split("?")[0]!
+              pill.dataset.modeLabel = full ? threadLabels().full : threadLabels().summary
+              syncEditor(event.currentTarget)
             }}
             onKeyDown={(event) => {
               if (props.controller.onKeyDown(event)) return
@@ -304,7 +319,11 @@ export function PromptInputV2(props: PromptInputV2Props) {
   )
 }
 
-function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2Prompt) {
+function renderPromptInputV2Editor(
+  editor: HTMLDivElement,
+  prompt: PromptInputV2Prompt,
+  labels: { summary: string; full: string; toggle: string },
+) {
   const active = document.activeElement === editor
   editor.replaceChildren(
     ...prompt.flatMap<Node>((part) => {
@@ -320,6 +339,16 @@ function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2
         mention.dataset.path = part.path
         if (part.mime) mention.dataset.mime = part.mime
         if (part.filename) mention.dataset.filename = part.filename
+        // A thread reference (tenon-thread://) or MCP resource is addressed by URL, not by path.
+        if (part.url) mention.dataset.url = part.url
+        // The mode shows after the pill without joining its text, which is the part's content.
+        if (part.mime === "application/x-tenon-thread") {
+          mention.dataset.mention = "thread"
+          mention.dataset.modeLabel = part.url?.includes("full=1") ? labels.full : labels.summary
+          mention.title = labels.toggle
+          mention.className =
+            "cursor-pointer text-syntax-property after:ml-1 after:rounded-full after:bg-v2-background-bg-layer-02 after:px-1.5 after:py-px after:text-[11px] after:font-medium after:text-v2-text-text-weak after:content-[attr(data-mode-label)]"
+        }
       }
       return [mention]
     }),
@@ -366,6 +395,7 @@ function parsePromptInputV2Editor(editor: HTMLDivElement) {
       end: position + content.length,
       ...(element.dataset.mime ? { mime: element.dataset.mime } : {}),
       ...(element.dataset.filename ? { filename: element.dataset.filename } : {}),
+      ...(element.dataset.url ? { url: element.dataset.url } : {}),
     })
     position += content.length
   }
@@ -796,6 +826,7 @@ export function PromptInputV2SubmitButton(props: {
 function PromptInputV2SuggestionIcon(props: { item: PromptInputV2Suggestion }) {
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-v2-icon-icon-accent" />
   if (props.item.kind === "command") return null
+  if (props.item.kind === "thread") return <Icon name="link" size="small" class="shrink-0 text-v2-icon-icon-muted" />
   return (
     <FileIcon
       node={{ path: props.item.path ?? props.item.label, type: props.item.kind === "reference" ? "directory" : "file" }}

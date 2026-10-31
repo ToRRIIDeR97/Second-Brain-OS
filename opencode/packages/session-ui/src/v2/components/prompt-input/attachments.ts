@@ -180,6 +180,24 @@ export function createPromptInputV2Attachments(
     event.preventDefault()
     input.setDraggingType(null)
     const plainText = event.dataTransfer?.getData("text/plain")
+    // A thread row dragged from the sidebar ("thread:<id>\n<title>") becomes a thread reference; the
+    // server swaps the tenon-thread:// attachment for that thread's text (app utils/thread-reference.ts).
+    if (plainText?.startsWith("thread:")) {
+      const [id = "", ...rest] = plainText.slice("thread:".length).split("\n")
+      const title = rest.join(" ").trim() || id
+      input.focusEditor()
+      input.addPart({
+        type: "file",
+        path: title,
+        content: `@${title}`,
+        start: 0,
+        end: 0,
+        mime: "application/x-tenon-thread",
+        filename: title,
+        url: `tenon-thread://${encodeURIComponent(id)}`,
+      })
+      return
+    }
     if (plainText?.startsWith("file:")) {
       const path = plainText.slice("file:".length)
       input.focusEditor()

@@ -9,8 +9,15 @@ import {
 } from "@opencode-ai/llm"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
+import { ThreadReference } from "../thread-reference"
 
-const media = (file: FileAttachment): ContentPart => ({
+// A text attachment (a referenced thread) reaches the model as text; providers reject text media.
+const media = (file: FileAttachment): ContentPart => {
+  const text = ThreadReference.inlineText(file)
+  return text === undefined ? mediaPart(file) : { type: "text", text }
+}
+
+const mediaPart = (file: FileAttachment): ContentPart => ({
   type: "media",
   mediaType: file.mime,
   data: file.uri,

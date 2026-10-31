@@ -255,6 +255,8 @@ type PromptSubmitInput = {
   followup?: Accessor<PromptDelivery>
   onAbort?: () => void
   onSubmit?: () => void
+  /** Called with the harness a new thread starts on, for Settings' "start from the last one I used". */
+  onNewSessionHarness?: (choice: { harnessID: string; model?: Harness.ModelSelection }) => void
   model?: ModelSelection
 }
 
@@ -392,6 +394,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     input.addToHistory(currentPrompt, mode)
     input.resetHistoryNavigation()
+    if (isNewSession) input.onNewSessionHarness?.({ harnessID: harnessInstanceID, model: harnessModel })
 
     const projectDirectory = sdk().directory
     const permissionState = permission.currentServerState()

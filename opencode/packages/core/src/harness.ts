@@ -41,6 +41,7 @@ import { HarnessRegistry } from "./harness/registry"
 import { HarnessSetup } from "./harness/setup"
 import { HarnessPids } from "./harness/pids"
 import { HarnessUpdate } from "./harness/update"
+import { ThreadReference } from "./session/thread-reference"
 import { HarnessUsage } from "./harness/usage"
 import { harnessEnvironment } from "./harness/env"
 import { Location } from "./location"
@@ -167,11 +168,24 @@ interface AcpRuntime {
   handoff: Handoff
 }
 
-const probeTTL = 30_000
+const probeTTL = 2 * 60_000
 // A failed check is retried sooner, so a slow cold start doesn't hide a harness for long.
 const failedProbeTTL = 5_000
 // Model lists change rarely (new releases, sign-in); checks ask the harness again after this long.
-const catalogTTL = 10 * 60_000
+// Asking an ACP agent opens a session and switches through every model (about 10s for Claude Code).
+const catalogTTL = 24 * 60 * 60_000
+
+// Availability and model lists don't depend on the folder, so every folder shares one cache and one
+// running check per harness. Opening a thread in a new folder then starts no harness CLIs.
+const shared = {
+  probes: new Map<string, ProbeEntry>(),
+  catalogs: new Map<string, Catalog>(),
+  stored: new Map<string, Harness.Instance>(),
+  discovering: new Set<string>(),
+  scope: Scope.makeUnsafe(),
+  probe: undefined as ReturnType<typeof makeCachedProbe> | undefined,
+  seeded: false,
+}
 
 const layer = Layer.effect(
   Service,
@@ -225,20 +239,20 @@ const layer = Layer.effect(
     const runtimes = new Map<string, CodexRuntime>()
     const acpRuntimes = new Map<string, AcpRuntime>()
     // Probing starts the harness CLI, so picker refreshes reuse a recent result per instance config.
-    const probes = new Map<string, ProbeEntry>()
+    const probes = shared.probes
     // Models each harness reported. After catalogTTL a check asks for them again; a failed check
     // keeps the last list, so the picker doesn't shrink while a harness is slow or briefly offline.
-    const catalogs = new Map<string, { readonly models: ReadonlyArray<Harness.Model>; readonly checked: number }>()
+    const catalogs = shared.catalogs
     // Commands each ACP harness last reported; the skills catalog lists them for harnesses without skill folders.
     const commands = new Map<Harness.InstanceID, ReadonlyArray<AcpHarness.AcpCommand>>()
     const instanceKey = (instance: InstanceConfig) =>
       `${instance.id}:${JSON.stringify([instance.name, instance.config])}`
     // Lists from the last run seed the catalogs, so the first listing after a restart already has models.
     // Their `checked` time is kept, so the usual catalogTTL still decides when to ask the harness again.
-    const stored = yield* HarnessCatalogCache.read(global.data)
+    const stored = shared.seeded ? {} : yield* HarnessCatalogCache.read(global.data)
     for (const instance of latest) {
       const entry = stored[HarnessCatalogCache.id(instanceKey(instance))]
-      if (entry) catalogs.set(instanceKey(instance), entry)
+      if (entry && !catalogs.has(instanceKey(instance))) catalogs.set(instanceKey(instance), entry)
     }
     const setCatalog = (key: string, models: ReadonlyArray<Harness.Model>) => {
       const entry = { models, checked: Date.now() }
@@ -246,21 +260,22 @@ const layer = Layer.effect(
       return HarnessCatalogCache.write(global.data, key, entry)
     }
     // Checks from the last run answer the first listing after a restart while the real check runs.
-    const storedProbes = yield* HarnessCatalogCache.readProbes(global.data)
-    const lastProbes = new Map(
-      latest.flatMap((instance) => {
+    if (!shared.seeded) {
+      const storedProbes = yield* HarnessCatalogCache.readProbes(global.data)
+      for (const instance of latest) {
         const entry = storedProbes[HarnessCatalogCache.id(instanceKey(instance))]
-        return entry ? [[instanceKey(instance), entry] as const] : []
-      }),
-    )
-    const probeCached = makeCachedProbe({
+        if (entry) shared.stored.set(instanceKey(instance), entry)
+      }
+      shared.seeded = true
+    }
+    const probeCached = (shared.probe ??= makeCachedProbe({
       catalogs,
       probes,
-      stored: lastProbes,
+      stored: shared.stored,
       setCatalog,
       persist: (key, instance) => HarnessCatalogCache.writeProbe(global.data, key, instance),
-      scope: layerScope,
-    })
+      scope: shared.scope,
+    }))
     const cachedProbe = (instance: InstanceConfig, probe: Probe) => probeCached(instanceKey(instance), instance, probe)
     // Listing an ACP agent's models opens a session and switches to each model once (about 10s for
     // Claude Code), so it runs beside the listing; its result reaches the picker on the next list.
@@ -274,7 +289,7 @@ const layer = Layer.effect(
     )
     const discoveryDirectory = path.join(global.state, "harness-discovery")
     yield* Effect.promise(() => fs.mkdir(discoveryDirectory, { recursive: true })).pipe(Effect.ignore)
-    const discovering = new Set<string>()
+    const discovering = shared.discovering
     const discoverAcpModels = (instance: InstanceConfig, settings: AcpHarness.Settings) => {
       const key = instanceKey(instance)
       if (discovering.has(key)) return Effect.void
@@ -454,8 +469,7 @@ const layer = Layer.effect(
           process,
           settings,
           input.directory,
-          (request) =>
-            handleCodexRequest(request, input, permissions, questions, gate.guard),
+          (request) => handleCodexRequest(request, input, permissions, questions, gate.guard),
           delegation,
         )
         const revision = input.revision ?? 0
@@ -1073,7 +1087,11 @@ const layer = Layer.effect(
               return Effect.fail(
                 new HarnessUpdate.UpdateError({ reason: "not-found", message: `No harness CLI has ID "${id}".` }),
               )
-            return HarnessUpdate.upgrade(process, command).pipe(
+            return HarnessUpdate.upgrade(process, command, HarnessSetup.recipe(instance.id)?.packageName).pipe(
+              // Claude Code runs through its ACP adapter; the `claude` CLI beside it updates itself.
+              Effect.andThen(
+                instance.id === Harness.ClaudeCode ? HarnessUpdate.upgradeCompanion(process, "claude") : Effect.void,
+              ),
               Effect.andThen(closeRuntimes(instance.id)),
               Effect.andThen(Effect.sync(() => forget(instance.id))),
               Effect.andThen(updateStatus(instance, command)),
@@ -1860,7 +1878,8 @@ export function makeCachedProbe(state: {
     Effect.suspend(() => {
       const cached = state.probes.get(key)
       if (cached && cached.expires > Date.now()) return Effect.succeed(cached.instance)
-      const last = state.stored.get(key)
+      // An expired check still answers at once with what it last saw while a fresh one runs.
+      const last = state.stored.get(key) ?? cached?.instance
       const stale = last && { ...last, models: state.catalogs.get(key)?.models ?? last.models }
       // Home, open threads, and Settings list at once on startup and focus; they share one check.
       const running = inflight.get(key)
@@ -2139,7 +2158,8 @@ function renderMessage(message: Message) {
 
 function renderContent(part: ContentPart): ReadonlyArray<string> {
   if (part.type === "text") return [part.text]
-  if (part.type === "media") return [`[Attached ${part.filename ?? part.mediaType}]`]
+  if (part.type === "media")
+    return [ThreadReference.inlineText(part) ?? `[Attached ${part.filename ?? part.mediaType}]`]
   if (part.type === "tool-call") return [`[Tool ${part.name}${toolTarget(part.input)}]`]
   if (part.type === "tool-result") return [`[Tool ${part.name} ${toolStatus(part)}]`]
   return []

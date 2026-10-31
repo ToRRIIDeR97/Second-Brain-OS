@@ -16,7 +16,7 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { modelProvider, useSettings } from "@/context/settings"
+import { modelProvider, useSettings, withVisibleModels } from "@/context/settings"
 import { harnessSettingsChanged } from "@/components/prompt-input/harness-controller"
 import { HarnessUsageWindows, fullestWindow } from "@/components/harness-usage"
 import {
@@ -213,6 +213,8 @@ export const SettingsHarnessesV2: Component<{
           </div>
         </Show>
 
+        <HarnessDefaults entries={entryList().filter((entry) => entry.enabled)} instance={instance} />
+
         <SettingsListV2>
           <SettingsRowV2
             title={language.t("harness.settings.titleAgent")}
@@ -339,6 +341,20 @@ const harnessState = (entry: Harness.SettingsEntry, instance?: Harness.Instance)
   return "on"
 }
 
+// Installer names are product names, shown as they are in every language.
+const installerName: Record<NonNullable<Harness.UpdateStatus["method"]>, string> = {
+  npm: "npm",
+  bun: "Bun",
+  pnpm: "pnpm",
+  brew: "Homebrew",
+  winget: "WinGet",
+  scoop: "Scoop",
+  choco: "Chocolatey",
+  pipx: "pipx",
+  uv: "uv",
+  self: "",
+}
+
 // Header, update, and model visibility for one harness. The in-process loop has no CLI or model list.
 const HarnessDetails: Component<{
   entry: Harness.SettingsEntry
@@ -365,6 +381,11 @@ const HarnessDetails: Component<{
           ? language.t("harness.settings.source.builtIn")
           : language.t("harness.settings.source.config"),
       version() ? language.t("harness.settings.version", { version: version()! }) : undefined,
+      props.update?.method === "self"
+        ? language.t("harness.settings.installedSelf")
+        : props.update?.method
+          ? language.t("harness.settings.installedWith", { method: installerName[props.update.method] })
+          : undefined,
       props.entry.enabled ? undefined : language.t("harness.settings.disabled"),
     ]
       .filter(Boolean)
@@ -403,20 +424,53 @@ const HarnessDetails: Component<{
       </Show>
 
       <Show when={props.update?.updateAvailable}>
-        <div class="settings-v2-harness-banner">
+        <div class="settings-v2-harness-banner" data-component="harness-update-banner">
           <span class="min-w-0 flex-1">
-            {language.t("harness.settings.updateAvailable", { latest: props.update?.latest ?? "" })}
-            {" · "}
-            {props.update?.method
-              ? language.t("harness.settings.updateRestart")
-              : language.t("harness.settings.updateManual")}
+            <Show
+              when={props.update?.latest}
+              fallback={language.t("harness.settings.selfUpdate.description", { command: props.update?.command ?? "" })}
+            >
+              {language.t("harness.settings.updateAvailable", { latest: props.update?.latest ?? "" })}
+              {" · "}
+              {props.update?.manual
+                ? language.t("harness.settings.updateNeedsAdmin")
+                : props.update?.method
+                  ? language.t("harness.settings.updateRestart")
+                  : language.t("harness.settings.updateManual")}
+            </Show>
           </span>
-          <Show when={props.update?.method}>
-            <ButtonV2 size="normal" variant="neutral" disabled={props.busy} onClick={props.onUpgrade}>
-              {props.busy ? language.t("harness.settings.updating") : language.t("harness.settings.update")}
+          <Show when={props.update?.method && !props.update?.manual}>
+            <ButtonV2
+              size="normal"
+              variant="neutral"
+              disabled={props.busy}
+              onClick={props.onUpgrade}
+              title={props.update?.command}
+            >
+              {props.busy
+                ? language.t("harness.settings.updating")
+                : props.update?.latest
+                  ? language.t("harness.settings.update")
+                  : language.t("harness.settings.selfUpdate")}
             </ButtonV2>
           </Show>
         </div>
+        <Show when={props.update?.manual && props.update?.command}>
+          <div class="settings-v2-harness-command flex items-center gap-2">
+            <code class="min-w-0 flex-1 truncate">{props.update?.command}</code>
+            <ButtonV2
+              size="small"
+              variant="ghost"
+              onClick={() =>
+                void navigator.clipboard
+                  .writeText(props.update?.command ?? "")
+                  .then(() => showToast({ title: language.t("harness.settings.commandCopied") }))
+              }
+            >
+              {language.t("harness.settings.copyCommand")}
+            </ButtonV2>
+          </div>
+        </Show>
       </Show>
 
       <Show when={host()}>
@@ -707,5 +761,125 @@ const DialogAddHarness: Component<{
         </ButtonV2>
       </DialogFooter>
     </Dialog>
+  )
+}
+
+/** Which harness, model and reasoning new threads start with (settings.v3 `harnesses.defaults`). */
+function HarnessDefaults(props: {
+  entries: ReadonlyArray<{ id: string; name: string }>
+  instance: (id: string) => Harness.Instance | undefined
+}) {
+  const language = useLanguage()
+  const settings = useSettings()
+  const defaults = () => settings.harnesses.defaults()
+  const harnessID = () => defaults()?.harnessID ?? Harness.OpenCode
+  const last = () => defaults()?.mode === "last"
+  const save = (next: Partial<NonNullable<ReturnType<typeof defaults>>>) =>
+    settings.harnesses.setDefaults({ mode: "fixed", harnessID: harnessID(), ...defaults(), ...next })
+  const harnessOptions = createMemo(() => [
+    { value: Harness.OpenCode as string, label: language.t("harness.settings.defaults.builtIn") },
+    ...props.entries
+      .filter((entry) => entry.id !== Harness.OpenCode)
+      .map((entry) => ({ value: entry.id, label: entry.name })),
+  ])
+  const models = createMemo(() => {
+    const instance = props.instance(harnessID())
+    return instance && instance.driver !== Harness.OpenCodeDriver
+      ? withVisibleModels(
+          instance,
+          settings.harnesses.hiddenModels(instance.id),
+          settings.harnesses.hiddenProviders(instance.id),
+        ).models
+      : []
+  })
+  const modelOptions = createMemo(() => [
+    { value: "", label: language.t("harness.settings.defaults.modelDefault") },
+    ...models().map((model) => ({ value: model.id, label: model.name })),
+  ])
+  const model = () => models().find((item) => item.id === defaults()?.model?.id)
+  const effortOptions = createMemo(() => [
+    { value: "", label: language.t("harness.settings.defaults.modelDefault") },
+    ...(model()?.reasoningEfforts ?? []).map((effort) => ({ value: effort, label: effort })),
+  ])
+  return (
+    <div class="settings-v2-section" data-component="harness-defaults">
+      <h4 class="settings-v2-section-title">{language.t("harness.settings.defaults.title")}</h4>
+      <SettingsListV2>
+        <SettingsRowV2
+          title={language.t("harness.settings.defaults.harness")}
+          description={language.t("harness.settings.defaults.harness.description")}
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-default-harness"
+            options={harnessOptions()}
+            current={harnessOptions().find((option) => option.value === harnessID()) ?? harnessOptions()[0]}
+            placement="bottom-end"
+            gutter={6}
+            disabled={last()}
+            value={(option) => option.value}
+            label={(option) => option.label}
+            onSelect={(option) => option && save({ harnessID: option.value, model: undefined })}
+          />
+        </SettingsRowV2>
+        <Show when={models().length > 0}>
+          <SettingsRowV2
+            title={language.t("harness.settings.defaults.model")}
+            description={language.t("harness.settings.defaults.model.description")}
+          >
+            <SelectV2
+              appearance="inline"
+              data-action="settings-default-model"
+              options={modelOptions()}
+              current={
+                modelOptions().find((option) => option.value === (defaults()?.model?.id ?? "")) ?? modelOptions()[0]
+              }
+              placement="bottom-end"
+              gutter={6}
+              disabled={last()}
+              value={(option) => option.value}
+              label={(option) => option.label}
+              onSelect={(option) => {
+                if (!option) return
+                const next = models().find((item) => item.id === option.value)
+                save({ model: next ? { id: next.id, reasoningEffort: next.defaultReasoningEffort } : undefined })
+              }}
+            />
+          </SettingsRowV2>
+        </Show>
+        <Show when={(model()?.reasoningEfforts.length ?? 0) > 0}>
+          <SettingsRowV2
+            title={language.t("harness.settings.defaults.reasoning")}
+            description={language.t("harness.settings.defaults.reasoning.description")}
+          >
+            <SelectV2
+              appearance="inline"
+              data-action="settings-default-reasoning"
+              options={effortOptions()}
+              current={
+                effortOptions().find((option) => option.value === (defaults()?.model?.reasoningEffort ?? "")) ??
+                effortOptions()[0]
+              }
+              placement="bottom-end"
+              gutter={6}
+              disabled={last()}
+              value={(option) => option.value}
+              label={(option) => option.label}
+              onSelect={(option) =>
+                option && model() && save({ model: { id: model()!.id, reasoningEffort: option.value || undefined } })
+              }
+            />
+          </SettingsRowV2>
+        </Show>
+        <SettingsRowV2
+          title={language.t("harness.settings.defaults.last")}
+          description={language.t("harness.settings.defaults.last.description")}
+        >
+          <Switch checked={last()} hideLabel onChange={(value: boolean) => save({ mode: value ? "last" : "fixed" })}>
+            {language.t("harness.settings.defaults.last")}
+          </Switch>
+        </SettingsRowV2>
+      </SettingsListV2>
+    </div>
   )
 }

@@ -92,6 +92,10 @@ const desktop = [
   "Nuoroda paprašė Tenon Workbench pradėti seansą:\n{{path}}\n\nBet kokia užklausa iš nuorodos įdedama į įvesties lauką ir nesiunčiama. Tęskite tik jei šią nuorodą atidarėte patys iš patikimo šaltinio.",
   "Atidaryti",
   "Atšaukti",
+  "Open a website?",
+  "An agent wants to open {{host}} in the Workbench browser.",
+  "Open",
+  "Don't open",
 ]
 
 export const dict = {

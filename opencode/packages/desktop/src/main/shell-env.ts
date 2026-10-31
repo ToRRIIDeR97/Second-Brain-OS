@@ -130,3 +130,60 @@ export function mergeShellEnv(shell: Record<string, string> | null, env: Record<
     ...env,
   }
 }
+
+/**
+ * The Windows equivalent of loading the login shell's PATH. A GUI app inherits the PATH Explorer had at
+ * sign-in, so a CLI installed since then looks missing until the user signs out. `registry` holds the
+ * current user and system Path values (as `reg query` prints them, unexpanded); their entries and the
+ * usual CLI install folders are appended when missing. Existing entries keep their order.
+ */
+export function windowsPath(path: string, registry: ReadonlyArray<string>, env: Record<string, string | undefined>) {
+  const expand = (value: string) => value.replace(/%([^%]+)%/g, (whole, name: string) => env[name] ?? whole)
+  const entries = path.split(";").filter(Boolean)
+  const seen = new Set(entries.map((entry) => entry.replace(/[\\/]+$/, "").toLowerCase()))
+  const home = env.USERPROFILE ?? ""
+  const extra = [
+    ...registry.flatMap((value) => value.split(";")).map(expand),
+    `${env.APPDATA}\\npm`,
+    `${env.LOCALAPPDATA}\\pnpm`,
+    `${home}\\.bun\\bin`,
+    `${home}\\scoop\\shims`,
+    `${env.LOCALAPPDATA}\\Microsoft\\WinGet\\Links`,
+    `${home}\\.local\\bin`,
+    `${home}\\.opencode\\bin`,
+  ]
+  const added = extra.filter((entry) => {
+    const key = entry
+      .trim()
+      .replace(/[\\/]+$/, "")
+      .toLowerCase()
+    // A folder built from a missing variable is relative ("\.bun\bin") or names "undefined".
+    if (!key || key.startsWith("\\") || key.includes("undefined") || key.includes("%") || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return [...entries, ...added.map((entry) => entry.trim())].join(";")
+}
+
+/** The current user's and the system's Path values from the registry, unexpanded. Empty off Windows. */
+export async function readRegistryPaths() {
+  if (process.platform !== "win32") return []
+  const keys = ["HKCU\\Environment", "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"]
+  const values = await Promise.all(
+    keys.map(
+      (key) =>
+        new Promise<string | undefined>((resolve) => {
+          const child = spawn("reg", ["query", key, "/v", "Path"], { windowsHide: true })
+          let out = ""
+          child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()))
+          child.on("error", () => resolve(undefined))
+          child.on("close", () => resolve(out.match(/^\s*Path\s+REG_(?:EXPAND_)?SZ\s+(.*)$/im)?.[1]?.trim()))
+          setTimeout(() => {
+            child.kill()
+            resolve(undefined)
+          }, TIMEOUT).unref()
+        }),
+    ),
+  )
+  return values.filter((value): value is string => !!value)
+}

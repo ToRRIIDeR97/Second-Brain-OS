@@ -1,4 +1,5 @@
-import { Effect, Layer, LayerMap } from "effect"
+import { Effect, Layer, LayerMap, Scope } from "effect"
+import { memoMap } from "./effect/memo-map"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -37,6 +38,8 @@ import { BuiltInTools } from "./tool/builtins"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
 import { ToolOutputStore } from "./tool-output-store"
+import { AbsolutePath } from "./schema"
+import { canonicalDirectory } from "./util/directory"
 
 export { LocationServiceMap } from "./location-service-map"
 
@@ -83,9 +86,26 @@ export const locationServices = LayerNode.group([
 export type LocationServices = LayerNode.Output<typeof locationServices>
 export type LocationError = LayerNode.Error<typeof locationServices>
 
+// Graphs that only replace nodes outside the location services share one map Layer, so the shared
+// memo map builds it once and a folder boots once (it used to boot in each of three maps).
+const sharedMaps = new Map<string, Layer.Layer<LocationServiceMap.Service>>()
+const targetIDs = new WeakMap<object, number>()
+let nextTargetID = 0
+const targetID = (target: object) => targetIDs.get(target) ?? targetIDs.set(target, ++nextTargetID).get(target)!
+
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
+  const relevant = replacements.filter(([source]) => LayerNode.contains(locationServices, source))
+  const key = relevant.map(([source, target]) => `${source.name}>${targetID(target)}`).join("|")
+  const shared = sharedMaps.get(key)
+  if (shared) return shared
+  const built = makeLocationServiceMap(relevant)
+  sharedMaps.set(key, built)
+  return built
+}
+
+function makeLocationServiceMap(replacements: LayerNode.Replacements): Layer.Layer<LocationServiceMap.Service> {
   return Layer.effect(
     LocationServiceMap.Service,
     LayerMap.make(
@@ -109,9 +129,32 @@ export function buildLocationServiceMap(
         )
       },
       { idleTimeToLive: "60 minutes" },
-    ),
+    ).pipe(Effect.map(canonicalKeys)),
   )
 }
 
-// This is temporary for backwards compatibility
+// Callers pass directories spelled however they arrived (C:/a, c:\a\), and some pass
+// `workspaceID: undefined` where others leave it out; keys compare structurally, so both
+// would boot the folder again. Key the map by one spelling and one shape.
+function canonicalKeys<I, E>(map: LayerMap.LayerMap<Location.Ref, I, E>): LayerMap.LayerMap<Location.Ref, I, E> {
+  const key = (ref: Location.Ref): Location.Ref => {
+    const directory = AbsolutePath.make(canonicalDirectory(ref.directory))
+    return ref.workspaceID === undefined ? { directory } : { directory, workspaceID: ref.workspaceID }
+  }
+  return Object.assign(Object.create(map), {
+    get: (ref: Location.Ref) => map.get(key(ref)),
+    contextEffect: (ref: Location.Ref) => map.contextEffect(key(ref)),
+    invalidate: (ref: Location.Ref) => map.invalidate(key(ref)),
+  })
+}
+
+// This is temporary for backwards compatibility. It is the same cached Layer the app graph builds,
+// so runtimes sharing a memo map also share the folder services.
 export const locationServiceMapLayer = buildLocationServiceMap()
+
+// The map built once in the process-wide memo map. A graph built with its own memo map (each HTTP
+// listener) provides this instead, so a folder boots one set of services for the whole process.
+const processScope = Scope.makeUnsafe()
+export const processLocationServiceMapLayer = Layer.effectContext(
+  Layer.buildWithMemoMap(locationServiceMapLayer, memoMap, processScope),
+)

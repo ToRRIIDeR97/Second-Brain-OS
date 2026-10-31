@@ -1,3 +1,4 @@
+import { ThreadReference } from "@opencode-ai/core/session/thread-reference"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import path from "path"
@@ -781,6 +782,33 @@ const layer = Layer.effect(
               })
             }
             return pieces
+          }
+          const reference = ThreadReference.parse(part.url)
+          if (part.url.startsWith(ThreadReference.scheme)) {
+            if (!reference || reference.sessionID === input.sessionID) return []
+            const referenced = SessionID.make(reference.sessionID)
+            const found = yield* Effect.all([
+              sessions.get(referenced),
+              sessions.messages({ sessionID: referenced, limit: reference.full ? 500 : 200 }),
+            ]).pipe(Effect.option)
+            if (found._tag === "None") return []
+            const [thread, messages] = found.value
+            const title = part.filename ?? thread.title
+            const items = messages.flatMap((message) => {
+              const text = message.parts
+                .flatMap((item) => (item.type === "text" && !item.synthetic ? [item.text] : []))
+                .join("\n")
+              return text.trim() ? [`${message.info.role.toUpperCase()}:\n${text}`] : []
+            })
+            return [
+              {
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: ThreadReference.renderItems({ title, items, full: reference.full }),
+              },
+            ]
           }
           const url = new URL(part.url)
           switch (url.protocol) {

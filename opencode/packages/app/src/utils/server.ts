@@ -153,8 +153,12 @@ const recentHarnesses = new Map<string, ReadonlyArray<HarnessSchema.Instance>>()
 // The persisted list (harness-controller.ts) uses the same shape with the connection key in place of the URL.
 export const recentHarnessKey = (server: string, directory: string) => `${server}\n${directory}`
 
+// Availability doesn't depend on the folder, so a folder opened for the first time uses the server's
+// latest list from any folder.
+const latestHarnesses = new Map<string, ReadonlyArray<HarnessSchema.Instance>>()
+
 export function rememberedHarnesses(url: string, directory: string) {
-  return recentHarnesses.get(recentHarnessKey(url, directory))
+  return recentHarnesses.get(recentHarnessKey(url, directory)) ?? latestHarnesses.get(url)
 }
 
 /**
@@ -167,8 +171,14 @@ export async function listHarnessesRemembered(
   keep?: (list: ReadonlyArray<HarnessSchema.Instance>) => void,
 ) {
   const list = await listHarnessesForServer(input, directory).catch(() => undefined)
-  if (!list) return fallbackHarnesses()
+  // A failed check keeps the last answer instead of marking every harness unavailable.
+  if (!list) {
+    const last = rememberedHarnesses(input.server.url, directory)
+    if (last) return last
+    throw new Error("Harness availability check failed.")
+  }
   recentHarnesses.set(recentHarnessKey(input.server.url, directory), list)
+  latestHarnesses.set(input.server.url, list)
   keep?.(list)
   return list
 }

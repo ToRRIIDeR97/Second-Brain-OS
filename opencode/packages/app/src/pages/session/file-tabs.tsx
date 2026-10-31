@@ -19,6 +19,7 @@ import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { clearFileReveal, fileReveal, panelSettled } from "@/pages/session/file-reference"
+import { FileViewer, viewerKind } from "@/pages/session/file-viewer"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -616,6 +617,18 @@ function SessionFileViewV2(props: { tab: string }) {
         <Switch>
           <Match when={state()?.error}>
             {(err) => <div class="px-6 py-4 text-[13px] text-v2-state-fg-danger">{err()}</div>}
+          </Match>
+          <Match when={state()?.loaded && viewerKind(path())}>
+            {(kind) => (
+              <FileViewer
+                kind={kind()}
+                directory={sdk().directory}
+                path={path()!}
+                content={state()?.content}
+                source={() => renderFile(contents())}
+                onReady={() => setRendered(true)}
+              />
+            )}
           </Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
         </Switch>

@@ -14,7 +14,7 @@ import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { EventV2 } from "./event"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
-import { SessionMessageTable, SessionTable } from "./session/sql"
+import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
@@ -38,6 +38,7 @@ import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import { Harness } from "@opencode-ai/schema/harness"
+import { ThreadReference } from "./session/thread-reference"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -466,7 +467,12 @@ const layer = Layer.effect(
               if ((yield* execution.active).has(input.sessionID)) yield* execution.interrupt(input.sessionID)
               yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
             }
-            const prompt = resolvePrompt(input.prompt)
+            const prompt = yield* expandThreads(
+              result,
+              (id) => legacyThreadItems(db, id),
+              input.sessionID,
+              resolvePrompt(input.prompt),
+            )
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
@@ -595,6 +601,65 @@ const layer = Layer.effect(
     return result
   }),
 )
+
+/**
+ * Replaces each `tenon-thread://` attachment with a text attachment holding that thread: what it would
+ * send its own model (summary), or every message (`?full=1`). A thread that is gone, or the prompt's
+ * own thread, is dropped.
+ */
+function expandThreads(
+  sessions: Pick<Interface, "get" | "messages" | "context">,
+  legacy: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<string>>,
+  sessionID: SessionSchema.ID,
+  prompt: Prompt,
+) {
+  if (!prompt.files?.some((file) => file.uri.startsWith(ThreadReference.scheme))) return Effect.succeed(prompt)
+  return Effect.forEach(prompt.files, (file) => {
+    const reference = ThreadReference.parse(file.uri)
+    if (!file.uri.startsWith(ThreadReference.scheme)) return Effect.succeed([file])
+    if (!reference || reference.sessionID === sessionID) return Effect.succeed([])
+    const id = SessionSchema.ID.make(reference.sessionID)
+    return Effect.gen(function* () {
+      const info = yield* sessions.get(id)
+      const messages = reference.full
+        ? yield* sessions.messages({ sessionID: id, order: "asc", limit: 500 })
+        : yield* sessions.context(id)
+      const title = file.name ?? info.title
+      // A thread run by the built-in agent keeps its messages in the v1 tables.
+      const text =
+        messages.length > 0
+          ? ThreadReference.render({ title, messages, full: reference.full })
+          : ThreadReference.renderItems({ title, items: yield* legacy(id), full: reference.full })
+      return [ThreadReference.attachment({ title, text })]
+    }).pipe(Effect.catch(() => Effect.succeed([])))
+  }).pipe(Effect.map((files) => Prompt.make({ ...prompt, files: files.flat() })))
+}
+
+/** A v1 thread's visible text, one "ROLE:" item per message, oldest first. */
+function legacyThreadItems(db: Database.Interface["db"], sessionID: SessionSchema.ID) {
+  return db
+    .select({ messageID: MessageTable.id, message: MessageTable.data, part: PartTable.data })
+    .from(PartTable)
+    .innerJoin(MessageTable, eq(PartTable.message_id, MessageTable.id))
+    .where(eq(PartTable.session_id, sessionID))
+    .orderBy(asc(MessageTable.time_created), asc(PartTable.id))
+    .all()
+    .pipe(
+      Effect.map((rows) => {
+        const messages = new Map<string, { role: string; text: string[] }>()
+        rows.forEach((row) => {
+          const part = row.part as { type?: string; text?: string; synthetic?: boolean }
+          if (part.type !== "text" || part.synthetic || !part.text) return
+          const role = (row.message as { role?: string }).role ?? "user"
+          const entry = messages.get(row.messageID) ?? { role, text: [] }
+          entry.text.push(part.text)
+          messages.set(row.messageID, entry)
+        })
+        return [...messages.values()].map((entry) => `${entry.role.toUpperCase()}:\n${entry.text.join("\n")}`)
+      }),
+      Effect.orElseSucceed(() => []),
+    )
+}
 
 const resolvePrompt = (input: PromptInput.Prompt) =>
   Prompt.make({

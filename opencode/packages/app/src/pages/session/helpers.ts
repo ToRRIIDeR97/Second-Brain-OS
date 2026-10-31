@@ -31,6 +31,11 @@ export const agentTabPartID = (tab: string) => (isAgentTab(tab) ? tab.slice(AGEN
 /** Right-panel tab that lays out the thread's html designs as artboards. */
 export const CANVAS_TAB = "canvas"
 
+/** Right-panel tabs for the Workbench browser and the device emulator. */
+export const BROWSER_TAB = "browser"
+export const DEVICE_TAB = "device"
+const toolTabs = new Set([BROWSER_TAB, DEVICE_TAB])
+
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
 
 export function shouldShowFileTree(input: { visible: boolean; opened: boolean }) {
@@ -43,6 +48,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const fileBrowser = input.fileBrowser ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
   const canvasOpen = createMemo(() => input.tabs().active() === CANVAS_TAB || input.tabs().all().includes(CANVAS_TAB))
+  const toolOpen = (tab: string) => input.tabs().active() === tab || input.tabs().all().includes(tab)
   const openFileOpen = createMemo(
     () =>
       fileBrowser() &&
@@ -55,7 +61,8 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review" || tab === CANVAS_TAB || isAgentTab(tab)) return []
+          if (tab === "context" || tab === "review" || tab === CANVAS_TAB || toolTabs.has(tab) || isAgentTab(tab))
+            return []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
@@ -72,7 +79,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const agentTabs = createMemo(() => [...new Set(input.tabs().all().filter(isAgentTab))], emptyTabs, { equals: same })
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
-    if (active === "context" || active === CANVAS_TAB) return active
+    if (active === "context" || active === CANVAS_TAB || (active && toolTabs.has(active))) return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
@@ -92,7 +99,7 @@ export const createSessionTabs = (input: TabsInput) => {
   })
   const closableTab = createMemo(() => {
     const active = activeTab()
-    if (active === "context" || active === CANVAS_TAB) return active
+    if (active === "context" || active === CANVAS_TAB || toolTabs.has(active)) return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (agentTabs().includes(active)) return active
     if (!openedTabs().includes(active)) return
@@ -102,6 +109,8 @@ export const createSessionTabs = (input: TabsInput) => {
   return {
     contextOpen,
     canvasOpen,
+    browserOpen: () => toolOpen(BROWSER_TAB),
+    deviceOpen: () => toolOpen(DEVICE_TAB),
     openFileOpen,
     panelTabs,
     openedTabs,

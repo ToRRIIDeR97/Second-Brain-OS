@@ -1,3 +1,5 @@
+import { blockBrowserOrigin, startBrowserBridge } from "./browser"
+import { registerFileViewerProtocol } from "./file-viewer"
 import { randomUUID } from "node:crypto"
 import { mkdirSync, rmSync, statSync } from "node:fs"
 import * as http from "node:http"
@@ -399,6 +401,7 @@ const main = Effect.gen(function* () {
   )
   app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME)
   registerRendererProtocol()
+  registerFileViewerProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
   const googleCalendar = createGoogleCalendarService()
@@ -479,15 +482,25 @@ const main = Effect.gen(function* () {
     const hostname = "127.0.0.1"
     const password = randomUUID()
     // Restarts after a crash reuse the port and password, so renderers reconnect to the same URL.
+    // Agents reach the Workbench browser through this bridge; the server process gets its address.
+    const bridge = yield* Effect.promise(() =>
+      startBrowserBridge().catch((error: unknown) => {
+        logger.error("browser bridge failed", String(error))
+        return undefined
+      }),
+    )
+    if (bridge) Object.assign(process.env, { TENON_BROWSER_URL: bridge.url, TENON_BROWSER_TOKEN: bridge.token })
     const startSidecar = (port: number) =>
       superviseSidecar({
-        spawn: () =>
-          spawnLocalServer(hostname, port, password, {
+        spawn: () => {
+          blockBrowserOrigin(`http://${hostname}:${port}`)
+          return spawnLocalServer(hostname, port, password, {
             userDataPath: app.getPath("userData"),
             onStdout: (message) => writeLog("server", "stdout", { message }),
             onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
             onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-          }),
+          })
+        },
         log: (message, meta) => writeLog("utility", message, meta, "warn"),
       })
 
@@ -499,7 +512,12 @@ const main = Effect.gen(function* () {
     // The picked port is free only until the sidecar binds it. If another process took it in
     // between, pick a new one instead of failing the launch.
     for (let attempt = 1; ; attempt++) {
-      const failure = yield* Effect.promise(() => sidecar.initial.ready.then(() => undefined, (error: unknown) => error))
+      const failure = yield* Effect.promise(() =>
+        sidecar.initial.ready.then(
+          () => undefined,
+          (error: unknown) => error,
+        ),
+      )
       if (failure === undefined) break
       const raced = fixedPort === undefined && attempt < 3 && !(yield* Effect.promise(() => isPortFree(hostname, port)))
       if (!raced) return yield* Effect.die(failure)

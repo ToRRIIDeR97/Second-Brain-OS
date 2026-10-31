@@ -93,6 +93,9 @@ export type ElectronAPI = {
   saveFilePicker: (opts?: { title?: string; defaultPath?: string }) => Promise<string | null>
   openExternal: (url: string) => void
   openLocalFile: (url: string) => void
+  fileViewerURL: (directory: string, path: string) => Promise<string | undefined>
+  browser: BrowserAPI
+  device: DeviceAPI
   openPath: (path: string, app?: string) => Promise<void>
   revealPath: (path: string) => Promise<boolean>
   readClipboardImage: () => Promise<{ buffer: ArrayBuffer; width: number; height: number } | null>
@@ -115,4 +118,43 @@ export type ElectronAPI = {
   setForceFocus: (enabled: boolean) => Promise<void>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
   setNativeTranslations: (bundle: DesktopNativeBundle) => Promise<void>
+}
+
+export type BrowserBounds = { x: number; y: number; width: number; height: number }
+export type BrowserState = { url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean }
+export type PickedElement = {
+  selector: string
+  tag: string
+  text: string
+  html: string
+  rect: BrowserBounds
+  styles: Record<string, string>
+}
+export type BrowserAPI = {
+  show: (bounds?: BrowserBounds) => Promise<void>
+  navigate: (url: string) => Promise<void>
+  history: (direction: "back" | "forward" | "reload") => Promise<void>
+  capture: (rect?: BrowserBounds) => Promise<string | undefined>
+  pick: () => Promise<PickedElement | null>
+  onState: (cb: (state: BrowserState) => void) => () => void
+  onAgent: (cb: (event: { tool: string }) => void) => () => void
+}
+
+export type DevicePlatform = "android" | "ios"
+export type DeviceInfo = { platform: DevicePlatform; id: string; name: string; state: string }
+export type DeviceStatus = {
+  android: { sdk: boolean; devices: DeviceInfo[]; avds: string[] }
+  ios: { supported: boolean; devices: DeviceInfo[]; input: boolean }
+}
+export type DeviceInputEvent =
+  | { kind: "tap"; x: number; y: number }
+  | { kind: "swipe"; x: number; y: number; toX: number; toY: number }
+  | { kind: "text"; text: string }
+  | { kind: "key"; key: "home" | "back" | "enter" }
+export type DeviceAPI = {
+  status: () => Promise<DeviceStatus>
+  boot: (platform: DevicePlatform, id: string) => Promise<void>
+  screenshot: (platform: DevicePlatform, id: string) => Promise<string | undefined>
+  input: (platform: DevicePlatform, id: string, input: DeviceInputEvent) => Promise<void>
+  onAgent: (cb: (event: { tool: string; platform: DevicePlatform; id: string }) => void) => () => void
 }

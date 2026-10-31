@@ -57,6 +57,17 @@ export default function BrainHomePage() {
     harnessInstanceID: Harness.OpenCode as Harness.InstanceID,
     harnessModel: undefined as Harness.ModelSelection | undefined,
     starting: false,
+    // Set once the user picks a harness here, so a later settings load doesn't override it.
+    picked: false,
+  })
+  // Home starts on the harness chosen in Settings › Harnesses. Settings load asynchronously on desktop.
+  createEffect(() => {
+    const choice = settings.harnesses.newThreadChoice()
+    if (!choice || state.picked) return
+    setState({
+      harnessInstanceID: choice.harnessID as Harness.InstanceID,
+      harnessModel: choice.model as Harness.ModelSelection | undefined,
+    })
   })
   const client = (directory: string) => ({
     server: serverSDK().server,
@@ -96,7 +107,9 @@ export default function BrainHomePage() {
     placeholderData: () => rememberedHarnesses(serverSDK().server.http.url, directory()),
     staleTime: 30_000,
     refetchOnMount: true,
-    retry: false,
+    // A check that fails before anything is remembered (the server still starting) is retried soon.
+    retry: MODEL_RETRIES,
+    retryDelay: MODEL_RETRY_MS,
     // The selected agent can answer before its models are listed; ask again until they arrive, as threads do.
     refetchInterval: (query) => {
       const selected = query.state.data?.find((item) => item.id === state.harnessInstanceID)
@@ -113,7 +126,7 @@ export default function BrainHomePage() {
     )
   const selectHarness = (instanceID: Harness.InstanceID) => {
     const next = harnesses()?.find((instance) => instance.id === instanceID)
-    setState({ harnessInstanceID: instanceID, harnessModel: next ? defaultModel(next) : undefined })
+    setState({ harnessInstanceID: instanceID, harnessModel: next ? defaultModel(next) : undefined, picked: true })
   }
   // Fall back to an available harness, and keep the model valid for the selected one.
   createEffect(() => {
@@ -122,8 +135,10 @@ export default function BrainHomePage() {
     if (!available) return
     const current = available.find((instance) => instance.id === state.harnessInstanceID)
     if (current?.status !== "available") {
+      // Only a confirmed check moves Home off its harness; a remembered list may be out of date.
+      if (harnessQuery.isPlaceholderData) return
       const fallback = available.find((instance) => instance.status === "available")
-      if (fallback) selectHarness(fallback.id)
+      if (fallback) setState({ harnessInstanceID: fallback.id, harnessModel: defaultModel(fallback) })
       return
     }
     if (current.models.some((model) => model.id === state.harnessModel?.id)) return

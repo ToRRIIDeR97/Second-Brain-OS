@@ -1,3 +1,4 @@
+import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
@@ -5,7 +6,7 @@ import type { Details } from "electron"
 import { CHANNEL } from "./constants"
 import { stableDatabaseName } from "./database-name"
 import { getLogger } from "./logging"
-import { fallbackPath, getUserShell, loadShellEnv } from "./shell-env"
+import { fallbackPath, getUserShell, loadShellEnv, readRegistryPaths, windowsPath } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
 
@@ -56,6 +57,9 @@ export async function preferAppEnv(userDataPath: string) {
   // look uninstalled. Not on Windows, whose PATH isn't colon-separated.
   if (!shellEnv && process.platform !== "win32")
     process.env.PATH = fallbackPath(process.env.PATH ?? "", app.getPath("home"))
+  // Windows has no login shell; its registry holds the PATH as it is now, CLIs installed since sign-in included.
+  if (process.platform === "win32")
+    process.env.PATH = windowsPath(process.env.PATH ?? "", await readRegistryPaths(), process.env)
   // A set OPENCODE_DB wins: the onboarding test uses ":memory:", and a user may pick their own file. Assigning
   // undefined to process.env would store the string "undefined", so it is set only when there is a name.
   const database = stableDatabaseName(CHANNEL, app.isPackaged)
@@ -67,7 +71,9 @@ export async function preferAppEnv(userDataPath: string) {
 export function spawnLocalServer(hostname: string, port: number, password: string, options: SpawnLocalServerOptions) {
   const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
   const child = utilityProcess.fork(sidecar, [], {
-    cwd: process.cwd(),
+    // Requests that name no folder fall back to the server's working directory. The app's own (a
+    // drive root or System32, depending on how it was launched) would boot a watcher over it.
+    cwd: homedir(),
     env: createSidecarEnv(),
     serviceName: SIDECAR_SERVICE_NAME,
     stdio: "pipe",

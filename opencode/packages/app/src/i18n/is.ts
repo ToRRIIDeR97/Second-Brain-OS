@@ -92,6 +92,10 @@ const desktop = [
   "Tengill bað Tenon Workbench að hefja setu í:\n{{path}}\n\nFyrirmæli úr tenglinum eru sett í innsláttarreitinn og ekki send. Haltu aðeins áfram ef þú opnaðir þennan tengil frá uppruna sem þú treystir.",
   "Opna",
   "Hætta við",
+  "Open a website?",
+  "An agent wants to open {{host}} in the Workbench browser.",
+  "Open",
+  "Don't open",
 ]
 
 export const dict = {

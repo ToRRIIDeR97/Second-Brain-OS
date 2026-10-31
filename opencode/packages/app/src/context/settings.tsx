@@ -46,6 +46,7 @@ export interface Settings {
   }
   notifications: NotificationSettings
   sounds: SoundSettings
+  calendar?: CalendarSyncSettings
   harnesses?: {
     /** Model IDs left out of each harness's picker, by harness instance ID. New models show by default. */
     hiddenModels?: Record<string, string[]>
@@ -53,8 +54,34 @@ export interface Settings {
     hiddenProviders?: Record<string, string[]>
     /** The first-run agent setup dialog was shown once, so Home doesn't open it again. */
     setupPrompted?: boolean
+    /** What new threads and Home start with. "last" reuses the last harness a prompt was sent with. */
+    defaults?: HarnessDefaults
+    /** The harness, model and reasoning of the last prompt sent, for `defaults.mode === "last"`. */
+    lastUsed?: HarnessChoice
   }
 }
+
+export type CalendarSyncSettings = {
+  /** Pull Google accounts in the background, whatever page is open. */
+  autoSync: boolean
+  intervalMinutes: number
+  onOpen: boolean
+  /** When the window regains focus and the last sync is older than two minutes. */
+  onFocus: boolean
+}
+
+export const defaultCalendarSync: CalendarSyncSettings = {
+  autoSync: true,
+  intervalMinutes: 15,
+  onOpen: true,
+  onFocus: true,
+}
+
+export type HarnessChoice = {
+  harnessID: string
+  model?: { id: string; reasoningEffort?: string; serviceTier?: string }
+}
+export type HarnessDefaults = HarnessChoice & { mode: "fixed" | "last" }
 
 /** A harness with the models the user hid in Settings left out. */
 export function withVisibleModels<T extends { id: string; models: ReadonlyArray<{ id: string }> }>(
@@ -357,10 +384,30 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("notifications", "errors", value)
         },
       },
+      calendar: {
+        sync: (): CalendarSyncSettings => ({ ...defaultCalendarSync, ...store.calendar }),
+        setSync(value: Partial<CalendarSyncSettings>) {
+          setStore("calendar", (current) => ({ ...defaultCalendarSync, ...current, ...value }))
+        },
+      },
       harnesses: {
         setupPrompted: () => store.harnesses?.setupPrompted === true,
         setSetupPrompted() {
           setStore("harnesses", (value) => ({ ...value, setupPrompted: true }))
+        },
+        defaults: () => store.harnesses?.defaults,
+        setDefaults(value: HarnessDefaults | undefined) {
+          setStore("harnesses", (current) => ({ ...current, defaults: value }))
+        },
+        /** The harness a new thread starts with, or undefined to use the built-in agent. */
+        newThreadChoice(): HarnessChoice | undefined {
+          const defaults = store.harnesses?.defaults
+          if (!defaults) return
+          if (defaults.mode === "last") return store.harnesses?.lastUsed ?? defaults
+          return defaults
+        },
+        setLastUsed(value: HarnessChoice) {
+          setStore("harnesses", (current) => ({ ...current, lastUsed: value }))
         },
         hiddenModels: (instanceID: string) => store.harnesses?.hiddenModels?.[instanceID] ?? [],
         setModelHidden(instanceID: string, modelID: string, hidden: boolean) {

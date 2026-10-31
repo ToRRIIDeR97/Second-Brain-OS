@@ -76,7 +76,14 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     Persist.global("harness.instances.v1"),
     createStore<Record<string, ReadonlyArray<Harness.Instance>>>({}),
   )
-  const storedList = () => stored[persistedHarnessKey(serverSDK().server, sdk().directory)]
+  // A folder without its own list uses the server's list from another folder: availability is the same.
+  const storedList = () => {
+    const own = stored[persistedHarnessKey(serverSDK().server, sdk().directory)]
+    if (own) return own
+    const prefix = recentHarnessKey(ServerConnection.key(serverSDK().server), "")
+    const key = Object.keys(stored).find((item) => item.startsWith(prefix))
+    return key ? stored[key] : undefined
+  }
   // A list another composer or Home already loaded shows at once; this composer still checks.
   const remembered = rememberedHarnesses(server().server.url, sdk().directory) ?? storedList()
   const [loaded, { refetch }] = createResource(
@@ -94,6 +101,16 @@ export function createPromptHarnessController(selection: HarnessSelection) {
   // can arrive after the resource started. Models hidden in Settings never reach the picker or the
   // default-model choice.
   const list = () => (loaded.state === "ready" || loaded.state === "refreshing" ? loaded.latest : storedList())
+  // A failed first check (the server still starting) is retried soon instead of on the next focus.
+  const [failures, setFailures] = createSignal(0)
+  createEffect(() => {
+    if (loaded.state !== "errored" || failures() >= MODEL_RETRIES) return
+    const timer = setTimeout(() => {
+      setFailures((count) => count + 1)
+      void refetch()
+    }, MODEL_RETRY_MS)
+    onCleanup(() => clearTimeout(timer))
+  })
   const instances = createMemo(() =>
     list()?.map((item) =>
       withVisibleModels(item, settings.harnesses.hiddenModels(item.id), settings.harnesses.hiddenProviders(item.id)),
@@ -143,6 +160,8 @@ export function createPromptHarnessController(selection: HarnessSelection) {
     const available = instances()
     if (!available) return
     const current = available.find((item) => item.id === selection.current())
+    // Only a confirmed check moves the thread off its harness; a saved list may be out of date.
+    if (current?.status !== "available" && loaded.state !== "ready") return
     const selected =
       current?.status === "available"
         ? current

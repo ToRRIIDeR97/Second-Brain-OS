@@ -106,6 +106,35 @@ const api: ElectronAPI = {
   saveFilePicker: (opts) => ipcRenderer.invoke("save-file-picker", opts),
   openExternal: (url) => ipcRenderer.send("open-external", url),
   openLocalFile: (url) => ipcRenderer.send("open-local-file", url),
+  fileViewerURL: (directory, path) => ipcRenderer.invoke("file-viewer-url", directory, path),
+  browser: {
+    show: (bounds) => ipcRenderer.invoke("browser-show", bounds),
+    navigate: (url) => ipcRenderer.invoke("browser-navigate", url),
+    history: (direction) => ipcRenderer.invoke("browser-history", direction),
+    capture: (rect) => ipcRenderer.invoke("browser-capture", rect),
+    pick: () => ipcRenderer.invoke("browser-pick"),
+    onState: (cb) => {
+      const handler = (_: unknown, state: Parameters<typeof cb>[0]) => cb(state)
+      ipcRenderer.on("browser-state", handler)
+      return () => ipcRenderer.removeListener("browser-state", handler)
+    },
+    onAgent: (cb) => {
+      const handler = (_: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+      ipcRenderer.on("browser-agent", handler)
+      return () => ipcRenderer.removeListener("browser-agent", handler)
+    },
+  },
+  device: {
+    status: () => ipcRenderer.invoke("device-status"),
+    boot: (platform, id) => ipcRenderer.invoke("device-boot", platform, id),
+    screenshot: (platform, id) => ipcRenderer.invoke("device-screenshot", platform, id),
+    input: (platform, id, input) => ipcRenderer.invoke("device-input", platform, id, input),
+    onAgent: (cb) => {
+      const handler = (_: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+      ipcRenderer.on("device-agent", handler)
+      return () => ipcRenderer.removeListener("device-agent", handler)
+    },
+  },
   openPath: (path, app) => ipcRenderer.invoke("open-path", path, app),
   revealPath: (path) => ipcRenderer.invoke("reveal-path", path),
   readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),

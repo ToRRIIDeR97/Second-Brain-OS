@@ -20,6 +20,13 @@ type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
+export type DeviceInfo = { platform: "android" | "ios"; id: string; name: string; state: string }
+export type DeviceInput =
+  | { kind: "tap"; x: number; y: number }
+  | { kind: "swipe"; x: number; y: number; toX: number; toY: number }
+  | { kind: "text"; text: string }
+  | { kind: "key"; key: "home" | "back" | "enter" }
+
 export type GoogleAccount = {
   id: string
   /** The account's address, read from its primary calendar. */
@@ -146,6 +153,38 @@ type PlatformBase = {
 
   /** Open a local file URL in its default app (desktop only) */
   openLocalFile?(url: string): void
+  /** A read-only URL for a file inside `directory` (desktop), for viewers that can't take a data URL. */
+  fileViewerURL?(directory: string, path: string): Promise<string | undefined>
+  /** The Workbench panel's browser (desktop). Agents use the same browser through the tenon MCP server. */
+  browser?: {
+    show(bounds?: { x: number; y: number; width: number; height: number }): Promise<void>
+    navigate(url: string): Promise<void>
+    history(direction: "back" | "forward" | "reload"): Promise<void>
+    capture(rect?: { x: number; y: number; width: number; height: number }): Promise<string | undefined>
+    pick(): Promise<{
+      selector: string
+      tag: string
+      text: string
+      html: string
+      rect: { x: number; y: number; width: number; height: number }
+      styles: Record<string, string>
+    } | null>
+    onState(
+      cb: (state: { url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean }) => void,
+    ): () => void
+    onAgent(cb: (event: { tool: string }) => void): () => void
+  }
+  /** Phones for the Device tab (desktop): Android everywhere, the iOS Simulator on macOS. */
+  device?: {
+    status(): Promise<{
+      android: { sdk: boolean; devices: DeviceInfo[]; avds: string[] }
+      ios: { supported: boolean; devices: DeviceInfo[]; input: boolean }
+    }>
+    boot(platform: DeviceInfo["platform"], id: string): Promise<void>
+    screenshot(platform: DeviceInfo["platform"], id: string): Promise<string | undefined>
+    input(platform: DeviceInfo["platform"], id: string, input: DeviceInput): Promise<void>
+    onAgent(cb: (event: { tool: string; platform: DeviceInfo["platform"]; id: string }) => void): () => void
+  }
 
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>

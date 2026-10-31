@@ -23,8 +23,9 @@ const LANGUAGE_NAMES = new Map<string, string>(
 
 // attachments carry text/plain for all text files, so the label comes from the extension;
 // filename may be an absolute path, so extract the basename before looking for one
-export function typeLabel(filename: string, mime: string, fallback: string) {
+export function typeLabel(filename: string, mime: string, fallback: string, threadLabel?: string) {
   if (mime === "application/pdf") return "PDF"
+  if (mime === "application/x-tenon-thread" && threadLabel) return threadLabel
   const base = getFilename(filename)
   // idx 0 is a dotfile like .gitignore, not an extension
   const idx = base.lastIndexOf(".")

@@ -92,6 +92,10 @@ const desktop = [
   "Egy hivatkozás arra kérte a Tenon Workbench alkalmazást, hogy indítson munkamenetet itt:\n{{path}}\n\nA hivatkozásból származó kérés a beviteli mezőbe kerül, és nem lesz elküldve. Csak akkor folytassa, ha ezt a hivatkozást Ön nyitotta meg egy megbízható forrásból.",
   "Megnyitás",
   "Mégsem",
+  "Open a website?",
+  "An agent wants to open {{host}} in the Workbench browser.",
+  "Open",
+  "Don't open",
 ]
 
 export const dict = {

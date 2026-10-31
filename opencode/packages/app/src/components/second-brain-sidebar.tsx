@@ -1,3 +1,4 @@
+import { THREAD_DRAG_PREFIX } from "@/utils/thread-reference"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
 import { createSignal, For, Show } from "solid-js"
@@ -584,6 +585,12 @@ function ThreadRow(props: { ctrl: SidebarController; node: ThreadNode<Session>; 
               class="flex h-9 min-w-0 items-center gap-1.5 pl-2 pr-1 text-left focus-visible:outline-none"
               data-sidebar-thread-open
               aria-current={active() ? "page" : undefined}
+              draggable="true"
+              // Dropped on a composer, the thread is attached as a reference.
+              onDragStart={(event) => {
+                event.dataTransfer?.setData("text/plain", `${THREAD_DRAG_PREFIX}${session().id}\n${title()}`)
+                if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
+              }}
               onClick={() => props.ctrl.openThread(session())}
               onDblClick={() => {
                 renameFromMenu = false

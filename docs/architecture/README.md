@@ -281,6 +281,16 @@ carry no account; the page treats them as the first account's (the migrated
 one) until the next sync replaces them. The design options are recorded in
 [ADR-012](../adr/ADR-012-google-multi-account.md).
 
+Syncing runs in the background as well as from the Calendar page.
+`app/src/features/second-brain/calendar-sync.ts` holds the merge
+(`syncGoogleCalendar`), one Google call at a time across callers, and bumps a
+version an open Calendar page reloads on. `CalendarAutoSync`
+(`calendar-auto-sync.tsx`, mounted in the app shell) runs it when the app opens,
+on an interval, and when the window regains focus after two minutes, per
+Settings → Calendar (`settings.v3` `calendar`). It skips while offline or when
+Google asks for a reconnect, and doubles its interval after failures, up to
+four times.
+
 ## Home navigation
 
 Home is the sidebar's first item and the fallback for unknown routes. Its
@@ -705,19 +715,22 @@ The picker shows the models each harness reports, not a list saved when the
 harness was added. `HarnessRuntime` in `core/src/harness.ts` keeps two
 caches per instance configuration:
 
-- An availability check, reused for 30 seconds, or 5 seconds after a failure
-  (`makeCachedProbe`). Each result, failed ones included, is also written to
+- An availability check, reused for 2 minutes, or 5 seconds after a failure
+  (`makeCachedProbe`). After it expires, the next listing still answers at once
+  with the last result and checks again in the background. The probe and model
+  caches are shared by every folder (`shared` in `core/src/harness.ts`), so
+  opening a thread in a new folder starts no harness CLIs. Each result, failed ones included, is also written to
   `harness-probes.json` beside the model cache, without its CLI error text. On
   the first listing after a restart the stored result answers at once and the
   real check runs in the background (stale-while-revalidate), so a slow CLI
   (Command Code takes about 5 seconds) no longer holds up `/api/harness`.
-- The last model list the harness reported. After 10 minutes the next check
+- The last model list the harness reported. After 24 hours the next check
   asks the harness again; if that fails, the old list stays and counts as
   checked. The lists are also written to `harness-models.json` in the XDG data
   directory (`core/src/harness/catalog-cache.ts`), keyed by a SHA-256 of the
   instance configuration because that can hold API keys. The server seeds its
   lists from that file at startup and keeps each entry's check time, so the
-  10-minute rule still decides when to ask again. The file is a rebuildable
+  24-hour rule still decides when to ask again. The file is a rebuildable
   cache: a missing or corrupt file only means the next check discovers again.
 
 Each check and each ACP model discovery logs `harness check` or
@@ -727,7 +740,8 @@ duration in milliseconds.
 An ACP check (`AcpHarness.probe`) runs only the handshake, so a list answers
 in about a second. When no model list is known, or it is 10 minutes old, the
 check also starts `AcpHarness.discover` in the background (`session/new` plus
-one model switch each, about 10 seconds for Claude Code, 45-second timeout).
+one model switch each, about 10 seconds for Claude Code, 45-second timeout);
+"Refresh models" asks again on demand.
 When it finishes, it stores the models and drops the cached check, so the next
 list carries them; if it fails (for example before sign-in), the next check
 after the cache expires tries again. Concurrent lists of one harness share a
@@ -780,19 +794,36 @@ them, new models included. The provider stays connected.
 ### Harness CLI updates
 
 `core/src/harness/update.ts` finds where a harness CLI was installed from by
-resolving its command on `PATH` to a real path:
+resolving its command on `PATH` to a real path, on macOS and Windows alike
+(`sourceFromPath`):
 
 - `<prefix>/lib/node_modules/<pkg>` (or `npm\node_modules`, `nodejs\node_modules`
-  on Windows) is a global npm package.
-- `~/.bun/install/global/node_modules/<pkg>` is a global Bun package.
+  on Windows) is a global npm package; `~/.bun/install/global/node_modules` is
+  Bun; `<pnpm home>/global/<n>/node_modules` is pnpm.
 - `<brew>/Cellar/<formula>/<version>` or `Caskroom/<cask>/<version>` is
   Homebrew.
+- `WinGet\Packages\<PackageId>_<source>_<hash>` is WinGet;
+  `scoop\apps\<name>\<version>` is Scoop; `chocolatey\lib\<name>` is
+  Chocolatey; `pipx/venvs/<name>` and `uv/tools/<name>` are Python tools.
+- A Windows npm or pnpm shim (`.cmd`, `.ps1`, or the extensionless script) is
+  read to find the package it starts (`shimTarget`), so harnesses added by the
+  user update too.
+- With none of these, a CLI that updates itself (`claude update`,
+  `codex update`, `opencode upgrade`) uses its own updater; its npm package
+  gives the latest version.
 
-Other installs, such as a standalone binary or a curl-script copy, show their
-version only and are updated outside the app. The latest version comes from
-the npm registry configured in the user's `.npmrc` (`/<pkg>/latest`) or from
-`brew info --json=v2`. Results are cached for six hours per executable, or
-ten minutes when the latest version couldn't be read.
+Other installs show their version only and are updated outside the app. The
+latest version comes from the user's npm registry (`/<pkg>/latest`),
+`brew info --json=v2`, `winget show`, the local Scoop bucket manifest, or PyPI.
+Results are cached for six hours per executable, or ten minutes when the latest
+version couldn't be read. Updating Claude Code updates its ACP adapter and then
+runs `claude update` for the CLI beside it (`upgradeCompanion`).
+
+On Windows the desktop also reads the current PATH from the registry
+(`HKCU\Environment` and the system key) when it starts, and appends the usual
+CLI folders (`%APPDATA%\npm`, pnpm, Bun, Scoop shims, WinGet Links,
+`~\.local\bin`), so a CLI installed after sign-in is found without signing out
+(`windowsPath` in `desktop/src/main/shell-env.ts`).
 
 `GET /api/harness/updates` lists installed and latest versions for enabled
 Codex and ACP harnesses. The renderer's `HarnessUpdateNotifier` (mounted in the
@@ -801,9 +832,13 @@ available update with Update and Later. Later hides that version until a newer
 one comes out (`harness-updates` global key). Settings → Harnesses shows the
 version, an update badge, and an Update button.
 
-`POST /api/harness/upgrade/:id` runs `npm install --global --prefix <prefix>
-<pkg>@latest`, `bun add --global <pkg>@latest`, or `brew upgrade [--cask]
-<name>`, with a 5-minute timeout. It then closes that harness's open runtimes
+`POST /api/harness/upgrade/:id` runs the detected installer's update with a
+5-minute timeout (`updateCommand`): `npm install --global --prefix <prefix>
+<pkg>@latest`, `bun add --global`, `pnpm add --global`, `brew upgrade [--cask]`,
+`winget upgrade --id <id> --exact --silent`, `scoop update`, `pipx upgrade`,
+`uv tool upgrade`, or the CLI's own updater. Chocolatey needs an elevated
+prompt, so `UpdateStatus.manual` is set and Settings shows the command to copy
+instead of an Update button. It then closes that harness's open runtimes
 and clears its caches, so the next turn and the picker start the new version.
 A turn in progress on that harness stops, and its thread reconnects on the next
 message.
@@ -1406,3 +1441,80 @@ Desktop session export reads all native history pages, projects the existing
 CLI JSON format, and invokes the narrow preload save operation. Main owns the
 native destination picker and completes the file write before reporting
 success. Browser downloads cannot confirm saving and do not show that toast.
+
+## Folder services and startup
+
+The server keys each folder's services (`LocationServiceMap`) by one spelling of
+its path: `canonicalDirectory` (`core/src/util/directory.ts`) resolves it and, on
+Windows, uses backslashes and an upper-case drive letter, so `C:/a` and `c:\a\`
+boot one set of services. A key also takes one shape: `workspaceID` is left out
+when it is undefined, since keys compare structurally. Graphs that don't replace
+location nodes share one map Layer (`buildLocationServiceMap`), built once in
+the process-wide memo map (`processLocationServiceMapLayer`); the HTTP listener,
+which builds its graph with its own memo map, is given that instance. Known gap:
+at startup the active folder can still log two boots from the same map, cause
+not yet found. The desktop starts the server in the home folder, so a request that
+names no folder doesn't boot a watcher over the app's working directory (a drive
+root or System32). Git discovery asks `rev-parse` for the top level, git dir
+and common dir in one process.
+
+## Default harness for new threads
+
+Settings → Harnesses → "Default for new threads" stores
+`settings.v3` `harnesses.defaults` (`mode: "fixed" | "last"`, `harnessID`,
+`model`). `drafts.create` and Brain Home start new threads on it; with
+"Start from the last one I used", `harnesses.lastUsed` (written on each new
+thread's first send) wins. A reused empty draft takes the current default. The
+composer keeps its harness until a confirmed check says it is unavailable; a
+saved or remembered list never moves it.
+
+## Thread references
+
+A prompt can carry another thread: pick it under @ (Threads, newest first) or
+drag its sidebar row onto the composer (`thread:<id>` drag data). The mention is
+a file part with `tenon-thread://<sessionID>` (`?full=1` for the whole thread)
+and the `application/x-tenon-thread` MIME type. The pill shows "Summary" or
+"Full" after its text (a CSS `::after` from `data-mode-label`, so the part's
+content stays the mention); clicking it switches the URL and syncs the prompt
+(`session-ui/src/v2/components/prompt-input/index.tsx`). When the prompt is admitted,
+`SessionV2.prompt` replaces it with a `data:text/plain` attachment holding the
+thread rendered as an untrusted `<referenced-thread>` block
+(`core/src/session/thread-reference.ts`): what that thread would send its own
+model, or every message, within 8k or 24k tokens. Threads run by the built-in
+agent are read from the v1 tables. The legacy prompt path does the same with a
+synthetic text part. `toLLMMessages` and the harness prompt renderer inline
+text attachments as text, so every harness reads the same block. The prompt's
+own thread, or one that no longer exists, is dropped.
+
+## Workbench panel
+
+The right-hand panel (`SessionSidePanel`, called the Workbench panel in the
+product) adds three tools to Review, Session, Canvas, agent and file tabs.
+
+- **File viewers.** `app/src/pages/session/file-viewer.tsx` renders Markdown
+  (with a Rendered/Source switch), CSV/TSV tables, JSON trees, PDF (Chromium's
+  viewer), video, spreadsheets (SheetJS) and Word documents (mammoth, then the
+  markdown sanitizer). Binary files come through `tenon-file://` URLs that main
+  issues for a folder-relative path after checking it stays inside the folder
+  (`desktop/src/main/file-viewer.ts`); the protocol serves only issued URLs,
+  read-only, with range requests. Other platforms fall back to the base64 the
+  server read.
+- **Browser tab.** One `WebContentsView` in the `persist:tenon-browser`
+  session, laid over the tab (`desktop/src/main/browser.ts`,
+  `app/src/pages/session/browser-tab.tsx`). The user can select elements (an
+  isolated-world picker returns selector, text, HTML and key styles), annotate a
+  screenshot (draw, capture a region, add notes) and send it to the composer.
+  The view hides while annotating or while a dialog is open.
+- **Device tab.** Android emulators and devices through the SDK's `adb` and
+  `emulator` on macOS and Windows; the iOS Simulator through `simctl` on macOS
+  (`idb` for taps). The screen is polled as PNG frames; a click is a tap
+  (`desktop/src/main/device.ts`, `app/src/pages/session/device-tab.tsx`).
+
+Agents always have the browser and device tools (`browser_*`, `device_*`). They
+are listed by the `tenon` MCP server when the desktop has started its bridge
+(`core/src/harness/browser-tools.ts`). Calls go to a loopback HTTP bridge in the
+main process with a bearer token passed in the server's environment
+(`TENON_BROWSER_URL`, `TENON_BROWSER_TOKEN`; harness processes don't get it).
+An agent call brings the matching tab forward and logs the step in it.
+`browser_navigate` to a site other than localhost asks the user in a native
+dialog first.

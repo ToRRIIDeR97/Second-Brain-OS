@@ -121,9 +121,14 @@ describe("listHarnessesRemembered", () => {
     expect(rememberedHarnesses("http://localhost:4097", "C:\\brain")).toMatchObject([{ id: Harness.Codex }])
 
     ok = false
-    expect(await listHarnessesRemembered(input, "C:\\brain")).toEqual(fallbackHarnesses())
+    expect(await listHarnessesRemembered(input, "C:\\brain")).toMatchObject([{ id: Harness.Codex }])
     expect(rememberedHarnesses("http://localhost:4097", "C:\\brain")).toMatchObject([{ id: Harness.Codex }])
-    expect(rememberedHarnesses("http://localhost:4097", "C:\\other")).toBeUndefined()
+    // Availability doesn't depend on the folder, so a new folder starts from the server's latest list.
+    expect(rememberedHarnesses("http://localhost:4097", "C:\\other")).toMatchObject([{ id: Harness.Codex }])
+    expect(rememberedHarnesses("http://localhost:4098", "C:\\other")).toBeUndefined()
+    await expect(
+      listHarnessesRemembered({ ...input, server: { url: "http://localhost:4098" } }, "C:\\x"),
+    ).rejects.toThrow()
   })
 
   test("hands only a good list to the persisted copy", async () => {
