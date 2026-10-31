@@ -23,13 +23,17 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   if (options?.bypass) return false
 
   const ins = yield* InstanceState.context
-  const full = realTarget(process.platform === "win32" ? FSUtil.normalizePath(target) : target)
+  const written = process.platform === "win32" ? FSUtil.normalizePath(target) : target
+  const real = realTarget(written)
   const roots = {
     ...ins,
     directory: realTarget(ins.directory),
     worktree: ins.worktree === "/" ? ins.worktree : realTarget(ins.worktree),
   }
-  if (containsPath(full, roots)) return false
+  if (containsPath(real, roots)) return false
+  // Rules name paths as the user writes them, so ask with that path; only a path that looks internal
+  // but resolves outside the project is shown as its real target.
+  const full = containsPath(written, ins) ? real : written
 
   const kind = options?.kind ?? "file"
   const dir = kind === "directory" ? full : path.dirname(full)

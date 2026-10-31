@@ -76,9 +76,12 @@ Notes on the class view:
   `claude-code` (driver `acp`, shown as Claude Code).
   They are reserved, so `harnesses.json` and config files can't replace them.
 - Permission requests exist only in memory. Saved permission rows are allow
-  rules, scoped to a project.
+  rules, scoped to a project. Values saved from a command or path are literal
+  patterns (`[*]` and `[?]` stand for a literal `*` and `?`).
 - `BrainProject` and `KnowledgeNote` are Markdown files. `CalendarSnapshot` is
-  one JSON file per location. None of them is stored in SQLite.
+  one JSON file per location. None of them is stored in SQLite. A note is
+  deleted only with the revision the caller read; writes refuse a file that
+  would exceed the read limit.
 - `BrainProject.location.path` names the Project's folder (inside the
   workspace's `projects` folder, or an absolute linked folder). A legacy
   `location.workspaceId` is an OpenCode `Project.id`. A BrainProject's thread

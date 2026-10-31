@@ -765,7 +765,10 @@ The same chips also come from Markdown links to local files (a relative path
 or a `file://` URL) and from Codex's `:codex-file-citation{path=…}`
 directive, which is rewritten to an inline-code path before parsing. To keep
 those link targets, the sanitizer's URI allowlist adds `file:` to DOMPurify's
-default list. A `file:` link that isn't a chip (outside the thread folder)
+default list. Inline `style` attributes keep only colour and font properties
+(`restrictStyle` in `markdown-media.ts`), which highlighted code needs; layout,
+positioning and `url()` values are dropped, so raw HTML can't place itself over
+the app shell. A `file:` link that isn't a chip (outside the thread folder)
 opens nothing: the desktop window refuses to navigate to it
 (`openExternalURL` accepts only `http`, `https` and `mailto`).
 
@@ -827,6 +830,25 @@ opaque provider continuations and assistant filesystem snapshots are excluded
 from the copied history. Review snapshots remain scoped to the session's
 location and canonical Git worktree.
 
+### Credentials, approvals and project config
+
+- Provider keys never reach the renderer: `/provider` and `/config/providers`
+  return `Provider.toRendererInfo` (no `key`, no token or header values), and
+  `/config` and `/global/config` responses drop credential fields wherever they
+  appear (`config/redact.ts`).
+- A PTY connect ticket stands in for credentials only after the auth
+  middleware has checked, without consuming it, that the ticket exists for that
+  PTY and that the Origin is allowed. Routing and instance loading happen after
+  that; the handler then consumes the ticket against its full scope.
+- "Always allow" saves commands, skill names and harness resources as literal
+  patterns (`Wildcard.literal`; `[*]` and `[?]` match a literal `*` and `?`), so
+  approving `rm *` once doesn't allow every `rm`. Rules saved before this change
+  keep their old meaning.
+- A folder's own config (project files and project `.opencode` folders) can't
+  set `share` or `enterprise`; only user and admin config can turn on sharing.
+  Project config can still load plugins and MCP commands: there is no
+  workspace trust prompt yet.
+
 ## Known gaps
 
 Found during the 2026-10-02 scope audit. Paths are relative to
@@ -838,8 +860,11 @@ fix lands.
   or validated relative path. As of the 2026-10 batch-1 hardening, `open-path` no longer
   executes renderer-supplied application paths (main resolves an application
   name through the registered-application lookup), and both handlers require
-  absolute paths. Arbitrary-path opening from a compromised main-frame renderer
-  remains open until the workspace-ID contract lands.
+  absolute paths. Without an app, `open-path` applies the local-file policy
+  (`localFileAction`): an executable is revealed in the file manager, never
+  opened. With an app, the path must be a directory. Opening other files from a
+  compromised main-frame renderer remains possible until the workspace-ID
+  contract lands.
 - `store-*` handlers accept only the renderer's own store files, `default.dat`
   and `opencode.<scope>.dat` (`store-name.ts`). Renderer input can't create or
   escape files under `userData`, and can't read or write main-owned stores
@@ -862,7 +887,9 @@ fix lands.
   entry strips it from the address bar on load, the workspace proxy never
   forwards it, and v2 PTY sockets use one-time tickets instead. The
   desktop no longer records a Chromium NetLog, which captured full URLs, and
-  the debug-log export skips any `.netlog` file. Packaged builds don't copy
+  the debug-log export skips any `.netlog` file. Crashpad minidumps hold
+  process memory, so the export lists them in `crashpad.json` (name, size,
+  time) instead of including them. Packaged builds don't copy
   renderer console output into the log files, and no terminal console
   messages are written to `pty.log`.
 - Renderer sourcemaps are built as hidden maps and excluded from the packaged
