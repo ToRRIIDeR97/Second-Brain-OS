@@ -3,6 +3,7 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
 import * as Tool from "./tool"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { MAX_MEDIA_INGEST_BYTES } from "@opencode-ai/core/tool/read-filesystem"
 import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
@@ -304,6 +305,11 @@ export const ReadTool = Tool.define<
       const isImage = SUPPORTED_IMAGE_MIMES.has(mime)
 
       if (isImage || isPdfAttachment(mime)) {
+        // The whole file is held in memory and base64-encoded, so refuse it before reading.
+        if (Number(stat.size) > MAX_MEDIA_INGEST_BYTES)
+          return yield* Effect.fail(
+            new Error(`File is too large to attach (limit ${MAX_MEDIA_INGEST_BYTES / 1024 / 1024} MB): ${filepath}`),
+          )
         const bytes = yield* fs.readFile(filepath)
         const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
         return {

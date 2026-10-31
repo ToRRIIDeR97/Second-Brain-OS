@@ -24,6 +24,8 @@ const input = MoveSession.Input.make({
   moveChanges: true,
 })
 const called = Ref.makeUnsafe<MoveSession.Input | undefined>(undefined)
+// Sessions the mocked Session service reports as running.
+const running = new Set<string>()
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
@@ -44,6 +46,12 @@ const apiLayer = HttpRouter.serve(
       moveSession: (value) => Ref.set(called, value),
     }),
   ),
+  Layer.provide(
+    Layer.mock(SessionV2.Service)({
+      active: Effect.sync(() => running as ReadonlySet<string> as ReadonlySet<SessionV2.ID>),
+      revert: {} as SessionV2.Interface["revert"],
+    }),
+  ),
   Layer.provide(ServerAuth.Config.configLayer({ password: Option.none(), username: "opencode" })),
 )
 const it = testEffect(apiLayer)
@@ -58,6 +66,21 @@ describe("control-plane HttpApi", () => {
 
       expect(response.status).toBe(204)
       expect(yield* Ref.get(called)).toEqual(input)
+    }),
+  )
+
+  it.live("refuses to move a running session", () =>
+    Effect.gen(function* () {
+      yield* Ref.set(called, undefined)
+      running.add(input.sessionID)
+      const response = yield* HttpClientRequest.post("/experimental/control-plane/move-session").pipe(
+        HttpClientRequest.setBody(HttpBody.jsonUnsafe(input)),
+        HttpClient.execute,
+      )
+      running.delete(input.sessionID)
+
+      expect(response.status).toBeGreaterThanOrEqual(400)
+      expect(yield* Ref.get(called)).toBeUndefined()
     }),
   )
 })

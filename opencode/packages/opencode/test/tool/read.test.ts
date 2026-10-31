@@ -482,6 +482,23 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.live("refuses an image too large to attach before reading it", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const file = path.join(dir, "huge.png")
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+        "base64",
+      )
+      yield* put(file, png)
+      // Sparse, so the 21 MB file costs no disk.
+      yield* Effect.promise(() => import("fs/promises").then((fs) => fs.truncate(file, 21 * 1024 * 1024)))
+
+      const error = yield* fail(dir, { filePath: file })
+      expect(error.message).toContain("too large to attach")
+    }),
+  )
+
   it.live("image files set truncated to false", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()

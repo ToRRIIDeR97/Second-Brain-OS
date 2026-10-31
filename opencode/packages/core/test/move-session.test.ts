@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -14,24 +14,11 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-
-// Sessions the fake execution service reports as running.
-const active = new Set<string>()
-const execution = Layer.succeed(
-  SessionExecution.Service,
-  SessionExecution.Service.of({
-    active: Effect.sync(() => new Set(active) as unknown as ReadonlySet<SessionV2.ID>),
-    resume: () => Effect.void,
-    wake: () => Effect.void,
-    interrupt: () => Effect.void,
-  }),
-)
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -44,7 +31,6 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
     ]),
-    [[SessionExecution.node, execution]],
   ),
 )
 
@@ -107,15 +93,6 @@ describe("MoveSession", () => {
         })
         .run()
         .pipe(Effect.orDie)
-
-      // A running session is refused before anything is captured.
-      active.add(sessionID)
-      const refused = yield* MoveSession.Service.use((service) =>
-        service.moveSession({ sessionID, destination: { directory: moved }, moveChanges: true }),
-      ).pipe(Effect.flip)
-      active.delete(sessionID)
-      expect(refused).toBeInstanceOf(SessionV2.OperationUnavailableError)
-      expect(yield* Effect.promise(() => fs.readFile(path.join(source, "tracked.txt"), "utf8"))).toBe("changed\n")
 
       yield* MoveSession.Service.use((service) =>
         service.moveSession({ sessionID, destination: { directory: moved }, moveChanges: true }),
