@@ -215,6 +215,16 @@ const layer = Layer.effect(
           if (result.effect === "allow" && !options?.alwaysAsk) return
           const item = yield* create(request(input), input.agent, options?.alwaysAsk)
           return yield* restore(Deferred.await(item.deferred)).pipe(
+            // A wait interrupted before any reply (the harness turn ended) withdraws the prompt from the dock.
+            EffectRuntime.onInterrupt(() =>
+              pending.has(item.request.id)
+                ? events.publish(Event.Replied, {
+                    sessionID: item.request.sessionID,
+                    requestID: item.request.id,
+                    reply: "reject",
+                  })
+                : EffectRuntime.void,
+            ),
             EffectRuntime.catchTag("PermissionV2.DeclinedError", (error) => EffectRuntime.die(error)),
             EffectRuntime.ensuring(
               EffectRuntime.sync(() => {

@@ -219,6 +219,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           draft.finish = event.data.finish
           draft.cost = event.data.cost
           if (event.data.contextWindow !== undefined) draft.contextWindow = event.data.contextWindow
+          if (event.data.contextUsed !== undefined) draft.contextUsed = event.data.contextUsed
           draft.tokens = event.data.tokens
           if (event.data.snapshot || event.data.files)
             draft.snapshot = {

@@ -3,18 +3,24 @@ import path from "path"
 import { sql } from "drizzle-orm"
 import { Effect } from "effect"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { layer } from "@opencode-ai/core/database/sqlite.node"
 import { tmpdir } from "./fixture/tmpdir"
 
-// The desktop server runs the node:sqlite driver; Bun implements node:sqlite too, so it runs here.
-describe("node:sqlite driver", () => {
+// The desktop server runs the node:sqlite driver under Node. Bun only has node:sqlite in some versions (the pinned
+// 1.3.14 doesn't), so the suite runs where the module exists and is skipped, not failed, where it doesn't.
+const supported = await import("node:sqlite").then(
+  () => true,
+  () => false,
+)
+const { layer } = supported ? await import("@opencode-ai/core/database/sqlite.node") : { layer: undefined }
+
+describe.skipIf(!supported)("node:sqlite driver", () => {
   test("sets the busy timeout and WAL mode when the connection opens", async () => {
     await using tmp = await tmpdir()
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* EffectDrizzleSqlite.makeWithDefaults()
         return [yield* db.get(sql`PRAGMA busy_timeout`), yield* db.get(sql`PRAGMA journal_mode`)]
-      }).pipe(Effect.provide(layer({ filename: path.join(tmp.path, "node.db"), timeout: 1234 })), Effect.scoped),
+      }).pipe(Effect.provide(layer!({ filename: path.join(tmp.path, "node.db"), timeout: 1234 })), Effect.scoped),
     )
     expect(result).toEqual([{ timeout: 1234 }, { journal_mode: "wal" }])
   })
@@ -33,7 +39,7 @@ describe("node:sqlite driver", () => {
           (i) => db.get(sql.raw(`SELECT ${i} AS n`)),
         )
         return { values, rows, again: yield* db.all(query) }
-      }).pipe(Effect.provide(layer({ filename: ":memory:" })), Effect.scoped),
+      }).pipe(Effect.provide(layer!({ filename: ":memory:" })), Effect.scoped),
     )
     expect(result.values).toEqual([
       [1, "a"],

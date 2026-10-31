@@ -221,7 +221,10 @@ test("hand-written tags decode leniently and round-trip unchanged", () => {
   expect(savedNumbers).toContain("- 2024\n")
   expect(KnowledgeNote.decode("notes/a.md", savedNumbers).info.tags).toEqual(["2024", "q3"])
   const savedScalar = KnowledgeNote.encode(scalar.info, scalar.data, scalar.body)
-  expect(savedScalar).toContain("tags: work, home")
+  // The hand-written scalar stays a scalar (not a list); the YAML writer bundled with gray-matter (js-yaml 3) quotes
+  // a value containing ", ", which is the same value.
+  expect(savedScalar).toMatch(/tags: '?work, home'?\n/)
+  expect(KnowledgeNote.decode("notes/b.md", savedScalar).info.tags).toEqual(["work", "home"])
   // A changed tag list is written as a list.
   expect(KnowledgeNote.encode({ ...scalar.info, tags: ["work"] }, scalar.data, scalar.body)).toContain("- work")
 })

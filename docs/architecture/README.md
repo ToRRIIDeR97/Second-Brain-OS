@@ -580,6 +580,16 @@ thread folder's history. When an ACP session is reopened with
 `session/load`, the last replayed `usage_update` cost is the baseline
 (`replayedCost`), so the next turn records only its own cost.
 
+Each harness runtime has a turn gate: approvals asked during a turn are
+withdrawn and denied when the turn ends (`turnGate`). A refused ACP model
+switch ends the turn with an error naming the model. Codex turn usage is the
+growth of the thread's cumulative `tokenUsage.total`; the last call's input
+and output are reported as `contextUsed`, which the step stores on the
+assistant message next to `contextWindow` and the context meter divides by
+the window. A setup read that finds a harness newly signed in closes its open
+runtimes (`newlySignedIn`). Windows npm shims (`.cmd`, `.ps1`) resolve to
+`<npm folder>/node_modules/<package>` for update checks.
+
 When the built-in loop reads a thread that earlier ran on another provider
 or a harness, `toLLMMessages` replays provider-executed tool calls as
 provider parts only to the provider that ran them. For any other provider

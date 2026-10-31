@@ -42,6 +42,12 @@ const harnessContextWindow = (usage: Usage | undefined) => {
   return typeof size === "number" && Number.isFinite(size) && size > 0 ? size : undefined
 }
 
+/** Harness drivers that know the context in use after a step put it in `usage.providerMetadata.harness.contextUsed`. */
+const harnessContextUsed = (usage: Usage | undefined) => {
+  const used = usage?.providerMetadata?.harness?.contextUsed
+  return typeof used === "number" && Number.isFinite(used) && used >= 0 ? used : undefined
+}
+
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
 
@@ -90,6 +96,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         readonly tokens: ReturnType<typeof tokens>
         readonly cost: number
         readonly contextWindow: number | undefined
+        readonly contextUsed: number | undefined
       }
     | undefined
 
@@ -438,6 +445,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           tokens: tokens(event.usage),
           cost: harnessCost(event.usage),
           contextWindow: harnessContextWindow(event.usage),
+          contextUsed: harnessContextUsed(event.usage),
         }
         return
       case "finish":

@@ -9,6 +9,7 @@ import path from "path"
 import { ConfigHarness } from "../config/harness"
 import type { AppProcess } from "../process"
 import { harnessEnvironment } from "./env"
+import { HarnessPids } from "./pids"
 import {
   make as makeClient,
   ProtocolError,
@@ -149,6 +150,7 @@ function connect(
         }),
       )
       .pipe(Effect.mapError((cause) => new ProtocolError(`Could not start ${settings.command}.`, { cause })))
+    yield* HarnessPids.track(handle.pid, settings.command)
     yield* Stream.runDrain(handle.stderr).pipe(Effect.ignore, Effect.forkScoped)
     const client = yield* makeClient({
       connection: { stdout: handle.stdout, stdin: handle.stdin },
@@ -360,7 +362,7 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
               state.currentModel = model
             }).pipe(Effect.andThen(readEffort(response))),
           ),
-          Effect.ignore,
+          Effect.asVoid,
         )
 
   // No effort chosen means the agent's own default, when it offers one.
@@ -391,7 +393,23 @@ export const open = Effect.fn("AcpHarness.open")(function* (process: Process, in
       Effect.gen(function* () {
         // A folded level is sent as its `<base>/<level>` model; otherwise as the agent's level option.
         const variant = `${turnInput.model}/${turnInput.reasoningEffort}`
-        yield* setModel(selector.variants?.has(variant) ? variant : turnInput.model)
+        const requested = selector.variants?.has(variant) ? variant : turnInput.model
+        // Running on another model while the thread records the chosen one would misreport the turn, so a
+        // refused switch ends the turn and names the model instead.
+        const switched = yield* Effect.exit(setModel(requested))
+        if (Exit.isFailure(switched)) {
+          const error = Option.getOrUndefined(Exit.findErrorOption(switched))
+          return Stream.fromIterable(
+            finishAcpTurn(
+              Exit.fail(
+                new ProtocolError(
+                  `The agent couldn't switch to the model ${requested}: ${error?.message ?? "it refused the change"}. Pick another model and send again.`,
+                ),
+              ),
+              acpState(),
+            ),
+          )
+        }
         yield* setEffort(turnInput.reasoningEffort)
         yield* Queue.clear(items)
         const parser = acpState(state.sessionCost)

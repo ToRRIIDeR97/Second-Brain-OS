@@ -38,6 +38,7 @@ import { HarnessCatalogCache } from "./harness/catalog-cache"
 import { HarnessDelegation } from "./harness/delegation"
 import { HarnessRegistry } from "./harness/registry"
 import { HarnessSetup } from "./harness/setup"
+import { HarnessPids } from "./harness/pids"
 import { HarnessUpdate } from "./harness/update"
 import { HarnessUsage } from "./harness/usage"
 import { harnessEnvironment } from "./harness/env"
@@ -143,8 +144,10 @@ interface CodexRuntime {
   readonly workspace?: TenonContext.Workspace
   /** The `tenon` MCP server, and with it `ask_user`, is attached to this thread. */
   readonly askUser: boolean
-  /** Withdraws an `ask_user` question left open when a turn ends. */
+  /** Withdraws an `ask_user` question and any approval left open when a turn ends. */
   readonly endTurn?: Effect.Effect<void>
+  /** Starts a turn: approvals asked from now on are withdrawn when it ends. */
+  readonly beginTurn: () => void
   handoff: Handoff
 }
 
@@ -154,8 +157,10 @@ interface AcpRuntime {
   readonly workspace?: TenonContext.Workspace
   /** The agent accepted the `tenon` MCP server, and with it `ask_user`. */
   readonly askUser: boolean
-  /** Withdraws an `ask_user` question left open when a turn ends. */
+  /** Withdraws an `ask_user` question and any approval left open when a turn ends. */
   readonly endTurn: Effect.Effect<void>
+  /** Starts a turn: approvals asked from now on are withdrawn when it ends. */
+  readonly beginTurn: () => void
   handoff: Handoff
 }
 
@@ -256,6 +261,14 @@ const layer = Layer.effect(
     const cachedProbe = (instance: InstanceConfig, probe: Probe) => probeCached(instanceKey(instance), instance, probe)
     // Listing an ACP agent's models opens a session and switches to each model once (about 10s for
     // Claude Code), so it runs beside the listing; its result reaches the picker on the next list.
+    // Harness processes from a run whose server died without its finalizers are still running; end them.
+    yield* HarnessPids.configure(path.join(global.state, "harness-pids"))
+    yield* HarnessPids.reapLedger.pipe(
+      Effect.tap((ended) =>
+        ended.length ? Effect.logWarning("ended leftover harness processes", { ended }) : Effect.void,
+      ),
+      Effect.forkScoped,
+    )
     const discoveryDirectory = path.join(global.state, "harness-discovery")
     yield* Effect.promise(() => fs.mkdir(discoveryDirectory, { recursive: true })).pipe(Effect.ignore)
     const discovering = new Set<string>()
@@ -430,6 +443,7 @@ const layer = Layer.effect(
       const settings = decodeCodexSettings(instance.config)
       const runtimeScope = yield* Scope.make()
       const close = Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)
+      const gate = turnGate()
       const runtime = yield* Effect.gen(function* () {
         const asker = yield* HarnessAskUser.make(questions, input.sessionID)
         const delegation = yield* HarnessDelegation.endpoint(input.sessionID, asker.ask)
@@ -437,7 +451,8 @@ const layer = Layer.effect(
           process,
           settings,
           input.directory,
-          (request) => handleCodexRequest(request, input.sessionID, input.directory, permissions, questions),
+          (request) =>
+            handleCodexRequest(request, input.sessionID, input.directory, permissions, questions, gate.guard),
           delegation,
         )
         const revision = input.revision ?? 0
@@ -470,7 +485,8 @@ const layer = Layer.effect(
           workspace: yield* workspaceOf(input.directory),
           // Every endpoint here carries `ask_user`, because the runtime always has the question service.
           askUser: delegation !== undefined,
-          endTurn: asker.endTurn,
+          endTurn: asker.endTurn.pipe(Effect.andThen(gate.end)),
+          beginTurn: gate.begin,
           // A failed resume starts a fresh thread, which gets the bounded full history.
           handoff: thread.resumed && continuation ? continuation.handoff : "full",
         } satisfies CodexRuntime
@@ -512,6 +528,7 @@ const layer = Layer.effect(
       input: StreamInput,
     ) {
       const runtimeScope = yield* Scope.make()
+      const gate = turnGate()
       const revision = input.revision ?? 0
       const continuation = yield* readContinuation(database.db, input.sessionID, instance.id, revision)
       const asker = yield* HarnessAskUser.make(questions, input.sessionID).pipe(
@@ -530,13 +547,16 @@ const layer = Layer.effect(
             commands.set(instance.id, reported)
           }),
         approve: (request) =>
-          approve(permissions, {
-            sessionID: input.sessionID,
-            action: request.action,
-            resources: [...request.resources],
-            save: [...request.resources],
-            metadata: { harness: instance.id, title: request.title, ...(request.kind ? { kind: request.kind } : {}) },
-          }),
+          gate.guard(
+            approve(permissions, {
+              sessionID: input.sessionID,
+              action: request.action,
+              resources: [...request.resources],
+              save: [...request.resources],
+              metadata: { harness: instance.id, title: request.title, ...(request.kind ? { kind: request.kind } : {}) },
+            }),
+            false,
+          ),
       }).pipe(
         Effect.provideService(Scope.Scope, runtimeScope),
         Effect.onError(() => Scope.close(runtimeScope, Exit.void).pipe(Effect.ignore)),
@@ -559,7 +579,8 @@ const layer = Layer.effect(
         scope: runtimeScope,
         workspace: yield* workspaceOf(input.directory),
         askUser: delegation !== undefined && session.mcpAttached,
-        endTurn: asker.endTurn,
+        endTurn: asker.endTurn.pipe(Effect.andThen(gate.end)),
+        beginTurn: gate.begin,
         handoff: session.resumed && continuation ? continuation.handoff : "full",
       } satisfies AcpRuntime
     })
@@ -595,6 +616,7 @@ const layer = Layer.effect(
           Effect.map((runtime) => {
             const text = renderHarnessPrompt(input.request, runtime.handoff, runtime)
             runtime.handoff = "none"
+            runtime.beginTurn()
             return onTurnSuccess(
               runtime.session
                 .turn({
@@ -637,7 +659,15 @@ const layer = Layer.effect(
           )
           const threadID = responseThreadID(thread)
           if (!threadID) return yield* Effect.fail(new ProtocolError("Codex did not return a thread ID."))
-          const runtime: CodexRuntime = { client: opened.client, scope, threadID, askUser: false, handoff: "none" }
+          // A title request asks no approvals (read-only, approvals off), so its turn needs no gate.
+          const runtime: CodexRuntime = {
+            client: opened.client,
+            scope,
+            threadID,
+            askUser: false,
+            handoff: "none",
+            beginTurn: () => {},
+          }
           const request = { ...input.request, system: [], messages: [Message.user(oneShotPrompt(input.request))] }
           return yield* replyText(
             codexStream(Effect.succeed(runtime), {
@@ -776,9 +806,12 @@ const layer = Layer.effect(
       )
 
     const updateStatus = (instance: InstanceConfig, command: string) =>
-      HarnessUpdate.check(process, command, probes.get(instanceKey(instance))?.instance.version).pipe(
-        Effect.map((check) => Harness.UpdateStatus.make({ id: instance.id, name: instance.name, ...check })),
-      )
+      HarnessUpdate.check(
+        process,
+        command,
+        probes.get(instanceKey(instance))?.instance.version,
+        HarnessSetup.recipe(instance.id)?.packageName,
+      ).pipe(Effect.map((check) => Harness.UpdateStatus.make({ id: instance.id, name: instance.name, ...check })))
 
     const setupFailure = (reason: HarnessSetup.SetupError["reason"], message: string) =>
       new HarnessSetup.SetupError({ reason, message })
@@ -794,7 +827,7 @@ const layer = Layer.effect(
       Effect.gen(function* () {
         const instance = current.find((candidate) => candidate.id === item.id)
         const stored = keys[item.id]
-        const resolved = yield* HarnessUpdate.resolve(item.command)
+        const resolved = yield* HarnessUpdate.resolve(item.command, item.packageName)
         const auth =
           item.id === Harness.Codex
             ? instance?.authenticated
@@ -819,6 +852,9 @@ const layer = Layer.effect(
           apiKey: stored?.option,
         })
       })
+    // Each harness's sign-in at the last setup read. A sign-in done in a terminal reaches only new processes, so
+    // threads already open keep failing until their runtime is replaced.
+    const lastAuth = new Map<string, string>()
     const setup = () =>
       Effect.all([list(), HarnessSetup.readKeys(global.data)]).pipe(
         Effect.flatMap(([current, keys]) =>
@@ -826,6 +862,19 @@ const layer = Layer.effect(
             concurrency: "unbounded",
           }),
         ),
+        Effect.tap((statuses) => {
+          const signedIn = newlySignedIn(lastAuth, statuses)
+          for (const status of statuses) lastAuth.set(status.id, status.auth ?? "unknown")
+          return Effect.forEach(
+            signedIn,
+            (id) =>
+              closeRuntimes(id).pipe(
+                Effect.andThen(Effect.sync(() => forget(id))),
+                Effect.andThen(Effect.logInfo("harness signed in; open threads reconnect", { id })),
+              ),
+            { discard: true },
+          )
+        }),
       )
     // A changed CLI or credential takes effect on the next probe and the next message of each open thread.
     const setupChanged = (item: HarnessSetup.Recipe) =>
@@ -1285,6 +1334,7 @@ function openCodex(
         stdin: { stream: "pipe", endOnDone: false },
       }),
     )
+    yield* HarnessPids.track(handle.pid, settings.binaryPath?.trim() || "codex")
     yield* Stream.runDrain(handle.stderr).pipe(Effect.ignore, Effect.forkScoped)
     const client = yield* makeCodexClient({
       connection: { stdout: handle.stdout, stdin: handle.stdin },
@@ -1426,6 +1476,7 @@ function codexStream(
     runtime.pipe(
       Effect.flatMap((runtime) =>
         Effect.sync(() => {
+          runtime.beginTurn()
           const prompt = renderHarnessPrompt(input.request, runtime.handoff, {
             ...runtime,
             instructionsInDeveloper: true,
@@ -1494,6 +1545,8 @@ export interface CodexState {
   readonly startedTools: Set<string>
   /** Plan updates shown so far this turn; each becomes its own todo call. */
   plans: number
+  /** The thread's cumulative token counts before this turn, from its first usage update. */
+  usageBase?: Record<string, number>
   usage?: ReturnType<typeof normalizeUsage>
   finished: boolean
   failed: boolean
@@ -1539,11 +1592,24 @@ export function parseCodexNotification(
     return codexItemEvents(notification.method, item, state)
   }
   if (notification.method === "thread/tokenUsage/updated") {
+    // `last` is the latest model call and `total` the thread so far; a turn with several calls is their sum, so
+    // the turn's usage is the growth of `total`. The context in use is the last call's input and output.
     const tokenUsage = isRecord(params.tokenUsage) ? params.tokenUsage : undefined
-    state.usage = normalizeUsage(
-      isRecord(tokenUsage?.last) ? tokenUsage.last : undefined,
-      number(tokenUsage?.modelContextWindow),
+    const total = counts(tokenUsage?.total)
+    const last = counts(tokenUsage?.last)
+    if (!total) {
+      state.usage = normalizeUsage(last, number(tokenUsage?.modelContextWindow))
+      return []
+    }
+    state.usageBase ??= Object.fromEntries(
+      Object.entries(total).map(([key, value]) => [key, value - (last?.[key] ?? 0)]),
     )
+    const base = state.usageBase
+    const turn = Object.fromEntries(
+      Object.entries(total).map(([key, value]) => [key, Math.max(0, value - (base[key] ?? 0))]),
+    )
+    const contextUsed = last ? (last.inputTokens ?? 0) + (last.outputTokens ?? 0) : undefined
+    state.usage = normalizeUsage(turn, number(tokenUsage?.modelContextWindow), contextUsed)
     return []
   }
   if (notification.method === "error") {
@@ -1637,49 +1703,59 @@ function handleCodexRequest(
   directory: string,
   permissions: PermissionV2.Interface,
   questions: QuestionV2.Interface,
+  guard: TurnGate["guard"],
 ) {
   const params = isRecord(request.params) ? request.params : {}
   if (request.method === "item/commandExecution/requestApproval") {
     const command = string(params.command) ?? "command"
-    return approve(permissions, {
-      sessionID,
-      action: "bash",
-      resources: [command],
-      save: [command],
-      metadata: {
-        harness: "codex",
-        cwd: string(params.cwd) ?? directory,
-        ...(string(params.reason) ? { reason: string(params.reason) } : {}),
-      },
-    }).pipe(Effect.map((allowed) => ({ decision: allowed ? "accept" : "decline" })))
+    return guard(
+      approve(permissions, {
+        sessionID,
+        action: "bash",
+        resources: [command],
+        save: [command],
+        metadata: {
+          harness: "codex",
+          cwd: string(params.cwd) ?? directory,
+          ...(string(params.reason) ? { reason: string(params.reason) } : {}),
+        },
+      }),
+      false,
+    ).pipe(Effect.map((allowed) => ({ decision: allowed ? "accept" : "decline" })))
   }
   if (request.method === "item/fileChange/requestApproval") {
     const resource = string(params.grantRoot) ?? directory
-    return approve(permissions, {
-      sessionID,
-      action: "edit",
-      resources: [resource],
-      save: [resource],
-      metadata: {
-        harness: "codex",
-        ...(string(params.reason) ? { reason: string(params.reason) } : {}),
-      },
-    }).pipe(Effect.map((allowed) => ({ decision: allowed ? "accept" : "decline" })))
+    return guard(
+      approve(permissions, {
+        sessionID,
+        action: "edit",
+        resources: [resource],
+        save: [resource],
+        metadata: {
+          harness: "codex",
+          ...(string(params.reason) ? { reason: string(params.reason) } : {}),
+        },
+      }),
+      false,
+    ).pipe(Effect.map((allowed) => ({ decision: allowed ? "accept" : "decline" })))
   }
   if (request.method === "item/permissions/requestApproval") {
     const requested = isRecord(params.permissions) ? params.permissions : {}
     const resource = json(requested)
-    return approve(permissions, {
-      sessionID,
-      action: "request_permissions",
-      resources: [resource],
-      save: [resource],
-      metadata: {
-        harness: "codex",
-        cwd: string(params.cwd) ?? directory,
-        ...(string(params.reason) ? { reason: string(params.reason) } : {}),
-      },
-    }).pipe(
+    return guard(
+      approve(permissions, {
+        sessionID,
+        action: "request_permissions",
+        resources: [resource],
+        save: [resource],
+        metadata: {
+          harness: "codex",
+          cwd: string(params.cwd) ?? directory,
+          ...(string(params.reason) ? { reason: string(params.reason) } : {}),
+        },
+      }),
+      false,
+    ).pipe(
       Effect.map((allowed) => ({
         permissions: allowed ? requested : {},
         scope: "turn",
@@ -1883,6 +1959,39 @@ const skillGuidance =
 const referenceGuidance =
   /Project references provide additional directories that can be accessed when relevant\.[\s\S]*?<\/available_references>/g
 
+export type TurnGate = ReturnType<typeof turnGate>
+
+/**
+ * One harness runtime's current turn. An approval asked during the turn runs through `guard`; when the turn ends
+ * (Stop included) before it is answered, the wait is interrupted, which withdraws the prompt from the dock, and the
+ * agent gets `fallback`, a denial, instead of an answer to a request it has already abandoned.
+ */
+export function turnGate() {
+  let ended = Deferred.makeUnsafe<void>()
+  return {
+    begin: () => {
+      ended = Deferred.makeUnsafe<void>()
+    },
+    end: Effect.suspend(() => Deferred.succeed(ended, undefined)).pipe(Effect.asVoid),
+    guard: <A, E, R>(effect: Effect.Effect<A, E, R>, fallback: A) =>
+      Effect.suspend(() => Effect.raceFirst(effect, Deferred.await(ended).pipe(Effect.as(fallback)))),
+  }
+}
+
+/** Harnesses whose sign-in appeared since the previous setup read; none on the first read. */
+export function newlySignedIn(
+  previous: ReadonlyMap<string, string>,
+  current: ReadonlyArray<{ readonly id: string; readonly auth?: string }>,
+) {
+  return current
+    .filter((item) => {
+      const before = previous.get(item.id)
+      const now = item.auth === "signed-in" || item.auth === "api-key"
+      return before !== undefined && now && before !== "signed-in" && before !== "api-key"
+    })
+    .map((item) => item.id)
+}
+
 /** The idle time after which a thread's harness process is closed; its next message reconnects. */
 const RUNTIME_IDLE_TTL = 30 * 60_000
 
@@ -2033,7 +2142,17 @@ function oneLine(value: string) {
   return line.length > 160 ? `${line.slice(0, 160)}...` : line
 }
 
-function normalizeUsage(value: Record<string, unknown> | undefined, contextSize?: number) {
+/** A Codex token-count record's numeric fields. */
+function counts(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, item]) =>
+      typeof item === "number" && Number.isFinite(item) ? [[key, item]] : [],
+    ),
+  )
+}
+
+function normalizeUsage(value: Record<string, unknown> | undefined, contextSize?: number, contextUsed?: number) {
   if (!value) return undefined
   const inputTokens = number(value.inputTokens)
   const cachedInputTokens = number(value.cachedInputTokens) ?? 0
@@ -2045,7 +2164,16 @@ function normalizeUsage(value: Record<string, unknown> | undefined, contextSize?
     outputTokens: number(value.outputTokens),
     reasoningTokens: number(value.reasoningOutputTokens),
     totalTokens: number(value.totalTokens),
-    ...(contextSize === undefined ? {} : { providerMetadata: { harness: { contextSize } } }),
+    ...(contextSize === undefined && contextUsed === undefined
+      ? {}
+      : {
+          providerMetadata: {
+            harness: {
+              ...(contextSize === undefined ? {} : { contextSize }),
+              ...(contextUsed === undefined ? {} : { contextUsed }),
+            },
+          },
+        }),
   }
 }
 
