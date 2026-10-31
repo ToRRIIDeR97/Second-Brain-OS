@@ -96,9 +96,12 @@ export const layer = Layer.effectDiscard(
             return { taskID: child.id, agent, status: "running" } satisfies HarnessDelegation.TaskResult
           return yield* finalReply(child, agent)
         }
-        const outcome = yield* Effect.promise(() =>
-          Promise.race([entry.done, new Promise<undefined>((resolve) => setTimeout(resolve, waitSeconds * 1_000))]),
-        )
+        const outcome = yield* Effect.promise(() => {
+          const waited = Promise.withResolvers<undefined>()
+          const timer = setTimeout(() => waited.resolve(undefined), waitSeconds * 1_000)
+          // Cleared either way, so a finished task leaves no timer running for up to MAX_WAIT_SECONDS.
+          return Promise.race([entry.done, waited.promise]).finally(() => clearTimeout(timer))
+        })
         if (!outcome) return { taskID: child.id, agent, status: "running" } satisfies HarnessDelegation.TaskResult
         return yield* finalReply(child, agent, outcome.error)
       })

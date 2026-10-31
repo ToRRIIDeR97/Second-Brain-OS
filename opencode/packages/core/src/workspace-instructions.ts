@@ -62,7 +62,9 @@ export const workspaceFor = Effect.fnUntraced(function* (start: string, dataDir:
     .sort((a, b) => b[0].length - a[0].length)[0]
   if (!match) return undefined
   const folder = path.resolve(match[0])
-  return { root: path.resolve(match[1]), base: folder, search: chain.slice(0, chain.indexOf(folder) + 1) }
+  // Compared the way the match above was, so a drive letter in another case (C:\ vs c:\) still counts.
+  const depth = chain.findIndex((dir) => isWithin(folder, dir) && isWithin(dir, folder))
+  return { root: path.resolve(match[1]), base: folder, search: chain.slice(0, depth + 1) }
 })
 
 /** `start` and its ancestors, nearest first. */

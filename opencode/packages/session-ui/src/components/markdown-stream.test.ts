@@ -71,34 +71,29 @@ describe("markdown stream", () => {
     ])
   })
 
-  test("keeps reference-style markdown as one block", () => {
+  // Blocks split as usual while streaming (one live block re-rendered the whole reply per token); each
+  // block carries the reply's reference definitions so its reference links still resolve.
+  test("splits reference-style markdown and gives each block the definitions", () => {
     expect(stream("[docs][1]\n\n[1]: https://example.com", true)).toEqual([
-      {
-        raw: "[docs][1]\n\n[1]: https://example.com",
-        src: "[docs][1]\n\n[1]: https://example.com",
-        mode: "live",
-      },
+      { raw: "[docs][1]\n\n", src: "[docs][1]\n\n\n\n[1]: https://example.com", mode: "full" },
+      { raw: "[1]: https://example.com", src: "[1]: https://example.com\n\n[1]: https://example.com", mode: "live" },
     ])
   })
 
-  test("keeps compact and indented reference definitions with their uses", () => {
-    expect(stream("[docs]\n\n   [docs]:/guide", true)).toEqual([
-      {
-        raw: "[docs]\n\n   [docs]:/guide",
-        src: "[docs]\n\n   [docs]:/guide",
-        mode: "live",
-      },
-    ])
+  test("carries compact and indented reference definitions", () => {
+    expect(stream("[docs]\n\n   [docs]:/guide", true)[0]).toEqual({
+      raw: "[docs]\n\n",
+      src: "[docs]\n\n\n\n   [docs]:/guide",
+      mode: "full",
+    })
   })
 
-  test("keeps multiline reference definitions with their uses", () => {
-    expect(stream("[docs][id]\n\n[id]:\n  /guide", true)).toEqual([
-      {
-        raw: "[docs][id]\n\n[id]:\n  /guide",
-        src: "[docs][id]\n\n[id]:\n  /guide",
-        mode: "live",
-      },
-    ])
+  test("carries multiline reference definitions", () => {
+    expect(stream("[docs][id]\n\n[id]:\n  /guide", true)[0]).toEqual({
+      raw: "[docs][id]\n\n",
+      src: "[docs][id]\n\n\n\n[id]:\n  /guide",
+      mode: "full",
+    })
   })
 
   test("uses only the language portion of fence metadata", () => {

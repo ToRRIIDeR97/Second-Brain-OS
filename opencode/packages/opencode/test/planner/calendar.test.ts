@@ -36,6 +36,17 @@ describe("PlannerCalendar", () => {
     })
   })
 
+  test("writes refuse impossible dates, but a stored one stays readable", () => {
+    const event = { id: "event_1", title: "Plan", source: "local" as const, syncState: "local" as const }
+    expect(PlannerCalendar.realDate("2024-02-29")).toBe(true)
+    expect(PlannerCalendar.realDate("2023-02-29")).toBe(false)
+    expect(PlannerCalendar.realDate("2024-13-01")).toBe(false)
+    expect(() => PlannerCalendar.encode([{ ...event, date: "2024-02-31" }])).toThrow()
+    expect(() => PlannerCalendar.encode([{ ...event, date: "2024-03-01", endDate: "2024-04-31" }])).toThrow()
+    const stored = JSON.stringify({ version: 2, revision: "r", events: [{ ...event, date: "2024-02-31" }], tasks: [] })
+    expect(PlannerCalendar.decode(stored).events[0]?.date).toBe("2024-02-31")
+  })
+
   test("keeps task identity when scheduling and unscheduling", () => {
     const task = {
       id: "task_1",

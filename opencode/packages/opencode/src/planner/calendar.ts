@@ -5,6 +5,26 @@ import { ulid } from "ulid"
 
 const projectPattern = /^project_[0-9A-Z]+$/i
 const datePattern = /^\d{4}-\d{2}-\d{2}$/
+
+/** A YYYY-MM-DD string naming a day that exists (no 2024-02-31 or month 13). */
+export function realDate(value: string) {
+  if (!datePattern.test(value)) return false
+  const [year, month, day] = value.split("-").map(Number)
+  const date = new Date(Date.UTC(year!, month! - 1, day!))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day
+}
+
+// Only writes are held to real dates: a stored document that already has one must stay readable.
+function requireRealDates(events: ReadonlyArray<Event>, tasks: ReadonlyArray<Task>) {
+  for (const event of events) {
+    if (!realDate(event.date)) throw new InvalidError({ reason: "invalid_date" })
+    if (event.endDate && !realDate(event.endDate)) throw new InvalidError({ reason: "invalid_end_date" })
+  }
+  for (const task of tasks) {
+    if ((task.dueDate && !realDate(task.dueDate)) || (task.scheduledDate && !realDate(task.scheduledDate)))
+      throw new InvalidError({ reason: "invalid_task_due" })
+  }
+}
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/
 
 export const Source = Schema.Literals(["local", "google"])
@@ -111,7 +131,9 @@ export function decode(source: string | undefined): Snapshot {
 
 export function encode(events: ReadonlyArray<Event>, tasks: ReadonlyArray<Task> = []): Snapshot & { source: string } {
   const normalized = normalize(events)
-  const snapshot: Snapshot = { version: 2, revision: ulid(), events: normalized, tasks: normalizeTasks(tasks) }
+  const normalizedTasks = normalizeTasks(tasks)
+  requireRealDates(normalized, normalizedTasks)
+  const snapshot: Snapshot = { version: 2, revision: ulid(), events: normalized, tasks: normalizedTasks }
   return { ...snapshot, source: JSON.stringify(snapshot, null, 2) + "\n" }
 }
 

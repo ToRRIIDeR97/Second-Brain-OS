@@ -550,6 +550,7 @@ export default function CalendarPage() {
         ...result.tasks.map((task) => providerTask(task, localByProvider.get(taskKey(task)))),
       ]
       const saved = await writeCalendar(client(target), merged, snapshot()?.revision, mergedTasks)
+      if (directory() !== target) return
       eventActions.mutate(saved)
       googleActions.mutate(result.connection)
     } catch (error) {
@@ -579,6 +580,7 @@ export default function CalendarPage() {
         snapshot()?.revision,
         (snapshot()?.tasks ?? []).filter(keep),
       )
+      if (directory() !== target) return
       eventActions.mutate(saved)
       setState({ editing: false, ...(connection.connected ? {} : { googlePanel: false }) })
     } catch (error) {
@@ -589,10 +591,13 @@ export default function CalendarPage() {
   }
 
   const persist = async (next: CalendarEvent[]) => {
-    if (!directory()) return
+    const workspace = directory()
+    if (!workspace) return
     setState({ saving: true, error: "" })
     try {
-      const saved = await writeCalendar(client(directory()), next, snapshot()?.revision, snapshot()?.tasks)
+      const saved = await writeCalendar(client(workspace), next, snapshot()?.revision, snapshot()?.tasks)
+      // A workspace switch during the write leaves the view on another calendar; don't overwrite it.
+      if (directory() !== workspace) return
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft() })
     } catch (error) {
@@ -932,6 +937,7 @@ export default function CalendarPage() {
               : [...current, savedEvent]
           })()
       const saved = await writeCalendar(client(target), next, snapshot()?.revision, snapshot()?.tasks)
+      if (directory() !== target) return
       eventActions.mutate(saved)
       setState({ editing: false, draft: emptyDraft(), googleConfirm: "", googleWriteKey: "" })
       await googleActions.refetch()

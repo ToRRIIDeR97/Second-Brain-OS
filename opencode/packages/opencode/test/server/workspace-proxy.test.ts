@@ -178,4 +178,31 @@ describe("HttpApi workspace proxy", () => {
       expect(yield* Queue.take(messages)).toBe("echo:hello")
     }),
   )
+  it.live("sends the target's auth headers on the upstream websocket", () =>
+    Effect.gen(function* () {
+      const upstreamUrl = yield* listenTestServer((request) =>
+        Effect.gen(function* () {
+          const socket = yield* Effect.orDie(request.upgrade)
+          const write = yield* socket.writer
+          yield* socket
+            .runRaw(() => Effect.void, {
+              onOpen: write(`auth:${request.headers["authorization"] ?? "none"}`).pipe(Effect.catch(() => Effect.void)),
+            })
+            .pipe(Effect.catch(() => Effect.void))
+          return HttpServerResponse.empty()
+        }),
+      )
+      const proxyUrl = yield* listenServer((request) =>
+        HttpApiProxy.websocket(request, `${upstreamUrl}/echo`, { authorization: "Bearer remote-token" }),
+      )
+
+      const socket = yield* Socket.makeWebSocket(`${proxyUrl.replace(/^http/, "ws")}/proxy`, {
+        closeCodeIsError: () => false,
+      })
+      const messages = yield* Queue.unbounded<string>()
+      yield* socket.runRaw((message) => Queue.offer(messages, String(message))).pipe(Effect.forkScoped)
+
+      expect(yield* Queue.take(messages)).toBe("auth:Bearer remote-token")
+    }),
+  )
 })
